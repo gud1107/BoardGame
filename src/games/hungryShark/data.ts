@@ -966,6 +966,46 @@ export interface UpgradeLevels {
   bite: number;
   speed: number;
   boost: number;
+  /** 🌟 각성 stage (T4 only, 0~MAX_AWAKEN; older saves lack it → 0). */
+  awaken?: number;
+}
+
+// ── 🌟 각성 (post-apex progression for T4 sharks) ─────────────────────────────
+
+export interface AwakenStage {
+  name: string;
+  cost: number;
+  desc: string;
+  /** Aura color in the dive + the stage chip in the shop. */
+  color: string;
+}
+
+/** Five stages bought one by one on a T4 shark; each adds the effect in `desc` (cumulative). */
+export const AWAKEN_STAGES: AwakenStage[] = [
+  { name: "깨어남", cost: 30000, desc: "최대 체력 +10%", color: "#7dd3fc" },
+  { name: "황금 본능", cost: 50000, desc: "골드 획득 +10%", color: "#fde047" },
+  { name: "스킬 해방", cost: 80000, desc: "스킬 쿨타임 -15%", color: "#c4b5fd" },
+  { name: "불굴의 심장", cost: 120000, desc: "최대 체력 +10% · 허기 -10%", color: "#fb7185" },
+  { name: "심해의 왕", cost: 170000, desc: "골드 +15% · 몸집 +8% · 자석 범위 +30%", color: "#f0abfc" },
+];
+export const MAX_AWAKEN = AWAKEN_STAGES.length;
+
+export function canAwaken(shark: SharkDef): boolean {
+  return shark.tier === 4;
+}
+
+/** Cumulative multipliers for an awaken stage (0 = none). */
+export function awakenBonus(level: number) {
+  const l = Math.max(0, Math.min(MAX_AWAKEN, Math.floor(level || 0)));
+  return {
+    level: l,
+    health: 1 + (l >= 1 ? 0.1 : 0) + (l >= 4 ? 0.1 : 0),
+    gold: 1 + (l >= 2 ? 0.1 : 0) + (l >= 5 ? 0.15 : 0),
+    cooldown: l >= 3 ? 0.85 : 1,
+    drain: l >= 4 ? 0.9 : 1,
+    size: l >= 5 ? 1.08 : 1,
+    magnet: l >= 5 ? 1.3 : 1,
+  };
 }
 
 /** Final per-run stats after applying upgrades (the "AnimationCurve" evaluation). */
@@ -988,13 +1028,18 @@ export interface EffectiveStats {
   boostDrain: number;
   /** Heal multiplier on top of healGain (왕성한 식욕 passive). */
   healMul: number;
+  /** Seconds between skill casts (각성 Ⅲ shortens it). */
+  skillCooldown: number;
+  /** 🌟 각성 stage in effect (0 = none) — drives the aura. */
+  awaken: number;
 }
 
 export function effectiveStats(shark: SharkDef, up: UpgradeLevels): EffectiveStats {
   const p = shark.passive?.id;
   const ballistics = p === "ballistics";
+  const aw = awakenBonus(canAwaken(shark) ? (up.awaken ?? 0) : 0);
   return {
-    maxHealth: shark.maxHealth,
+    maxHealth: Math.round(shark.maxHealth * aw.health),
     swimSpeed: shark.swimSpeed * (1 + up.speed * 0.03),
     // 수중 탄도학: the boost's extra speed is 45% bigger.
     boostMultiplier: ballistics ? 1 + (shark.boostMultiplier - 1) * 1.45 : shark.boostMultiplier,
@@ -1003,14 +1048,16 @@ export function effectiveStats(shark: SharkDef, up: UpgradeLevels): EffectiveSta
     biteForce: shark.biteForce * (1 + up.bite * 0.08),
     biteLevel: up.bite,
     eatRadius: shark.eatRadius,
-    length: shark.length,
-    goldMultiplier: shark.goldMultiplier,
-    magnetRadius: shark.magnetRadius,
+    length: shark.length * aw.size,
+    goldMultiplier: shark.goldMultiplier * aw.gold,
+    magnetRadius: shark.magnetRadius * aw.magnet,
     // 냉혈 대사: hunger drains 20% slower.
-    baseDrainRate: shark.baseDrainRate * (p === "coldBlood" ? 0.8 : 1),
+    baseDrainRate: shark.baseDrainRate * (p === "coldBlood" ? 0.8 : 1) * aw.drain,
     magnetPower: p === "staticField" ? 2 : 1,
     boostDrain: (ballistics ? 0.7 : 1) / shark.boostEfficiency,
     healMul: p === "appetite" ? 1.2 : p === "bloodlust" ? 1.3 : 1,
+    skillCooldown: shark.skill.cooldown * aw.cooldown,
+    awaken: aw.level,
   };
 }
 

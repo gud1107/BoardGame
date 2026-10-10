@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { frenzyMultiplier, mapById, sharkById, ZONES, zoneAt, type MapId, type SharkDef, type UpgradeLevels } from "./data";
+import { frenzyMultiplier, mapById, sharkById, ZONES, zoneAt, type MapId, type SharkBranch, type SharkDef, type UpgradeLevels } from "./data";
 import { createWorld, depthMeters, evolveWorld, step, summarize, type MissionState, type RunSummary, type SharkInput, type World } from "./engine";
 import { drawWorld, updateCamera, viewHeightFor, type Camera } from "./render";
 import { SharkAudio } from "./audio";
@@ -38,6 +38,7 @@ interface Hud {
   airborne: boolean;
   missions: MissionState[];
   skillCd: number;
+  skillCdMax: number;
   skillActive: boolean;
   shield: boolean;
 }
@@ -69,6 +70,7 @@ export default function HungrySharkCanvas({
   onQuit,
   deaths,
   missionStreak = 0,
+  buildBranch = null,
 }: {
   def: SharkDef;
   upgrades: UpgradeLevels;
@@ -87,6 +89,8 @@ export default function HungrySharkCanvas({
   deaths?: DeathStats;
   /** Consecutive all-clear dives so far (sets this dive's all-clear bonus rate). */
   missionStreak?: number;
+  /** 내 빌드 — narrows the reef's evolution choices (🔄 다시 고르기 shows all). */
+  buildBranch?: SharkBranch | null;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -409,6 +413,7 @@ export default function HungrySharkCanvas({
           airborne: s.airborne,
           missions: world.missions.map((m) => ({ ...m })),
           skillCd: world.skill.cooldown,
+          skillCdMax: world.stats.skillCooldown,
           skillActive: world.skill.active > 0 || world.skill.vortex !== null || world.skill.reveal > 0,
           shield: s.shield > 0,
         });
@@ -537,7 +542,7 @@ export default function HungrySharkCanvas({
               <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-black/50 ring-1 ring-violet-300/40">
                 <div
                   className={`h-full rounded-full ${hud.skillCd <= 0 ? "bg-gradient-to-r from-violet-300 to-fuchsia-400" : "bg-violet-500/60"} ${hud.skillActive ? "animate-pulse" : ""}`}
-                  style={{ width: `${(1 - hud.skillCd / cur.def.skill.cooldown) * 100}%` }}
+                  style={{ width: `${(1 - hud.skillCd / hud.skillCdMax) * 100}%` }}
                 />
               </div>
               <span className="w-24 truncate text-[10px] font-bold text-violet-200 drop-shadow">
@@ -734,6 +739,7 @@ export default function HungrySharkCanvas({
           playerGold={bankCoins + hud.coins}
           goldNote="보유 코인 + 이번 잠수 코인"
           owned={owned}
+          buildBranch={buildBranch}
           closeLabel="▶ 사냥 계속하기"
           onEvolve={(target) => {
             const w = worldRef.current;

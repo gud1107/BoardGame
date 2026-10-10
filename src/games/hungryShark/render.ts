@@ -5,7 +5,7 @@
  * same as `worm/WormCanvas.tsx`.
  */
 
-import { activeGeometry, ceilingY, ENTITY_DEFS, isUnderIce, seabedExtent, seabedY, SEABED_BASE, SKY_TOP, SURFACE_Y, WORLD_W, worldBottom, ZONES, type EntityKind, type SharkDef } from "./data";
+import { activeGeometry, ceilingY, AWAKEN_STAGES, ENTITY_DEFS, isUnderIce, seabedExtent, seabedY, SEABED_BASE, SKY_TOP, SURFACE_Y, WORLD_W, worldBottom, ZONES, type EntityKind, type SharkDef } from "./data";
 import { ICE_TOP, type Structure } from "./mapGeometry";
 import { bodyLength, bodyScale, isCloaked, isDangerous, isEdible, mouthPos, type Entity, type World } from "./engine";
 import { MARKER_COLORS, type Marker } from "./markers";
@@ -1103,6 +1103,7 @@ function drawPlayerShark(ctx: CanvasRenderingContext2D, w: World, t: number) {
     ctx.arc(0, 0, L * 0.55, 0, Math.PI * 2);
     ctx.stroke();
   }
+  if (w.stats.awaken > 0 && !isCloaked(w)) drawAwakenAura(ctx, w.stats.awaken, L, t);
   if (isCloaked(w)) ctx.globalAlpha = 0.28 + 0.1 * Math.sin(t * 12);
   else if (w.skill.ambush) {
     ctx.shadowColor = "#c084fc";
@@ -1118,6 +1119,57 @@ function drawPlayerShark(ctx: CanvasRenderingContext2D, w: World, t: number) {
     ctx.shadowBlur = 30;
   }
   drawSharkShape(ctx, w.def, L, open, t * tailHz, s.hurtFlash > 0 && Math.floor(t * 30) % 2 === 0, w.gold.active);
+  ctx.restore();
+}
+
+/**
+ * 🌟 각성 aura, growing stage by stage: Ⅰ a soft halo, Ⅱ+ orbiting motes (one per stage),
+ * Ⅲ+ a second pulsing ring, Ⅴ a rotating crown of rays. Colors follow AWAKEN_STAGES.
+ */
+function drawAwakenAura(ctx: CanvasRenderingContext2D, level: number, L: number, t: number) {
+  const color = AWAKEN_STAGES[level - 1].color;
+  const R = L * 0.62;
+  ctx.save();
+  const halo = ctx.createRadialGradient(0, 0, R * 0.3, 0, 0, R * 1.15);
+  halo.addColorStop(0, "rgba(255,255,255,0)");
+  halo.addColorStop(0.7, color + "33");
+  halo.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(0, 0, R * 1.15, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 8 + level * 4;
+  if (level >= 3) {
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.35 + 0.25 * Math.sin(t * 4);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, R * (1 + 0.05 * Math.sin(t * 4)), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  if (level >= 2) {
+    ctx.fillStyle = color;
+    for (let i = 0; i < level; i++) {
+      const a = t * 1.6 + (i * Math.PI * 2) / level;
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * R, Math.sin(a) * R * 0.6, 3 + level * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  if (level >= 5) {
+    ctx.strokeStyle = "#fde68a";
+    ctx.lineWidth = 2.5;
+    ctx.globalAlpha = 0.55;
+    for (let i = 0; i < 12; i++) {
+      const a = -t * 0.8 + (i * Math.PI * 2) / 12;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * R * 1.05, Math.sin(a) * R * 1.05);
+      ctx.lineTo(Math.cos(a) * R * 1.25, Math.sin(a) * R * 1.25);
+      ctx.stroke();
+    }
+  }
   ctx.restore();
 }
 

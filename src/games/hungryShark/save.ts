@@ -5,7 +5,7 @@
  * to trust anyway). Corrupt/tampered saves fall back to a fresh profile.
  */
 
-import { evolutionPath, MAPS, SHARKS, type MapId, type UpgradeLevels } from "./data";
+import { BRANCH_ORDER, evolutionPath, MAPS, MAX_AWAKEN, sharkById, SHARKS, type MapId, type SharkBranch, type UpgradeLevels } from "./data";
 
 /** Shark picker sort keys ("tree" = the evolution-tree layout). */
 export const PICKER_SORTS = ["tree", "cost", "tier", "health", "speed", "gold", "boostEff", "best"] as const;
@@ -52,6 +52,11 @@ export interface SharkSave {
   /** Consecutive dives that cleared every mission (reset by a dive that didn't). */
   missionStreak: number;
   bestMissionStreak: number;
+  /**
+   * 내 빌드: the evolution branch the shop tree (and the reef's evolution choices) narrows to.
+   * Set by the first branch shark bought; null = not chosen yet / 다시 고르기 → all branches shown.
+   */
+  buildBranch: SharkBranch | null;
 }
 
 const KEY = "hungry-shark-save-v1";
@@ -76,6 +81,7 @@ export function freshSave(): SharkSave {
     deaths: {},
     missionStreak: 0,
     bestMissionStreak: 0,
+    buildBranch: null,
   };
 }
 
@@ -105,7 +111,10 @@ export function decodeSave(raw: string | null): SharkSave {
     if (checksum(json) !== sum) return freshSave();
     const parsed = JSON.parse(json) as SharkSave;
     if (parsed.version !== 1) return freshSave();
-    return migrateSave({ ...freshSave(), ...parsed });
+    // buildBranch left undefined when the save predates it, so migrateSave can seed it.
+    const merged: SharkSave = { ...freshSave(), ...parsed };
+    if (!("buildBranch" in parsed)) (merged as { buildBranch?: SharkBranch | null }).buildBranch = undefined;
+    return migrateSave(merged);
   } catch {
     return freshSave();
   }
@@ -180,7 +189,21 @@ export function migrateSave(save: SharkSave): SharkSave {
   const streak = (v: unknown) => (Number.isFinite(v) && (v as number) > 0 ? Math.floor(v as number) : 0);
   const missionStreak = streak(save.missionStreak);
   const bestMissionStreak = Math.max(missionStreak, streak(save.bestMissionStreak));
-  return { ...save, coins, owned: SHARKS.map((s) => s.id).filter((id) => owned.has(id)), selected, upgrades, best, picker, mapBest, mapSharkBest, deaths, missionStreak, bestMissionStreak };
+  for (const [id, u] of Object.entries(upgrades)) {
+    if (u && u.awaken !== undefined) {
+      const a = Number(u.awaken);
+      upgrades[id] = { ...u, awaken: Number.isFinite(a) ? Math.max(0, Math.min(MAX_AWAKEN, Math.floor(a))) : 0 };
+    }
+  }
+  // Saves from before 내 빌드: the selected shark's branch, else the first branch already owned.
+  const branchOf = (id: string) => (SHARKS.some((s) => s.id === id) ? sharkById(id).branch : "BASE");
+  let buildBranch: SharkBranch | null = (BRANCH_ORDER as readonly string[]).includes(save.buildBranch ?? "") ? save.buildBranch : null;
+  if (save.buildBranch === undefined) {
+    const sel = branchOf(selected);
+    const first = [...owned].map(branchOf).find((b) => b !== "BASE");
+    buildBranch = sel !== "BASE" ? sel : (first ?? null);
+  }
+  return { ...save, coins, owned: SHARKS.map((s) => s.id).filter((id) => owned.has(id)), selected, upgrades, best, picker, mapBest, mapSharkBest, deaths, missionStreak, bestMissionStreak, buildBranch };
 }
 
 export function loadSave(): SharkSave {

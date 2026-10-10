@@ -18,6 +18,10 @@ import {
   evolutionFrontier,
   recommendedPath,
   SIM_DIVE_INCOME,
+  AWAKEN_STAGES,
+  canAwaken,
+  MAX_AWAKEN,
+  type SharkBranch,
   SHARK_POWER_RANK,
   sharkPowerRank,
   STRONGEST_SHARK_ID,
@@ -65,6 +69,8 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
   const [showBestiary, setShowBestiary] = useState(false);
   const [showEvolve, setShowEvolve] = useState(false);
   const [bestThisSession, setBestThisSession] = useState(0);
+  // 🔄 빌드 다시 고르기: temporarily show every branch again until one is chosen.
+  const [repickBuild, setRepickBuild] = useState(false);
 
   const update = (fn: (s: SharkSave) => SharkSave) => {
     setSave((prev) => {
@@ -82,14 +88,37 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
   const picker = save.picker;
   const sortKey = picker.sort;
   const setPicker = (p: Partial<PickerPrefs>) => update((s) => ({ ...s, picker: { ...s.picker, ...p } }));
-  const listedSharks = listSharks(save, picker);
+  const build = repickBuild ? null : save.buildBranch;
+  const listedSharks = listSharks(save, picker, build);
+
+  /** Pick 내 빌드 (from 다시 고르기 or before any build): narrow the tree and view that branch's furthest owned shark. */
+  const chooseBuild = (branch: SharkBranch) => {
+    update((s) => ({ ...s, buildBranch: branch }));
+    setRepickBuild(false);
+    if (sharkById(viewId).branch !== branch) {
+      const mine = SHARKS.filter((sh) => sh.branch === branch);
+      const top = [...mine].reverse().find((sh) => save.owned.includes(sh.id));
+      setViewId((top ?? mine.find((sh) => sh.tier === 2) ?? SHARKS[0]).id);
+    }
+  };
 
   const unlock = (def: SharkDef) =>
     update((s) =>
       s.owned.includes(def.id) || s.coins < def.cost || (def.parentId && !s.owned.includes(def.parentId))
         ? s
-        : { ...s, coins: s.coins - def.cost, owned: [...s.owned, def.id], selected: def.id },
+        : {
+            ...s,
+            coins: s.coins - def.cost,
+            owned: [...s.owned, def.id],
+            selected: def.id,
+            // Buying into a branch makes it 내 빌드 (first pick, or a different one while re-picking).
+            buildBranch: def.branch === "BASE" ? s.buildBranch : def.branch,
+          },
     );
+  const unlockAndSettle = (def: SharkDef) => {
+    unlock(def);
+    if (def.branch !== "BASE") setRepickBuild(false);
+  };
 
   const startDive = () => {
     update((s) => ({ ...s, selected: viewId }));
@@ -155,6 +184,7 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
         mapId={save.mapId}
         bankCoins={save.coins}
         owned={save.owned}
+        buildBranch={save.buildBranch}
         onEvolve={(target, runCoins) => {
           // Owned already → free swap. Otherwise pay from the bank first, then this dive's coins.
           const have = save.owned.includes(target.id);
@@ -167,6 +197,7 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
             coins: sv.coins - fromBank,
             owned: sv.owned.includes(target.id) ? sv.owned : [...sv.owned, target.id],
             selected: target.id,
+            buildBranch: target.branch === "BASE" ? sv.buildBranch : target.branch,
           }));
           setViewId(target.id);
           return { fromRun, upgrades: upgradesFor(save, target.id) };
@@ -231,6 +262,13 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
           {/* List controls: 진화 트리 or a stat sorted 높은/낮은 순 + filters — saved with the profile */}
           <SharkListControls picker={picker} onChange={setPicker} />
 
+          <BuildBar
+            build={save.buildBranch}
+            repicking={repickBuild}
+            onRepick={() => setRepickBuild(true)}
+            onCancel={() => setRepickBuild(false)}
+          />
+
           {/* Evolution tree picker: T1 root, then 5 branch columns × T2..T4 — or a flat sorted grid */}
           <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-2 light:border-slate-200 light:bg-white">
             {listedSharks.length === 0 ? (
@@ -251,9 +289,24 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
                       ))}
                   </div>
                 )}
-                <div className="grid grid-cols-2 gap-x-2 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">
-                  {BRANCH_ORDER.map((br) => (
-                    <BranchColumn key={br} branch={br} listed={listedSharks} save={save} viewId={viewId} onPick={setViewId} />
+                <div
+                  className={
+                    build
+                      ? "mx-auto grid w-full max-w-sm grid-cols-1 gap-y-2"
+                      : "grid grid-cols-2 gap-x-2 gap-y-2 sm:grid-cols-3 lg:grid-cols-5"
+                  }
+                >
+                  {BRANCH_ORDER.filter((br) => !build || br === build).map((br) => (
+                    <BranchColumn
+                      key={br}
+                      branch={br}
+                      listed={listedSharks}
+                      save={save}
+                      viewId={viewId}
+                      onPick={setViewId}
+                      onChoose={build ? undefined : () => chooseBuild(br)}
+                      chosen={!repickBuild ? false : save.buildBranch === br}
+                    />
                   ))}
                 </div>
               </>
@@ -296,6 +349,21 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
               <StatBars def={viewDef} save={save} />
               <PowerRankBox def={viewDef} />
               {owned && <EvolutionBox def={viewDef} save={save} onView={setViewId} />}
+              {owned && canAwaken(viewDef) && (
+                <AwakenBox
+                  def={viewDef}
+                  level={ups.awaken ?? 0}
+                  coins={save.coins}
+                  onAwaken={(cost) =>
+                    update((s) => {
+                      const cur = upgradesFor(s, viewId);
+                      const lvl = cur.awaken ?? 0;
+                      if (lvl >= MAX_AWAKEN || s.coins < cost) return s;
+                      return { ...s, coins: s.coins - cost, upgrades: { ...s.upgrades, [viewId]: { ...cur, awaken: lvl + 1 } } };
+                    })
+                  }
+                />
+              )}
               {owned ? (
                 (Object.keys(UPGRADE_LABELS) as UpgradeKind[]).map((k) => {
                   const lvl = ups[k];
@@ -340,7 +408,7 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
                   </p>
                   <button
                     disabled={!parentOwned || save.coins < viewDef.cost}
-                    onClick={() => unlock(viewDef)}
+                    onClick={() => unlockAndSettle(viewDef)}
                     className="rounded-xl bg-yellow-400 px-5 py-2 text-sm font-black text-slate-900 hover:bg-yellow-300 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 light:disabled:bg-slate-200 light:disabled:text-slate-400"
                   >
                     🔓 {viewDef.cost.toLocaleString()}🪙에 잠금 해제
@@ -462,9 +530,10 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
           currentSharkId={viewId}
           playerGold={save.coins}
           owned={save.owned}
+          buildBranch={save.buildBranch}
           onEvolve={(target) => {
             if (save.owned.includes(target.id)) update((s) => ({ ...s, selected: target.id }));
-            else unlock(target);
+            else unlockAndSettle(target);
             setViewId(target.id);
             setShowEvolve(false);
           }}
@@ -552,9 +621,12 @@ function emptyPickerMessage(save: SharkSave): string {
 }
 
 /** Picker contents. "tree" keeps SHARKS order (the tree layout groups it); stat ties fall back to tree order. */
-function listSharks(save: SharkSave, picker: PickerPrefs): SharkDef[] {
+function listSharks(save: SharkSave, picker: PickerPrefs, build: SharkBranch | null): SharkDef[] {
   const list = SHARKS.filter(
-    (sh) => !(picker.hideOwned && save.owned.includes(sh.id)) && !(picker.buyableOnly && !canBuyNow(sh, save)),
+    (sh) =>
+      (!build || sh.branch === "BASE" || sh.branch === build) &&
+      !(picker.hideOwned && save.owned.includes(sh.id)) &&
+      !(picker.buyableOnly && !canBuyNow(sh, save)),
   );
   if (picker.sort === "tree") return list;
   const { value } = SORT_OPTIONS[picker.sort];
@@ -661,12 +733,18 @@ function BranchColumn({
   save,
   viewId,
   onPick,
+  onChoose,
+  chosen,
 }: {
   branch: (typeof BRANCH_ORDER)[number];
   listed: SharkDef[];
   save: SharkSave;
   viewId: string;
   onPick: (id: string) => void;
+  /** All-branches view: "이 빌드로" button that makes this branch 내 빌드. */
+  onChoose?: () => void;
+  /** This branch is the current 내 빌드 (shown while re-picking). */
+  chosen?: boolean;
 }) {
   const shown = new Set(listed.map((sh) => sh.id));
   const root = SHARKS.find((sh) => sh.tier === 2 && sh.branch === branch);
@@ -686,6 +764,15 @@ function BranchColumn({
       <div className={`text-center text-[11px] font-black ${f.label}`}>
         {BRANCH_INFO[branch].emoji} {BRANCH_INFO[branch].name}
         <div className="text-[9px] font-semibold opacity-70">{BRANCH_INFO[branch].desc}</div>
+        {onChoose && (
+          <button
+            type="button"
+            onClick={onChoose}
+            className="mt-1 rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-black text-slate-900 hover:bg-white light:bg-slate-800 light:text-white"
+          >
+            {chosen ? "✔ 지금 빌드" : "✅ 이 빌드로"}
+          </button>
+        )}
       </div>
       {rows.map((r) => (
         <div key={r.tier} className={`flex flex-col gap-1 rounded-xl border border-dashed p-1 ${f.line}`}>
@@ -750,6 +837,11 @@ function SharkCard({
       } ${sh.tier === 1 && !metric ? "max-w-[11rem]" : ""}`}
     >
       <span className="absolute top-1 left-1.5 text-[9px] font-black text-white/50 light:text-slate-400">T{sh.tier}</span>
+      {(save.upgrades[sh.id]?.awaken ?? 0) > 0 && (
+        <span className="absolute bottom-1 left-1.5 text-[9px] font-black text-fuchsia-300 light:text-fuchsia-600">
+          🌟{save.upgrades[sh.id]?.awaken}
+        </span>
+      )}
       {lineMark && <span className={`absolute top-1 right-1.5 max-w-[70%] truncate text-[9px] font-black ${lineClass ?? ""}`}>{lineMark}</span>}
       <SharkPreview def={sh} width={88} height={40} dim={!own} />
       <span className="mt-0.5 w-full truncate text-center text-[11px] font-bold text-white sm:text-xs light:text-slate-800">{sh.name}</span>
@@ -767,6 +859,108 @@ function SharkCard({
         <span className="mt-0.5 rounded-full bg-amber-400 px-1.5 text-[9px] font-black text-slate-900">🎯 추천 진화</span>
       )}
     </button>
+  );
+}
+
+/** 내 빌드 bar above the shark tree: which branch it's narrowed to, 다시 고르기 / 취소. */
+function BuildBar({
+  build,
+  repicking,
+  onRepick,
+  onCancel,
+}: {
+  build: SharkBranch | null;
+  repicking: boolean;
+  onRepick: () => void;
+  onCancel: () => void;
+}) {
+  const box = "flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-xs";
+  if (!build) {
+    return (
+      <div className={`${box} border-sky-400/30 bg-sky-500/10 text-sky-100 light:border-sky-200 light:bg-sky-50 light:text-sky-800`}>
+        <span className="font-bold">🧬 빌드를 골라 보세요 — 계통 위 [이 빌드로] 버튼이나 첫 계통 상어 해금으로 정해지고, 그 빌드만 보입니다.</span>
+      </div>
+    );
+  }
+  const info = BRANCH_INFO[build];
+  if (repicking) {
+    return (
+      <div className={`${box} border-amber-400/40 bg-amber-400/10 text-amber-100 light:border-amber-300 light:bg-amber-50 light:text-amber-800`}>
+        <span className="font-bold">
+          🔄 빌드 다시 고르기 — 원하는 계통 위의 [이 빌드로]를 누르세요 (지금: {info.emoji} {info.name})
+        </span>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-lg bg-black/30 px-2.5 py-1 font-bold hover:bg-black/45 light:bg-white light:hover:bg-slate-100"
+        >
+          취소
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className={`${box} border-white/15 bg-white/[0.04] text-white light:border-slate-200 light:bg-white light:text-slate-800`}>
+      <span className="font-black">
+        🧬 내 빌드: {info.emoji} {info.name} <span className="font-semibold opacity-60">· {info.desc}</span>
+      </span>
+      <button type="button" onClick={onRepick} className="rounded-lg bg-amber-400 px-2.5 py-1 font-black text-slate-900 hover:bg-amber-300">
+        🔄 빌드 다시 고르기
+      </button>
+    </div>
+  );
+}
+
+/** 🌟 각성: five stages bought in order on an owned T4 shark, each one listed with its effect. */
+function AwakenBox({ def, level, coins, onAwaken }: { def: SharkDef; level: number; coins: number; onAwaken: (cost: number) => void }) {
+  const next = level < MAX_AWAKEN ? AWAKEN_STAGES[level] : null;
+  return (
+    <div className="rounded-lg border border-fuchsia-400/40 bg-fuchsia-500/10 p-2 text-[11px] light:border-fuchsia-200 light:bg-fuchsia-50">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-black text-fuchsia-200 light:text-fuchsia-700">
+          🌟 각성 {level}/{MAX_AWAKEN}단계 <span className="font-semibold opacity-70">· {def.name}</span>
+        </span>
+        <span className="tracking-tight text-fuchsia-200 light:text-fuchsia-600">
+          {"★".repeat(level)}
+          <span className="opacity-30">{"★".repeat(MAX_AWAKEN - level)}</span>
+        </span>
+      </div>
+      <ol className="mt-1.5 space-y-1">
+        {AWAKEN_STAGES.map((st, i) => {
+          const done = i < level;
+          const isNext = i === level;
+          return (
+            <li
+              key={st.name}
+              className={`flex items-center gap-2 rounded-md px-2 py-1 ${
+                done ? "bg-black/25 light:bg-white" : isNext ? "bg-black/15 ring-1 ring-fuchsia-300/60 light:bg-white" : "opacity-45"
+              }`}
+            >
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: st.color, boxShadow: done ? `0 0 6px ${st.color}` : undefined }} />
+              <span className="w-[5.5rem] shrink-0 font-black text-white light:text-slate-800">
+                {i + 1}단계 {st.name}
+              </span>
+              <span className="min-w-0 flex-1 text-white/65 light:text-slate-600">{st.desc}</span>
+              <span className="shrink-0 font-bold text-white/60 light:text-slate-500">{done ? "✓" : `${(st.cost / 1000).toLocaleString()}k🪙`}</span>
+            </li>
+          );
+        })}
+      </ol>
+      {next ? (
+        <button
+          type="button"
+          disabled={coins < next.cost}
+          onClick={() => onAwaken(next.cost)}
+          className="mt-1.5 w-full rounded-lg bg-fuchsia-400 py-1.5 text-xs font-black text-slate-900 hover:bg-fuchsia-300 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 light:disabled:bg-slate-200 light:disabled:text-slate-400"
+        >
+          🌟 {level + 1}단계 「{next.name}」 각성 — 🪙{next.cost.toLocaleString()}
+          {coins < next.cost ? ` (${(next.cost - coins).toLocaleString()} 부족)` : ""}
+        </button>
+      ) : (
+        <div className="mt-1.5 text-center font-black text-fuchsia-200 light:text-fuchsia-700">👑 완전 각성! 잠수 중 왕관 오라가 빛납니다.</div>
+      )}
+      <div className="mt-1 text-[10px] text-white/45 light:text-slate-500">효과는 누적되고, 단계가 오를수록 잠수 중 오라가 화려해집니다.</div>
+    </div>
   );
 }
 
@@ -803,7 +997,7 @@ function EvolutionBox({ def, save, onView }: { def: SharkDef; save: SharkSave; o
   if (path.length === 0) {
     return (
       <div className="rounded-lg border border-amber-400/40 bg-amber-400/10 p-2 text-[11px] font-bold text-amber-300 light:border-amber-300 light:bg-amber-50 light:text-amber-700">
-        👑 최종 진화 단계입니다 — 강화로 더 강해질 수 있어요.
+        👑 최종 진화 단계입니다 — 아래 🌟 각성으로 5단계까지 더 강해질 수 있어요.
       </div>
     );
   }

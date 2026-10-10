@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { BRANCH_INFO, recommendedEvolution, sharkById, type SharkBranch, type SharkDef } from "./data";
 
 /**
@@ -63,6 +64,7 @@ export default function SharkEvolutionModal({
   owned,
   goldNote,
   closeLabel = "닫기",
+  buildBranch = null,
   onEvolve,
   onClose,
 }: {
@@ -72,11 +74,18 @@ export default function SharkEvolutionModal({
   /** Small caption under the gold amount (e.g. "보유 + 이번 잠수"). */
   goldNote?: string;
   closeLabel?: string;
+  /** 내 빌드: the reef's 5-way choice shows only this branch until 🔄 빌드 다시 고르기. */
+  buildBranch?: SharkBranch | null;
   onEvolve: (target: SharkDef) => void;
   onClose: () => void;
 }) {
   const current = sharkById(currentSharkId);
-  const nextOptions = current.nextIds.map(sharkById);
+  const [showAll, setShowAll] = useState(false);
+  const allOptions = current.nextIds.map(sharkById);
+  const narrowed = !showAll && buildBranch ? allOptions.filter((s) => s.branch === buildBranch) : allOptions;
+  // Only the reef's branch choice narrows (later choices are all inside one branch anyway).
+  const canNarrow = !!buildBranch && allOptions.some((s) => s.branch !== buildBranch) && allOptions.some((s) => s.branch === buildBranch);
+  const nextOptions = canNarrow ? narrowed : allOptions;
   const compact = nextOptions.length > 3;
   const pick = nextOptions.length > 1 ? recommendedEvolution(current.id) : null;
 
@@ -216,7 +225,15 @@ export default function SharkEvolutionModal({
           </div>
         </div>
 
-        <div className="flex justify-end">
+        <div className={`flex items-center gap-2 ${canNarrow ? "justify-between" : "justify-end"}`}>
+          {canNarrow && (
+            <button
+              onClick={() => setShowAll((v) => !v)}
+              className="rounded-xl bg-amber-500/90 px-4 py-2 text-xs font-black text-neutral-950 hover:bg-amber-400"
+            >
+              {showAll ? `🧬 내 빌드만 보기 (${BRANCH_INFO[buildBranch!].emoji} ${BRANCH_INFO[buildBranch!].short})` : "🔄 빌드 다시 고르기"}
+            </button>
+          )}
           <button onClick={onClose} className="rounded-xl bg-neutral-800 px-5 py-2 text-xs font-bold text-neutral-300 hover:bg-neutral-700">
             {closeLabel}
           </button>

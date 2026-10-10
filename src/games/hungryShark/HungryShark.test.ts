@@ -1121,3 +1121,44 @@ describe("강함 하이라이트", () => {
     expect(d.TIER_BEST_IDS.size).toBe(3);
   });
 });
+
+describe("각성 + 내 빌드", () => {
+  it("awaken stages stack on a T4 shark and are ignored below T4", async () => {
+    const d = await import("./data");
+    const apex = d.sharkById("megalodon");
+    const base = d.effectiveStats(apex, { bite: 0, speed: 0, boost: 0 });
+    const full = d.effectiveStats(apex, { bite: 0, speed: 0, boost: 0, awaken: 5 });
+    expect(full.awaken).toBe(5);
+    expect(full.maxHealth).toBe(Math.round(apex.maxHealth * 1.2));
+    expect(full.goldMultiplier).toBeCloseTo(apex.goldMultiplier * 1.25);
+    expect(full.skillCooldown).toBeCloseTo(apex.skill.cooldown * 0.85);
+    expect(full.baseDrainRate).toBeLessThan(base.baseDrainRate);
+    expect(full.length).toBeGreaterThan(base.length);
+    const t3 = d.sharkById("white");
+    expect(d.effectiveStats(t3, { bite: 0, speed: 0, boost: 0, awaken: 5 }).awaken).toBe(0);
+    expect(d.AWAKEN_STAGES.length).toBe(d.MAX_AWAKEN);
+  });
+
+  it("engine uses the awakened skill cooldown", async () => {
+    const d = await import("./data");
+    const e = await import("./engine");
+    const w = e.createWorld(d.sharkById("megalodon"), { bite: 0, speed: 0, boost: 0, awaken: 3 }, 7);
+    e.castSkill(w);
+    expect(w.skill.cooldown).toBeCloseTo(d.sharkById("megalodon").skill.cooldown * 0.85);
+  });
+
+  it("old saves get 내 빌드 seeded from what they own; awaken is clamped", async () => {
+    const s = await import("./save");
+    const old = { ...s.freshSave(), owned: ["reef", "mako"], selected: "reef", upgrades: { mako: { bite: 1, speed: 0, boost: 0, awaken: 99 } } } as Record<string, unknown>;
+    delete old.buildBranch;
+    const json = JSON.stringify(old);
+    // Round-trip through the real decoder (which is where "missing field" is detected).
+    const enc = s.encodeSave(old as unknown as import("./save").SharkSave);
+    expect(JSON.parse(json).buildBranch).toBeUndefined();
+    const dec = s.decodeSave(enc);
+    expect(dec.buildBranch).toBe("SPEED");
+    expect(dec.upgrades.mako.awaken).toBe(5);
+    expect(s.decodeSave(s.encodeSave(s.freshSave())).buildBranch).toBeNull();
+    expect(s.decodeSave(s.encodeSave({ ...dec, buildBranch: null })).buildBranch).toBeNull();
+  });
+});

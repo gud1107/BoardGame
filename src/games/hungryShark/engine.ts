@@ -1270,7 +1270,7 @@ function applyPreyEffect(w: World, e: Entity) {
       break;
     case "skill":
       if (w.skill.cooldown > 0) {
-        w.skill.cooldown = Math.max(0, w.skill.cooldown - w.def.skill.cooldown * 0.5);
+        w.skill.cooldown = Math.max(0, w.skill.cooldown - w.stats.skillCooldown * 0.5);
         floatText(w, s.x, s.y - 54, "⚡ 메가 바이트 충전!", "#c4b5fd", 18);
         w.events.push({ type: "skillReady" });
       }
@@ -1390,7 +1390,7 @@ function updateSkill(w: World, input: SharkInput, dt: number) {
 export function castSkill(w: World) {
   const sk = w.skill;
   const s = w.shark;
-  sk.cooldown = w.def.skill.cooldown;
+  sk.cooldown = w.stats.skillCooldown;
   sk.active = SKILL_ACTIVE[sk.id];
   const hx = Math.cos(s.angle), hy = Math.sin(s.angle);
   const m = mouthPos(w);
