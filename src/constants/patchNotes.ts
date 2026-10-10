@@ -69,6 +69,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       },
       {
         game: "ink-duel",
+        type: "FEAT",
+        desc: "벽 그리기도 붓 커서·끝점 이어 붙이기 지원, 휴대폰에선 이어 그릴 수 있는 선 끝을 옅은 동그라미로 미리 보여줘요",
+      },
+      {
+        game: "ink-duel",
         type: "FIX",
         desc: "마우스를 뗐다가 끝점에서 이어 그린 선도 한 도형으로 인식해요 (세 줄 삼각형 = 로켓, 네 줄 네모 = 모루)",
       },
