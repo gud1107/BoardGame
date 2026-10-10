@@ -157,10 +157,25 @@ const SHINE_CSS = `@keyframes sd-owned-shine{0%{transform:translateX(-120%) skew
 @media (prefers-reduced-motion:reduce){.sd-owned-burst,.sd-owned-plus{animation:none}.sd-owned-plus{display:none}}`;
 
 /**
- * "카드 N" in the dock header — glints while there is something to look at, opens the owned-cards sheet.
- * Right after a purchase (count went up) it flares twice with a floating "+N"; the burst ends on animationend.
+ * "카드 N" / "👑×N" in the dock header — glints while there is something to look at, opens the owned-cards sheet.
+ * Right after a gain (count went up) it flares twice with a floating "+N"; the burst ends on animationend.
+ * Stays mounted at 0 (just hidden when `hideAtZero`) so the very first gain still bursts.
  */
-function OwnedCardsButton({ count, onClick }: { count: number; onClick: () => void }) {
+function OwnedCardsButton({
+  count,
+  onClick,
+  label,
+  plusIcon = "",
+  title = "가지고 있는 카드 보기",
+  hideAtZero = false,
+}: {
+  count: number;
+  onClick: () => void;
+  label: (count: number) => string;
+  plusIcon?: string;
+  title?: string;
+  hideAtZero?: boolean;
+}) {
   // Count the player has already "seen" — mounting at N never bursts, only later increases do.
   const [seen, setSeen] = useState(count);
   // A rematch can reset the count below `seen` — resync during render so the next purchase bursts again.
@@ -168,7 +183,7 @@ function OwnedCardsButton({ count, onClick }: { count: number; onClick: () => vo
   const gained = count - seen;
   const burst = gained > 0;
   return (
-    <span className="relative inline-flex">
+    <span className={`relative ${hideAtZero && count === 0 ? "hidden" : "inline-flex"}`}>
       {count > 0 && <style>{SHINE_CSS}</style>}
       <button
         type="button"
@@ -176,7 +191,7 @@ function OwnedCardsButton({ count, onClick }: { count: number; onClick: () => vo
         onAnimationEnd={(e) => {
           if (e.target === e.currentTarget) setSeen(count);
         }}
-        title="가지고 있는 카드 보기"
+        title={title}
         className={`relative z-10 overflow-hidden rounded-full border px-1.5 text-[10px] leading-tight font-bold transition hover:brightness-125 ${
           count > 0
             ? "border-amber-300/70 bg-amber-500/20 text-amber-100 shadow-[0_0_8px_rgba(251,191,36,0.45)] light:text-amber-800"
@@ -190,7 +205,7 @@ function OwnedCardsButton({ count, onClick }: { count: number; onClick: () => vo
             style={{ animation: `sd-owned-shine ${burst ? "0.55s" : "2.4s"} ease-in-out infinite` }}
           />
         )}
-        <span className="relative">🃏 카드 {count}</span>
+        <span className="relative">{label(count)}</span>
       </button>
       {burst && (
         <span
@@ -198,7 +213,8 @@ function OwnedCardsButton({ count, onClick }: { count: number; onClick: () => vo
           aria-hidden="true"
           className="sd-owned-plus pointer-events-none absolute -top-3 left-1/2 z-20 rounded-full bg-amber-300 px-1 text-[10px] leading-tight font-black whitespace-nowrap text-stone-900 shadow-[0_0_10px_rgba(253,224,71,0.9)]"
         >
-          +{gained}
+          +{plusIcon}
+          {gained}
         </span>
       )}
     </span>
@@ -301,8 +317,15 @@ export default function PlayerDock({
         <span className="flex shrink-0 items-center gap-2">
           <TokenLimitBadge total={tokenTotal(player.tokens)} />
           <ScrollPips count={player.scrolls} />
-          {player.royals.length > 0 && <span className="text-[10px] text-amber-200">👑×{player.royals.length}</span>}
-          <OwnedCardsButton count={player.cards.length} onClick={() => setShowOwned(true)} />
+          <OwnedCardsButton
+            count={player.royals.length}
+            onClick={() => setShowOwned(true)}
+            label={(n) => `👑×${n}`}
+            plusIcon="👑"
+            title="받은 왕실 카드 보기"
+            hideAtZero
+          />
+          <OwnedCardsButton count={player.cards.length} onClick={() => setShowOwned(true)} label={(n) => `🃏 카드 ${n}`} />
         </span>
       </div>
       {compact && !isMe ? (
