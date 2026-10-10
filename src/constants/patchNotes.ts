@@ -58,6 +58,18 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.55.1",
+    releaseDate: "2026-10-11",
+    title: "✏️ 낙서 결투 이어 그리기 인식 개선",
+    changes: [
+      {
+        game: "ink-duel",
+        type: "FIX",
+        desc: "마우스를 뗐다가 끝점에서 이어 그린 선도 한 도형으로 인식해요 (세 줄 삼각형 = 로켓, 네 줄 네모 = 모루)",
+      },
+    ],
+  },
+  {
     version: "v1.55.0",
     releaseDate: "2026-10-09",
     title: "✏️ 낙서 결투 무빙 모드 방장 이어받기·설정·그림판 배치, 🎲 랜덤 합성 디펜스 새 맵 3종·자동 모드",

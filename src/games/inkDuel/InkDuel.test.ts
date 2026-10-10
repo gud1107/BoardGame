@@ -615,3 +615,20 @@ describe("bot shield choice", () => {
     }
   });
 });
+
+describe("ink duel — continued lines (lift the mouse, keep drawing)", () => {
+  const line = (...p: number[]): Stroke => ({ c: 0, p });
+  it("reads a shape drawn in several touching lines like the one-stroke version", () => {
+    expect(analyzeWeapon([line(40, 40, 160, 40), line(162, 42, 160, 160), line(158, 161, 40, 160), line(41, 158, 40, 42)]).kind).toBe("anvil");
+    expect(analyzeWeapon([line(100, 30, 170, 160), line(168, 158, 30, 160), line(32, 157, 99, 33)]).kind).toBe("rocket");
+    // Second line drawn backwards still joins.
+    expect(analyzeWeapon([line(100, 30, 170, 160, 30, 160), line(99, 33, 32, 157)]).kind).toBe("rocket");
+  });
+  it("keeps a closed outline closed and dots apart", () => {
+    const circle: number[] = [];
+    for (let i = 0; i <= 24; i++) circle.push(100 + Math.round(50 * Math.cos((i / 24) * 2 * Math.PI)), 100 + Math.round(50 * Math.sin((i / 24) * 2 * Math.PI)));
+    expect(analyzeWeapon([line(...circle), line(150, 100, 185, 70)]).kind).toBe("bomb");
+    const dots = [line(40, 40, 50, 40), line(70, 40, 80, 40), line(100, 40, 110, 40), line(130, 40, 140, 40)];
+    expect(analyzeWeapon(dots).kind).toBe("cluster");
+  });
+});

@@ -354,6 +354,59 @@ function closedCorners(pts: number[]): number {
   return corners;
 }
 
+/** Pen lifts whose ends are this close (pad px) count as one continued line. */
+export const JOIN_DIST = 14;
+
+function reversePts(p: readonly number[]): number[] {
+  const out: number[] = [];
+  for (let i = p.length - 2; i >= 0; i -= 2) out.push(p[i], p[i + 1]);
+  return out;
+}
+
+/**
+ * Joins strokes that pick up where another one stopped (lift the mouse, keep
+ * drawing) into single polylines, so a triangle drawn as 3 lines still reads
+ * as a triangle. Shape only — colors are counted per stroke elsewhere. Dots
+ * stay apart (cluster pellets), and a chain that already closed on itself is
+ * left alone (a bomb with a fuse stays a bomb).
+ */
+function chainStrokes(strokes: readonly Stroke[]): number[][] {
+  const near = (p: readonly number[], i: number, q: readonly number[], j: number) => {
+    const dx = p[i] - q[j];
+    const dy = p[i + 1] - q[j + 1];
+    return dx * dx + dy * dy <= JOIN_DIST * JOIN_DIST;
+  };
+  const isClosed = (p: number[]) => strokeLength({ c: 0, p }) >= 60 && near(p, 0, p, p.length - 2);
+  const chains: number[][] = [];
+  for (const s of strokes) {
+    let pts = s.p.slice();
+    if (strokeLength(s) >= 6) {
+      for (let joined = true; joined && !isClosed(pts); ) {
+        joined = false;
+        for (let k = chains.length - 1; k >= 0; k--) {
+          const c = chains[k];
+          if (strokeLength({ c: 0, p: c }) < 6 || isClosed(c)) continue;
+          const ce = c.length - 2;
+          const pe = pts.length - 2;
+          let next: number[] | null = null;
+          if (near(c, ce, pts, 0)) next = c.concat(pts);
+          else if (near(c, ce, pts, pe)) next = c.concat(reversePts(pts));
+          else if (near(c, 0, pts, pe)) next = pts.concat(c);
+          else if (near(c, 0, pts, 0)) next = reversePts(pts).concat(c);
+          if (next) {
+            chains.splice(k, 1);
+            pts = next;
+            joined = true;
+            break;
+          }
+        }
+      }
+    }
+    chains.push(pts);
+  }
+  return chains;
+}
+
 /** Full analysis of a weapon doodle drawn on the PAD_SIZE pad. */
 export function analyzeWeapon(strokes: readonly Stroke[]): WeaponStats {
   const ink = totalInk(strokes);
@@ -367,34 +420,35 @@ export function analyzeWeapon(strokes: readonly Stroke[]): WeaponStats {
   const element = ELEMENTS[color];
   const element2: Element | null = second >= 0 && colorInk[second] >= ink * 0.35 ? ELEMENTS[second] : null;
 
-  // Longest stroke drives the archetype.
-  let main = strokes[0];
-  let mainLen = strokeLength(main);
+  // Longest continued line drives the archetype.
+  const lines = chainStrokes(strokes);
+  let main = lines[0];
+  let mainLen = strokeLength({ c: 0, p: main });
   let totalLen = 0;
-  for (const s of strokes) {
-    const l = strokeLength(s);
+  for (const p of lines) {
+    const l = strokeLength({ c: 0, p });
     totalLen += l;
     if (l > mainLen) {
-      main = s;
+      main = p;
       mainLen = l;
     }
   }
-  const sx = main.p[0];
-  const sy = main.p[1];
-  const ex = main.p[main.p.length - 2];
-  const ey = main.p[main.p.length - 1];
+  const sx = main[0];
+  const sy = main[1];
+  const ex = main[main.length - 2];
+  const ey = main[main.length - 1];
   const endDist = Math.sqrt((ex - sx) * (ex - sx) + (ey - sy) * (ey - sy));
   const straightness = mainLen > 0 ? endDist / mainLen : 0;
   // Gap allowed between pen-down and pen-up for a closed shape (capped so a spiral never counts).
   const closed = mainLen >= 60 && endDist <= Math.max(18, Math.min(35, mainLen * 0.15));
-  const rs = resample(main.p, 8);
+  const rs = resample(main, 8);
   const area = closed ? polygonArea(rs) : 0;
 
   let turns = 0;
   let spikes = 0;
   let zigzag = 0;
-  for (const s of strokes) {
-    const t = countTurns(resample(s.p, 8));
+  for (const p of lines) {
+    const t = countTurns(resample(p, 8));
     turns += t.turns;
     spikes += t.spikes;
     zigzag += t.zigzag;
@@ -422,7 +476,7 @@ export function analyzeWeapon(strokes: readonly Stroke[]): WeaponStats {
   }
 
   let kind: WeaponKind;
-  if (strokes.length >= 4 && mainShare < 0.45) kind = "cluster";
+  if (lines.length >= 4 && mainShare < 0.45) kind = "cluster";
   else if (crossing) kind = "shuriken";
   else if (straightness >= 0.85 && mainLen >= 70) kind = "spear";
   else if (closed && area >= 900) {
@@ -566,7 +620,7 @@ export function analyzeWeapon(strokes: readonly Stroke[]): WeaponStats {
     case "cluster":
       damage = 9 * wf;
       blastRadius = 20;
-      pellets = clamp(strokes.length, 3, 6);
+      pellets = clamp(lines.length, 3, 6);
       break;
     default:
       damage = 17 * wf;

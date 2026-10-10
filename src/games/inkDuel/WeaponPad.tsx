@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { COLOR_NAMES, INK_COLORS, MAX_POINTS_PER_STROKE, MAX_STROKES, PAD_SIZE, strokeInk, totalInk, type InkColor, type Stroke } from "./analyze";
+import { COLOR_NAMES, INK_COLORS, JOIN_DIST, MAX_POINTS_PER_STROKE, MAX_STROKES, PAD_SIZE, strokeInk, strokeLength, totalInk, type InkColor, type Stroke } from "./analyze";
 
 interface Props {
   strokes: Stroke[];
@@ -76,6 +76,27 @@ export default function WeaponPad({ strokes, color, budget, disabled, onChange, 
     return [Math.max(0, Math.min(PAD_SIZE, x)), Math.max(0, Math.min(PAD_SIZE, y))];
   }
 
+  /**
+   * Starting near the end of an earlier line picks up exactly where it
+   * stopped — a mouse can't land on the same pixel twice, and the analyzer
+   * reads joined lines as one shape (triangle in 3 lines = rocket).
+   */
+  function snapToEnd(x: number, y: number): [number, number] {
+    let best: [number, number] = [x, y];
+    let bestD = JOIN_DIST * JOIN_DIST;
+    for (const s of strokes) {
+      if (strokeLength(s) < 6) continue;
+      for (const i of [0, s.p.length - 2]) {
+        const d = (s.p[i] - x) ** 2 + (s.p[i + 1] - y) ** 2;
+        if (d <= bestD) {
+          bestD = d;
+          best = [s.p[i], s.p[i + 1]];
+        }
+      }
+    }
+    return best;
+  }
+
   function addPoint(live: Stroke, x: number, y: number): boolean {
     const lx = live.p[live.p.length - 2];
     const ly = live.p[live.p.length - 1];
@@ -94,7 +115,7 @@ export default function WeaponPad({ strokes, color, budget, disabled, onChange, 
         if (disabled || strokes.length >= MAX_STROKES) return;
         if (totalInk(strokes) + 2 > budget) return;
         e.currentTarget.setPointerCapture(e.pointerId);
-        const [x, y] = toPad(e.currentTarget, e.clientX, e.clientY);
+        const [x, y] = snapToEnd(...toPad(e.currentTarget, e.clientX, e.clientY));
         liveRef.current = { c: color, p: [x, y] };
         redraw();
       }}
