@@ -17,6 +17,11 @@ const CSS = `
 .sd-rc-title{animation:sd-rc-title .7s ease-out .15s both}
 .sd-rc-spark{animation:sd-rc-spark 1.4s ease-out both}
 .sd-rc-stamp{animation:sd-rc-stamp .5s cubic-bezier(.2,.9,.3,1.3) .85s both}
+.sd-rc-quick.sd-rc-life{animation-duration:1.9s}
+.sd-rc-quick .sd-rc-card{animation-duration:.55s}
+.sd-rc-quick .sd-rc-title{animation-duration:.45s;animation-delay:0s}
+.sd-rc-quick .sd-rc-spark{animation-duration:.9s}
+.sd-rc-quick .sd-rc-stamp{animation-delay:.4s}
 .sd-ab-toast{animation:sd-ab-toast 2.6s ease-out forwards}
 @media (prefers-reduced-motion:reduce){.sd-rc-rays,.sd-rc-card,.sd-rc-title,.sd-rc-stamp{animation:none}.sd-rc-spark{display:none}}
 `;
@@ -46,13 +51,26 @@ function royalAbilityLine(ability: CardAbility, isMe: boolean): string {
 /**
  * Full-screen celebration when anyone claims a royal card — portrait drops in
  * over rotating gold rays with a spark burst, then the ability "발동!" stamp.
- * Auto-closes after ~3.6s (or on tap); never blocks the follow-up choice for long.
+ * Auto-closes after ~3.6s (or on tap). `quick` (the claimer must now pick something — e.g. the
+ * steal target) plays a 1.9s cut so the choice panel underneath isn't held up.
  */
-export function RoyalCeremony({ royal, who, isMe, onDone }: { royal: RoyalCard; who: string; isMe: boolean; onDone: () => void }) {
+export function RoyalCeremony({
+  royal,
+  who,
+  isMe,
+  quick = false,
+  onDone,
+}: {
+  royal: RoyalCard;
+  who: string;
+  isMe: boolean;
+  quick?: boolean;
+  onDone: () => void;
+}) {
   const meta = royal.ability ? ABILITY_META[royal.ability] : null;
   return (
     <div
-      className="sd-rc-life fixed inset-0 z-[70] flex cursor-pointer flex-col items-center justify-center overflow-hidden bg-[radial-gradient(ellipse_at_center,rgba(76,29,149,0.55)_0%,rgba(0,0,0,0.88)_65%)] px-4 text-white"
+      className={`sd-rc-life ${quick ? "sd-rc-quick" : ""} fixed inset-0 z-[70] flex cursor-pointer flex-col items-center justify-center overflow-hidden bg-[radial-gradient(ellipse_at_center,rgba(76,29,149,0.55)_0%,rgba(0,0,0,0.88)_65%)] px-4 text-white`}
       onClick={onDone}
       onAnimationEnd={(e) => {
         if (e.target === e.currentTarget) onDone();
@@ -91,7 +109,7 @@ export function RoyalCeremony({ royal, who, isMe, onDone }: { royal: RoyalCard; 
           <span className="text-xs text-amber-50/90">{royalAbilityLine(royal.ability, isMe)}</span>
         </div>
       )}
-      <p className="relative mt-4 text-[10px] text-white/50">탭하면 닫혀요</p>
+      <p className="relative mt-4 text-[10px] text-white/50">{quick ? "곧 고르기 창이 열려요 · 탭하면 바로 닫혀요" : "탭하면 닫혀요"}</p>
     </div>
   );
 }

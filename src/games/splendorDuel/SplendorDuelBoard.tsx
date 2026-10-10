@@ -332,7 +332,7 @@ export default function SplendorDuelBoard({
   // following "extraTurn" event in the same action), ability banners from each new engine event.
   const royalsKey = `${state.players.p1.royals.length},${state.players.p2.royals.length}`;
   const [seenRoyalsKey, setSeenRoyalsKey] = useState(royalsKey);
-  const [ceremony, setCeremony] = useState<{ royal: RoyalCard; seat: Seat; key: number } | null>(null);
+  const [ceremony, setCeremony] = useState<{ royal: RoyalCard; seat: Seat; key: number; quick: boolean } | null>(null);
   const [seenAlertSeq, setSeenAlertSeq] = useState(state.eventSeq);
   const [alert, setAlert] = useState<(AbilityAlert & { key: number }) | null>(null);
   if (seenRoyalsKey !== royalsKey || seenAlertSeq !== state.eventSeq) {
@@ -344,7 +344,9 @@ export default function SplendorDuelBoard({
         const royals = state.players[seat].royals;
         if (royals.length > before) claimed = { royal: royals[royals.length - 1], seat };
       }
-      if (claimed) setCeremony({ ...claimed, key: state.eventSeq });
+      // The claimer now has a choice waiting (steal target, discard…) → short cut so it isn't covered for long.
+      const choiceWaiting = !!claimed && claimed.seat === viewerSeat && state.phase === "resolving" && state.activeSeat === viewerSeat;
+      if (claimed) setCeremony({ ...claimed, key: state.eventSeq, quick: choiceWaiting });
     }
     if (seenAlertSeq !== state.eventSeq) {
       setSeenAlertSeq(state.eventSeq);
@@ -705,6 +707,7 @@ export default function SplendorDuelBoard({
             royal={ceremony.royal}
             who={names[ceremony.seat]}
             isMe={ceremony.seat === viewerSeat}
+            quick={ceremony.quick}
             onDone={() => setCeremony(null)}
           />
         )}
