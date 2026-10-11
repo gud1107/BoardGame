@@ -88,6 +88,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         desc: "실수 순간에 누가 뭘 냈고 누구 손에 뭐가 남았는지 숫자줄로 표시, 🖐 다시 맞추기 설명·요청자 표시, 📜 레벨별 지난 기록 보기",
       },
       {
+        game: "telepathy",
+        type: "FEAT",
+        desc: "잔잔한 앰비언트 BGM 🎐 Quiet Signal, 남은 카드가 나만 있으면 \"바로 내세요\" 알림, 레벨 보상 막대(⚡·❤️·🏆)와 보상 획득 카드",
+      },
+      {
         game: "common",
         type: "FIX",
         desc: "아발론·뱅·마피아·하나미코지 등 15개 게임의 승패가 전적에 안 쌓이던 문제 수정 — 이제 모든 게임 결과가 기록돼요",

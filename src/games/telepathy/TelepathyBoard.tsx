@@ -1,8 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getTelepathyBgm } from "./telepathyBgm";
 import {
   CANCEL_LOCK_MS,
+  MAX_LIVES,
+  MAX_STARS,
+  REWARDS,
   FREE_CANCELS,
   HOLD_TO_PLAY_MS,
   pileTop,
@@ -63,6 +69,80 @@ function RevealChips({ revealed, names, tone }: { revealed: Reveal[]; names: str
           </span>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** What clearing `level` gives (null = nothing), and whether it would be wasted at the cap. */
+function rewardFor(state: MindState, level: number): { kind: "star" | "life" | "win"; wasted: boolean } | null {
+  if (level >= state.maxLevel) return { kind: "win", wasted: false };
+  const kind = REWARDS[level];
+  if (!kind) return null;
+  return { kind, wasted: kind === "life" ? state.lives >= MAX_LIVES : state.stars >= MAX_STARS };
+}
+
+const REWARD_ICON = { star: "⚡", life: "❤️", win: "🏆" } as const;
+const REWARD_TEXT = { star: "⚡ 번뜩임 +1", life: "❤️ 하트 +1", win: "🏆 최종 승리 +500점" } as const;
+
+/**
+ * Level road (1..maxLevel) with the reward icon on each reward level, plus a
+ * line spelling out what clearing the current level earns.
+ */
+function RewardTrack({ state }: { state: MindState }) {
+  const levels = Array.from({ length: state.maxLevel }, (_, i) => i + 1);
+  const cur = state.level;
+  const curCleared = state.phase === "break";
+  const reward = rewardFor(state, cur);
+  const next = levels.find((lv) => lv > cur && rewardFor(state, lv));
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2.5 light:border-slate-200 light:bg-white">
+      <div className="flex items-end justify-between gap-0.5">
+        {levels.map((lv) => {
+          const r = rewardFor(state, lv);
+          const done = lv < cur || (lv === cur && curCleared);
+          const isCur = lv === cur && !curCleared;
+          return (
+            <div key={lv} className="flex min-w-0 flex-1 flex-col items-center gap-0.5">
+              <span className={`h-4 text-[11px] leading-4 ${done ? "opacity-40 grayscale" : ""}`}>{r ? REWARD_ICON[r.kind] : ""}</span>
+              <span
+                className={`flex h-6 w-full max-w-7 items-center justify-center rounded-md text-[10px] font-bold tabular-nums transition ${
+                  isCur
+                    ? "scale-110 bg-indigo-500 text-white shadow-[0_0_12px_rgba(129,140,248,0.7)]"
+                    : done
+                      ? "bg-emerald-500/25 text-emerald-200 light:text-emerald-700"
+                      : r
+                        ? "border border-amber-300/50 text-white/80 light:text-slate-700"
+                        : "border border-white/10 text-white/40 light:border-slate-200 light:text-slate-400"
+                }`}
+              >
+                {done ? "✓" : lv}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {!curCleared && (
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
+          <span className="font-semibold text-white light:text-slate-800">
+            🎁 레벨 {cur} 통과 보상:{" "}
+            {reward ? (
+              <span className={reward.kind === "win" ? "text-yellow-200 light:text-amber-700" : reward.kind === "star" ? "text-amber-200 light:text-amber-700" : "text-rose-200 light:text-rose-700"}>
+                {REWARD_TEXT[reward.kind]}
+                {reward.wasted && <span className="ml-1 text-[11px] font-normal text-white/50 light:text-slate-500">(이미 최대라 못 받아요)</span>}
+              </span>
+            ) : (
+              <span className="font-normal text-white/50 light:text-slate-500">
+                없음{next ? ` · 다음 보상은 레벨 ${next} ${REWARD_ICON[rewardFor(state, next)!.kind]}` : ""}
+              </span>
+            )}
+          </span>
+          {!state.practice && (
+            <span className="text-white/50 light:text-slate-500">
+              +{cur * 100}점 · 실수 없으면 +50
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -281,6 +361,18 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
     prevPhaseForGo.current = state.phase;
   }, [state.phase, sound]);
 
+  const safeKey = state.phase === "playing" && myHand.length > 0 && state.hands.every((h, seat) => seat === mySeat || h.length === 0) ? `${state.level}:${state.seq}` : null;
+  const lastSafeRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (safeKey === null) {
+      lastSafeRef.current = null;
+      return;
+    }
+    if (lastSafeRef.current !== null) return;
+    lastSafeRef.current = safeKey;
+    getTelepathyBgm().play("safeToPlay");
+  }, [safeKey]);
+
   // ------------------------------------------------------------- derived
   const flowRunning = state.phase === "playing" || state.phase === "starVote" || state.phase === "resume";
   const flowElapsed = flowRunning ? Math.max(0, (state.pausedAt ?? hostNow) - state.flowStartAt) : 0;
@@ -303,6 +395,13 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
   const reachingOthers = state.phase === "playing" ? state.reaching.map((r, seat) => (r && seat !== mySeat ? seat : -1)).filter((seat) => seat >= 0) : [];
   const starDiscards = state.discards.filter((d) => d.reason === "star");
   const mistakeDiscards = state.discards.filter((d) => d.reason === "mistake");
+
+  const totalLeft = state.hands.reduce((n, h) => n + h.length, 0);
+  // Everyone else is out → my remaining cards can't be a mistake: say so loudly.
+  const safeNow = state.phase === "playing" && myHand.length > 0 && totalLeft === myHand.length;
+  const onlyOther = state.phase === "playing" && !safeNow && totalLeft > 0 ? state.hands.findIndex((h, seat) => seat !== mySeat && h.length === totalLeft) : -1;
+  const bgmIntensity = state.level >= state.maxLevel || (state.phase === "playing" && totalLeft <= state.playerCount) ? 1 : 0;
+  useSuiteBgm(getTelepathyBgm, timed, bgmIntensity);
 
   const ring = 2 * Math.PI * 54;
   const ringFrac = (flowElapsed % 10_000) / 10_000;
@@ -360,6 +459,7 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
           >
             ⚡ 번뜩임 {state.practice ? "∞" : state.stars} <span className="text-[10px] opacity-70">ⓘ</span>
           </button>
+          <SuiteSoundHud suite={getTelepathyBgm} icon="🎐" label="Quiet Signal" preview="chime" />
           <button
             type="button"
             onClick={() => setHistoryAt(state.log.length - 1)}
@@ -376,6 +476,8 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
           </button>
         </div>
       </div>
+
+      {state.phase !== "won" && state.phase !== "lost" && <RewardTrack state={state} />}
 
       {/* Seats */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -486,6 +588,11 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
               </span>
             </div>
             <div className="flex min-h-9 flex-wrap items-center justify-center gap-1.5">
+              {onlyOther >= 0 && reachingOthers.length === 0 && (
+                <span className="rounded-full border border-emerald-300/60 bg-emerald-400/15 px-3 py-1 text-xs font-bold text-emerald-100 light:text-emerald-800">
+                  ⏩ {names[onlyOther]}님만 카드가 남았어요 — 바로 내도 안전!
+                </span>
+              )}
               {reachingOthers.map((seat) => (
                 <span key={seat} className="tlp-banner flex items-center gap-1 rounded-full border-2 border-yellow-300 bg-yellow-400/25 px-3 py-1 text-sm font-black text-yellow-100 shadow-[0_0_24px_rgba(250,204,21,0.55)] light:bg-yellow-100 light:text-amber-800">
                   <span className="tlp-hand">✋</span> {names[seat]} 내려는 중!
@@ -585,10 +692,29 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
             <span className="tlp-pop text-4xl">✨</span>
             <p className="text-lg font-black text-white light:text-slate-900">레벨 {state.level} 통과!</p>
             {levelLog && levelLog.mistakes === 0 && <p className="text-xs font-semibold text-emerald-300 light:text-emerald-600">실수 없이 통과 +50점</p>}
-            {state.lastReward && (
-              <p className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white light:bg-indigo-100 light:text-indigo-800">
-                보상: {state.lastReward.kind === "life" ? "❤️ 하트 +1" : "⚡ 번뜩임 +1 (막혔을 때 모두 가장 낮은 카드 1장씩 공개)"}
-                {!state.lastReward.granted && " (이미 최대라 사라짐)"}
+            {state.lastReward ? (
+              <div
+                className={`tlp-pop flex items-center gap-3 rounded-2xl border-2 px-4 py-2.5 text-left ${
+                  state.lastReward.kind === "life" ? "border-rose-300/70 bg-rose-500/15 light:bg-rose-50" : "border-amber-300/70 bg-amber-400/15 light:bg-amber-50"
+                } ${state.lastReward.granted ? "" : "opacity-60"}`}
+              >
+                <span className="text-4xl">{state.lastReward.kind === "life" ? "❤️" : "⚡"}</span>
+                <div>
+                  <p className="text-xs font-semibold text-white/60 light:text-slate-500">{state.lastReward.granted ? "🎁 보상 획득!" : "🎁 보상 — 이미 최대라 받지 못했어요"}</p>
+                  <p className="text-lg font-black text-white light:text-slate-900">{state.lastReward.kind === "life" ? "하트 +1" : "번뜩임 +1"}</p>
+                  <p className="text-[11px] text-white/60 light:text-slate-500">
+                    지금 {state.lastReward.kind === "life" ? `하트 ${state.lives}개` : `번뜩임 ${state.stars}개`}
+                    {state.lastReward.kind === "star" && " · 막혔을 때 모두 가장 낮은 카드 1장씩 공개"}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/70 light:bg-slate-100 light:text-slate-600">
+                이번 레벨은 보상 없음
+                {(() => {
+                  const next = Array.from({ length: state.maxLevel }, (_, i) => i + 1).find((lv) => lv > state.level && REWARDS[lv] && lv < state.maxLevel);
+                  return next ? ` · 다음 보상: 레벨 ${next} ${REWARDS[next] === "life" ? "❤️" : "⚡"}` : "";
+                })()}
               </p>
             )}
             {levelLog && <Timeline log={levelLog} names={names} />}
@@ -686,7 +812,19 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
       )}
 
       {/* My hand */}
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 light:border-slate-200 light:bg-white">
+      <div
+        className={`flex flex-col items-center gap-3 rounded-2xl border p-4 transition ${
+          safeNow ? "border-emerald-300/70 bg-emerald-500/10 shadow-[0_0_30px_rgba(52,211,153,0.25)] light:bg-emerald-50" : "border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white"
+        }`}
+      >
+        {safeNow && (
+          <div className="tlp-banner flex w-full max-w-sm flex-col items-center rounded-xl border-2 border-emerald-300 bg-emerald-400/20 px-3 py-2 text-center light:bg-emerald-100">
+            <p className="text-base font-black text-emerald-100 light:text-emerald-800">✅ 남은 카드는 나만! 바로 내세요</p>
+            <p className="text-[11px] text-emerald-100/80 light:text-emerald-700">
+              다른 사람 손에 카드가 없어서 {myHand.length > 1 ? `${myHand.length}장 모두 차례로` : "지금 내도"} 실수가 될 수 없어요
+            </p>
+          </div>
+        )}
         <div className="flex flex-wrap justify-center gap-1.5">
           {visibleHand.length === 0 ? (
             <p className="text-xs text-white/50 light:text-slate-500">{sentCard !== null ? "보내는 중…" : "손에 카드가 없어요 — 다른 사람을 기다려요"}</p>
@@ -716,7 +854,9 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
           onContextMenu={(e) => e.preventDefault()}
           disabled={!canPlay && hold === null}
           aria-label={nextCard !== undefined ? `${nextCard} 카드를 꾹 눌러서 내기` : "낼 카드 없음"}
-          className="relative flex h-36 w-28 touch-none select-none flex-col items-center justify-center rounded-2xl border-2 border-white/80 bg-gradient-to-br from-slate-50 to-indigo-100 shadow-2xl transition active:scale-95 disabled:opacity-40"
+          className={`relative flex h-36 w-28 touch-none select-none flex-col items-center justify-center rounded-2xl border-2 bg-gradient-to-br shadow-2xl transition active:scale-95 disabled:opacity-40 ${
+            safeNow ? "tlp-reach border-emerald-300 from-emerald-50 to-emerald-200" : "border-white/80 from-slate-50 to-indigo-100"
+          }`}
           style={{ WebkitTouchCallout: "none" }}
         >
           {holdProgress > 0 && (

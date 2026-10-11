@@ -637,6 +637,8 @@ export function botBaseDelay(state: MindState, seat: SeatIndex): number | null {
   const gap = unseenBetween(state, top, hand[0]);
   // Expected number of other players' cards below mine: if it's tiny, hurry.
   const othersCards = cardsLeft(state) - hand.length;
+  // Nobody else holds anything → can't be a mistake, play right away.
+  if (othersCards === 0) return 350;
   const unknownTotal = Math.max(1, unseenBetween(state, top, CARD_MAX + 1) - hand.length);
   const expectedBelow = (gap * othersCards) / unknownTotal;
   const hurry = expectedBelow < 0.35 ? 0.6 : 1;

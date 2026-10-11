@@ -52,8 +52,9 @@ describe("proceduralScore DSL", () => {
 });
 
 describe("game sound suites", () => {
-  it("finds all 27 suites", () => {
-    expect(suites.length).toBe(27);
+  it("finds all 28 suites", () => {
+    // 27 from the 2026-10-11 sound-suite pass + telepathy's BGM.
+    expect(suites.length).toBe(28);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {
