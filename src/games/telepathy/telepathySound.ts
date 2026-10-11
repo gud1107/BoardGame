@@ -68,6 +68,8 @@ class TelepathySound {
     const freq = 220 * Math.pow(2, ((Math.max(1, Math.min(100, card)) - 1) / 99) * 3);
     this.tone(freq, t, 0.55, { type: "sine", gain: 0.45 });
     this.tone(freq * 2.01, t, 0.25, { type: "triangle", gain: 0.12 });
+    // Sparkle tail for the landing burst.
+    [1.5, 2, 3].forEach((m, i) => this.tone(freq * m, t + 0.06 + i * 0.05, 0.22, { type: "triangle", gain: 0.07 }));
   }
 
   /** Countdown pip; `last` is the higher "go" note. */

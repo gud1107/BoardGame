@@ -206,7 +206,7 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
   const flowRunning = state.phase === "playing" || state.phase === "starVote" || state.phase === "resume";
   const flowElapsed = flowRunning ? Math.max(0, (state.pausedAt ?? hostNow) - state.flowStartAt) : 0;
   const top = pileTop(state);
-  const recent = state.pile.slice(-4, -1);
+  const recent = state.pile.slice(-6, -1);
   const holdsCount = state.holds.filter(Boolean).length;
   const myHolding = state.holds[mySeat];
   const resyncLeft = RESYNC_PER_LEVEL - (state.resyncUsed[mySeat] ?? 0);
@@ -217,23 +217,43 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
   const breakLeft = state.phase === "break" && state.phaseUntil !== null ? Math.max(0, Math.ceil((state.phaseUntil - hostNow) / 1000)) : null;
   const levelLog = state.log[state.log.length - 1];
 
+  const lastPlay = state.pile.length > 0 ? state.pile[state.pile.length - 1] : null;
+  const playedBy = state.hands.map((_, seat) => state.pile.filter((p) => p.seat === seat).length);
+  const levelTotal = state.level * state.playerCount;
+  const levelOut = levelTotal - state.hands.reduce((n, h) => n + h.length, 0);
+  const reachingOthers = state.phase === "playing" ? state.reaching.map((r, seat) => (r && seat !== mySeat ? seat : -1)).filter((seat) => seat >= 0) : [];
+  const starDiscards = state.discards.filter((d) => d.reason === "star");
+  const mistakeDiscards = state.discards.filter((d) => d.reason === "mistake");
+
   const ring = 2 * Math.PI * 54;
   const ringFrac = (flowElapsed % 10_000) / 10_000;
 
   return (
     <div className="flex flex-col gap-3">
       <style>{`
-        @keyframes tlp-reach { 0%,100% { box-shadow: 0 0 0 0 rgba(250,204,21,.0) } 50% { box-shadow: 0 0 0 6px rgba(250,204,21,.45) } }
-        .tlp-reach { animation: tlp-reach .8s ease-in-out infinite; }
+        @keyframes tlp-reach { 0%,100% { box-shadow: 0 0 0 2px rgba(250,204,21,.7), 0 0 18px 2px rgba(250,204,21,.35) } 50% { box-shadow: 0 0 0 5px rgba(250,204,21,.95), 0 0 42px 12px rgba(250,204,21,.55) } }
+        .tlp-reach { animation: tlp-reach .7s ease-in-out infinite; }
+        @keyframes tlp-hand { 0%,100% { transform: translateY(0) rotate(-8deg) scale(1) } 50% { transform: translateY(-7px) rotate(8deg) scale(1.15) } }
+        .tlp-hand { animation: tlp-hand .55s ease-in-out infinite; display: inline-block; }
+        @keyframes tlp-banner { 0%,100% { opacity: .85; transform: scale(1) } 50% { opacity: 1; transform: scale(1.06) } }
+        .tlp-banner { animation: tlp-banner .7s ease-in-out infinite; }
+        @keyframes tlp-shock { from { transform: scale(.55); opacity: .95 } to { transform: scale(2.6); opacity: 0 } }
+        .tlp-shock { animation: tlp-shock .75s cubic-bezier(.15,.7,.3,1) both; }
+        @keyframes tlp-spark { 0% { transform: translate(-50%,-50%) scale(1); opacity: 1 } 100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(.2); opacity: 0 } }
+        .tlp-spark { animation: tlp-spark .8s cubic-bezier(.1,.8,.3,1) both; }
+        @keyframes tlp-tag { 0% { transform: translate(-50%, 8px) scale(.8); opacity: 0 } 20% { transform: translate(-50%, 0) scale(1.05); opacity: 1 } 75% { opacity: 1 } 100% { transform: translate(-50%, -26px); opacity: 0 } }
+        .tlp-tag { animation: tlp-tag 1.4s ease-out both; }
+        @keyframes tlp-seatflash { from { opacity: 1 } to { opacity: 0 } }
+        .tlp-seatflash { animation: tlp-seatflash 1s ease-out both; }
         @keyframes tlp-flip { from { transform: rotateY(90deg); opacity: 0 } to { transform: rotateY(0); opacity: 1 } }
         .tlp-flip { animation: tlp-flip .45s ease-out both; }
-        @keyframes tlp-land { from { transform: translateY(-18px) scale(1.15); opacity: .2 } to { transform: none; opacity: 1 } }
-        .tlp-land { animation: tlp-land .3s cubic-bezier(.2,.9,.3,1.2) both; }
+        @keyframes tlp-land { 0% { transform: translateY(-46px) rotate(-14deg) scale(1.45); opacity: 0 } 60% { transform: translateY(3px) rotate(2deg) scale(.96); opacity: 1 } 100% { transform: none } }
+        .tlp-land { animation: tlp-land .42s cubic-bezier(.2,.9,.3,1.2) both; }
         @keyframes tlp-shake { 0%,100% { transform: none } 20% { transform: translateX(-6px) } 40% { transform: translateX(6px) } 60% { transform: translateX(-4px) } 80% { transform: translateX(3px) } }
         .tlp-shake { animation: tlp-shake .5s ease-out; }
         @keyframes tlp-pop { 0% { transform: scale(.4); opacity: 0 } 60% { transform: scale(1.15); opacity: 1 } 100% { transform: scale(1) } }
         .tlp-pop { animation: tlp-pop .5s ease-out both; }
-        @media (prefers-reduced-motion: reduce) { .tlp-reach,.tlp-flip,.tlp-land,.tlp-shake,.tlp-pop { animation: none } }
+        @media (prefers-reduced-motion: reduce) { .tlp-reach,.tlp-flip,.tlp-land,.tlp-shake,.tlp-pop,.tlp-hand,.tlp-banner,.tlp-shock,.tlp-spark,.tlp-tag,.tlp-seatflash { animation: none } .tlp-spark,.tlp-shock,.tlp-tag,.tlp-seatflash { display: none } }
       `}</style>
 
       {/* Status strip */}
@@ -279,10 +299,14 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
           return (
             <div
               key={seat}
-              className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 transition ${reaching ? "tlp-reach border-yellow-300/70" : "border-white/10 light:border-slate-200"} ${
-                seat === mySeat ? "bg-white/[0.07] light:bg-indigo-50" : "bg-white/[0.03] light:bg-white"
+              className={`relative flex items-center gap-2 rounded-xl border px-2.5 py-2 transition duration-200 ${
+                reaching ? "tlp-reach z-10 scale-[1.04] border-yellow-300 bg-yellow-400/15 light:bg-yellow-50" : seat === mySeat ? "border-white/10 bg-white/[0.07] light:border-slate-200 light:bg-indigo-50" : "border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white"
               }`}
             >
+              {reaching && <span className="tlp-hand pointer-events-none absolute -left-2 -top-4 text-3xl drop-shadow-[0_0_8px_rgba(250,204,21,0.9)]">✋</span>}
+              {lastPlay?.seat === seat && state.phase === "playing" && (
+                <span key={`flash-${state.pile.length}`} className="tlp-seatflash pointer-events-none absolute inset-0 rounded-xl" style={{ boxShadow: `inset 0 0 0 2px ${seatColor(seat)}, 0 0 24px ${seatColor(seat)}` }} />
+              )}
               <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: seatColor(seat) }} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-semibold text-white light:text-slate-800">
@@ -298,16 +322,18 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
                   ) : state.phase === "break" ? (
                     state.readies[seat] ? <span className="text-emerald-300 light:text-emerald-600">✓ 준비</span> : "쉬는 중"
                   ) : reaching ? (
-                    <span className="font-semibold text-yellow-300 light:text-amber-600">✋ 뻗는 중</span>
+                    <span className="text-xs font-black text-yellow-300 light:text-amber-600">✋ 내려는 중!</span>
                   ) : (
-                    <>카드 {hand.length}장</>
+                    <>낸 카드 {playedBy[seat]}장</>
                   )}
                 </p>
               </div>
-              <div className="flex -space-x-2">
-                {Array.from({ length: Math.min(hand.length, 6) }, (_, i) => (
-                  <span key={i} className="h-5 w-3.5 rounded-[3px] border border-indigo-200/40 bg-gradient-to-br from-indigo-500 to-violet-700" />
-                ))}
+              <div className="flex shrink-0 flex-col items-center leading-none" aria-label={`남은 카드 ${hand.length}장`}>
+                <span className="relative flex h-9 w-7 items-center justify-center rounded-md border border-indigo-200/50 bg-gradient-to-br from-indigo-500 to-violet-700 shadow-md">
+                  {hand.length > 1 && <span className="absolute -right-1 -top-1 -z-10 h-9 w-7 rounded-md border border-indigo-200/30 bg-violet-800" />}
+                  <span className={`text-lg font-black tabular-nums ${hand.length === 0 ? "text-white/40" : "text-white"}`}>{hand.length}</span>
+                </span>
+                <span className="mt-0.5 text-[9px] text-white/50 light:text-slate-500">남음</span>
               </div>
             </div>
           );
@@ -354,7 +380,42 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
 
         {(state.phase === "playing" || state.phase === "starVote" || state.phase === "resume") && (
           <>
+            <div className="flex w-full items-center justify-between gap-2 text-[11px] text-white/60 light:text-slate-500">
+              <span>
+                이번 레벨 <b className="tabular-nums text-white light:text-slate-900">{levelOut}</b> / {levelTotal}장 나옴
+              </span>
+              <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
+                <span className="block h-full rounded-full bg-gradient-to-r from-indigo-400 to-fuchsia-400 transition-all duration-500" style={{ width: `${levelTotal > 0 ? (levelOut / levelTotal) * 100 : 0}%` }} />
+              </span>
+            </div>
+            <div className="flex min-h-9 flex-wrap items-center justify-center gap-1.5">
+              {reachingOthers.map((seat) => (
+                <span key={seat} className="tlp-banner flex items-center gap-1 rounded-full border-2 border-yellow-300 bg-yellow-400/25 px-3 py-1 text-sm font-black text-yellow-100 shadow-[0_0_24px_rgba(250,204,21,0.55)] light:bg-yellow-100 light:text-amber-800">
+                  <span className="tlp-hand">✋</span> {names[seat]} 내려는 중!
+                </span>
+              ))}
+            </div>
             <div className="relative flex h-40 w-40 items-center justify-center">
+              {lastPlay && state.phase === "playing" && (
+                <div key={`burst-${state.pile.length}`} className="pointer-events-none absolute inset-0" aria-hidden>
+                  <span className="tlp-shock absolute inset-6 rounded-full border-4" style={{ borderColor: seatColor(lastPlay.seat) }} />
+                  <span className="tlp-shock absolute inset-10 rounded-full border-2 border-white" style={{ animationDelay: "0.12s" }} />
+                  {Array.from({ length: 14 }, (_, i) => {
+                    const a = (i / 14) * Math.PI * 2 + (state.pile.length % 3) * 0.4;
+                    const d = 70 + (i % 3) * 18;
+                    return (
+                      <span
+                        key={i}
+                        className="tlp-spark absolute left-1/2 top-1/2 h-2 w-2 rounded-full"
+                        style={{ background: i % 2 ? "#fde68a" : seatColor(lastPlay.seat), boxShadow: `0 0 8px ${seatColor(lastPlay.seat)}`, ["--dx" as string]: `${Math.cos(a) * d}px`, ["--dy" as string]: `${Math.sin(a) * d}px` }}
+                      />
+                    );
+                  })}
+                  <span className="tlp-tag absolute left-1/2 -bottom-2 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-black text-slate-900 shadow-lg" style={{ background: seatColor(lastPlay.seat) }}>
+                    {names[lastPlay.seat]} ▶ {lastPlay.card}
+                  </span>
+                </div>
+              )}
               <svg className="absolute inset-0 -rotate-90" viewBox="0 0 120 120" aria-hidden>
                 <circle cx="60" cy="60" r="54" fill="none" stroke="currentColor" strokeWidth="5" className="text-white/10 light:text-indigo-100" />
                 <circle
@@ -370,7 +431,11 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
                   className="text-indigo-300 light:text-indigo-500"
                 />
               </svg>
-              <div key={state.pile.length} className="tlp-land flex h-24 w-[4.5rem] flex-col items-center justify-center rounded-xl border-2 border-white/80 bg-gradient-to-br from-slate-50 to-indigo-100 shadow-xl">
+              <div
+                key={`pile-${state.pile.length}`}
+                className="tlp-land relative flex h-24 w-[4.5rem] flex-col items-center justify-center rounded-xl border-2 border-white/80 bg-gradient-to-br from-slate-50 to-indigo-100 shadow-xl"
+                style={lastPlay ? { boxShadow: `0 0 28px ${seatColor(lastPlay.seat)}, 0 10px 25px rgba(0,0,0,.4)` } : undefined}
+              >
                 {top > 0 ? (
                   <>
                     <span className="text-3xl font-black tabular-nums text-indigo-900">{top}</span>
@@ -390,7 +455,7 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
               <div className="flex items-center gap-1.5 text-xs text-white/50 light:text-slate-500">
                 이전:
                 {recent.map((p, i) => (
-                  <span key={i} className="rounded border border-white/15 px-1.5 tabular-nums light:border-slate-300">
+                  <span key={i} className="rounded border px-1.5 tabular-nums" style={{ borderColor: seatColor(p.seat) }} title={names[p.seat]}>
                     {p.card}
                   </span>
                 ))}
@@ -485,20 +550,43 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
         )}
       </div>
 
-      {/* Discards */}
-      {state.discards.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 text-xs text-white/50 light:text-slate-500">
-          버린 카드:
-          {[...state.discards]
-            .sort((a, b) => a.card - b.card)
-            .map((d) => (
-              <span
-                key={d.card}
-                className={`rounded px-1.5 tabular-nums ${d.reason === "mistake" ? "bg-rose-500/15 text-rose-200 light:text-rose-700" : "border border-dashed border-amber-300/60 text-amber-200 light:text-amber-700"}`}
-              >
-                {d.card}
-              </span>
-            ))}
+      {/* Cards that left hands without reaching the pile (this level) */}
+      {(starDiscards.length > 0 || mistakeDiscards.length > 0) && state.phase !== "break" && (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {starDiscards.length > 0 && (
+            <div className="rounded-xl border-2 border-dashed border-amber-300/60 bg-amber-400/[0.08] p-2.5 light:border-amber-300 light:bg-amber-50">
+              <p className="mb-1.5 text-xs font-bold text-amber-200 light:text-amber-800">⚡ 번뜩임으로 나온 카드 ({starDiscards.length}장)</p>
+              <div className="flex flex-wrap gap-1.5">
+                {[...starDiscards]
+                  .sort((a, b) => a.card - b.card)
+                  .map((d) => (
+                    <span key={`s-${d.card}`} className="flex flex-col items-center rounded-lg border border-amber-300/50 bg-black/20 px-2 py-1 light:bg-white">
+                      <span className="text-base font-black tabular-nums text-white light:text-slate-900">{d.card}</span>
+                      <span className="max-w-[5rem] truncate text-[9px]" style={{ color: seatColor(d.seat) }}>
+                        {names[d.seat]}
+                      </span>
+                    </span>
+                  ))}
+              </div>
+            </div>
+          )}
+          {mistakeDiscards.length > 0 && (
+            <div className="rounded-xl border border-rose-300/40 bg-rose-500/[0.08] p-2.5 light:border-rose-200 light:bg-rose-50">
+              <p className="mb-1.5 text-xs font-bold text-rose-200 light:text-rose-700">💔 실수로 버려진 카드 ({mistakeDiscards.length}장)</p>
+              <div className="flex flex-wrap gap-1.5">
+                {[...mistakeDiscards]
+                  .sort((a, b) => a.card - b.card)
+                  .map((d) => (
+                    <span key={`m-${d.card}`} className="flex flex-col items-center rounded-lg border border-rose-300/40 bg-black/20 px-2 py-1 light:bg-white">
+                      <span className="text-base font-black tabular-nums text-white/80 light:text-slate-700">{d.card}</span>
+                      <span className="max-w-[5rem] truncate text-[9px]" style={{ color: seatColor(d.seat) }}>
+                        {names[d.seat]}
+                      </span>
+                    </span>
+                  ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
