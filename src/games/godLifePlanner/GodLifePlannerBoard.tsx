@@ -1,0 +1,806 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { getSoundEngine } from "@/lib/audio/soundEngine";
+import {
+  ACTIVITY_INFO,
+  BLOCK_INFO,
+  CHALLENGE_BY_ID,
+  DAY_NAMES,
+  EVENTS,
+  GOAL_BY_ID,
+  OPPORTUNITY_BY_ID,
+  TRACKS,
+  TRACK_INFO,
+  TUNING,
+  type Activity,
+} from "./data";
+import {
+  bannedActivities,
+  canResist,
+  computeRankings,
+  forcedBlocks,
+  goalIdOf,
+  habitAt,
+  pendingSeats,
+  previewDay,
+  resistCost,
+  scoreBreakdown,
+  soloGrade,
+  temptationOf,
+  temptationPlacements,
+  totalDays,
+  type BlockOutcome,
+  type Cell,
+  type DayRecord,
+  type EngineAction,
+  type GameState,
+  type Plan,
+  type Seat,
+  type SeatState,
+} from "./engine";
+import RulebookModal from "./RulebookModal";
+
+interface Props {
+  state: GameState;
+  viewerSeat: Seat;
+  names: Record<Seat, string>;
+  connectedSeats: ReadonlySet<Seat>;
+  /** 지금 단계가 끝나는 시각(이 기기 기준). 제한 없음/알 수 없음이면 null. */
+  deadlineMs: number | null;
+  nowMs: number;
+  committedPlan: Plan | null;
+  onAction: (action: EngineAction) => void;
+  onCommit: (plan: Plan) => void;
+  onGameEnd: () => void;
+}
+
+const CARD = "rounded-2xl border border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white light:shadow-sm";
+const SUB = "text-xs text-white/50 light:text-slate-500";
+const PRIMARY = "rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-40";
+const GHOST =
+  "rounded-xl border border-white/15 px-3 py-1.5 text-xs font-semibold text-white/75 transition hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400";
+
+const PALETTE: Activity[] = ["sleep", "study", "exercise", "work", "meet", "rest", "empty"];
+
+const CELL_TONE: Record<Cell, string> = {
+  sleep: "bg-indigo-500/15 border-indigo-400/30 light:bg-indigo-50 light:border-indigo-200",
+  study: "bg-sky-500/15 border-sky-400/30 light:bg-sky-50 light:border-sky-200",
+  exercise: "bg-orange-500/15 border-orange-400/30 light:bg-orange-50 light:border-orange-200",
+  work: "bg-amber-500/15 border-amber-400/30 light:bg-amber-50 light:border-amber-200",
+  meet: "bg-pink-500/15 border-pink-400/30 light:bg-pink-50 light:border-pink-200",
+  rest: "bg-emerald-500/15 border-emerald-400/30 light:bg-emerald-50 light:border-emerald-200",
+  empty: "bg-white/[0.02] border-white/10 border-dashed light:bg-slate-50 light:border-slate-200",
+  temptation: "bg-fuchsia-500/20 border-fuchsia-400/40 light:bg-fuchsia-50 light:border-fuchsia-300",
+};
+
+function cellLabel(state: GameState, seat: Seat, cell: Cell, day = state.day): { emoji: string; name: string } {
+  if (cell === "temptation") {
+    const t = temptationOf(state, seat, day);
+    return { emoji: t.emoji, name: t.name };
+  }
+  return { emoji: ACTIVITY_INFO[cell].emoji, name: ACTIVITY_INFO[cell].name };
+}
+
+function gainsText(o: BlockOutcome): string {
+  return TRACKS.filter((t) => o.gains[t])
+    .map((t) => `${TRACK_INFO[t].emoji}${o.gains[t]! > 0 ? "+" : ""}${o.gains[t]}`)
+    .join(" ");
+}
+
+function defaultDraft(state: GameState, seat: Seat): Plan {
+  const yesterday = state.seats[seat].days[state.day - 1];
+  const base: Cell[] = yesterday
+    ? yesterday.plan.cells.map((c) => (c === "temptation" ? "empty" : c))
+    : ["sleep", "sleep", "empty", "empty", "empty", "empty", "empty", "sleep"];
+  const banned = bannedActivities(state, seat);
+  const cells = base.map((c) => (c !== "temptation" && banned.has(c) ? "empty" : c)) as Cell[];
+  for (const [b, act] of forcedBlocks(state, seat)) cells[b] = act;
+  return { cells, temptation: canResist(state, seat) ? "resist" : "yield", opportunityId: null };
+}
+
+function Pips({ value, tone }: { value: number; tone: "hp" | "mp" }) {
+  const on = tone === "hp" ? "bg-rose-400" : "bg-violet-400";
+  return (
+    <span className="flex gap-0.5">
+      {Array.from({ length: TUNING.gaugeMax }, (_, i) => (
+        <span key={i} className={`h-2.5 w-2 rounded-sm ${i < value ? on : "bg-white/10 light:bg-slate-200"}`} />
+      ))}
+    </span>
+  );
+}
+
+function SeatStatus({ s, compact }: { s: SeatState; compact?: boolean }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/70 light:text-slate-600">
+        <span className="flex items-center gap-1.5">
+          ⚡<Pips value={s.hp} tone="hp" />
+          <b className="tabular-nums">{s.hp}</b>
+        </span>
+        <span className="flex items-center gap-1.5">
+          💗<Pips value={s.mp} tone="mp" />
+          <b className="tabular-nums">{s.mp}</b>
+        </span>
+        {s.sick && <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-rose-200 light:text-rose-700">🤒 몸살</span>}
+        {s.apathy && <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-violet-200 light:text-violet-700">😶 무기력</span>}
+      </div>
+      <div className={`grid gap-1.5 ${compact ? "grid-cols-4" : "grid-cols-2 sm:grid-cols-4"}`}>
+        {TRACKS.map((t) => (
+          <div key={t} className="flex flex-col gap-0.5">
+            <span className="flex justify-between text-[11px] text-white/60 light:text-slate-500">
+              <span>
+                {TRACK_INFO[t].emoji}
+                {!compact && ` ${TRACK_INFO[t].name}`}
+              </span>
+              <b className="tabular-nums text-white/90 light:text-slate-800">{s.tracks[t]}</b>
+            </span>
+            <span className="h-1.5 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
+              <span className="block h-full rounded-full bg-emerald-400" style={{ width: `${(s.tracks[t] / TUNING.trackMax) * 100}%` }} />
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HabitChips({ s }: { s: SeatState }) {
+  if (s.habits.length === 0) return <span className={SUB}>아직 습관이 없어요 — 같은 블록에 같은 활동을 3일 연속!</span>;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {[...s.habits]
+        .sort((a, b) => a.block - b.block)
+        .map((h) => (
+          <span
+            key={h.block}
+            className={`rounded-full border px-2 py-0.5 text-[11px] ${
+              h.shaken ? "border-amber-400/50 text-amber-200 light:text-amber-700" : "border-emerald-400/40 text-emerald-200 light:text-emerald-700"
+            }`}
+          >
+            {h.shaken ? "⚠️" : "🌱"} {BLOCK_INFO[h.block].label} {ACTIVITY_INFO[h.activity].emoji}
+            {ACTIVITY_INFO[h.activity].name}
+          </span>
+        ))}
+    </div>
+  );
+}
+
+function OutcomeCell({ state, seat, o, day, delay, animate }: { state: GameState; seat: Seat; o: BlockOutcome; day: number; delay?: number; animate?: boolean }) {
+  const { emoji, name } = cellLabel(state, seat, o.cell, day);
+  const dim = o.kind === "void" || o.kind === "fail" || o.kind === "nap";
+  return (
+    <div
+      className={`relative flex min-h-[3.6rem] flex-col items-center justify-center rounded-lg border px-0.5 py-1 text-center ${CELL_TONE[o.cell]} ${dim ? "opacity-60" : ""} ${
+        o.matched ? "ring-2 ring-pink-400/70" : ""
+      } ${o.opp ? "ring-2 ring-lime-400/70" : ""}`}
+      style={animate ? { animation: "glp-pop 0.35s ease both", animationDelay: `${delay ?? 0}ms` } : undefined}
+      title={`${name}${o.kind === "fail" ? " (실패)" : o.kind === "void" ? " (무효)" : o.kind === "nap" ? " (쓰러져 잠듦)" : ""}`}
+    >
+      <span className={`text-base leading-none ${o.kind === "fail" ? "line-through" : ""}`}>{o.kind === "nap" ? "💤" : o.kind === "void" ? "🫥" : emoji}</span>
+      <span className="mt-0.5 text-[10px] leading-tight text-white/70 light:text-slate-600">
+        {o.kind === "fail" ? "실패" : o.kind === "void" ? "무효" : o.kind === "nap" ? "쓰러짐" : name}
+      </span>
+      {gainsText(o) && <span className="text-[9px] leading-tight text-emerald-200 light:text-emerald-700">{gainsText(o)}</span>}
+      {(o.matched || o.opp || o.noShow) && (
+        <span className="absolute -right-1 -top-1 text-[11px]">{o.noShow ? "🙇" : o.opp ? OPPORTUNITY_BY_ID[o.opp]?.emoji : "🤝"}</span>
+      )}
+    </div>
+  );
+}
+
+function DayRow({ state, seat, rec, day, animate }: { state: GameState; seat: Seat; rec: DayRecord; day: number; animate?: boolean }) {
+  return (
+    <div className="grid grid-cols-8 gap-1">
+      {rec.outcomes.map((o, b) => (
+        <OutcomeCell key={b} state={state} seat={seat} o={o} day={day} delay={b * 140} animate={animate} />
+      ))}
+    </div>
+  );
+}
+
+export default function GodLifePlannerBoard({ state, viewerSeat, names, connectedSeats, deadlineMs, nowMs, committedPlan, onAction, onCommit, onGameEnd }: Props) {
+  const me = state.seats[viewerSeat];
+  const [rulebookOpen, setRulebookOpen] = useState(false);
+  const [brush, setBrush] = useState<Activity>("study");
+  const [draft, setDraft] = useState<Plan>(() => defaultDraft(state, viewerSeat));
+  const draftKeyRef = useRef(`${state.seed}:${state.day}`);
+  const pending = pendingSeats(state);
+  const secondsLeft = deadlineMs === null ? null : Math.max(0, Math.ceil((deadlineMs - nowMs) / 1000));
+  const days = totalDays(state);
+  const event = EVENTS[state.events[state.day]];
+  const committed = state.commits[viewerSeat] !== null;
+
+  // 새 날이 되면 초안을 어제 계획으로 다시 채운다(습관은 같은 시간 반복이 핵심이라).
+  useEffect(() => {
+    const key = `${state.seed}:${state.day}`;
+    if (draftKeyRef.current === key || state.phase !== "planning") return;
+    draftKeyRef.current = key;
+    setDraft(defaultDraft(state, viewerSeat));
+  }, [state, viewerSeat]);
+
+  // 계획 시간이 끝나기 직전 자동 확정
+  const autoCommitRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (state.phase !== "planning" || committed || deadlineMs === null) return;
+    if (deadlineMs - nowMs > 1500 || autoCommitRef.current === state.stage) return;
+    autoCommitRef.current = state.stage;
+    onCommit(draft);
+  }, [state.phase, state.stage, committed, deadlineMs, nowMs, draft, onCommit]);
+
+  // 효과음
+  const lastStageRef = useRef(state.stage);
+  useEffect(() => {
+    if (lastStageRef.current === state.stage) return;
+    lastStageRef.current = state.stage;
+    const sound = getSoundEngine();
+    if (state.phase === "dayResult") {
+      const rec = state.seats[viewerSeat].days[state.day];
+      if (rec && (rec.exhausted || rec.burnout)) sound.playWrongBuzz();
+      else if (rec && rec.notes.some((n) => n.includes("습관 형성") || n.includes("주간 도전"))) sound.playCorrectDing();
+      else sound.playCardFlick();
+    } else if (state.phase === "ended") sound.playFinishFanfare();
+    else if (state.phase === "planning") sound.playUiClickTick();
+  }, [state, viewerSeat]);
+
+  const preview = useMemo(() => (state.phase === "planning" ? previewDay(state, viewerSeat, draft) : null), [state, viewerSeat, draft]);
+  const banned = bannedActivities(state, viewerSeat);
+  const forced = forcedBlocks(state, viewerSeat);
+  const card = state.phase === "planning" || state.phase === "revealing" ? temptationOf(state, viewerSeat) : null;
+  const placements = state.phase === "planning" ? temptationPlacements(state, viewerSeat) : [];
+  const resistOk = state.phase === "planning" && canResist(state, viewerSeat);
+
+  function paint(b: number) {
+    if (committed || forced.has(b)) return;
+    setDraft((d) => {
+      const cells = [...d.cells];
+      cells[b] = brush;
+      return { ...d, cells };
+    });
+  }
+
+  function chooseTemptation(mode: "resist" | "yield", blocks?: number[]) {
+    setDraft((d) => {
+      const cells = d.cells.map((c) => (c === "temptation" ? "empty" : c)) as Cell[];
+      if (mode === "yield" && blocks) for (const b of blocks) cells[b] = "temptation";
+      return { ...d, cells, temptation: mode };
+    });
+  }
+
+  const placedBlocks = draft.cells.map((c, b) => (c === "temptation" ? b : -1)).filter((b) => b >= 0);
+
+  // ---------- 상단 바
+  const header = (
+    <div className={`${CARD} flex flex-col gap-2 p-3 sm:p-4`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-2xl">📅</span>
+          <div>
+            <p className="text-sm font-bold text-white light:text-slate-900">
+              {state.phase === "goalDraft" ? "인생 목표 고르기" : state.phase === "ended" ? "일주일 끝!" : `${DAY_NAMES[state.day]}요일`}
+              {state.phase !== "goalDraft" && state.phase !== "ended" && <span className="ml-1.5 font-normal text-white/50 light:text-slate-500">Day {state.day + 1}/{days}</span>}
+            </p>
+            <p className={SUB}>
+              {state.phase === "goalDraft" && "비밀 목표 1장을 골라요"}
+              {state.phase === "planning" && (committed ? "계획 확정 — 다른 사람을 기다리는 중" : "오늘 8블록을 계획하세요")}
+              {state.phase === "revealing" && "계획 공개 중..."}
+              {state.phase === "dayResult" && "오늘의 결과"}
+              {state.phase === "ended" && "최종 점수"}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {secondsLeft !== null && state.phase !== "ended" && (
+            <span className={`rounded-full px-2.5 py-1 text-xs font-bold tabular-nums ${secondsLeft <= 10 ? "bg-rose-500/20 text-rose-200 light:text-rose-700" : "bg-white/10 text-white/80 light:bg-slate-100 light:text-slate-700"}`}>
+              ⏱ {secondsLeft}초
+            </span>
+          )}
+          <button onClick={() => setRulebookOpen(true)} className={GHOST}>
+            📖 룰북
+          </button>
+        </div>
+      </div>
+      {state.phase !== "goalDraft" && state.phase !== "ended" && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-white/[0.04] px-3 py-2 text-xs light:bg-slate-50">
+          <span className="font-semibold text-white light:text-slate-800">
+            {event.emoji} 오늘의 이벤트 · {event.name}
+          </span>
+          <span className="text-white/60 light:text-slate-500">{event.text}</span>
+          {state.friendBlocks[state.day] !== null && (
+            <span className="rounded-full bg-pink-500/15 px-2 py-0.5 text-pink-200 light:text-pink-700">🧑‍🤝‍🧑 친구는 {BLOCK_INFO[state.friendBlocks[state.day]!].label}에 시간 있음</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  // ---------- 주간 도전 · 다른 사람
+  const challengesPanel = (
+    <div className={`${CARD} flex flex-col gap-2 p-3`}>
+      <p className="text-xs font-semibold text-white/60 light:text-slate-500">🏁 주간 도전 {state.seatCount === 1 ? "(목요일까지 5점 · 일요일까지 3점)" : state.seatCount === 2 ? "(먼저 달성 4점)" : "(1등 5점 · 2등 3점)"}</p>
+      {state.challenges.map((cid) => {
+        const c = CHALLENGE_BY_ID[cid];
+        const aw = state.challengeAwards[cid];
+        const winners = [...aw.first, ...aw.second];
+        return (
+          <div key={cid} className="flex items-start justify-between gap-2 text-xs">
+            <span className="break-keep text-white/80 light:text-slate-700">
+              {c.emoji} <b>{c.name}</b> <span className="text-white/50 light:text-slate-500">— {c.text}</span>
+            </span>
+            <span className="shrink-0 text-right text-[11px] text-emerald-200 light:text-emerald-700">{winners.map((s) => names[s]).join(", ")}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const othersPanel =
+    state.seatCount > 1 ? (
+      <div className={`${CARD} flex flex-col gap-2.5 p-3`}>
+        <p className="text-xs font-semibold text-white/60 light:text-slate-500">👥 다른 사람</p>
+        {state.seats.map((s, seat) => {
+          if (seat === viewerSeat) return null;
+          const waiting = pending.includes(seat);
+          return (
+            <div key={seat} className="flex flex-col gap-1 border-t border-white/5 pt-2 first:border-t-0 first:pt-0 light:border-slate-100">
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className={`truncate font-semibold ${connectedSeats.has(seat) ? "text-white light:text-slate-900" : "text-white/40 light:text-slate-400"}`}>
+                  {names[seat]}
+                </span>
+                <span className="shrink-0 text-white/50 light:text-slate-500">
+                  {state.phase === "planning" ? (waiting ? "⏳ 계획 중" : "✅ 확정") : state.phase === "dayResult" ? (waiting ? "보는 중" : "✅ 준비") : ""}
+                  {" · "}습관 {s.habits.length}
+                </span>
+              </div>
+              <SeatStatus s={s} compact />
+            </div>
+          );
+        })}
+      </div>
+    ) : null;
+
+  // ---------- 목표 고르기
+  if (state.phase === "goalDraft") {
+    const picked = me.goalPick;
+    return (
+      <div className="flex flex-col gap-3">
+        <style>{GLP_KEYFRAMES}</style>
+        {header}
+        <div className={`${CARD} flex flex-col gap-3 p-4`}>
+          <p className="break-keep text-sm text-white/80 light:text-slate-700">
+            🤫 <b>비밀 인생 목표</b>를 1장 골라요. 게임이 끝날 때 공개되고, 달성하면 보너스 점수를 받아요. 다른 사람에게는 보이지 않아요.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {state.goalOptions[viewerSeat].map((gid, i) => {
+              const g = GOAL_BY_ID[gid];
+              const chosen = picked === i;
+              return (
+                <button
+                  key={gid}
+                  disabled={picked !== null}
+                  onClick={() => onAction({ type: "CHOOSE_GOAL", seat: viewerSeat, pick: i as 0 | 1 })}
+                  className={`flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition ${
+                    chosen ? "border-emerald-400 bg-emerald-400/10" : "border-white/15 hover:border-white/30 disabled:opacity-40 light:border-slate-300"
+                  }`}
+                >
+                  <span className="text-lg">
+                    {g.emoji} <b className="text-white light:text-slate-900">{g.name}</b>
+                  </span>
+                  <span className="break-keep text-xs text-white/70 light:text-slate-600">{g.text}</span>
+                  <span className="text-xs font-bold text-amber-200 light:text-amber-700">+{g.points}점</span>
+                </button>
+              );
+            })}
+          </div>
+          {picked !== null && <p className={SUB}>다른 사람을 기다리는 중... ({state.seatCount - pending.length}/{state.seatCount})</p>}
+        </div>
+        {challengesPanel}
+        {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
+      </div>
+    );
+  }
+
+  const myGoalId = goalIdOf(state, viewerSeat);
+  const myGoal = myGoalId ? GOAL_BY_ID[myGoalId] : null;
+
+  const myPanel = (
+    <div className={`${CARD} flex flex-col gap-2.5 p-3 sm:p-4`}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-bold text-white light:text-slate-900">🙋 {names[viewerSeat]}</p>
+        <span className={SUB}>
+          주간 도전 {me.challengePoints}점 · 붕괴 {me.collapses}회
+        </span>
+      </div>
+      <SeatStatus s={me} />
+      <HabitChips s={me} />
+      {myGoal && (
+        <p className="break-keep text-xs text-white/60 light:text-slate-500">
+          🤫 내 인생 목표: {myGoal.emoji} <b className="text-white/85 light:text-slate-800">{myGoal.name}</b> — {myGoal.text} (+{myGoal.points})
+        </p>
+      )}
+    </div>
+  );
+
+  // ---------- 지난 날 (내 플래너)
+  const historyPanel =
+    me.days.length > 0 && state.phase !== "dayResult" ? (
+      <details className={`${CARD} px-3 py-2.5`} open={state.phase === "ended"}>
+        <summary className="cursor-pointer text-xs font-semibold text-white/60 light:text-slate-500">🗓️ 내 플래너 ({me.days.length}일)</summary>
+        <div className="mt-2 flex flex-col gap-1.5">
+          {me.days.map((rec, d) => (
+            <div key={d} className="flex items-center gap-1.5">
+              <span className="w-5 shrink-0 text-center text-xs font-bold text-white/60 light:text-slate-500">{DAY_NAMES[d]}</span>
+              <div className="min-w-0 flex-1">
+                <DayRow state={state} seat={viewerSeat} rec={rec} day={d} />
+              </div>
+              <span className="w-8 shrink-0 text-right text-[11px] tabular-nums text-emerald-200 light:text-emerald-700">+{rec.growth}</span>
+            </div>
+          ))}
+        </div>
+      </details>
+    ) : null;
+
+  // ---------- 계획 단계
+  if (state.phase === "planning" || state.phase === "revealing") {
+    const plan = committed ? (committedPlan ?? draft) : draft;
+    const shown = committed && committedPlan ? previewDay(state, viewerSeat, committedPlan) : preview;
+    const rec = shown?.record ?? null;
+    const warnings: string[] = [];
+    if (rec) {
+      if (rec.exhausted) warnings.push("🥵 이대로면 탈진해요 (−3점, 내일 몸살)");
+      if (rec.burnout) warnings.push("😵 이대로면 번아웃이에요 (−3점, 내일 무기력)");
+      if (rec.nightSleep < (state.options.hard ? 3 : 2)) warnings.push(`🥱 밤잠(B1·B2·B8 수면)이 ${rec.nightSleep}블록 — 마감 때 체력 −2, 멘탈 −1`);
+      if (rec.outcomes.some((o) => o.kind === "fail")) warnings.push("⚠️ 비용을 낼 수 없어 실패하는 블록이 있어요");
+    }
+    const yieldBlock = card && card.kind === "block" && plan.temptation === "yield";
+    return (
+      <div className="flex flex-col gap-3">
+        <style>{GLP_KEYFRAMES}</style>
+        {header}
+        {myPanel}
+
+        <div className={`${CARD} flex flex-col gap-3 p-3 sm:p-4`}>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-bold text-white light:text-slate-900">✏️ 오늘의 계획</p>
+            {!committed && state.day > 0 && (
+              <button onClick={() => setDraft(defaultDraft(state, viewerSeat))} className={GHOST}>
+                ↺ 어제 계획
+              </button>
+            )}
+          </div>
+
+          {!committed && (
+            <div className="flex flex-wrap gap-1.5">
+              {PALETTE.map((a) => {
+                const disabled = banned.has(a);
+                return (
+                  <button
+                    key={a}
+                    disabled={disabled}
+                    onClick={() => {
+                      setBrush(a);
+                      getSoundEngine().playUiClickTick();
+                    }}
+                    className={`rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition disabled:opacity-30 ${CELL_TONE[a]} ${
+                      brush === a ? "ring-2 ring-emerald-400" : ""
+                    } text-white/85 light:text-slate-700`}
+                  >
+                    {ACTIVITY_INFO[a].emoji} {ACTIVITY_INFO[a].name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-8">
+            {plan.cells.map((c, b) => {
+              const o = rec?.outcomes[b];
+              const habit = habitAt(me, b);
+              const streak = me.streak[b];
+              const label = cellLabel(state, viewerSeat, c);
+              const habitHere = habit && habit.activity === c;
+              const streakHere = !habitHere && c !== "temptation" && c !== "empty" && streak.activity === c && streak.count > 0;
+              return (
+                <button
+                  key={b}
+                  onClick={() => paint(b)}
+                  disabled={committed}
+                  className={`relative flex min-h-[5.2rem] flex-col items-center justify-start gap-0.5 rounded-xl border px-1 py-1.5 text-center transition ${CELL_TONE[c]} ${
+                    o && (o.kind === "fail" || o.kind === "void" || o.kind === "nap") ? "ring-2 ring-rose-500/70" : ""
+                  } ${forced.has(b) ? "cursor-not-allowed" : ""}`}
+                >
+                  <span className="text-[10px] leading-none text-white/50 light:text-slate-500">
+                    {BLOCK_INFO[b].label} {BLOCK_INFO[b].time}
+                  </span>
+                  <span className="text-lg leading-tight">{label.emoji}</span>
+                  <span className="text-[11px] font-semibold leading-tight text-white/90 light:text-slate-800">{label.name}</span>
+                  {o && (
+                    <span className="text-[10px] leading-tight text-white/60 light:text-slate-500">
+                      {o.kind === "fail" ? "❌ 실패" : o.kind === "void" ? "🫥 무효" : o.kind === "nap" ? "💤 쓰러짐" : `⚡${o.hp} 💗${o.mp}`}
+                    </span>
+                  )}
+                  {o && gainsText(o) && <span className="text-[10px] leading-tight text-emerald-200 light:text-emerald-700">{gainsText(o)}</span>}
+                  {habitHere && <span className="absolute -right-1 -top-1 text-xs" title="습관 블록">{habit.shaken ? "⚠️" : "🌱"}</span>}
+                  {streakHere && (
+                    <span className="absolute -right-1 -top-1 rounded-full bg-emerald-500/80 px-1 text-[9px] font-bold text-white" title="연속 일수">
+                      {streak.count + 1}/{state.options.easyHabit ? 2 : 3}
+                    </span>
+                  )}
+                  {forced.has(b) && <span className="absolute -left-1 -top-1 text-xs" title="이벤트로 고정">🔒</span>}
+                </button>
+              );
+            })}
+          </div>
+
+          {rec && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-white/[0.04] px-3 py-2 text-xs text-white/75 light:bg-slate-50 light:text-slate-600">
+              <span>
+                🔮 예상 마감 ⚡<b>{rec.endHp}</b> 💗<b>{rec.endMp}</b>
+              </span>
+              <span>
+                성장 <b className="text-emerald-200 light:text-emerald-700">+{rec.growth}</b>
+              </span>
+              <span className="text-white/45 light:text-slate-400">(약속 성사·기회 카드 경쟁은 공개 후 결정)</span>
+            </div>
+          )}
+          {warnings.length > 0 && (
+            <ul className="flex flex-col gap-1 text-xs text-rose-200 light:text-rose-700">
+              {warnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {card && (
+          <div className={`${CARD} flex flex-col gap-2 border-fuchsia-400/30 p-3 sm:p-4`}>
+            <p className="text-sm font-bold text-white light:text-slate-900">
+              😈 오늘의 유혹 · {card.emoji} {card.name}
+            </p>
+            <p className="break-keep text-xs text-white/65 light:text-slate-500">{card.text}</p>
+            {!committed && (
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  disabled={!resistOk}
+                  onClick={() => chooseTemptation("resist")}
+                  className={`${GHOST} ${plan.temptation === "resist" ? "!border-emerald-400 !text-emerald-200 light:!text-emerald-700" : ""} disabled:opacity-30`}
+                >
+                  🛡️ 참기 (멘탈 −{resistCost(state)})
+                </button>
+                {card.kind === "instant" ? (
+                  <button onClick={() => chooseTemptation("yield")} className={`${GHOST} ${plan.temptation === "yield" ? "!border-fuchsia-400 !text-fuchsia-200 light:!text-fuchsia-700" : ""}`}>
+                    😈 넘어가기
+                  </button>
+                ) : (
+                  placements.map((blocks) => {
+                    const active = plan.temptation === "yield" && blocks.length === placedBlocks.length && blocks.every((x, i) => x === placedBlocks[i]);
+                    return (
+                      <button
+                        key={blocks.join("-")}
+                        onClick={() => chooseTemptation("yield", blocks)}
+                        className={`${GHOST} ${active ? "!border-fuchsia-400 !text-fuchsia-200 light:!text-fuchsia-700" : ""}`}
+                      >
+                        😈 {blocks.map((b) => BLOCK_INFO[b].label).join("+")}에 넘어가기
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            )}
+            {!resistOk && state.phase === "planning" && <p className="text-xs text-amber-200 light:text-amber-700">멘탈이 부족하거나 무기력해서 참을 수 없어요 — 반드시 넘어가야 해요.</p>}
+            {yieldBlock && placedBlocks.length === 0 && !(card.id === "T4" && plan.cells[2] === "sleep") && !committed && (
+              <p className="text-xs text-white/50 light:text-slate-400">놓을 블록을 고르지 않으면 첫 번째 가능한 블록에 자동으로 들어가요.</p>
+            )}
+          </div>
+        )}
+
+        {state.markets[state.day].length > 0 && (
+          <div className={`${CARD} flex flex-col gap-2 p-3 sm:p-4`}>
+            <p className="text-sm font-bold text-white light:text-slate-900">🍀 기회 카드 <span className="text-xs font-normal text-white/50 light:text-slate-500">(하루 1장 신청 · 정원이 넘치면 성장 합이 낮은 사람 우선)</span></p>
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {state.markets[state.day].map((id) => {
+                const opp = OPPORTUNITY_BY_ID[id];
+                const at = opp.block ?? plan.cells.indexOf(opp.activity);
+                const fits = at >= 0 && plan.cells[at] === opp.activity;
+                const selected = plan.opportunityId === id;
+                const reward = [
+                  ...TRACKS.filter((t) => opp.reward.tracks?.[t]).map((t) => `${TRACK_INFO[t].emoji}+${opp.reward.tracks![t]}`),
+                  opp.reward.hp ? `⚡+${opp.reward.hp}` : "",
+                  opp.reward.mp ? `💗${opp.reward.mp > 0 ? "+" : ""}${opp.reward.mp}` : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ");
+                return (
+                  <button
+                    key={id}
+                    disabled={committed}
+                    onClick={() => setDraft((d) => ({ ...d, opportunityId: d.opportunityId === id ? null : id }))}
+                    className={`flex flex-col items-start gap-0.5 rounded-xl border p-2.5 text-left text-xs transition ${
+                      selected ? "border-lime-400 bg-lime-400/10" : "border-white/10 hover:border-white/25 light:border-slate-200"
+                    }`}
+                  >
+                    <span className="font-semibold text-white light:text-slate-900">
+                      {opp.emoji} {opp.name} {selected && "✓"}
+                    </span>
+                    <span className="text-white/60 light:text-slate-500">
+                      {opp.block === null ? "아무 블록" : BLOCK_INFO[opp.block].label} {ACTIVITY_INFO[opp.activity].emoji}
+                      {ACTIVITY_INFO[opp.activity].name} · 정원 {opp.capacity}
+                      {opp.minPeople ? ` (최소 ${opp.minPeople}명)` : ""}
+                      {opp.cost ? ` · 💰−${opp.cost}` : ""}
+                    </span>
+                    <span className="text-emerald-200 light:text-emerald-700">보상 {reward}</span>
+                    {selected && !fits && <span className="text-amber-200 light:text-amber-700">⚠️ 계획에 이 블록·활동이 없어요</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {!committed ? (
+          <button onClick={() => onCommit(draft)} className={`${PRIMARY} py-3 text-base`}>
+            🔒 계획 확정
+          </button>
+        ) : (
+          <p className="text-center text-sm text-white/60 light:text-slate-500">
+            {state.phase === "revealing" ? "모두 확정! 계획을 공개하는 중..." : `다른 사람을 기다리는 중... (${state.seatCount - pending.length}/${state.seatCount})`}
+          </p>
+        )}
+
+        {challengesPanel}
+        {othersPanel}
+        {historyPanel}
+        {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
+      </div>
+    );
+  }
+
+  // ---------- 하루 결과
+  if (state.phase === "dayResult") {
+    const order = [viewerSeat, ...state.seats.map((_, i) => i).filter((i) => i !== viewerSeat)];
+    const ready = !pending.includes(viewerSeat);
+    return (
+      <div className="flex flex-col gap-3">
+        <style>{GLP_KEYFRAMES}</style>
+        {header}
+        {myPanel}
+        <div className={`${CARD} flex flex-col gap-3 p-3 sm:p-4`}>
+          <div className="grid grid-cols-8 gap-1 text-center text-[10px] text-white/45 light:text-slate-400">
+            {BLOCK_INFO.map((b) => (
+              <span key={b.label}>
+                {b.label}
+                <span className="hidden sm:inline"> {b.time}</span>
+              </span>
+            ))}
+          </div>
+          {order.map((seat) => {
+            const rec = state.seats[seat].days[state.day];
+            if (!rec) return null;
+            const t = temptationOf(state, seat);
+            return (
+              <div key={seat} className="flex flex-col gap-1.5 border-t border-white/5 pt-2.5 first:border-t-0 first:pt-0 light:border-slate-100">
+                <div className="flex flex-wrap items-center justify-between gap-1 text-xs">
+                  <span className="font-semibold text-white light:text-slate-900">
+                    {seat === viewerSeat ? "🙋 나" : names[seat]}
+                    {rec.plan.auto && <span className="ml-1 font-normal text-amber-200 light:text-amber-700">(시간 초과 — 기본 계획)</span>}
+                  </span>
+                  <span className="text-white/60 light:text-slate-500">
+                    {rec.plan.temptation === "resist" ? "🛡️" : t.emoji} 성장 <b className="text-emerald-200 light:text-emerald-700">+{rec.growth}</b> · ⚡{rec.endHp} 💗{rec.endMp}
+                  </span>
+                </div>
+                <DayRow state={state} seat={seat} rec={rec} day={state.day} animate />
+                {rec.notes.length > 0 && (
+                  <ul className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-white/65 light:text-slate-500">
+                    {rec.notes.map((n, i) => (
+                      <li key={i}>{n}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            );
+          })}
+          <p className="text-[11px] text-white/40 light:text-slate-400">🤝 분홍 테두리 = 약속 성사 · 🍀 연두 테두리 = 기회 카드 획득 · 🙇 펑크</p>
+        </div>
+        <button disabled={ready} onClick={() => onAction({ type: "READY", seat: viewerSeat })} className={`${PRIMARY} py-3 text-base`}>
+          {ready ? `다른 사람 기다리는 중 (${state.seatCount - pending.length}/${state.seatCount})` : state.day + 1 >= days ? "🏁 최종 점수 보기" : `☀️ ${DAY_NAMES[state.day + 1]}요일로`}
+        </button>
+        {challengesPanel}
+        {othersPanel}
+        {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
+      </div>
+    );
+  }
+
+  // ---------- 게임 종료
+  const rankings = computeRankings(state);
+  return (
+    <div className="flex flex-col gap-3">
+      <style>{GLP_KEYFRAMES}</style>
+      {header}
+      <div className={`${CARD} flex flex-col gap-3 p-3 sm:p-4`}>
+        {state.seatCount === 1 && (
+          <p className="text-center text-lg font-bold text-white light:text-slate-900">
+            🎖️ {soloGrade(rankings[0].score)} <span className="text-sm font-normal text-white/60 light:text-slate-500">({rankings[0].score}점)</span>
+          </p>
+        )}
+        <ol className="flex flex-col gap-2 sm:hidden">
+          {rankings.map((r) => {
+            const b = scoreBreakdown(state, r.seat);
+            const gid = goalIdOf(state, r.seat);
+            const g = gid ? GOAL_BY_ID[gid] : null;
+            return (
+              <li key={r.seat} className={`flex flex-col gap-1 rounded-xl border border-white/10 p-2.5 text-xs light:border-slate-200 ${r.seat === viewerSeat ? "bg-emerald-400/5" : ""}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate font-semibold text-white light:text-slate-900">
+                    {r.rank === 1 ? "🥇" : r.rank === 2 ? "🥈" : r.rank === 3 ? "🥉" : `${r.rank}.`} {names[r.seat]}
+                  </span>
+                  <b className="shrink-0 tabular-nums text-amber-200 light:text-amber-700">{r.score}점</b>
+                </div>
+                <span className="break-keep text-white/60 light:text-slate-500">
+                  성장 {b.growth} · 균형 {b.balance} · 습관 {b.habits} · 도전 {b.challenges} · 컨디션 {b.condition}
+                  {b.penalty ? ` · 붕괴 −${b.penalty}` : ""}
+                </span>
+                <span className="break-keep text-white/60 light:text-slate-500">
+                  {g ? `${g.emoji} ${g.name} ` : ""}
+                  <b className={b.goalMet ? "text-emerald-200 light:text-emerald-700" : "text-white/40 light:text-slate-400"}>{b.goalMet ? `+${b.goal}` : "실패"}</b>
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+        <div className="hidden overflow-x-auto sm:block">
+          <table className="w-full text-left text-xs">
+            <thead className="text-white/45 light:text-slate-400">
+              <tr>
+                <th className="py-1 pr-2 font-medium">순위</th>
+                <th className="py-1 pr-2 font-medium">이름</th>
+                <th className="py-1 pr-2 font-medium">성장</th>
+                <th className="py-1 pr-2 font-medium">균형</th>
+                <th className="py-1 pr-2 font-medium">습관</th>
+                <th className="py-1 pr-2 font-medium">인생 목표</th>
+                <th className="py-1 pr-2 font-medium">도전</th>
+                <th className="py-1 pr-2 font-medium">컨디션</th>
+                <th className="py-1 pr-2 font-medium">붕괴</th>
+                <th className="py-1 font-medium">합계</th>
+              </tr>
+            </thead>
+            <tbody className="text-white/85 light:text-slate-700">
+              {rankings.map((r) => {
+                const b = scoreBreakdown(state, r.seat);
+                const gid = goalIdOf(state, r.seat);
+                const g = gid ? GOAL_BY_ID[gid] : null;
+                return (
+                  <tr key={r.seat} className={`border-t border-white/5 light:border-slate-100 ${r.seat === viewerSeat ? "bg-emerald-400/5" : ""}`}>
+                    <td className="py-1.5 pr-2 font-bold">{r.rank === 1 ? "🥇" : r.rank === 2 ? "🥈" : r.rank === 3 ? "🥉" : r.rank}</td>
+                    <td className="max-w-[7rem] truncate py-1.5 pr-2 font-semibold">{names[r.seat]}</td>
+                    <td className="py-1.5 pr-2 tabular-nums">{b.growth}</td>
+                    <td className="py-1.5 pr-2 tabular-nums">{b.balance}</td>
+                    <td className="py-1.5 pr-2 tabular-nums">{b.habits}</td>
+                    <td className="py-1.5 pr-2">
+                      {g ? `${g.emoji} ${g.name} ` : ""}
+                      <b className={b.goalMet ? "text-emerald-200 light:text-emerald-700" : "text-white/40 light:text-slate-400"}>{b.goalMet ? `+${b.goal}` : "실패"}</b>
+                    </td>
+                    <td className="py-1.5 pr-2 tabular-nums">{b.challenges}</td>
+                    <td className="py-1.5 pr-2 tabular-nums">{b.condition}</td>
+                    <td className="py-1.5 pr-2 tabular-nums">{b.penalty ? `−${b.penalty}` : 0}</td>
+                    <td className="py-1.5 font-bold tabular-nums text-amber-200 light:text-amber-700">{r.score}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <button onClick={onGameEnd} className={`${PRIMARY} self-center`}>
+          결과 확정하고 계속하기
+        </button>
+      </div>
+      {myPanel}
+      {historyPanel}
+      {challengesPanel}
+      {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
+    </div>
+  );
+}
+
+const GLP_KEYFRAMES = `@keyframes glp-pop{0%{opacity:0;transform:translateY(6px) scale(.92)}100%{opacity:1;transform:none}}`;
+

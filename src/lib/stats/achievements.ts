@@ -166,6 +166,12 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["untouched", "😎", "손대지 않은 리볼버", "방아쇠 없이 1위", 1, k("flawlessWins")],
     ["skull", "💀", "해골의 주인", "해골 발동 성공", 1, k("skullTriggers")],
   ],
+  "god-life-planner": [
+    ["score-150", "📅", "갓생 장인", "한 판 150점 이상", 150, k("maxScore")],
+    ["goals-5", "🎯", "인생 설계자", "인생 목표 달성 5번", 5, k("goalsMet")],
+    ["habits-4", "🌱", "루틴 마스터", "수면이 아닌 습관 4개로 마무리", 4, k("maxHabits")],
+    ["flawless-3", "🧘", "번아웃 제로", "붕괴 없이 일주일 3번", 3, k("flawlessWeeks")],
+  ],
   "liar-game": [
     ["escape-5", "🎭", "완벽한 위장", "라이어로 지목을 5번 피함", 5, k("liarEscapes")],
     ["guess-3", "🔍", "역전의 한 수", "들킨 뒤 제시어를 맞혀 역전 3번", 3, k("liarGuesses")],

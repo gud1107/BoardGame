@@ -93,6 +93,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "오답 없는 퍼펙트", key: "perfectGames", flag: true },
     { label: "Lv.10 봇 상대 승리", key: "lv10BotWins", flag: true },
   ],
+  "god-life-planner": [
+    { label: "최종 점수", key: "maxScore", unit: "점" },
+    { label: "인생 목표 달성", key: "goalsMet", flag: true },
+    { label: "만든 습관", key: "habitsFormed", unit: "개" },
+    { label: "붕괴 없는 일주일", key: "flawlessWeeks", flag: true },
+  ],
   "liar-game": [
     { label: "라이어로 지목 피함", key: "liarEscapes", unit: "번" },
     { label: "들킨 뒤 정답 역전", key: "liarGuesses", unit: "번" },
@@ -216,6 +222,11 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "tp-5p", label: "5인 최고 점수", num: "maxScore5p", format: "count", unit: "점" },
     { id: "tp-6p", label: "6인 최고 점수", num: "maxScore6p", format: "count", unit: "점" },
     { id: "tp-perfect", label: "무실수 레벨", num: "perfectLevels", format: "count", unit: "개" },
+  ],
+  "god-life-planner": [
+    { id: "glp-score", label: "한 판 최고 점수", num: "maxScore", format: "count", unit: "점" },
+    { id: "glp-goals", label: "인생 목표 달성", num: "goalsMet", format: "count", unit: "번" },
+    { id: "glp-habits", label: "만든 습관", num: "habitsFormed", format: "count", unit: "개" },
   ],
   "liar-game": [
     { id: "lg-escape", label: "라이어 생존", num: "liarEscapes", format: "count", unit: "번" },

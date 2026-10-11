@@ -23,6 +23,7 @@ export const GAME_DIFFICULTY: Record<string, 1 | 2 | 3 | 4 | 5> = {
   "city-chase": 2,
   "telepathy": 1,
   "liar-game": 1,
+  "god-life-planner": 3,
   "bluff-roulette": 2,
   "merge-defense": 1,
   "ink-duel": 2,

@@ -91,6 +91,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "god-life-planner",
+    name: "갓생 플래너",
+    nameEn: "God-Life Planner",
+    description:
+      "하루 24시간을 3시간짜리 8블록으로 나눠 일주일을 계획하는 자기계발 보드게임! 모두 비공개로 동시에 계획을 짜고 0시부터 실행해요. 공부·운동·일·약속으로 성장하고, 같은 시간에 사흘 연속 하면 습관이 되어 점점 쉬워져요. 무리하면 탈진·번아웃, 유혹 카드와 기회 카드, 같은 시간에 잡아야 성사되는 약속까지. 1인 혼자 하기~6인, AI 봇 지원.",
+    players: { min: 1, max: 6 },
+    playTime: { minMinutes: 20, maxMinutes: 45 },
+    category: "strategy",
+    thumbnail: { emoji: "📅", gradient: ["#34d399", "#0f172a"] },
+    tags: ["갓생", "자기계발", "습관", "계획", "일정", "동시 진행", "혼자 하기", "AI봇"],
+    genres: ["strategy", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "liar-game",
     name: "라이어를 찾아라",
     nameEn: "Find the Liar",
