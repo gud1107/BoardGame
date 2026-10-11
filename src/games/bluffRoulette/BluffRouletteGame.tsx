@@ -52,6 +52,75 @@ import ChatDrawer from "@/components/chat/ChatDrawer";
 import { selfResult } from "@/games/shared/selfResult";
 import { bluffRouletteStatDetails } from "./stats";
 import { getBluffSound } from "./bluffSound";
+import { buildTimeline } from "./timeline";
+import {
+  ACCESSORIES,
+  COATS,
+  defaultAvatar,
+  HATS,
+  sanitizeAvatar,
+  sanitizeEmote,
+  SKINS,
+  type Avatar,
+  type EmoteKind,
+} from "./cosmetics";
+
+const AVATAR_KEY = "bluff-roulette-avatar";
+function loadAvatar(): Avatar {
+  try {
+    const raw = window.localStorage.getItem(AVATAR_KEY);
+    return sanitizeAvatar(raw ? JSON.parse(raw) : null, 0);
+  } catch {
+    return defaultAvatar(0);
+  }
+}
+function saveAvatar(a: Avatar) {
+  try {
+    window.localStorage.setItem(AVATAR_KEY, JSON.stringify(a));
+  } catch {
+    /* private mode — keep the in-memory choice */
+  }
+}
+
+/** Lobby avatar picker (rulebook §R): hat, coat colour, accessory, skin tone. */
+function AvatarPicker({ value, onChange }: { value: Avatar; onChange: (a: Avatar) => void }) {
+  const chip = (on: boolean) =>
+    `rounded-full border px-2.5 py-1 text-xs transition ${on ? "border-amber-400 bg-amber-500/20 text-amber-100 light:text-amber-800" : "border-white/15 text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-600"}`;
+  const swatch = (on: boolean) => `h-7 w-7 rounded-full border-2 transition ${on ? "border-amber-400 scale-110" : "border-white/20 light:border-slate-300"}`;
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-sm text-white/70 light:border-slate-200 light:bg-white light:text-slate-600">
+      <b className="text-white light:text-slate-900">🎩 내 캐릭터</b>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="w-10 text-xs">모자</span>
+        {HATS.map((h) => (
+          <button key={h.id} type="button" onClick={() => onChange({ ...value, hat: h.id })} className={chip(value.hat === h.id)}>
+            {h.icon} {h.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="w-10 text-xs">코트</span>
+        {COATS.map((c) => (
+          <button key={c.id} type="button" title={c.label} aria-label={c.label} onClick={() => onChange({ ...value, coat: c.id })} className={swatch(value.coat === c.id)} style={{ background: c.id }} />
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="w-10 text-xs">소품</span>
+        {ACCESSORIES.map((a) => (
+          <button key={a.id} type="button" onClick={() => onChange({ ...value, accessory: a.id })} className={chip(value.accessory === a.id)}>
+            {a.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="w-10 text-xs">피부</span>
+        {SKINS.map((c) => (
+          <button key={c} type="button" aria-label={`피부 ${c}`} onClick={() => onChange({ ...value, skin: c })} className={swatch(value.skin === c)} style={{ background: c }} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /** Whose decision `useBotAutoplay` should drive right now — null outside live play (the showdown/next-round screen has no single decider). */
 function currentActor(state: BluffRouletteState): SeatIndex | null {
@@ -80,6 +149,7 @@ type Occupant = {
   playerId?: string;
   isHost?: boolean;
   targetPlayerCount?: number;
+  avatar?: Avatar;
 };
 type Phase =
   | "choose"
@@ -123,6 +193,13 @@ export default function BluffRouletteGame({ onComplete }: PlayableGameProps) {
   const [codeInput, setCodeInput] = useState(roomFromUrl ?? "");
   const [targetPlayerCount, setTargetPlayerCount] = useState(4);
   const [skullMode, setSkullMode] = useState(false);
+  const [myAvatar, setMyAvatar] = useState<Avatar>(loadAvatar);
+  const myAvatarRef = useRef(myAvatar);
+  useEffect(() => {
+    myAvatarRef.current = myAvatar;
+  }, [myAvatar]);
+  // Latest emote per seat (cosmetic, outside the lockstep engine) — `at` is local receipt time.
+  const [emotes, setEmotes] = useState<Record<SeatIndex, { kind: EmoteKind; at: number } | undefined>>({});
   const skullModeRef = useRef(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -268,6 +345,12 @@ export default function BluffRouletteGame({ onComplete }: PlayableGameProps) {
     const chatChannel = `room:bluff-roulette:${roomCode}`;
     void loadRecentMessages(chatChannel).then((history) => {
       setChatMessages((prev) => mergeHistoryIntoMessages(prev, history));
+    });
+
+    channel.on("broadcast", { event: "emote" }, ({ payload }) => {
+      const e = sanitizeEmote(payload, playerCountRef.current);
+      if (!e) return;
+      setEmotes((prev) => ({ ...prev, [e.seat]: { kind: e.kind, at: performance.now() } }));
     });
 
     channel.on("broadcast", { event: "chat-message" }, ({ payload }) => {
@@ -476,6 +559,7 @@ export default function BluffRouletteGame({ onComplete }: PlayableGameProps) {
           seat,
           name: myName,
           playerId: myPlayerId,
+          avatar: myAvatarRef.current,
           ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current } : {}),
         } satisfies Occupant);
         requestStateSync();
@@ -525,6 +609,7 @@ export default function BluffRouletteGame({ onComplete }: PlayableGameProps) {
       seat: next,
       name: myName,
       playerId: myPlayerId,
+      avatar: myAvatarRef.current,
       ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current } : {}),
     } satisfies Occupant);
   }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost]);
@@ -684,6 +769,44 @@ export default function BluffRouletteGame({ onComplete }: PlayableGameProps) {
     const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
     return chooseBotAction(state, actor, level);
   }, []);
+
+  // Bots react with an emote once a showdown has finished playing out (driver client only, cosmetic).
+  const lastBotEmoteKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const res = gameState?.lastResolution;
+    if (!canDriveBots || !gameState || !res || gameState.phase === "playing") return;
+    const key = `${gameState.roundNumber}:${res.challengerSeat}:${res.accusedSeat}`;
+    if (lastBotEmoteKeyRef.current === key) return;
+    lastBotEmoteKeyRef.current = key;
+    const after = buildTimeline(res).total * 1000;
+    const someoneDied = res.pulls.some((p) => p.hit);
+    for (const seat of allBotSeatSet) {
+      if (!gameState.players[seat]?.alive) continue;
+      const survived = res.pulls.some((p) => p.seat === seat && !p.hit);
+      const won = (seat === res.challengerSeat && !res.truthful) || (seat === res.accusedSeat && res.truthful && !res.skull);
+      const pick: EmoteKind | null = survived ? (Math.random() < 0.5 ? "laugh" : "pray") : won ? (Math.random() < 0.6 ? "smug" : "clap") : someoneDied && Math.random() < 0.4 ? "nervous" : null;
+      if (!pick || Math.random() < 0.35) continue;
+      window.setTimeout(
+        () => channelRef.current?.send({ type: "broadcast", event: "emote", payload: { seat, kind: pick, id: Date.now() } }),
+        after + 300 + Math.random() * 1500,
+      );
+    }
+  }, [gameState, canDriveBots, allBotSeatSet]);
+
+  const sendEmote = useCallback(
+    (kind: EmoteKind) => {
+      if (mySeat === null) return;
+      channelRef.current?.send({ type: "broadcast", event: "emote", payload: { seat: mySeat, kind, id: Date.now() } });
+    },
+    [mySeat],
+  );
+
+  const avatars = useMemo(() => {
+    const map: Record<SeatIndex, Avatar | undefined> = {};
+    for (const o of occupants) if (o.avatar) map[o.seat] = sanitizeAvatar(o.avatar, o.seat);
+    if (mySeat !== null) map[mySeat] = myAvatar;
+    return map;
+  }, [occupants, mySeat, myAvatar]);
 
   useBotAutoplay<BluffRouletteState, EngineAction, SeatIndex>({
     active: canDriveBots && phase === "playing",
@@ -987,6 +1110,13 @@ export default function BluffRouletteGame({ onComplete }: PlayableGameProps) {
             </div>
           </label>
         )}
+        <AvatarPicker
+          value={myAvatar}
+          onChange={(a) => {
+            setMyAvatar(a);
+            saveAvatar(a);
+          }}
+        />
         {intent === "create" && (
           <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-sm text-white/70 light:border-slate-200 light:bg-white light:text-slate-600">
             <input type="checkbox" checked={skullMode} onChange={(e) => setSkullMode(e.target.checked)} className="mt-0.5 h-4 w-4 accent-violet-500" />
@@ -1115,6 +1245,9 @@ export default function BluffRouletteGame({ onComplete }: PlayableGameProps) {
         onAction={handleAction}
         onGameEnd={handleGameEnd}
         canDrive={canDriveBots}
+        avatars={avatars}
+        emotes={emotes}
+        onEmote={sendEmote}
       />
       <ChatDrawer
         messages={chatMessages}

@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import type { CardKind, Suit } from "./engine";
 
 /**
@@ -7,6 +8,11 @@ import type { CardKind, Suit } from "./engine";
  * card (100×140 box, emblem centred at 50,70) feeds both the 2D HUD (`<img>`)
  * and the 3D textures (the same image drawn onto a canvas), so they always
  * match.
+ *
+ * Themes: every look is just a pair of SVG builders (face + back) keyed in
+ * `THEMES` below — add a theme by writing those two functions and listing
+ * it there; the HUD, the 3D textures and the ⚙ picker pick it up from
+ * `CARD_THEMES` automatically.
  */
 
 function polygon(cx: number, cy: number, points: number, outer: number, inner: number, rot = -Math.PI / 2): string {
@@ -148,22 +154,118 @@ function backSvg(): string {
 </svg>`;
 }
 
+/** Neon-casino palette per kind: [glow, core]. */
+const NEON: Record<CardKind, [string, string]> = {
+  sun: ["#ffb020", "#fff3c4"],
+  moon: ["#7c8cff", "#e3e6ff"],
+  star: ["#22f5d0", "#d6fff7"],
+  mask: ["#ff3dcb", "#ffd6f5"],
+  skull: ["#a3ff3d", "#efffd6"],
+};
+
+function neonFaceSvg(kind: CardKind): string {
+  const a = CARD_ART[kind];
+  const [glow, core] = NEON[kind];
+  const emblem = a.layers
+    .filter((l) => l.fill !== "light")
+    .map((l) => `<path d="${l.d}" fill="none" stroke="${l.fill === "dark" ? glow : core}" stroke-width="${l.fill === "dark" ? 1.2 : 2}" stroke-linejoin="round"${l.evenodd ? ' fill-rule="evenodd"' : ""}/>`)
+    .join("");
+  const corner = `<text x="14" y="26" font-size="10" font-weight="900" text-anchor="middle" fill="${core}" filter="url(#n)" font-family="'Pretendard','Noto Sans KR','Malgun Gothic',sans-serif">${a.label}</text>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 140">
+<defs>
+<filter id="n" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+<radialGradient id="bg" cx="0.5" cy="0.45" r="0.8"><stop offset="0" stop-color="#1a0d33"/><stop offset="1" stop-color="#07030f"/></radialGradient>
+<pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M10 0 L0 0 0 10" fill="none" stroke="${glow}" stroke-opacity="0.12" stroke-width="0.5"/></pattern>
+</defs>
+<rect x="1" y="1" width="98" height="138" rx="9" fill="url(#bg)" stroke="#000" stroke-width="1"/>
+<rect x="1" y="1" width="98" height="138" rx="9" fill="url(#grid)"/>
+<rect x="5" y="5" width="90" height="130" rx="7" fill="none" stroke="${glow}" stroke-width="1.6" filter="url(#n)"/>
+<g filter="url(#n)" stroke="${glow}">${emblem}</g>
+${corner}
+<g transform="rotate(180 50 70)">${corner}</g>
+</svg>`;
+}
+
+function neonBackSvg(): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 140">
+<defs>
+<filter id="n" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#14062b"/><stop offset="1" stop-color="#05020c"/></linearGradient>
+<pattern id="d" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="12" height="12" fill="none" stroke="#ff3dcb" stroke-opacity="0.18" stroke-width="0.6"/></pattern>
+</defs>
+<rect x="1" y="1" width="98" height="138" rx="9" fill="url(#bg)" stroke="#000" stroke-width="1"/>
+<rect x="1" y="1" width="98" height="138" rx="9" fill="url(#d)"/>
+<rect x="5" y="5" width="90" height="130" rx="7" fill="none" stroke="#22f5d0" stroke-width="1.5" filter="url(#n)"/>
+<path d="M50 40 L72 70 L50 100 L28 70 Z" fill="none" stroke="#ff3dcb" stroke-width="1.8" filter="url(#n)"/>
+<circle cx="50" cy="70" r="12" fill="none" stroke="#ffb020" stroke-width="1.6" filter="url(#n)"/>
+${[0, 1, 2, 3, 4, 5].map((i) => `<circle cx="${(50 + Math.cos((i * Math.PI) / 3) * 7).toFixed(1)}" cy="${(70 + Math.sin((i * Math.PI) / 3) * 7).toFixed(1)}" r="2" fill="#ffb020"/>`).join("")}
+</svg>`;
+}
+
+export type CardTheme = "classic" | "neon";
+
+const THEMES: Record<CardTheme, { label: string; face: (k: CardKind) => string; back: () => string }> = {
+  classic: { label: "클래식 살롱", face: faceSvg, back: backSvg },
+  neon: { label: "네온 카지노", face: neonFaceSvg, back: neonBackSvg },
+};
+
+export const CARD_THEMES: { id: CardTheme; label: string }[] = (Object.keys(THEMES) as CardTheme[]).map((id) => ({ id, label: THEMES[id].label }));
+
 const urlCache = new Map<string, string>();
-/** `data:` URL of a card image (memoised). */
-export function cardImageUrl(kind: CardKind | "back"): string {
-  let u = urlCache.get(kind);
+/** `data:` URL of a card image (memoised per theme). */
+export function cardImageUrl(kind: CardKind | "back", theme: CardTheme = "classic"): string {
+  const key = `${theme}:${kind}`;
+  let u = urlCache.get(key);
   if (!u) {
-    u = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(kind === "back" ? backSvg() : faceSvg(kind))}`;
-    urlCache.set(kind, u);
+    const t = THEMES[theme] ?? THEMES.classic;
+    u = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(kind === "back" ? t.back() : t.face(kind))}`;
+    urlCache.set(key, u);
   }
   return u;
 }
 
+// --- per-viewer theme preference (localStorage, best effort) ---
+const THEME_KEY = "bluff-roulette-card-theme";
+const themeListeners = new Set<() => void>();
+function readTheme(): CardTheme {
+  try {
+    const v = window.localStorage.getItem(THEME_KEY);
+    return v === "neon" || v === "classic" ? v : "classic";
+  } catch {
+    return "classic";
+  }
+}
+let currentTheme: CardTheme | null = null;
+export function getCardTheme(): CardTheme {
+  if (currentTheme === null) currentTheme = typeof window === "undefined" ? "classic" : readTheme();
+  return currentTheme;
+}
+export function setCardTheme(theme: CardTheme) {
+  currentTheme = theme;
+  try {
+    window.localStorage.setItem(THEME_KEY, theme);
+  } catch {
+    /* private mode — keep the in-memory choice */
+  }
+  themeListeners.forEach((l) => l());
+}
+export function useCardTheme(): CardTheme {
+  return useSyncExternalStore(
+    (l) => {
+      themeListeners.add(l);
+      return () => themeListeners.delete(l);
+    },
+    getCardTheme,
+    () => "classic",
+  );
+}
+
 export function CardFace({ kind, className = "", dim = false }: { kind: CardKind; className?: string; dim?: boolean }) {
+  const theme = useCardTheme();
   return (
     // eslint-disable-next-line @next/next/no-img-element -- inline data: SVG, nothing for next/image to optimise
     <img
-      src={cardImageUrl(kind)}
+      src={cardImageUrl(kind, theme)}
       alt={CARD_ART[kind].label}
       draggable={false}
       className={`select-none drop-shadow-[0_2px_3px_rgba(0,0,0,0.45)] ${className}`}
@@ -173,19 +275,20 @@ export function CardFace({ kind, className = "", dim = false }: { kind: CardKind
 }
 
 export function CardBack({ className = "" }: { className?: string }) {
+  const theme = useCardTheme();
   return (
     // eslint-disable-next-line @next/next/no-img-element -- inline data: SVG, nothing for next/image to optimise
-    <img src={cardImageUrl("back")} alt="뒷면" draggable={false} className={`select-none drop-shadow-[0_2px_3px_rgba(0,0,0,0.45)] ${className}`} />
+    <img src={cardImageUrl("back", theme)} alt="뒷면" draggable={false} className={`select-none drop-shadow-[0_2px_3px_rgba(0,0,0,0.45)] ${className}`} />
   );
 }
 
 /** Draws a card onto a 2D canvas once its SVG image has decoded (for three.js textures). */
-export function paintCard(ctx: CanvasRenderingContext2D, kind: CardKind | "back", w: number, h: number, onDone?: () => void) {
+export function paintCard(ctx: CanvasRenderingContext2D, kind: CardKind | "back", w: number, h: number, onDone?: () => void, theme: CardTheme = "classic") {
   const img = new Image();
   img.onload = () => {
     ctx.clearRect(0, 0, w, h);
     ctx.drawImage(img, 0, 0, w, h);
     onDone?.();
   };
-  img.src = cardImageUrl(kind);
+  img.src = cardImageUrl(kind, theme);
 }

@@ -18,8 +18,9 @@ import {
   type Resolution,
   type SeatIndex,
 } from "./engine";
-import { CARD_ART, CardBack, CardFace } from "./cardArt";
-import { buildTimeline, activePull, type ShowdownTimeline } from "./timeline";
+import { CARD_ART, CARD_THEMES, CardBack, CardFace, setCardTheme, useCardTheme } from "./cardArt";
+import { buildTimeline, activePull, pullStep, type PullStep, type ShowdownTimeline } from "./timeline";
+import { EMOTE_COOLDOWN_MS, EMOTES, emoteIcon, type Avatar, type EmoteKind } from "./cosmetics";
 import { getBluffSound } from "./bluffSound";
 import RulebookModal from "./RulebookModal";
 import type { Showdown } from "./Scene3D";
@@ -39,6 +40,10 @@ interface Props {
   onGameEnd: () => void;
   /** This client drives bots → it also auto-advances past a finished showdown. */
   canDrive: boolean;
+  avatars: Record<SeatIndex, Avatar | undefined>;
+  /** Latest emote per seat; `at` = performance.now() on receipt. */
+  emotes: Record<SeatIndex, { kind: EmoteKind; at: number } | undefined>;
+  onEmote: (kind: EmoteKind) => void;
 }
 
 type View = "3d" | "2d";
@@ -131,9 +136,26 @@ function showdownCaption(res: Resolution, tl: ShowdownTimeline, t: number, names
   const pull = activePull(tl, t);
   if (pull) {
     const p = res.pulls[pull.index];
-    const fired = pull.local >= tl.pulls[pull.index].fireAt - tl.pulls[pull.index].liftAt;
-    if (!fired) return { text: `🔫 ${n(p.seat)}의 ${p.chamber + 1}번째 방아쇠… (위험 ${Math.round(pullDanger(p.chamber) * 100)}%)`, tone: "neutral" };
-    return p.hit ? { text: `💥 탕! ${n(p.seat)} 탈락`, tone: "bad" } : { text: `찰칵… ${n(p.seat)} 생존!`, tone: "good" };
+    const who = n(p.seat);
+    const danger = Math.round(pullDanger(p.chamber) * 100);
+    switch (pullStep(tl.pulls[pull.index], t)) {
+      case "grab":
+        return { text: `🔫 ${who}이(가) 리볼버를 집어 듭니다`, tone: "neutral" };
+      case "open":
+        return { text: `탄창을 엽니다 — 이미 빈 칸 ${p.chamber}개, 남은 ${6 - p.chamber}칸 중 실탄 1발`, tone: "neutral" };
+      case "notch":
+        return { text: `딱 한 칸 돌립니다 → ${p.chamber + 1}번째 약실`, tone: "neutral" };
+      case "close":
+        return { text: "철컥, 탄창을 닫습니다", tone: "neutral" };
+      case "raise":
+        return { text: `${who}이(가) 관자놀이에 겨눕니다`, tone: "neutral" };
+      case "cock":
+        return { text: "공이치기를 당깁니다…", tone: "neutral" };
+      case "hold":
+        return { text: `숨을 고르는 중… 터질 확률 ${danger}%`, tone: "neutral" };
+      default:
+        return p.hit ? { text: `💥 탕! ${who} 탈락`, tone: "bad" } : { text: `찰칵… 빈 약실! ${who} 생존`, tone: "good" };
+    }
   }
   if (t < (tl.pulls[0]?.liftAt ?? tl.total)) {
     if (res.skull) return { text: `💀 해골 발동! ${n(res.accusedSeat)}을(를) 뺀 모두가 방아쇠를 당깁니다`, tone: "skull" };
@@ -145,6 +167,75 @@ function showdownCaption(res: Resolution, tl: ShowdownTimeline, t: number, names
   return { text: dead.length ? `💀 ${dead.join(", ")} 탈락` : "모두 살아남았다", tone: dead.length ? "bad" : "good" };
 }
 
+const STEP_ORDER: { id: PullStep[]; label: string }[] = [
+  { id: ["grab"], label: "집기" },
+  { id: ["open", "notch", "close"], label: "탄창 한 칸" },
+  { id: ["raise"], label: "겨누기" },
+  { id: ["cock", "hold"], label: "공이치기" },
+  { id: ["fire", "after"], label: "방아쇠" },
+];
+
+/**
+ * Step bar + chamber dial for the pull on stage (rulebook §J): the dial
+ * shows the chambers already proven empty (✕), the one about to fire
+ * (arrow) and the rest (?), turning exactly one notch when the cylinder is
+ * advanced, then the outcome in that chamber.
+ */
+function PullHud({ res, tl, t, names }: { res: Resolution; tl: ShowdownTimeline; t: number; names: Record<SeatIndex, string> }) {
+  const pull = activePull(tl, t);
+  if (!pull) return null;
+  const p = res.pulls[pull.index];
+  const beats = tl.pulls[pull.index];
+  const step = pullStep(beats, t);
+  const stepIdx = STEP_ORDER.findIndex((s) => s.id.includes(step));
+  const advanced = t >= beats.spinAt;
+  const pointer = advanced ? p.chamber : p.chamber - 1;
+  const fired = t >= beats.fireAt;
+  const danger = Math.round(pullDanger(p.chamber) * 100);
+  return (
+    <div className="pointer-events-none absolute inset-x-2 bottom-2 flex items-end justify-between gap-2">
+      <ol className="flex flex-wrap gap-1 rounded-xl bg-black/65 p-1.5 text-[10px] font-bold backdrop-blur sm:text-[11px]">
+        {STEP_ORDER.map((s, i) => (
+          <li
+            key={s.label}
+            className={`rounded-full px-2 py-0.5 transition ${i < stepIdx ? "bg-amber-900/60 text-amber-200/70" : i === stepIdx ? "bg-amber-500 text-black shadow-[0_0_10px_rgba(251,191,36,0.7)]" : "bg-white/5 text-white/35"}`}
+          >
+            {i + 1}. {s.label}
+          </li>
+        ))}
+      </ol>
+      <div className="flex flex-col items-center gap-0.5 rounded-xl bg-black/65 p-1.5 backdrop-blur">
+        <svg viewBox="-34 -34 68 68" className="h-16 w-16 sm:h-20 sm:w-20" aria-label={`${names[p.seat] ?? ""}의 약실`}>
+          <polygon points="0,-33 -5,-25 5,-25" fill="#fbbf24" />
+          <g style={{ transform: `rotate(${-pointer * 60}deg)`, transition: "transform 0.35s cubic-bezier(.2,1.4,.4,1)" }}>
+            <circle r="28" fill="#2f3036" stroke="#55565e" strokeWidth="2" />
+            {Array.from({ length: 6 }, (_, i) => {
+              const a = ((i * 60 - 90) * Math.PI) / 180;
+              const x = Math.cos(a) * 17;
+              const y = Math.sin(a) * 17;
+              const spent = i < p.chamber;
+              const current = i === p.chamber && advanced;
+              const fill = current && fired ? (p.hit ? "#ef4444" : "#0b0b0d") : spent ? "#050506" : "#7d7f87";
+              return (
+                <g key={i} transform={`translate(${x} ${y})`}>
+                  <circle r="7" fill={fill} stroke={current ? "#fbbf24" : "#1c1c20"} strokeWidth={current ? 2 : 1} />
+                  <text textAnchor="middle" dominantBaseline="central" fontSize="7" fill="#f5f5f4" style={{ transform: `rotate(${pointer * 60}deg)`, transformBox: "fill-box", transformOrigin: "center" }}>
+                    {spent ? "✕" : current && fired ? (p.hit ? "💥" : "✓") : "?"}
+                  </text>
+                </g>
+              );
+            })}
+            <circle r="4" fill="#55565e" />
+          </g>
+        </svg>
+        <span className={`text-[10px] font-bold ${fired ? (p.hit ? "text-rose-300" : "text-emerald-300") : "text-amber-200"}`}>
+          {fired ? (p.hit ? "실탄!" : "빈 칸") : `위험 ${danger}%`}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 /** 2D fallback / "3D 끄기" table: same public info laid out on an ellipse. */
 function Table2D({
   state,
@@ -152,12 +243,14 @@ function Table2D({
   names,
   showdown,
   t,
+  emotes,
 }: {
   state: BluffRouletteState;
   viewerSeat: SeatIndex;
   names: Record<SeatIndex, string>;
   showdown: Showdown | null;
   t: number;
+  emotes: Props["emotes"];
 }) {
   const n = state.playerCount;
   const views = getPlayerView(state, viewerSeat);
@@ -181,6 +274,11 @@ function Table2D({
             } ${alive ? "" : "opacity-40 grayscale"}`}
             style={{ left: `${x}%`, top: `${y}%` }}
           >
+            {emotes[v.seat] && (
+              <span key={emotes[v.seat]!.at} className="my-turn-pop-fade pointer-events-none absolute -top-7 text-2xl">
+                {emoteIcon(emotes[v.seat]!.kind)}
+              </span>
+            )}
             <span className="max-w-[5.5rem] truncate font-bold text-amber-50">{v.seat === viewerSeat ? "나" : names[v.seat]}</span>
             <span className="text-amber-100/70">{alive ? `🂠 ${v.handCount}` : "💀"}</span>
             <Pips shots={Math.max(0, shots)} />
@@ -205,7 +303,10 @@ function Table2D({
   );
 }
 
-export default function BluffRouletteBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd, canDrive }: Props) {
+export default function BluffRouletteBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd, canDrive, avatars, emotes, onEmote }: Props) {
+  const theme = useCardTheme();
+  const [notice, setNotice] = useState<{ text: string; suggest2d?: boolean } | null>(null);
+  const [emoteCooling, setEmoteCooling] = useState(false);
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [selected, setSelected] = useState<number[]>([]);
@@ -216,6 +317,19 @@ export default function BluffRouletteBoard({ state, viewerSeat, names, connected
     const lowEnd = (navigator.hardwareConcurrency ?? 8) <= 4 || window.innerWidth < 500;
     return readPref<Quality>(QUALITY_KEY, ["high", "low"], lowEnd ? "low" : "high");
   });
+
+  // --- automatic quality (rulebook §T): two slow 2-second windows in a row step the graphics down ---
+  const slowRef = useRef(0);
+  const handleFps = (fps: number) => {
+    const limit = quality === "high" ? 28 : 18;
+    slowRef.current = fps < limit ? slowRef.current + 1 : 0;
+    if (slowRef.current < 2) return;
+    slowRef.current = 0;
+    if (quality === "high") {
+      setQuality("low");
+      setNotice({ text: "화면이 버벅여서 그래픽을 '가볍게'로 바꿨어요 (⚙에서 되돌릴 수 있어요)" });
+    } else setNotice({ text: "그래도 느리다면 2D 테이블이 가장 가벼워요", suggest2d: true });
+  };
 
   // --- showdown clock: started (and ticked) from timer callbacks, never during render ---
   const sdKey = showdownKey(state);
@@ -272,8 +386,11 @@ export default function BluffRouletteBoard({ state, viewerSeat, names, connected
           if (c.kind === "liar") sound.liar();
           else if (c.kind === "flip") sound.flip(res.skull || isTrueCard(res.revealed[c.index], res.tableSuit));
           else if (c.kind === "skull") sound.skull();
-          else if (c.kind === "spin") sound.spin();
+          else if (c.kind === "open") sound.cylinderOpen();
+          else if (c.kind === "spin") sound.notch();
+          else if (c.kind === "close") sound.cylinderClose();
           else if (c.kind === "cock") sound.cock();
+          else if (c.kind === "heartbeat") sound.heartbeat();
           else if (c.kind === "fire") {
             if (res.pulls[c.index].hit) sound.bang();
             else sound.click();
@@ -287,6 +404,23 @@ export default function BluffRouletteBoard({ state, viewerSeat, names, connected
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per showdown
   }, [showdown]);
+
+  // a soft pop whenever anyone's emote bubble appears
+  const lastEmoteRef = useRef(0);
+  useEffect(() => {
+    const newest = Math.max(0, ...Object.values(emotes).map((e) => e?.at ?? 0));
+    if (newest > lastEmoteRef.current) {
+      lastEmoteRef.current = newest;
+      getBluffSound().emotePop();
+    }
+  }, [emotes]);
+  function sendEmote(kind: EmoteKind) {
+    if (emoteCooling) return;
+    getBluffSound().unlock();
+    onEmote(kind);
+    setEmoteCooling(true);
+    window.setTimeout(() => setEmoteCooling(false), EMOTE_COOLDOWN_MS);
+  }
 
   // --- auto-continue (one driver client only, so a stalled table never waits on a human click) ----
   useEffect(() => {
@@ -328,10 +462,12 @@ export default function BluffRouletteBoard({ state, viewerSeat, names, connected
 
   const caption = showdown ? showdownCaption(showdown.res, showdown.tl, t, names) : null;
   const myPullNow = showdown ? activePull(showdown.tl, t) : null;
-  const flashMine =
-    !!showdown && !!myPullNow && showdown.res.pulls[myPullNow.index].seat === viewerSeat && showdown.res.pulls[myPullNow.index].hit && myPullNow.local > 1.95 && myPullNow.local < 2.6;
-  const flashOther =
-    !!showdown && !!myPullNow && showdown.res.pulls[myPullNow.index].seat !== viewerSeat && showdown.res.pulls[myPullNow.index].hit && myPullNow.local > 1.95 && myPullNow.local < 2.15;
+  const pullNow = showdown && myPullNow ? { res: showdown.res.pulls[myPullNow.index], beats: showdown.tl.pulls[myPullNow.index] } : null;
+  const isMine = !!pullNow && pullNow.res.seat === viewerSeat;
+  const flashMine = !!pullNow && isMine && pullNow.res.hit && t >= pullNow.beats.fireAt && t < pullNow.beats.fireAt + 0.7;
+  const flashOther = !!pullNow && !isMine && pullNow.res.hit && t >= pullNow.beats.fireAt && t < pullNow.beats.fireAt + 0.18;
+  // my own pull: the edges darken from the moment I raise the gun, pulsing with the heartbeat
+  const myTension = isMine && pullNow && t < pullNow.beats.fireAt ? Math.min(1, Math.max(0, (t - pullNow.beats.raiseAt) / (pullNow.beats.fireAt - pullNow.beats.raiseAt))) : 0;
 
   const views = getPlayerView(state, viewerSeat);
   const sceneSeats = views.map((v) => ({ seat: v.seat, alive: v.alive, handCount: v.handCount, shots: v.shots }));
@@ -395,6 +531,17 @@ export default function BluffRouletteBoard({ state, viewerSeat, names, connected
               {q === "high" ? "고품질" : "가볍게"}
             </button>
           ))}
+          <span className="ml-2 text-white/50">카드</span>
+          {CARD_THEMES.map((th) => (
+            <button
+              key={th.id}
+              type="button"
+              onClick={() => setCardTheme(th.id)}
+              className={`rounded-full px-2.5 py-1 font-bold ${theme === th.id ? "bg-amber-600 text-white" : "border border-white/15 text-white/60"}`}
+            >
+              {th.label}
+            </button>
+          ))}
           {!hasWebgl && <span className="text-rose-300">이 기기는 3D(WebGL)를 지원하지 않아 2D로 표시해요</span>}
         </div>
       )}
@@ -412,9 +559,48 @@ export default function BluffRouletteBoard({ state, viewerSeat, names, connected
             names={names}
             showdown={showdown}
             quality={quality}
+            roundNumber={state.roundNumber}
+            theme={theme}
+            avatars={avatars}
+            emotes={emotes}
+            onFps={handleFps}
           />
         ) : (
-          <Table2D state={state} viewerSeat={viewerSeat} names={names} showdown={showdown} t={t} />
+          <Table2D state={state} viewerSeat={viewerSeat} names={names} showdown={showdown} t={t} emotes={emotes} />
+        )}
+        {myTension > 0 && (
+          <div
+            className="pointer-events-none absolute inset-0 animate-pulse"
+            style={{ boxShadow: `inset 0 0 ${60 + myTension * 90}px ${20 + myTension * 50}px rgba(0,0,0,${0.35 + myTension * 0.5})`, animationDuration: "0.9s" }}
+          />
+        )}
+        {showdown && <PullHud res={showdown.res} tl={showdown.tl} t={t} names={names} />}
+        {emotes[viewerSeat] && (
+          <span key={emotes[viewerSeat]!.at} className="my-turn-pop-fade pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 text-4xl drop-shadow-lg">
+            {emoteIcon(emotes[viewerSeat]!.kind)}
+          </span>
+        )}
+        {notice && (
+          <div className="absolute inset-x-2 top-12 flex justify-center">
+            <span className="flex items-center gap-2 rounded-full bg-black/80 px-3 py-1.5 text-[11px] text-amber-100 shadow-lg">
+              {notice.text}
+              {notice.suggest2d && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setView("2d");
+                    setNotice(null);
+                  }}
+                  className="rounded-full bg-amber-600 px-2 py-0.5 font-bold text-white"
+                >
+                  2D로
+                </button>
+              )}
+              <button type="button" onClick={() => setNotice(null)} aria-label="닫기" className="text-white/50">
+                ✕
+              </button>
+            </span>
+          </div>
         )}
         {caption && (
           <div className="pointer-events-none absolute inset-x-2 top-2 flex justify-center">
@@ -436,7 +622,7 @@ export default function BluffRouletteBoard({ state, viewerSeat, names, connected
           </div>
         )}
         {use3d && !showdown && <span className="pointer-events-none absolute right-2 bottom-2 text-[10px] text-white/30">드래그로 둘러보기</span>}
-        {flashMine && <div className="pointer-events-none absolute inset-0 animate-pulse bg-rose-700/70" />}
+        {flashMine && <div className="pointer-events-none absolute inset-0 bg-rose-700/75" />}
         {flashOther && <div className="pointer-events-none absolute inset-0 bg-white/40" />}
         {showdownDone && state.phase === "reveal" && (
           <div className="absolute inset-x-0 bottom-3 flex justify-center">
@@ -492,6 +678,23 @@ export default function BluffRouletteBoard({ state, viewerSeat, names, connected
             </div>
           );
         })}
+      </div>
+
+      {/* emotes (rulebook §T) — everyone at the table sees my character act them out */}
+      <div className="flex gap-1 overflow-x-auto pb-0.5">
+        {EMOTES.map((e) => (
+          <button
+            key={e.id}
+            type="button"
+            onClick={() => sendEmote(e.id)}
+            disabled={emoteCooling}
+            title={e.label}
+            className="flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-amber-100/80 transition hover:border-amber-400/50 disabled:opacity-40"
+          >
+            <span className="text-base leading-none">{e.icon}</span>
+            <span className="hidden sm:inline">{e.label}</span>
+          </button>
+        ))}
       </div>
 
       {/* my hand + actions */}

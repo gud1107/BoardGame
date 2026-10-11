@@ -310,3 +310,41 @@ describe("stats", () => {
     expect(sum("flawlessWins")).toBeLessThanOrEqual(1);
   });
 });
+
+describe("showdown timeline (§J pull steps)", () => {
+  it("each pull walks grab → open → notch → close → raise → cock → hold → fire in order", async () => {
+    const { buildTimeline, pullStep } = await import("./timeline");
+    let s = rig([["skull"], ["moon"], ["sun"], ["star"]], { skullMode: true });
+    s = applyAction(s, playIds(s, 0, ["skull"]));
+    s = applyAction(s, { type: "liar", seat: 1 });
+    const tl = buildTimeline(s.lastResolution!);
+    expect(tl.pulls).toHaveLength(3);
+    for (const p of tl.pulls) {
+      const beats = [p.liftAt, p.openAt, p.spinAt, p.closeAt, p.raiseAt, p.cockAt, p.holdAt, p.fireAt, p.lowerAt, p.endAt];
+      for (let i = 1; i < beats.length; i++) expect(beats[i]).toBeGreaterThan(beats[i - 1]);
+      const seen = [p.liftAt, p.openAt, p.spinAt, p.closeAt, p.raiseAt, p.cockAt, p.holdAt, p.fireAt, p.lowerAt].map((x) => pullStep(p, x + 0.001));
+      expect(seen).toEqual(["grab", "open", "notch", "close", "raise", "cock", "hold", "fire", "after"]);
+    }
+    // pulls never overlap; later skull pulls are faster than the first
+    for (let j = 1; j < tl.pulls.length; j++) expect(tl.pulls[j].liftAt).toBeGreaterThanOrEqual(tl.pulls[j - 1].endAt);
+    expect(tl.pulls[1].endAt - tl.pulls[1].liftAt).toBeLessThan(tl.pulls[0].endAt - tl.pulls[0].liftAt);
+    expect(tl.total).toBeGreaterThan(tl.pulls[2].endAt);
+  });
+});
+
+describe("cosmetics from the network", () => {
+  it("avatars only accept offered options, else the seat default", async () => {
+    const { sanitizeAvatar, defaultAvatar, COATS } = await import("./cosmetics");
+    expect(sanitizeAvatar({ hat: "top", coat: COATS[3].id, accessory: "scarf", skin: "#8f5d3e" }, 2)).toEqual({ hat: "top", coat: COATS[3].id, accessory: "scarf", skin: "#8f5d3e" });
+    expect(sanitizeAvatar({ hat: "crown", coat: "red", accessory: 5, skin: "<script>" }, 1)).toEqual(defaultAvatar(1));
+    expect(sanitizeAvatar(null, 4)).toEqual(defaultAvatar(4));
+  });
+  it("emotes must name a real seat and kind", async () => {
+    const { sanitizeEmote } = await import("./cosmetics");
+    expect(sanitizeEmote({ seat: 1, kind: "clap", id: 5 }, 4)).toEqual({ seat: 1, kind: "clap", id: 5 });
+    expect(sanitizeEmote({ seat: 4, kind: "clap", id: 5 }, 4)).toBeNull();
+    expect(sanitizeEmote({ seat: 1.5, kind: "clap", id: 5 }, 4)).toBeNull();
+    expect(sanitizeEmote({ seat: 1, kind: "dance", id: 5 }, 4)).toBeNull();
+    expect(sanitizeEmote("clap", 4)).toBeNull();
+  });
+});

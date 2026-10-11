@@ -176,6 +176,50 @@ class BluffSound {
     }
   }
 
+  /** Cylinder swung out — a light metallic unlatch. */
+  cylinderOpen() {
+    const ctx = this.ready("sfx");
+    if (!ctx || !this.sfxBus) return;
+    const t = ctx.currentTime;
+    this.hiss(ctx, this.sfxBus, { t, dur: 0.05, peak: 0.4, type: "bandpass", freq: 3600, q: 5 });
+    this.tone(ctx, this.sfxBus, { type: "triangle", freq: 1900, to: 1400, t: t + 0.02, dur: 0.12, peak: 0.06 });
+  }
+
+  /** Exactly one notch of the cylinder (no free spin — the rulebook never reloads). */
+  notch() {
+    const ctx = this.ready("sfx");
+    if (!ctx || !this.sfxBus) return;
+    const t = ctx.currentTime;
+    this.hiss(ctx, this.sfxBus, { t, dur: 0.03, peak: 0.55, type: "bandpass", freq: 4400, q: 7 });
+    this.hiss(ctx, this.sfxBus, { t: t + 0.06, dur: 0.025, peak: 0.35, type: "bandpass", freq: 3000, q: 6 });
+  }
+
+  /** Cylinder flicked shut. */
+  cylinderClose() {
+    const ctx = this.ready("sfx");
+    if (!ctx || !this.sfxBus) return;
+    const t = ctx.currentTime;
+    this.hiss(ctx, this.sfxBus, { t, dur: 0.06, peak: 0.6, type: "bandpass", freq: 2200, q: 3 });
+    this.tone(ctx, this.sfxBus, { type: "sine", freq: 420, to: 260, t, dur: 0.08, peak: 0.12 });
+  }
+
+  /** A double heartbeat thump while the trigger is held. */
+  heartbeat() {
+    const ctx = this.ready("sfx");
+    if (!ctx || !this.sfxBus) return;
+    const t = ctx.currentTime;
+    this.tone(ctx, this.sfxBus, { type: "sine", freq: 62, to: 44, t, dur: 0.18, peak: 0.85 });
+    this.tone(ctx, this.sfxBus, { type: "sine", freq: 58, to: 42, t: t + 0.22, dur: 0.16, peak: 0.6 });
+  }
+
+  /** Soft pop for an emote bubble. */
+  emotePop() {
+    const ctx = this.ready("sfx");
+    if (!ctx || !this.sfxBus) return;
+    const t = ctx.currentTime;
+    this.tone(ctx, this.sfxBus, { type: "sine", freq: 620, to: 980, t, dur: 0.12, peak: 0.12 });
+  }
+
   /** Hammer cock before the pull. */
   cock() {
     const ctx = this.ready("sfx");

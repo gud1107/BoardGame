@@ -63,6 +63,20 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         </section>
 
         <section>
+          <h3 className={h}>🔫 방아쇠 과정</h3>
+          <p className="text-xs">
+            집기 → 탄창 열기(빈 칸 ✕ 확인) → <b>딱 한 칸</b> 돌리기 → 닫기 → 관자놀이에 겨누기 → 공이치기 → 숨 고르기 → 찰칵 또는 탕! 화면 아래 약실 다이얼에서 이번 칸과 위험 %를 볼 수 있어요.
+          </p>
+        </section>
+
+        <section>
+          <h3 className={h}>😏 이모트 · 캐릭터</h3>
+          <p className="text-xs">
+            테이블 아래 이모트 버튼을 누르면 모두의 화면에서 내 캐릭터가 그 동작과 표정을 해요. 캐릭터의 모자·코트·소품·피부는 방에 들어갈 때 고를 수 있고, 카드 디자인(클래식/네온)과 그래픽 품질은 ⚙에서 바꿔요.
+          </p>
+        </section>
+
+        <section>
           <h3 className={h}>💀 해골 모드 (선택)</h3>
           <ul className="list-disc space-y-1 pl-4 text-xs">
             <li>해골을 <b>1장만 단독으로</b> 냈는데 의심받으면 → 해골을 낸 사람을 뺀 <b>모두</b>가 방아쇠를 당깁니다 (의심한 사람부터).</li>
