@@ -93,6 +93,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         desc: "잔잔한 앰비언트 BGM 🎐 Quiet Signal, 남은 카드가 나만 있으면 \"바로 내세요\" 알림, 레벨 보상 막대(⚡·❤️·🏆)와 보상 획득 카드",
       },
       {
+        game: "telepathy",
+        type: "IMPROVE",
+        desc: "레벨 막대에 지금까지 받은 점수 표시, 레벨 통과 순간 짧은 축하 음악(실수 없이 통과하면 반짝임 추가)과 +점수 표시",
+      },
+      {
         game: "common",
         type: "FIX",
         desc: "아발론·뱅·마피아·하나미코지 등 15개 게임의 승패가 전적에 안 쌓이던 문제 수정 — 이제 모든 게임 결과가 기록돼요",

@@ -6,6 +6,7 @@ import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { getTelepathyBgm } from "./telepathyBgm";
 import {
   CANCEL_LOCK_MS,
+  computeScore,
   MAX_LIVES,
   MAX_STARS,
   REWARDS,
@@ -94,8 +95,19 @@ function RewardTrack({ state }: { state: MindState }) {
   const curCleared = state.phase === "break";
   const reward = rewardFor(state, cur);
   const next = levels.find((lv) => lv > cur && rewardFor(state, lv));
+  const score = computeScore(state);
   return (
     <div className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2.5 light:border-slate-200 light:bg-white">
+      <div className="flex items-center justify-between gap-2 text-xs">
+        <span className="font-semibold text-white/60 light:text-slate-500">레벨 진행 · 보상</span>
+        {state.practice ? (
+          <span className="text-white/40 light:text-slate-400">연습 모드 — 점수 없음</span>
+        ) : (
+          <span key={score} className="tlp-pop flex items-baseline gap-1 rounded-full border border-yellow-300/50 bg-yellow-400/10 px-2.5 py-0.5 font-bold text-yellow-100 light:border-amber-300 light:bg-amber-50 light:text-amber-800">
+            🏅 지금까지 <span className="text-sm font-black tabular-nums">{score.toLocaleString()}</span>점
+          </span>
+        )}
+      </div>
       <div className="flex items-end justify-between gap-0.5">
         {levels.map((lv) => {
           const r = rewardFor(state, lv);
@@ -335,7 +347,11 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
       if (state.phase === "mistake") sound.mistake();
       else if (state.phase === "starReveal") sound.star();
       else if (state.phase === "starVote") sound.vote();
-      else if (state.phase === "break") sound.clear();
+      else if (state.phase === "break") {
+        // Short level-clear fanfare (shared suite → follows the 효과음 toggle).
+        const perfect = state.log[state.log.length - 1]?.mistakes === 0;
+        getTelepathyBgm().play(perfect ? "levelClearPerfect" : "levelClear");
+      }
       else if (state.phase === "won") sound.won();
       else if (state.phase === "lost") sound.lost();
     }
@@ -691,7 +707,14 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
           <div className="flex w-full flex-col items-center gap-3 text-center">
             <span className="tlp-pop text-4xl">✨</span>
             <p className="text-lg font-black text-white light:text-slate-900">레벨 {state.level} 통과!</p>
-            {levelLog && levelLog.mistakes === 0 && <p className="text-xs font-semibold text-emerald-300 light:text-emerald-600">실수 없이 통과 +50점</p>}
+            {!state.practice && levelLog && (
+              <p className="tlp-pop rounded-full border border-yellow-300/50 bg-yellow-400/10 px-3 py-1 text-sm font-bold text-yellow-100 light:border-amber-300 light:bg-amber-50 light:text-amber-800">
+                +{(state.level * 100 + (levelLog.mistakes === 0 ? 50 : 0)).toLocaleString()}점
+                {levelLog.mistakes === 0 && <span className="ml-1 text-xs font-semibold text-emerald-300 light:text-emerald-600">(실수 없이 +50 포함)</span>}
+                <span className="ml-1.5 text-xs font-semibold text-white/60 light:text-slate-500">→ 총 {computeScore(state).toLocaleString()}점</span>
+              </p>
+            )}
+            {state.practice && levelLog && levelLog.mistakes === 0 && <p className="text-xs font-semibold text-emerald-300 light:text-emerald-600">실수 없이 통과!</p>}
             {state.lastReward ? (
               <div
                 className={`tlp-pop flex items-center gap-3 rounded-2xl border-2 px-4 py-2.5 text-left ${

@@ -16,6 +16,21 @@ const SFX = {
   chime: fx.arp("musicbox", ["D5", "F#5", "A5"], 0.08, 0.6),
   /** Everyone else is out of cards — your cards are safe to play now. */
   safeToPlay: [...fx.arp("bell", ["A5", "D6", "F#6"], 0.07, 0.7, 0.9), ...fx.chord("pad", ["D4", "F#4", "A4"], 0.8, 0.5, 0.05)],
+  /** Level cleared: music-box run up to D6 resolving on a warm pad + bell. ~2s. */
+  levelClear: [
+    ...fx.arp("musicbox", ["D5", "F#5", "A5", "D6"], 0.09, 0.7),
+    ...fx.chord("pad", ["D4", "F#4", "A4", "D5"], 1.5, 0.9, 0.36),
+    { inst: "bell", note: "A5", at: 0.36, dur: 1.3 },
+    { inst: "upright", note: "D3", at: 0.36, dur: 1.2, gain: 0.8 },
+  ],
+  /** Same, plus a glockenspiel sparkle for a mistake-free level. */
+  levelClearPerfect: [
+    ...fx.arp("musicbox", ["D5", "F#5", "A5", "D6"], 0.09, 0.7),
+    ...fx.chord("pad", ["D4", "F#4", "A4", "D5"], 1.5, 0.9, 0.36),
+    { inst: "bell", note: "A5", at: 0.36, dur: 1.3 },
+    { inst: "upright", note: "D3", at: 0.36, dur: 1.2, gain: 0.8 },
+    ...fx.arp("glock", ["F#6", "A6", "D7", "A6", "D7"], 0.07, 0.5, 0.8).map((p) => ({ ...p, at: (p.at ?? 0) + 0.7 })),
+  ],
 } satisfies Record<string, SfxRecipe>;
 
 export const TELEPATHY_SUITE: SuiteConfig = {

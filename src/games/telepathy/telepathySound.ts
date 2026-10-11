@@ -114,14 +114,6 @@ class TelepathySound {
     this.tone(990, t + 0.12, 0.2, { type: "triangle", gain: 0.25 });
   }
 
-  /** Level cleared: rising major arpeggio. */
-  clear() {
-    const ctx = this.ensure();
-    if (!ctx) return;
-    const t = ctx.currentTime;
-    [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => this.tone(f, t + i * 0.09, 0.5, { type: "triangle", gain: 0.3 }));
-  }
-
   won() {
     const ctx = this.ensure();
     if (!ctx) return;
