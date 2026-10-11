@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
-import { getTelepathyBgm } from "./telepathyBgm";
+import { getTelepathyBgm, MISTAKE_MOOD } from "./telepathyBgm";
 import {
   CANCEL_LOCK_MS,
   computeScore,
@@ -456,7 +456,7 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
   const bgmIntensity = state.phase === "mistake" ? 2 : state.level >= state.maxLevel || (state.phase === "playing" && totalLeft <= state.playerCount) ? 1 : 0;
   useSuiteBgm(getTelepathyBgm, timed, bgmIntensity);
   useEffect(() => {
-    getTelepathyBgm().setTempo(state.phase === "mistake" ? 0.8 : 1);
+    getTelepathyBgm().setTempo(state.phase === "mistake" ? MISTAKE_MOOD.tempo : 1);
     return () => getTelepathyBgm().setTempo(1);
   }, [state.phase]);
   const scoreShown = useCountUp(computeScore(state));

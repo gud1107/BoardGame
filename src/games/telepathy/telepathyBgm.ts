@@ -14,6 +14,20 @@ import { defineSuite, fx, type SfxRecipe, type SuiteConfig } from "@/lib/audio/p
  * adds the BGM plus the 효과음-toggle preview and the "last cards are safe" cue.
  */
 
+/**
+ * 💔 Mistake mood — tweak these to make the "lights go out" moment stronger
+ * or softer. How LONG it lasts is the mistake screen itself: `MISTAKE_MS` in
+ * engine.ts (changing that also changes how long the explanation stays up).
+ */
+export const MISTAKE_MOOD = {
+  /** BGM tempo multiplier while the mistake screen is up (1 = unchanged, 0.5 = half speed). */
+  tempo: 0.8,
+  /** Volume of the D-minor pad that replaces the bright layers (0 = silent). */
+  darkPadGain: 0.6,
+  /** Volume of the low choir under it. */
+  choirGain: 0.35,
+};
+
 const SFX = {
   chime: fx.arp("musicbox", ["D5", "F#5", "A5"], 0.08, 0.6),
   /** Everyone else is out of cards — your cards are safe to play now. */
@@ -63,6 +77,17 @@ const SFX = {
     { inst: "upright", note: "D2", at: 3.2, dur: 2.2 },
     ...fx.arp("musicbox", ["A5", "D6", "F#6", "A6"], 0.12, 0.8, 0.7).map((p) => ({ ...p, at: (p.at ?? 0) + 3.6 })),
   ],
+  /** Game over (hearts gone): a slow, falling D-minor line that doesn't resolve. ~3.5s. */
+  defeat: [
+    ...fx.arp("musicbox", ["A5", "F5", "D5", "A4"], 0.32, 1.1, 0.85),
+    ...fx.chord("pad", ["D3", "F3", "A3"], 1.4, 0.8, 0.1),
+    ...fx.chord("pad", ["Bb2", "F3", "D4"], 1.3, 0.75, 1.4),
+    ...fx.chord("choir", ["G2", "D3", "Bb3"], 1.8, 0.7, 2.2),
+    { inst: "upright", note: "D2", at: 0.1, dur: 1.3, gain: 0.8 },
+    { inst: "upright", note: "Bb1", at: 1.4, dur: 1.2, gain: 0.75 },
+    { inst: "upright", note: "G1", at: 2.2, dur: 1.6, gain: 0.7 },
+    { inst: "bell", note: "D5", at: 2.6, dur: 1.4, gain: 0.5 },
+  ],
 } satisfies Record<string, SfxRecipe>;
 
 export const TELEPATHY_SUITE: SuiteConfig = {
@@ -84,8 +109,8 @@ export const TELEPATHY_SUITE: SuiteConfig = {
     { voice: "softKick", div: 4, gain: 0.55, level: 1, pattern: "x . x . | . . . . | x . x . | . . . ." },
     { voice: "glock", div: 4, gain: 0.3, level: 1, maxLevel: 2, pattern: "D6 . . . | . . A5 . | . . . . | F#5 . . . | B5 . . . | . . A5 . | . . . . | E6 . . ." },
     // Intensity 2 (💔 mistake): the light goes out — minor pad + low choir.
-    { voice: "pad", div: 16, gain: 0.6, level: 2, pattern: "D3+F3+A3 - Bb2+F3+D4 -" },
-    { voice: "choir", div: 16, gain: 0.35, level: 2, pattern: "D3+A3 - F3+D4 -" },
+    { voice: "pad", div: 16, gain: MISTAKE_MOOD.darkPadGain, level: 2, pattern: "D3+F3+A3 - Bb2+F3+D4 -" },
+    { voice: "choir", div: 16, gain: MISTAKE_MOOD.choirGain, level: 2, pattern: "D3+A3 - F3+D4 -" },
   ],
   sfx: SFX,
 };

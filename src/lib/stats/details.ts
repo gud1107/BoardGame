@@ -56,6 +56,13 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
   ],
   telepathy: [
     { label: "최고 도달 레벨", value: (d) => `레벨 ${n(d.maxLevel)}` },
+    {
+      label: "인원별 최고 점수",
+      value: (d) => {
+        const parts = [2, 3, 4, 5, 6].filter((c) => d[`maxScore${c}p`]).map((c) => `${c}인 ${n(d[`maxScore${c}p`])}`);
+        return parts.length > 0 ? parts.join(" · ") : null;
+      },
+    },
     { label: "최고 점수", value: (d) => n(d.maxScore) },
     { label: "실수 없이 통과한 레벨", value: (d) => n(d.perfectLevels) },
     { label: "실수 / ⚡ 사용", value: (d) => `${n(d.mistakes)} / ${n(d.starsUsed)}` },

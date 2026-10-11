@@ -46,7 +46,8 @@ import Timeline from "./Timeline";
 import RulebookModal from "./RulebookModal";
 import { telepathySound } from "./telepathySound";
 import { getTelepathyBgm } from "./telepathyBgm";
-import { readBestScore, saveBestScore } from "./bestScore";
+import { loadBestRecords, readBestScore, saveBestScore } from "./bestScore";
+import BestRecordsPanel from "./BestRecordsPanel";
 
 /**
  * 텔레파시 online room. Host-authoritative realtime (see engine.ts): the
@@ -253,6 +254,7 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
       lastSeenAtRef.current = {};
       setResultLevel(null);
       setBestBefore(readBestScore(playerCount));
+      loadBestRecords().then((r) => setBestBefore((b) => Math.max(b, r[playerCount]?.score ?? 0)));
       const state = createGame(playerCount, seed, Date.now(), { practice });
       gameStateRef.current = state;
       setGameState(state);
@@ -332,6 +334,7 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
       if (typeof payload?.hostNow === "number") setHostOffset((payload.hostNow as number) - Date.now());
       if (payload?.matchId) matchIdRef.current = String(payload.matchId);
       setBestBefore(readBestScore(state.playerCount));
+      loadBestRecords().then((r) => setBestBefore((b) => Math.max(b, r[state.playerCount]?.score ?? 0)));
       gameStateRef.current = state;
       setGameState(state);
       setPhase("playing");
@@ -619,10 +622,9 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
     completedMatchRef.current = key;
     const won = gameState.phase === "won";
     // Final fanfare / sigh (the board has already unmounted for the result screen).
-    if (won) getTelepathyBgm().play("victory");
-    else telepathySound().lost();
+    getTelepathyBgm().play(won ? "victory" : "defeat");
     if (gameState.practice) return; // 연습 모드는 기록하지 않아요 (§14)
-    saveBestScore(gameState.playerCount, computeScore(gameState));
+    saveBestScore(gameState.playerCount, computeScore(gameState), gameState.stats.levelsCleared);
     const rankings = gameState.hands.map((_, seat) => ({ seat, rank: won ? 1 : 2 }));
     const s = gameState.stats;
     onComplete({
@@ -637,6 +639,8 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
         flawlessWins: won && s.mistakes === 0 ? 1 : 0,
         noStarWins: won && s.starsUsed === 0 ? 1 : 0,
         [`maxLevel${gameState.playerCount}p`]: s.levelsCleared,
+        // Per-count best score — synced with the account like every detail key.
+        [`maxScore${gameState.playerCount}p`]: computeScore(gameState),
       })),
       finishedAt: new Date().toISOString(),
     });
@@ -724,6 +728,7 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
         }
         actions={
           <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
+            <BestRecordsPanel />
             <button
               onClick={() => {
                 setIntent("create");
@@ -929,6 +934,11 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
                 🏆 {gameState.playerCount}인 최고 기록 {bestBefore.toLocaleString()}점 · 이번 {computeScore(gameState).toLocaleString()}점
               </p>
             )
+          )}
+          {!gameState.practice && (
+            <div className="w-full max-w-sm">
+              <BestRecordsPanel highlight={gameState.playerCount} />
+            </div>
           )}
           {s.graceSaves > 0 && <p className="text-xs text-indigo-200 light:text-indigo-600">⏱ 0.25초 관용 판정이 {s.graceSaves}번 실수를 막았어요</p>}
           <div className="flex w-full flex-col gap-2 text-left">
