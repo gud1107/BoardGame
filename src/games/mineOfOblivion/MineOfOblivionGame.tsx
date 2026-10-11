@@ -33,6 +33,9 @@ import {
   type BotTakeoverEvent,
   type BotTakeoverState,
 } from "@/games/shared/bot/botTakeover";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getMineBgm } from "./mineBgm";
 
 /**
  * Online-room multiplayer entry point for 망각의 지뢰 — the same lockstep
@@ -113,6 +116,8 @@ export default function MineOfOblivionGame({ onComplete }: PlayableGameProps) {
   const [myPlayerId, setMyPlayerId] = useState<string | undefined>(undefined);
   const [occupants, setOccupants] = useState<Occupant[]>([]);
   const [gameState, setGameState] = useState<MineOfOblivionState | null>(null);
+  // Forgotten Mine BGM (mineBgm.ts) — procedural, plays during the match; gameplay SFX stay in the shared soundEngine.
+  useSuiteBgm(getMineBgm, phase === "playing" && gameState?.phase !== "GAME_OVER", 0);
 
   // Host-controlled AI bot roster (ARCHITECTURE.md §7) — same shape as every other online game here.
   const [botRoles, setBotRoles] = useState<Seat[]>([]);
@@ -767,7 +772,8 @@ export default function MineOfOblivionGame({ onComplete }: PlayableGameProps) {
             ))}
           </div>
         )}
-        <div className="mb-2 flex justify-end">
+        <div className="mb-2 flex items-center justify-end gap-1.5 text-white/70 light:text-slate-600">
+          <SuiteSoundHud suite={getMineBgm} icon="⛏️" label="Forgotten Mine" preview="preview" showSfx={false} />
           <button onClick={() => setShowRulebook(true)} className="rounded-full border border-white/10 light:border-slate-200 px-3 py-1 text-[11px] text-white/50 light:text-slate-500 hover:border-white/25">
             📖 룰북
           </button>

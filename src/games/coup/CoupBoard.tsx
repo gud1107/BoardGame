@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { coupIntensity, coupSoundCues, getCoupSound } from "./coupSound";
 import RulebookModal from "./RulebookModal";
 import TargetModal from "./TargetModal";
 import ResponseModal from "./ResponseModal";
@@ -96,6 +99,9 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
   const [trackedState, setTrackedState] = useState(state);
   const [eliminationToast, setEliminationToast] = useState<{ id: number; names: string[] } | null>(null);
   const [gameOverBanner, setGameOverBanner] = useState(false);
+  // Palace Intrigue sound suite (coupSound.ts) — cues from the engine's lastEvent, heard by every client.
+  useSoundCues(state, getCoupSound, coupSoundCues);
+  useSuiteBgm(getCoupSound, state.phase !== "gameOver", coupIntensity(state));
   if (trackedState !== state) {
     const newlyEliminated = detectNewlyEliminated(trackedState, state);
     const justEnded = detectGameJustEnded(trackedState, state);
@@ -224,6 +230,7 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
 
   return (
     <div
+      onPointerDownCapture={() => getCoupSound().unlock()}
       className="flex flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4 light:border-slate-200 light:shadow-md"
       // TODO(theme): hardcoded dark gradient background — not trivial to branch via a CSS class variant, left dark in light mode for now.
       style={{ background: "linear-gradient(160deg,#201408 0%,#140c04 45%,#0a0602 100%)" }}
@@ -232,7 +239,10 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
         <span>
           {state.playerCount}인 · 단판 승부 · 턴 {state.turnNumber}
         </span>
-        <div className="flex gap-1.5">{rulebookButton}</div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <SuiteSoundHud suite={getCoupSound} icon="👑" label="Palace Intrigue" preview="coin3" />
+          {rulebookButton}
+        </div>
       </div>
 
       {narration && (

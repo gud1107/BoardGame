@@ -60,7 +60,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.56.0",
     releaseDate: "2026-10-11",
-    title: "📡 신규 게임 텔레파시, 🏅 전적 업적·모든 게임 전적 기록, ✏️ 낙서 결투 이어 그리기 인식 개선·붓 커서, 🦈 배고픈 상어 각성·내 빌드",
+    title: "🎵 27개 게임 맞춤 BGM·효과음, 📡 신규 게임 텔레파시, 🏅 전적 업적·모든 게임 전적 기록, ✏️ 낙서 결투 이어 그리기 인식 개선·붓 커서, 🦈 배고픈 상어 각성·내 빌드",
     changes: [
       {
         game: "telepathy",
@@ -131,6 +131,146 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         game: "common",
         type: "IMPROVE",
         desc: "패치노트에서 같은 게임 변경사항을 한 묶음으로 보여주고, 많으면 「N개 더 보기」로 접어 둬요",
+      },
+      {
+        game: "common",
+        type: "FEAT",
+        desc: "🎵 사운드가 없던 27개 게임에 게임별 맞춤 배경음악 추가 — 12개 게임은 효과음도 새로, 게임 화면의 BGM/🔔 버튼으로 켜고 끔",
+      },
+      {
+        game: "avalon",
+        type: "FEAT",
+        desc: "🏰 원탁의 기사 발라드 BGM + 원정대 제안·투표·성공/실패·암살 효과음 (원정 2승/2패부터 전쟁 북)",
+      },
+      {
+        game: "bang",
+        type: "FEAT",
+        desc: "🤠 서부 술집 래그타임 BGM + 뱅·회피·결투·인디언·다이너마이트·맥주 등 카드별 효과음",
+      },
+      {
+        game: "coup",
+        type: "FEAT",
+        desc: "👑 궁정 음모 하프시코드 BGM + 소득·세금·암살·쿠·막기·도전(진실/허세) 효과음",
+      },
+      {
+        game: "for-sale",
+        type: "FEAT",
+        desc: "🏡 보사노바 BGM(2단계는 플루트) + 입찰 코인·패스·낙찰 망치·수표 공개 효과음",
+      },
+      {
+        game: "hanamikoji",
+        type: "FEAT",
+        desc: "🌸 고토·샤쿠하치 찻집 BGM + 카드 뽑기·비밀·거래·선물/경쟁 제안 효과음",
+      },
+      {
+        game: "love-letter",
+        type: "FEAT",
+        desc: "💌 하프 왈츠 BGM + 경비병·사제·남작·하녀·왕자·왕·백작부인·공주 카드별 효과음",
+      },
+      {
+        game: "memory-feast",
+        type: "FEAT",
+        desc: "🍽️ 가면 만찬 오르골 왈츠 BGM(맞히기 단계는 시계 소리) + 토큰·짝 맞춤·벌점 효과음",
+      },
+      {
+        game: "no-thanks",
+        type: "FEAT",
+        desc: "🎷 칵테일 재즈 BGM + 노땡스 칩·카드 가져가기·연속 숫자 효과음",
+      },
+      {
+        game: "pieces-of-language",
+        type: "FEAT",
+        desc: "🔤 고대 문자 칼림바 BGM + 글자마다 초록/노랑/빨강 소리로 결과가 하나씩 켜지는 효과음",
+      },
+      {
+        game: "splendor",
+        type: "FEAT",
+        desc: "💎 베네치아 보석 시장 만돌린 BGM + 보석·예약·구매·귀족 방문 효과음",
+      },
+      {
+        game: "worm",
+        type: "FEAT",
+        desc: "🕹️ 8비트 칩튠 BGM(마지막 30초 빨라짐) + 먹이·성장·처치·사망 효과음",
+      },
+      {
+        game: "century",
+        type: "FEAT",
+        desc: "🐪 실크로드 우드·다르부카 BGM + 생산·교환·상인 카드·휴식·점수 카드 효과음",
+      },
+      {
+        game: "city-chase",
+        type: "FEAT",
+        desc: "🚨 70년대 형사물 펑크 BGM 추가 (9라운드부터 사이렌)",
+      },
+      {
+        game: "ink-duel",
+        type: "FEAT",
+        desc: "✏️ 장난스러운 만화 결투 BGM 추가",
+      },
+      {
+        game: "merge-defense",
+        type: "FEAT",
+        desc: "🏰 EDM 디펜스 BGM 추가 (보스 웨이브에 금관·북)",
+      },
+      {
+        game: "lost-cities",
+        type: "FEAT",
+        desc: "🗺️ 탐험대 행진 BGM 추가 (덱 8장 이하부터 긴장)",
+      },
+      {
+        game: "love-wins-all",
+        type: "FEAT",
+        desc: "💘 R&B 신스팝 BGM 추가 (2차 베팅·쇼다운에 고조)",
+      },
+      {
+        game: "show-me-the-coin",
+        type: "FEAT",
+        desc: "🎤 붐뱁 힙합 BGM 추가 (베팅·쇼다운에 브라스)",
+      },
+      {
+        game: "summoners-rift",
+        type: "FEAT",
+        desc: "⚔️ 판타지 전투 오케스트라 BGM 추가 (협곡 판정 때 합창)",
+      },
+      {
+        game: "mine-of-oblivion",
+        type: "FEAT",
+        desc: "⛏️ 어두운 동굴 오르골 BGM 추가",
+      },
+      {
+        game: "mine-of-oblivion-2",
+        type: "FEAT",
+        desc: "⏱️ 시계 초침 스릴러 BGM 추가 (시한폭탄이 있으면 심장 박동)",
+      },
+      {
+        game: "hill-of-truth",
+        type: "FEAT",
+        desc: "🕵️ 누아르 재즈 라운지 BGM 추가",
+      },
+      {
+        game: "hungry-shark",
+        type: "FEAT",
+        desc: "🦈 심해 사냥 BGM 추가 (게임 자체 🔇에도 같이 꺼짐)",
+      },
+      {
+        game: "destiny-war-39",
+        type: "FIX",
+        desc: "🌃 사이버펑크 신스웨이브 BGM — 음원 파일이 없어 무음이던 배경음악을 직접 합성한 곡으로 교체",
+      },
+      {
+        game: "las-vegas",
+        type: "FIX",
+        desc: "🎰 빅밴드 스윙 BGM — 음원 파일이 없어 무음이던 배경음악을 직접 합성한 곡으로 교체",
+      },
+      {
+        game: "grid-poker",
+        type: "FIX",
+        desc: "🃏 딥하우스 BGM — 음원 파일이 없어 무음이던 배경음악을 직접 합성한 곡으로 교체",
+      },
+      {
+        game: "mal-dalli-ja",
+        type: "FIX",
+        desc: "🐎 경마 오케스트라 갤럽 BGM — 음원 파일이 없어 무음이던 배경음악을 직접 합성한 곡으로 교체",
       },
     ],
   },

@@ -23,6 +23,9 @@ import {
   type SeatIndex,
   type SummonersRiftState,
 } from "./engine";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getSummonersRiftBgm } from "./summonersRiftBgm";
 
 /**
  * Pure game UI + rules driver — same controlled-component contract as every
@@ -366,6 +369,8 @@ function MonsterHistoryPanel({ state, entries }: { state: SummonersRiftState; en
 }
 
 export default function SummonersRiftBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: SummonersRiftBoardProps) {
+  // Rift Battle Hymn BGM (summonersRiftBgm.ts) — choir climax while the rift resolves.
+  useSuiteBgm(getSummonersRiftBgm, state.phase !== "gameOver", state.phase === "resolvingRift" ? 1 : 0);
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const [lastRoundOpen, setLastRoundOpen] = useState(false);
 
@@ -555,12 +560,15 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
   }
 
   const rulebookButton = (
-    <button
+    <>
+      <SuiteSoundHud suite={getSummonersRiftBgm} icon="⚔️" label="Rift Battle Hymn" preview="preview" showSfx={false} />
+      <button
       onClick={() => setRulebookOpen(true)}
       className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
     >
       📖 소환사의 협곡 룰북
     </button>
+    </>
   );
   // Task brief §1 — "운명전쟁 스타일 직전 라운드 요약 UI": header toggle button,
   // disabled until a round has actually finished, opening the combined

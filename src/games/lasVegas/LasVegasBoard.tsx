@@ -21,6 +21,8 @@ import {
   type RolledDie,
   type SeatIndex,
 } from "./engine";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { getLasVegasBgm } from "./lasVegasBgm";
 
 /**
  * Pure game UI + rules driver — same controlled-component contract as every
@@ -265,12 +267,15 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
   }
 
   const rulebookButton = (
-    <button
+    <>
+      <SuiteSoundHud suite={getLasVegasBgm} icon="🎰" label="Midnight Strip Swing" preview="preview" showSfx={false} />
+      <button
       onClick={() => setRulebookOpen(true)}
       className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
     >
       📖 라스베가스 룰북
     </button>
+    </>
   );
 
   // ---------------------------------------------------------------------

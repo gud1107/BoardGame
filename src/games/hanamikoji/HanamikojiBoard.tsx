@@ -2,6 +2,9 @@
 
 import { type CSSProperties, useMemo, useState } from "react";
 import Tooltip from "@/components/Tooltip";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getHanamikojiSound, hanamikojiSoundCues } from "./hanamikojiSound";
 import RulebookModal from "./RulebookModal";
 import {
   ACTION_TYPES,
@@ -268,6 +271,9 @@ export default function HanamikojiBoard({
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const opponentRole = other(viewerRole);
   const myTurn = state.activePlayer === viewerRole;
+  // Gion Teahouse sound suite (hanamikojiSound.ts) — state-diff cues heard by both players.
+  useSoundCues(state, getHanamikojiSound, hanamikojiSoundCues);
+  useSuiteBgm(getHanamikojiSound, state.phase !== "match-end", state.roundNumber >= 3 ? 1 : 0);
 
   const [selectedAction, setSelectedAction] = useState<ActionType | null>(null);
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
@@ -416,14 +422,17 @@ export default function HanamikojiBoard({
   const iAmResponder = state.phase === "awaiting-response" && responder === viewerRole;
 
   return (
-    <div className={`${TABLE_PANEL} flex flex-col gap-4 p-3 sm:p-4`}>
+    <div onPointerDownCapture={() => getHanamikojiSound().unlock()} className={`${TABLE_PANEL} flex flex-col gap-4 p-3 sm:p-4`}>
       <TableTexture />
       <div className="relative z-10 flex flex-col gap-4">
         <div className="flex items-center justify-between text-xs text-white/50 light:text-slate-500">
           <span>
             {state.roundNumber}라운드 · 남은 카드 {state.deck.length}장
           </span>
-          {rulebookButton}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <SuiteSoundHud suite={getHanamikojiSound} icon="🌸" label="Gion Teahouse" preview="offer" />
+            {rulebookButton}
+          </div>
         </div>
 
         {connectionBanner}

@@ -25,6 +25,9 @@ import {
   type SplendorState,
   type TokenBundle,
 } from "./engine";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getSplendorSound, splendorSoundCues } from "./splendorSound";
 
 /**
  * Pure game UI + rules driver — same controlled-component contract as every
@@ -266,6 +269,9 @@ export default function SplendorBoard({ state, viewerSeat, names, connectedSeats
   const [tokenPick, setTokenPick] = useState<GemColor[]>([]);
   const [selectedCard, setSelectedCard] = useState<{ card: DevelopmentCard; source: "market" | "reserved" } | null>(null);
   const [discardPick, setDiscardPick] = useState<TokenBundle>({});
+  // Venetian Jewel Market sound suite (splendorSound.ts) — per-seat state-diff cues heard by every client.
+  useSoundCues(state, getSplendorSound, splendorSoundCues);
+  useSuiteBgm(getSplendorSound, state.phase !== "gameOver", state.endTriggered ? 1 : 0);
 
   // Whenever the state prop changes (my own action resolved, or an
   // opponent's action arrived over the network), any in-progress local
@@ -408,6 +414,7 @@ export default function SplendorBoard({ state, viewerSeat, names, connectedSeats
   // ---------------------------------------------------------------------
   return (
     <div
+      onPointerDownCapture={() => getSplendorSound().unlock()}
       className="flex flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4 light:border-slate-200 light:shadow-lg"
       // TODO(theme): hardcoded dark violet gradient board background — not yet theme-aware, kept dark in light mode.
       style={{ background: "linear-gradient(160deg,#1c1230 0%,#120b1c 45%,#08050d 100%)" }}
@@ -417,7 +424,10 @@ export default function SplendorBoard({ state, viewerSeat, names, connectedSeats
           {state.playerCount}인 · 위신 점수 {WIN_SCORE}점 달성 시 게임 종료
           {state.endTriggered && <span className="ml-1 text-rose-300">· 마지막 라운드 진행 중</span>}
         </span>
-        <div className="flex gap-1.5">{rulebookButton}</div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <SuiteSoundHud suite={getSplendorSound} icon="💎" label="Jewel Market" preview="noble" />
+          {rulebookButton}
+        </div>
       </div>
 
       <p className={`text-center text-xs font-medium ${isMyTurn ? "text-violet-200" : "text-white/50"}`}>

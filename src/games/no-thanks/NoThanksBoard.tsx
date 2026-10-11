@@ -15,6 +15,9 @@ import {
   type ScoreGroup,
   type SeatIndex,
 } from "./engine";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getNoThanksSound, noThanksSoundCues } from "./noThanksSound";
 
 const REVEAL_CHIPS_STORAGE_KEY = "no-thanks-reveal-opponent-chips";
 
@@ -134,6 +137,9 @@ function DeckStack({ count }: { count: number }) {
 
 export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: NoThanksBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  // Polite Refusal Swing sound suite (noThanksSound.ts) — state-diff cues heard by every client.
+  useSoundCues(state, getNoThanksSound, noThanksSoundCues);
+  useSuiteBgm(getNoThanksSound, state.phase === "playing", state.deck.length <= 5 ? 1 : 0);
   const publicMode = state.chipVisibility === "public";
 
   // Local-only, per-viewer practice/debug toggle — only meaningful in
@@ -332,7 +338,7 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
   const seatOrder = Array.from({ length: state.playerCount }, (_, i) => i);
 
   return (
-    <div className={`${TABLE_PANEL} flex flex-col gap-3 p-3 sm:p-4`}>
+    <div onPointerDownCapture={() => getNoThanksSound().unlock()} className={`${TABLE_PANEL} flex flex-col gap-3 p-3 sm:p-4`}>
       <TableTexture />
       <div className="relative z-10 flex flex-wrap items-center justify-between gap-1.5 text-xs text-emerald-100/60 light:text-slate-500">
         <span className="flex items-center gap-1.5">
@@ -348,7 +354,8 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
             {publicMode ? "👁️ 공개 모드" : "🔒 비밀 모드"}
           </span>
         </span>
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <SuiteSoundHud suite={getNoThanksSound} icon="🎷" label="Polite Refusal Swing" preview="pass" />
           {!publicMode && revealChipsButton}
           {rulebookButton}
         </div>

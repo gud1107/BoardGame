@@ -12,6 +12,9 @@ import {
   type MemoryFeastState,
   type Seat,
 } from "./engine";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getMemoryFeastSound, memoryFeastSoundCues } from "./memoryFeastSound";
 
 /**
  * Pure game UI + rules driver — the caller (`MemoryFeastGame`, which owns
@@ -168,6 +171,9 @@ export default function MemoryFeastBoard({
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const opponentRole = other(viewerRole);
   const cfg = DIFFICULTY_CONFIG[state.difficulty];
+  // Masquerade Banquet sound suite (memoryFeastSound.ts) — state-diff cues heard by both players.
+  useSoundCues(state, getMemoryFeastSound, memoryFeastSoundCues);
+  useSuiteBgm(getMemoryFeastSound, state.phase !== "match-end", state.phase === "open" ? 1 : 0);
 
   // --- Opponent placement flash: shown the instant a new flash targets me,
   // auto-hidden after the difficulty's flash duration. The "show" half is
@@ -290,7 +296,7 @@ export default function MemoryFeastBoard({
   const scoreMax = Math.max(state.score.p1, state.score.p2, 1);
 
   return (
-    <div className={`${TABLE_PANEL} flex flex-col gap-4 p-3 sm:p-4`}>
+    <div onPointerDownCapture={() => getMemoryFeastSound().unlock()} className={`${TABLE_PANEL} flex flex-col gap-4 p-3 sm:p-4`}>
       <TableTexture />
       <div className="relative z-10 flex flex-col gap-4">
         <div className="flex items-center justify-between text-xs text-white/50">
@@ -299,7 +305,10 @@ export default function MemoryFeastBoard({
               ? `배치 ${state.round}/${cfg.totalRounds}라운드`
               : "오픈(맞히기) 단계"}
           </span>
-          {rulebookButton}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <SuiteSoundHud suite={getMemoryFeastSound} icon="🍽️" label="Masquerade Banquet" preview="match" />
+            {rulebookButton}
+          </div>
         </div>
 
         {connectionBanner}

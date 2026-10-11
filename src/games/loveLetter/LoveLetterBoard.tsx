@@ -18,6 +18,9 @@ import {
   type LoveLetterView,
   type SeatIndex,
 } from "./engine";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getLoveLetterSound, loveLetterIntensity, loveLetterSoundCues } from "./loveLetterSound";
 
 /**
  * Pure game UI + rules driver — same controlled-component contract as every
@@ -87,6 +90,9 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
   const [trackedState, setTrackedState] = useState(state);
   const [eliminationToast, setEliminationToast] = useState<{ id: number; names: string[] } | null>(null);
   const [gameOverBanner, setGameOverBanner] = useState(false);
+  // Courtly Waltz sound suite (loveLetterSound.ts) — cues from the engine's lastEvent, heard by every client.
+  useSoundCues(state, getLoveLetterSound, loveLetterSoundCues);
+  useSuiteBgm(getLoveLetterSound, state.phase !== "gameOver", loveLetterIntensity(state));
   if (trackedState !== state) {
     const newlyEliminated = detectNewlyEliminated(trackedState, state);
     const justEnded = detectGameJustEnded(trackedState, state);
@@ -227,6 +233,7 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
 
   return (
     <div
+      onPointerDownCapture={() => getLoveLetterSound().unlock()}
       className="flex flex-col gap-3 rounded-[28px] border border-black/60 light:border-slate-200 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
       style={{ background: "linear-gradient(160deg,#2a1020 0%,#180a14 45%,#0a0308 100%)" }}
     >
@@ -234,7 +241,10 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
         <span>
           {state.playerCount}인 · 단판 승부 · 덱 {state.deck.length}장 남음
         </span>
-        <div className="flex gap-1.5">{rulebookButton}</div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <SuiteSoundHud suite={getLoveLetterSound} icon="💌" label="Courtly Waltz" preview="handmaid" />
+          {rulebookButton}
+        </div>
       </div>
 
       {narration && (

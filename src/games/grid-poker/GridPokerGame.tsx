@@ -11,7 +11,8 @@ import { useBackgroundResync } from "@/hooks/useBackgroundResync";
 import { useActiveRoomListing } from "@/games/shared/room/useActiveRoomListing";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
-import { useGameBgm } from "@/lib/audio/useGameBgm";
+import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getGridPokerBgm } from "./gridPokerBgm";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
 import {
@@ -359,7 +360,7 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
   // silence on every path away (post-game, leaving, unmount), same as every
   // other hub game (2026-08-26 세션). Muting/volume is the shared
   // `audioSettings` store now, not a bespoke per-game flag.
-  useGameBgm(phase === "playing" ? "gridPoker" : null);
+  useSuiteBgm(getGridPokerBgm, phase === "playing"); // procedural (gridPokerBgm.ts) — the gridPoker mp3 never shipped
 
   function enterRoom() {
     setFormError(null);

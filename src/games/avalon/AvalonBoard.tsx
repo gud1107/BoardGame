@@ -2,6 +2,9 @@
 
 import { type CSSProperties, useMemo, useState } from "react";
 import RulebookModal from "./RulebookModal";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { avalonIntensity, avalonSoundCues, getAvalonSound } from "./avalonSound";
 import AvalonRoleGuideSidebar from "./AvalonRoleGuideSidebar";
 import {
   AssassinCrosshair,
@@ -113,6 +116,9 @@ export default function AvalonBoard({
   const [hoveredTarget, setHoveredTarget] = useState<SeatIndex | null>(null);
   const [slashTarget, setSlashTarget] = useState<SeatIndex | null>(null);
   const { current: reveal, dismissCurrent: dismissReveal } = useAvalonReveals(state);
+  // Round Table sound suite (avalonSound.ts): every client hears every seat's moves via the state diff.
+  useSoundCues(state, getAvalonSound, avalonSoundCues);
+  useSuiteBgm(getAvalonSound, state.phase !== "gameOver", avalonIntensity(state));
 
   // `state.players` is only ever set once, inside startGame — no action
   // mutates it afterward — so its object identity is a reliable signal for
@@ -262,7 +268,7 @@ export default function AvalonBoard({
   ).filter((s) => s !== viewerSeat);
 
   return (
-    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
+    <div onPointerDownCapture={() => getAvalonSound().unlock()} className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
       <div
         className={`${TABLE_PANEL} flex min-w-0 flex-1 flex-col gap-3 p-3 sm:p-4`}
       >
@@ -275,7 +281,8 @@ export default function AvalonBoard({
               ? ` · 이번 라운드는 실패 ${threshold}장 이상이어야 실패`
               : ""}
           </span>
-          <div className="flex gap-1.5">
+          <div className="flex flex-wrap gap-1.5">
+            <SuiteSoundHud suite={getAvalonSound} icon="🏰" label="Round Table" preview="approved" />
             {roleReopenButton}
             {rulebookButton}
           </div>

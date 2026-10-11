@@ -44,6 +44,9 @@ import {
   type BotTakeoverState,
 } from "@/games/shared/bot/botTakeover";
 import { selfResult } from "@/games/shared/selfResult";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getCityChaseBgm } from "./cityChaseBgm";
 
 /**
  * Online-room multiplayer entry point for 시티 체이스 — same lockstep pattern
@@ -116,6 +119,8 @@ export default function CityChaseGame({ onComplete }: PlayableGameProps) {
   const [myPlayerId, setMyPlayerId] = useState<string | undefined>(undefined);
   const [occupants, setOccupants] = useState<Occupant[]>([]);
   const [gameState, setGameState] = useState<CityChaseState | null>(null);
+  // Night Pursuit BGM (cityChaseBgm.ts) — procedural, plays during the match; gameplay SFX stay in the shared soundEngine.
+  useSuiteBgm(getCityChaseBgm, phase === "playing" && gameState?.phase !== "gameOver", gameState && gameState.round >= 9 ? 1 : 0);
   const [finalResult, setFinalResult] = useState<{ winnerName: string; tied: boolean } | null>(null);
 
   const [botSeats, setBotSeats] = useState<SeatIndex[]>([]);
@@ -915,7 +920,8 @@ export default function CityChaseGame({ onComplete }: PlayableGameProps) {
             ))}
           </div>
         )}
-        <div className="mb-2 flex justify-end">
+        <div className="mb-2 flex items-center justify-end gap-1.5 text-white/70 light:text-slate-600">
+          <SuiteSoundHud suite={getCityChaseBgm} icon="🚨" label="Night Pursuit" preview="preview" showSfx={false} />
           <button onClick={() => setShowRulebook(true)} className="rounded-full border border-white/10 light:border-slate-200 px-3 py-1 text-[11px] text-white/50 light:text-slate-500 hover:border-white/25 light:hover:border-slate-400">
             📖 룰북
           </button>

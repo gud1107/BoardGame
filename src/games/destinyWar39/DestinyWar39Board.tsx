@@ -10,6 +10,8 @@ import { HiddenRevealCell, PlayedCardSlot, ReverseSwishOverlay, RoundResultBadge
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import { TOTAL_ROUNDS, type DestinyWar39State, type EngineAction, type SeatIndex, type TurnRecord } from "./engine";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { getDestinyWar39Bgm } from "./destinyWar39Bgm";
 
 /**
  * Minimum time a just-finished trick stays on screen (winner glowing) before
@@ -154,12 +156,15 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
   }, [state.phase]);
 
   const rulebookButton = (
-    <button
+    <>
+      <SuiteSoundHud suite={getDestinyWar39Bgm} icon="🌃" label="Neon Fate" preview="preview" showSfx={false} />
+      <button
       onClick={() => setRulebookOpen(true)}
       className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
     >
       📖 운명전쟁39 룰북
     </button>
+    </>
   );
   const historyButton = (
     <button

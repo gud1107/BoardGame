@@ -33,6 +33,9 @@ import {
   type BotTakeoverEvent,
   type BotTakeoverState,
 } from "@/games/shared/bot/botTakeover";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getLostCitiesBgm } from "./lostCitiesBgm";
 
 /**
  * Online-room multiplayer entry point for 로스트 시티 — the same lockstep
@@ -100,6 +103,8 @@ export default function LostCitiesGame({ onComplete }: PlayableGameProps) {
   const [myPlayerId, setMyPlayerId] = useState<string | undefined>(undefined);
   const [occupants, setOccupants] = useState<Occupant[]>([]);
   const [gameState, setGameState] = useState<LostCitiesState | null>(null);
+  // Expedition BGM (lostCitiesBgm.ts) — procedural, plays during the match; gameplay SFX stay in the shared soundEngine.
+  useSuiteBgm(getLostCitiesBgm, phase === "playing" && gameState?.phase !== "gameOver", gameState && gameState.deck.length <= 8 ? 1 : 0);
 
   // Host-controlled AI bot roster (ARCHITECTURE.md §7) — same shape as every
   // other online game here. `botLevels[i]` is the Level 1–10 difficulty for
@@ -751,7 +756,8 @@ export default function LostCitiesGame({ onComplete }: PlayableGameProps) {
             ))}
           </div>
         )}
-        <div className="mb-2 flex justify-end">
+        <div className="mb-2 flex items-center justify-end gap-1.5 text-white/70 light:text-slate-600">
+          <SuiteSoundHud suite={getLostCitiesBgm} icon="🗺️" label="Expedition" preview="preview" showSfx={false} />
           <button onClick={() => setShowRulebook(true)} className="rounded-full border border-white/10 px-3 py-1 text-[11px] text-white/50 hover:border-white/25">
             📖 룰북
           </button>

@@ -19,6 +19,9 @@ import { getScenario } from "./scenarios";
 import InvestigationPanel from "./InvestigationPanel";
 import GameReviewModal, { type AnswerReviewItem, type YellowReviewItem } from "./GameReviewModal";
 import RulebookModal from "./RulebookModal";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getHillOfTruthBgm } from "./hillOfTruthBgm";
 
 const VERDICT_META = {
   green: { label: "초록불", ring: "shadow-[0_0_28px_8px_rgba(52,211,153,0.55)]", dot: "bg-emerald-400" },
@@ -69,6 +72,8 @@ export default function HillOfTruthBoard({
   onAction,
   onGameEnd,
 }: HillOfTruthBoardProps) {
+  // Truth Seeker BGM (hillOfTruthBgm.ts) — procedural noir lounge while the questioning runs.
+  useSuiteBgm(getHillOfTruthBgm, state.phase === "playing");
   const scenario = getScenario(state.scenarioId);
   const [askText, setAskText] = useState("");
   const [askMode, setAskMode] = useState<QuestionMode>("public");
@@ -226,12 +231,15 @@ export default function HillOfTruthBoard({
             {state.difficulty === "LV3" ? "🔴 Lv.3 하드코어" : state.difficulty === "LV2" ? "🟡 Lv.2 심화" : "🟢 Lv.1 기본"}
           </span>
         </div>
+        <span className="flex items-center gap-1.5 text-white/70 light:text-slate-600">
+        <SuiteSoundHud suite={getHillOfTruthBgm} icon="🕵️" label="Truth Seeker" preview="preview" showSfx={false} />
         <button
           onClick={() => setRulebookOpen(true)}
           className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
         >
           📖 룰북
         </button>
+        </span>
       </div>
 
       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 light:border-slate-200 light:bg-white light:shadow-sm">

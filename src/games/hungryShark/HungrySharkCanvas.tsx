@@ -8,6 +8,9 @@ import { SharkAudio } from "./audio";
 import BestiaryPanel, { type DeathStats } from "./BestiaryPanel";
 import { selectMarkers } from "./markers";
 import SharkEvolutionModal from "./SharkEvolutionModal";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getHungrySharkBgm } from "./hungrySharkBgm";
 
 /**
  * requestAnimationFrame host for one dive: owns the mutable `World`, turns
@@ -92,6 +95,8 @@ export default function HungrySharkCanvas({
   /** 내 빌드 — narrows the reef's evolution choices (🔄 다시 고르기 shows all). */
   buildBranch?: SharkBranch | null;
 }) {
+  // Abyssal Hunt BGM (hungrySharkBgm.ts) — also silenced by this game's own mute toggle.
+  useSuiteBgm(getHungrySharkBgm, !muted);
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const worldRef = useRef<World | null>(null);
@@ -617,6 +622,7 @@ export default function HungrySharkCanvas({
         <button onClick={() => openBestiary(true)} className="rounded-md bg-black/50 px-2 py-1 text-xs text-white hover:bg-black/70" aria-label="먹이 도감" title="먹이 도감 (B)">
           📖
         </button>
+        <span className="text-white"><SuiteSoundHud suite={getHungrySharkBgm} icon="🦈" label="Abyssal Hunt" preview="preview" showSfx={false} /></span>
         <button onClick={onToggleMute} className="rounded-md bg-black/50 px-2 py-1 text-xs text-white hover:bg-black/70" aria-label="소리">
           {muted ? "🔇" : "🔊"}
         </button>

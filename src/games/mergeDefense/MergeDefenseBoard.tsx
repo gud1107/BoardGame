@@ -70,6 +70,9 @@ import RulebookModal from "./RulebookModal";
 import MapIntro from "./MapIntro";
 import GemGuide from "./GemGuide";
 import { AUTO_DEFAULT, AUTO_PRESET_NAME_MAX, autoPresetLink, describeAutoConfig, sameAutoConfig, upsertAutoPreset, type AutoConfig, type AutoPreset } from "./autoSettings";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getMergeDefenseBgm } from "./mergeDefenseBgm";
 
 interface Props {
   state: MergeDefenseState;
@@ -218,6 +221,8 @@ function mobAt(board: Board | undefined, x: number, y: number): Mob | null {
 const GAMBLE_ODDS_TEXT = GAMBLE_ODDS.map((o) => `${o.grade ? GRADE_NAMES[o.grade] : "꽝"} ${o.pct}%`).join(" · ");
 
 export default function MergeDefenseBoard({ state, mySeat, names, onAction, autoPlay = false, onToggleAuto, autoConfig = AUTO_DEFAULT, onAutoConfig, autoPresets = [], onAutoPresets, autoOnStart = false, onAutoOnStart, randomMap = false, mapBest }: Props) {
+  // Fortress Pulse BGM (mergeDefenseBgm.ts) — brass + taiko on boss waves.
+  useSuiteBgm(getMergeDefenseBgm, state.phase === "playing", isBossWave(state.wave) ? 1 : 0);
   const { parts: autoParts, upgradeMinGold: autoUpgradeGold, gambleSave: autoGambleSave } = autoConfig;
   const onAutoParts = onAutoConfig && ((parts: AutoPart[]) => onAutoConfig({ ...autoConfig, parts }));
   const onAutoUpgradeGold = onAutoConfig && ((upgradeMinGold: number) => onAutoConfig({ ...autoConfig, upgradeMinGold }));
@@ -1257,6 +1262,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
               </div>
             )}
           </span>
+          <SuiteSoundHud suite={getMergeDefenseBgm} icon="🏰" label="Fortress Pulse" preview="preview" showSfx={false} />
           <button onClick={() => setRulebookOpen(true)} className="rounded-full border border-white/15 px-2 py-0.5 text-[11px] hover:border-white/30 light:border-slate-300">
             📖<span className="hidden sm:inline"> 룰</span>
           </button>

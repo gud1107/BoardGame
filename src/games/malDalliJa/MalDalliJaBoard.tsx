@@ -18,6 +18,8 @@ import {
   type MalDalliJaState,
   type Seat,
 } from "./engine";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { getMalDalliJaBgm } from "./malDalliJaBgm";
 
 /**
  * Pure game UI + rules driver — knows nothing about betting, IndexedDB, or
@@ -473,6 +475,7 @@ export default function MalDalliJaBoard({
               상대 연결 대기중…
             </span>
           )}
+          <SuiteSoundHud suite={getMalDalliJaBgm} icon="🐎" label="Grand Derby Gallop" preview="preview" showSfx={false} />
           <button
             onClick={() => setRulebookOpen(true)}
             className="break-keep rounded-full border border-white/15 light:border-slate-200 px-3 py-1.5 text-xs text-white/70 light:text-slate-700 hover:border-white/30"

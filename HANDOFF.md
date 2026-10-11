@@ -39,6 +39,21 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 🎵 사운드 없던 27개 게임에 맞춤 BGM·효과음 (공용 절차적 사운드 엔진) — 2026-10-11 (커밋/푸시, 배포는 웹훅 자동)
+
+- **요청**: "배경음악·효과음 없는 게임에 전부 그 보드게임에 어울리는 맞춤형으로 넣어주세요". 조사해 보니 ① BGM·효과음 둘 다 없는 게임 12개, ② 효과음만 있는 게임 11개, ③ `useGameBgm`으로 mp3를 재생하도록 돼 있지만 `public/assets/sounds/bgm/`에 파일이 없어 실제로는 무음인 게임 4개였다(달무티는 이미 합성 BGM으로 교체돼 있었음).
+- **구조**: 게임마다 350줄짜리 엔진을 복사하지 않고 공용 엔진 하나를 만들었다.
+  - [proceduralScore.ts](./src/lib/audio/proceduralScore.ts): 순수 악보 DSL. 트랙마다 `"C4 - E4 . G4+B4!"` 같은 토큰 문자열을 쓴다(`-` 붙임줄, `.` 쉼표, `+` 화음, `x`/`X` 타악, `!` 강세, `|` 마디선 무시). 트랙은 각자 반복되고, `level`/`maxLevel`로 강도(`setIntensity`)에 따라 켜지고 꺼진다.
+  - [proceduralSuite.ts](./src/lib/audio/proceduralSuite.ts): `ProceduralSuite`. 악기 프리셋 약 50종(`INSTRUMENTS`), 효과음 레이어 DSL, `fx` 헬퍼(arp/chord/coin/whoosh/thud/crack…)가 있다. 사이트 전역 `audioSettings`(음소거·볼륨)를 따르고, `AudioContext.currentTime` 룩어헤드 스케줄러를 쓴다. **모든 게임이 AudioContext 하나를 공유**하고, 아무 곳이나 탭/키 입력하면 resume한다.
+  - [useProceduralSuite.ts](./src/lib/audio/useProceduralSuite.ts): `useSuiteBgm(getSuite, wanted, intensity)`, `useSoundCues(state, getSuite, classify)`(연속 스냅샷 diff, 모든 클라이언트가 봇·상대 행동까지 들음).
+  - [SuiteSoundHud.tsx](./src/components/audio/SuiteSoundHud.tsx): 룰북 버튼 옆 BGM / 🔔 효과음 토글. 보드 글자색을 상속해서 다크/라이트 모두 읽힌다.
+- **① 12개 게임 (BGM + 효과음 새로)**: 게임 폴더의 `<game>Sound.ts`에 악보, 효과음, 상태 diff → 큐 함수가 있다. 가능한 곳은 보드에 이미 있던 diff 감지기를 재사용했다(포세일 `ForSaleEffects`, 노땡스 `detectAuctionEvent`, 센추리 `detectAcquireEvent`, 쿠·러브레터 엔진 `lastEvent`). 뱅!은 센터 배너 카드(`bangCenterCue`)와 상태 diff(피격/다이너마이트/사망/턴)를 함께 쓴다. 지렁이는 시청자 기준(내 먹이는 70ms 스로틀, 내 처치/사망만 크게)이다. 언어의 조각은 피드백 색 배열을 숫자 하나로 인코딩해서(`encodeFeedback`) 글자마다 소리가 순서대로 켜진다.
+  - 아발론 원탁 발라드 / 뱅 래그타임 / 쿠 하프시코드 음모 / 포세일 보사노바 / 하나미코지 고토·샤쿠하치 / 러브레터 하프 왈츠 / 기억의 만찬 오르골 왈츠 / 노땡스 칵테일 재즈 / 언어의 조각 칼림바 / 스플렌더 만돌린 바카롤 / 지렁이 칩튠 / 센추리 우드·다르부카.
+- **② 11개 게임 (BGM만 추가, 기존 soundEngine 효과음 그대로)**: 게임 폴더의 `<game>Bgm.ts`. 효과음이 두 번 울리지 않도록 HUD는 `showSfx={false}`(BGM 토글만)로 했다. 방 흐름 게임(시티 체이스·낙서 결투·로스트 시티·망각의 지뢰 1/2)은 `*Game.tsx`에서, 나머지는 보드에서 `useSuiteBgm`을 호출한다. 배고픈 상어는 게임 자체 🔇(`muted`)에도 같이 꺼진다.
+- **③ mp3가 없던 4개 게임**: 운명전쟁39·라스베가스·그리드 포커·말달리자의 `useGameBgm(...)`을 `useSuiteBgm(get*Bgm, phase === "playing")`으로 바꿨다. `bgmManager.ts`는 로비(`lobby.mp3`)가 아직 쓰므로 그대로 뒀다.
+- **명세에 없던 결정**: 강도(intensity) 레이어를 게임마다 하나씩 넣었다(아발론 원정 2승/2패, 지렁이 마지막 30초, 합성 디펜스 보스 웨이브, 스플렌더·센추리 마지막 라운드 등). 꽃게 서바이벌·텔레파시와 기존 사운드 묶음 게임은 손대지 않았다.
+- **검증**: `src/lib/audio/proceduralSuites.test.ts` 59건(27개 스위트를 glob으로 모아 악보 컴파일, 음표 오타, 악기 존재, 효과음 레시피 확인). tsc, eslint(변경 파일) 통과. 헤드리스 Chromium(`--autoplay-policy=no-user-gesture-required`)에서 27개 스위트 모두 BGM을 1.5초 재생하고 효과음을 전부 실행했을 때 오실레이터가 실제로 생성됐고 페이지 에러 0건. **사람 귀로 들어보지는 않았다** — 곡 분위기나 볼륨 균형 피드백이 오면 각 `*Sound.ts`/`*Bgm.ts`의 `gain`과 패턴만 고치면 된다.
+
 ## 📡 신규 게임 텔레파시 (`telepathy`, 더 마인드 스타일 2~6인 실시간 협력) — 2026-10-11 (커밋/푸시, 배포는 웹훅 자동)
 
 - **요약**: 「더 마인드」 방식의 협력 게임. 말 없이 1~100 카드를 팀 전체가 작은 수부터 한 장씩 내요. 원작 이름·토끼·수리검 그림은 쓰지 않았어요 (하트 ❤️ / 번뜩임 ⚡). 로비 태그에 "더마인드"를 넣어서 검색되게 했어요.

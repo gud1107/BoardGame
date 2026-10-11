@@ -27,6 +27,9 @@ import ShowdownOverlay, {
 } from "./ShowMeTheCoinEffects";
 import RulebookModal from "./RulebookModal";
 import { useCountdown } from "./useCountdown";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getShowMeTheCoinBgm } from "./showMeTheCoinBgm";
 
 /** Request's "결과/연출 3초 유지" — confirmed length of the showdown reveal before the host auto-advances (see `ShowMeTheCoinGame.tsx`'s matching `setTimeout`). */
 export const SHOWDOWN_SECONDS = 3;
@@ -375,6 +378,8 @@ export default function ShowMeTheCoinBoard({
   onAction,
   onGameEnd,
 }: ShowMeTheCoinBoardProps) {
+  // Cypher Vault BGM (showMeTheCoinBgm.ts) — procedural; this game keeps its own SFX in the shared soundEngine.
+  useSuiteBgm(getShowMeTheCoinBgm, state.phase !== "gameOver", state.phase === "betting" || state.phase === "showdown" ? 1 : 0);
   const opponentSeat = otherSeat(viewerSeat);
   const { timeLeft } = useCountdown(SHOWDOWN_SECONDS, state.lastRoundResult?.roundNumber ?? 0, state.phase === "showdown");
   // 2026-09-01 세션: Phase 2 "COIN_COUNT_REVEALED" 전용 별도 카운트다운 — 라운드당 한 번뿐이라 `state.round`를 resetKey로 사용.
@@ -490,6 +495,7 @@ export default function ShowMeTheCoinBoard({
         <span>ROUND {state.round}</span>
         <div className="flex items-center gap-2">
           <span className="rounded-full border border-pink-400/30 px-2 py-0.5 text-pink-200 light:border-pink-300 light:text-pink-700">쇼 미 더 코인</span>
+          <SuiteSoundHud suite={getShowMeTheCoinBgm} icon="🎤" label="Cypher Vault" preview="preview" showSfx={false} />
           <button
             type="button"
             onClick={() => setRulebookOpen(true)}

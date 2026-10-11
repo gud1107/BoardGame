@@ -16,6 +16,9 @@ import {
   type PiecesOfLanguageState,
   type Seat,
 } from "./engine";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getPiecesOfLanguageSound, piecesOfLanguageSoundCues } from "./piecesOfLanguageSound";
 
 /**
  * Pure game UI + rules driver — knows nothing about betting, IndexedDB, or
@@ -243,11 +246,15 @@ export default function PiecesOfLanguageBoard({
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const opponentSeat = otherSeat(viewerSeat);
   const attemptsLeft = totalAttemptsRemaining(state);
+  // Ancient Glyphs sound suite (piecesOfLanguageSound.ts) — every guess lights up syllable by syllable for both players.
+  useSoundCues(state, getPiecesOfLanguageSound, piecesOfLanguageSoundCues);
+  const lowAttempts = state.maxAttempts !== null && attemptsLeft !== null && attemptsLeft <= Math.ceil(state.maxAttempts / 3);
+  useSuiteBgm(getPiecesOfLanguageSound, state.phase === "playing", lowAttempts ? 1 : 0);
 
   const isMyTurn = state.phase === "playing" && state.activeSeat === viewerSeat;
 
   return (
-    <div className="relative flex flex-col gap-4">
+    <div onPointerDownCapture={() => getPiecesOfLanguageSound().unlock()} className="relative flex flex-col gap-4">
       <Hud state={state} names={names} viewerSeat={viewerSeat} opponentConnected={opponentConnected} onOpenRulebook={() => setRulebookOpen(true)} />
 
       {/* ---- optional combined attempt-cap countdown bar (§4-style house rule) ---- */}
@@ -339,6 +346,7 @@ function Hud({
         {!opponentConnected && (
           <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-300 light:text-amber-700">상대 연결 대기중…</span>
         )}
+        <SuiteSoundHud suite={getPiecesOfLanguageSound} icon="🔤" label="Ancient Glyphs" preview="solve" />
         <button
           onClick={onOpenRulebook}
           className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"

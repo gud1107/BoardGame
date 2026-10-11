@@ -17,6 +17,9 @@ import {
   type WormState,
 } from "./engine";
 import { detectWormEvents, WormEffectsManager } from "./WormEffects";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getWormSound, wormEventCues } from "./wormSound";
 
 // TODO(theme): the `draw`/`drawMinimap` functions below paint directly onto
 // the <canvas> 2D context with hardcoded dark-palette colors (background,
@@ -137,6 +140,8 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
   const containerRef = useRef<HTMLDivElement | null>(null);
   const minimapRef = useRef<HTMLCanvasElement | null>(null);
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  // Arcade Arena sound suite (wormSound.ts): chiptune BGM, intensity 1 for the last 30 seconds.
+  useSuiteBgm(getWormSound, state.phase === "playing", MATCH_DURATION_MS - state.elapsedMs <= 30_000 ? 1 : 0);
   // Lazy initializer (runs once on first render, not "in an effect") — this
   // component only ever mounts client-side (dynamic import, `ssr: false`),
   // so `window`/`navigator` are always available here.
@@ -218,6 +223,12 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
     if (prevSnapshot !== state) {
       const events = detectWormEvents(prevSnapshot, state);
       effects.handleEvents(events, viewerSeat);
+      const sound = getWormSound();
+      for (const cue of wormEventCues(events, viewerSeat, performance.now())) {
+        if (typeof cue === "string") sound.play(cue);
+        else sound.play(cue.name, cue.arg);
+      }
+      if (prevSnapshot.phase === "playing" && state.phase === "gameOver") sound.play("buzzer");
       for (const ev of events) {
         if (ev.type !== "death" || ev.cause !== "head" || ev.attackerSeat === null) continue;
         // 짧은 쾌감 진동 — 내가 킬러일 때만, Vibration API 미지원 브라우저(iOS
@@ -490,7 +501,7 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
   const timeLeft = MATCH_DURATION_MS - state.elapsedMs;
 
   return (
-    <div className="flex flex-col gap-2">
+    <div onPointerDownCapture={() => getWormSound().unlock()} className="flex flex-col gap-2">
       <div
         ref={containerRef}
         className="relative w-full overflow-hidden rounded-[28px] border border-black/60 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] light:border-slate-300"
@@ -537,13 +548,16 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
           </div>
         </div>
 
-        {/* Rulebook button */}
+        {/* Rulebook button + sound toggles */}
+        <div className="absolute bottom-2 left-2 flex items-center gap-1.5 text-white/80 light:text-slate-700">
+        <SuiteSoundHud suite={getWormSound} icon="🕹️" label="Arcade Arena" preview="stageUp" />
         <button
           onClick={() => setRulebookOpen(true)}
-          className="absolute bottom-2 left-2 rounded-full border border-white/15 bg-black/40 px-2.5 py-1 text-[11px] text-white/70 backdrop-blur-sm transition hover:border-white/30 hover:text-white light:border-slate-300 light:bg-white/90 light:text-slate-700 light:shadow-sm light:hover:border-slate-400 light:hover:text-slate-900"
+          className="rounded-full border border-white/15 bg-black/40 px-2.5 py-1 text-[11px] text-white/70 backdrop-blur-sm transition hover:border-white/30 hover:text-white light:border-slate-300 light:bg-white/90 light:text-slate-700 light:shadow-sm light:hover:border-slate-400 light:hover:text-slate-900"
         >
           📖 룰북
         </button>
+        </div>
 
         {/* Respawn overlay */}
         {respawnMsLeft !== null && respawnMsLeft > 0 && (

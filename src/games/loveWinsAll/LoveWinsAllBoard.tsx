@@ -19,6 +19,9 @@ import {
 import RevealOverlay, { ChipPot, CheckBadge, DeclareBubble, RaiseBanner, type ActionCalloutEvent } from "./LoveWinsAllEffects";
 import RulebookModal from "./RulebookModal";
 import { useCountdown } from "./useCountdown";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getLoveWinsAllBgm } from "./loveWinsAllBgm";
 
 /** Request's "판정 연출 최소 3초 유지" — same length used for both the ordinary tie's next-round countdown and the final KO reveal (see `LoveWinsAllGame.tsx`'s matching host `setTimeout`). */
 export const REVEAL_SECONDS = 3;
@@ -332,6 +335,8 @@ function useActionCallout(state: LoveWinsAllState): ActionCalloutEvent | null {
 }
 
 export default function LoveWinsAllBoard({ state, viewerSeat, names, opponentConnected, onAction, onGameEnd }: LoveWinsAllBoardProps) {
+  // Heartbreak Showdown BGM (loveWinsAllBgm.ts) — procedural; this game keeps its own SFX in the shared soundEngine.
+  useSuiteBgm(getLoveWinsAllBgm, state.phase !== "gameOver", state.phase === "bet2" || state.phase === "showdown" ? 1 : 0);
   const opponentSeat = otherSeat(viewerSeat);
   const { timeLeft } = useCountdown(REVEAL_SECONDS, `${state.round}:${state.lastRoundResult?.roundNumber ?? 0}`, state.phase === "showdown" || state.phase === "gameOver");
   const [rulebookOpen, setRulebookOpen] = useState(false);
@@ -354,6 +359,7 @@ export default function LoveWinsAllBoard({ state, viewerSeat, names, opponentCon
           <span className="rounded-full border border-pink-400/30 px-2 py-0.5 text-pink-200">
             {state.variant === "base" ? "러브 윈즈 올" : "러브 윈즈 올 2"}
           </span>
+          <SuiteSoundHud suite={getLoveWinsAllBgm} icon="💘" label="Heartbreak Showdown" preview="preview" showSfx={false} />
           <button
             type="button"
             onClick={() => setRulebookOpen(true)}

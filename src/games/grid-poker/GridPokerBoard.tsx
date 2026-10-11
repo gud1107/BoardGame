@@ -28,6 +28,8 @@ import {
   type PlayerState,
   type SeatIndex,
 } from "./engine";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { getGridPokerBgm } from "./gridPokerBgm";
 
 const URGENT_THRESHOLD = 5;
 
@@ -237,12 +239,15 @@ export default function GridPokerBoard({
   const opponents = state.players.filter((p) => p.seat !== viewerSeat);
 
   const rulebookButton = (
-    <button
+    <>
+      <SuiteSoundHud suite={getGridPokerBgm} icon="🃏" label="Deep House Table" preview="preview" showSfx={false} />
+      <button
       onClick={() => setRulebookOpen(true)}
       className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
     >
       📖 족보 · 룰북
     </button>
+    </>
   );
 
   // All hooks (countdowns, the SFX effect, the mute-toggle state) must run

@@ -24,7 +24,8 @@ import {
   type Seat,
 } from "./engine";
 import MalDalliJaBoard from "./MalDalliJaBoard";
-import { useGameBgm } from "@/lib/audio/useGameBgm";
+import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getMalDalliJaBgm } from "./malDalliJaBgm";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { roleSelfResult } from "@/games/shared/selfResult";
@@ -140,7 +141,7 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
 
   const [phase, setPhase] = useState<Phase>(roomFromUrl ? "enter-name" : "choose");
   // 빠른 오케스트라 레이싱 테마 BGM — 실제 대국 중에만 크로스페이드로 재생 (2026-08-26 세션).
-  useGameBgm(phase === "playing" ? "malDalliJa" : null);
+  useSuiteBgm(getMalDalliJaBgm, phase === "playing"); // procedural (malDalliJaBgm.ts) — the malDalliJa mp3 never shipped
   const [intent, setIntent] = useState<"create" | "join">(roomFromUrl ? "join" : "create");
   const [identity, setIdentity] = useState<RoomIdentityValue>({ name: "" });
   const [codeInput, setCodeInput] = useState(roomFromUrl ?? "");

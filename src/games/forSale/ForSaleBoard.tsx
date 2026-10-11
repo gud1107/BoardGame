@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { forSaleSoundCues, getForSaleSound } from "./forSaleSound";
 import RulebookModal from "./RulebookModal";
 import { CheckCard, CoinChip, coinBreakdown, formatDollars, PropertyCard } from "./CardArt";
 import {
@@ -51,6 +54,9 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
   const [bidEvents, setBidEvents] = useState<BidFlyEvent[]>([]);
   const [winToast, setWinToast] = useState<{ winnerName: string; card: number; paid: number } | null>(null);
   const [flipRound, setFlipRound] = useState(0);
+  // Open House Bossa sound suite (forSaleSound.ts) — reuses the detectors above, heard by every client.
+  useSoundCues(state, getForSaleSound, forSaleSoundCues);
+  useSuiteBgm(getForSaleSound, state.phase !== "gameOver", state.phase === "selling" ? 1 : 0);
   if (trackedState !== state) {
     const newPass = detectPassEvent(trackedState, state);
     const newBid = detectBidEvent(trackedState, state);
@@ -179,6 +185,7 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
 
   return (
     <div
+      onPointerDownCapture={() => getForSaleSound().unlock()}
       className="relative flex flex-col gap-3 rounded-[28px] border border-black/60 light:border-slate-200 light:shadow-md p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
       // Hardcoded dark inline gradient — intentionally left as-is per theme-system guidance.
       style={{ background: "linear-gradient(160deg,#0f2532 0%,#0a1922 45%,#050d12 100%)" }}
@@ -199,7 +206,10 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
           <span className="whitespace-nowrap">· 수표 누적</span>
           <span className="shrink-0 font-semibold whitespace-nowrap text-emerald-300 light:text-emerald-600">{formatDollars(me.checks.reduce((s, c) => s + c, 0))}</span>
         </span>
-        <div className="flex gap-1.5">{rulebookButton}</div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <SuiteSoundHud suite={getForSaleSound} icon="🏡" label="Open House Bossa" preview="sold" />
+          {rulebookButton}
+        </div>
       </div>
 
       {/* Phase 1 — auction */}

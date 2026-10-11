@@ -1,6 +1,9 @@
 "use client";
 
-import { type CSSProperties, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { bangCenterCue, bangIntensity, bangSoundCues, getBangSound } from "./bangSound";
 import RulebookModal from "./RulebookModal";
 import { CardFace, CardBack } from "./CardFace";
 import { CARD_META, EQUIP_ORDER, ROLE_LABEL, TEAM_LABEL, type CardKind } from "./cardMeta";
@@ -276,6 +279,13 @@ export default function BangBoard({
   // low-life player drew back up over their limit, before they could play
   // anything at all. See BangBoard bug write-up in HANDOFF.md.
   const [discarding, setDiscarding] = useState(false);
+  // Dusty Saloon sound suite (bangSound.ts): state-diff stings for every seat, one sting per center-banner card reveal.
+  useSoundCues(state, getBangSound, bangSoundCues);
+  useSuiteBgm(getBangSound, state.turnPhase !== "game-end", bangIntensity(state));
+  const centerEvent = centerEvents[0];
+  useEffect(() => {
+    if (centerEvent) getBangSound().play(bangCenterCue(centerEvent));
+  }, [centerEvent]);
 
   const viewer = state.players[viewerSeat];
   const myTurn = state.turnSeat === viewerSeat;
@@ -395,7 +405,7 @@ export default function BangBoard({
   const iOweStorePick = pending?.kind === "general-store" && pending.pickOrder[pending.nextPickIndex] === viewerSeat;
 
   return (
-    <div className={`${TABLE_PANEL} flex flex-col gap-3 p-3 sm:p-4`}>
+    <div onPointerDownCapture={() => getBangSound().unlock()} className={`${TABLE_PANEL} flex flex-col gap-3 p-3 sm:p-4`}>
       <TableTexture />
       {centerEvents[0] && (
         <CenterPlayBanner key={centerEvents[0].id} event={centerEvents[0]} names={names} onDone={() => onCenterEventDone(centerEvents[0].id)} />
@@ -404,7 +414,10 @@ export default function BangBoard({
         <span>
           {state.playerCount}인 · 턴 {state.turnNumber} · 남은 카드 {state.deck.length}장
         </span>
-        {rulebookButton}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <SuiteSoundHud suite={getBangSound} icon="🤠" label="Dusty Saloon" preview="bang" />
+          {rulebookButton}
+        </div>
       </div>
 
       {/* Oval saloon table: every other seat placed around an ellipse, viewer always at the bottom.

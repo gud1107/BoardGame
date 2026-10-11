@@ -68,6 +68,9 @@ import {
   type BotTakeoverState,
 } from "@/games/shared/bot/botTakeover";
 import { selfResult } from "@/games/shared/selfResult";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getInkDuelBgm } from "./inkDuelBgm";
 
 /**
  * Online-room multiplayer entry point for 낙서 결투 — same lockstep pattern
@@ -266,6 +269,8 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
   const [myPlayerId, setMyPlayerId] = useState<string | undefined>(undefined);
   const [occupants, setOccupants] = useState<Occupant[]>([]);
   const [gameState, setGameState] = useState<InkDuelState | null>(null);
+  // Sketchbook Scuffle BGM (inkDuelBgm.ts) — procedural, plays during the match; gameplay SFX stay in the shared soundEngine.
+  useSuiteBgm(getInkDuelBgm, phase === "playing" && gameState?.phase !== "gameOver", 0);
   const [finalResult, setFinalResult] = useState<{ lines: string[] } | null>(null);
 
   const [botSeats, setBotSeats] = useState<SeatIndex[]>([]);
@@ -1457,6 +1462,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
         <div className="mb-2 flex items-center justify-between gap-2">
           <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[11px] font-bold text-amber-300 light:text-amber-700">🏃 무빙 모드 — 실시간</span>
           {tookOver && simHost && <span className="rounded-full bg-sky-500/15 px-2.5 py-1 text-[11px] font-semibold text-sky-300 light:text-sky-700">📡 방장 연결이 끊겨 내 기기가 게임을 이어서 진행 중</span>}
+          <SuiteSoundHud suite={getInkDuelBgm} icon="✏️" label="Sketchbook Scuffle" preview="preview" showSfx={false} />
           <button onClick={() => setShowRulebook(true)} className="rounded-full border border-white/10 light:border-slate-200 px-3 py-1 text-[11px] text-white/50 light:text-slate-500 hover:border-white/25 light:hover:border-slate-400">
             📖 룰북
           </button>
@@ -1501,7 +1507,8 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
             ))}
           </div>
         )}
-        <div className="mb-2 flex justify-end">
+        <div className="mb-2 flex items-center justify-end gap-1.5 text-white/70 light:text-slate-600">
+          <SuiteSoundHud suite={getInkDuelBgm} icon="✏️" label="Sketchbook Scuffle" preview="preview" showSfx={false} />
           <button onClick={() => setShowRulebook(true)} className="rounded-full border border-white/10 light:border-slate-200 px-3 py-1 text-[11px] text-white/50 light:text-slate-500 hover:border-white/25 light:hover:border-slate-400">
             📖 룰북
           </button>

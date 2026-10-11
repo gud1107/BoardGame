@@ -23,6 +23,9 @@ import {
   type EngineAction,
   type SeatIndex,
 } from "./engine";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { centurySoundCues, getCenturySound } from "./centurySound";
 
 /**
  * Pure game UI + rules driver — same controlled-component contract as every
@@ -58,6 +61,9 @@ export interface CenturyBoardProps {
 export default function CenturyBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: CenturyBoardProps) {
   const isMobile = useIsMobile();
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  // Silk Road Caravan sound suite (centurySound.ts) — per-seat state-diff cues heard by every client.
+  useSoundCues(state, getCenturySound, centurySoundCues);
+  useSuiteBgm(getCenturySound, state.phase !== "gameOver", state.endTriggered ? 1 : 0);
   const [acquiring, setAcquiring] = useState<{ index: number; payment: Resource[] } | null>(null);
   const [upgrading, setUpgrading] = useState<{ cardId: string; steps: Resource[] } | null>(null);
   const [trading, setTrading] = useState<{ cardId: string; repeats: number } | null>(null);
@@ -276,7 +282,10 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
             {state.playerCount}인 · {state.pointCardGoal}장 달성 시 게임 종료
             {state.endTriggered && <span className="ml-1 text-rose-300">· 마지막 라운드</span>}
           </span>
-          <div className="flex gap-1.5">{rulebookButton}</div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <SuiteSoundHud suite={getCenturySound} icon="🐪" label="Silk Road Caravan" preview="claim" />
+            {rulebookButton}
+          </div>
         </div>
         {/* Compact (mobile) phrasing stays on one line — the desktop
             sentence wraps to two on a narrow viewport, which is exactly the
@@ -381,7 +390,7 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
   );
 
   return (
-    <>
+    <div className="contents" onPointerDownCapture={() => getCenturySound().unlock()}>
       {body}
       <MyTurnOverlay isMyTurn={isMyTurn} />
 
@@ -474,6 +483,6 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
           }}
         />
       )}
-    </>
+    </div>
   );
 }

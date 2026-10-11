@@ -24,7 +24,8 @@ import {
   type SeatIndex,
 } from "./engine";
 import LasVegasBoard from "./LasVegasBoard";
-import { useGameBgm } from "@/lib/audio/useGameBgm";
+import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getLasVegasBgm } from "./lasVegasBgm";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, FillEmptySeatsButton, RemoveBotButton } from "@/components/lobby/BotSeatControls";
@@ -133,7 +134,7 @@ export default function LasVegasGame({ onComplete }: PlayableGameProps) {
 
   const [phase, setPhase] = useState<Phase>(roomFromUrl ? "enter-name" : "choose");
   // 화려한 스윙 재즈 테마 BGM — 실제 대국 중에만 크로스페이드로 재생 (2026-08-26 세션).
-  useGameBgm(phase === "playing" ? "lasVegas" : null);
+  useSuiteBgm(getLasVegasBgm, phase === "playing"); // procedural (lasVegasBgm.ts) — the lasVegas mp3 never shipped
   const [intent, setIntent] = useState<"create" | "join">(roomFromUrl ? "join" : "create");
   const [identity, setIdentity] = useState<RoomIdentityValue>({ name: "" });
   const [codeInput, setCodeInput] = useState(roomFromUrl ?? "");
