@@ -52,7 +52,8 @@ export const REACH_VISIBLE_MS = 200;
 export const FREE_CANCELS = 3;
 export const CANCEL_LOCK_MS = 2000;
 export const SYNC_COUNTDOWN_MS = 3000;
-export const MISTAKE_MS = 3200;
+/** Long enough to read "who played what, what was still held" (§6-2). */
+export const MISTAKE_MS = 4800;
 export const STAR_VOTE_MS = 8000;
 export const STAR_REVEAL_MS = 2400;
 export const STAR_COOLDOWN_MS = 10_000;
@@ -79,6 +80,14 @@ export interface PendingPlay {
 }
 
 export type LogKind = "play" | "mistake" | "star";
+
+/** Why the table is (re)syncing — shown on the sync screen. */
+export type SyncReason =
+  | { kind: "level" }
+  | { kind: "resync"; seat: SeatIndex }
+  | { kind: "mistake" }
+  | { kind: "star" }
+  | { kind: "away"; seats: SeatIndex[] };
 
 /** One dot on the replay timeline (§12). `t` = ms since the level's first sync finished. */
 export interface LogEntry {
@@ -134,7 +143,9 @@ export interface MindState {
   levelStartedAt: number | null;
   starVote: { proposer: SeatIndex; yes: (boolean | null)[]; deadline: number } | null;
   starCooldownUntil: number;
-  lastMistake: { id: number; trigger: PileCard; revealed: Reveal[] } | null;
+  /** `prevTop` = pile top before the bad card landed (0 = empty pile). */
+  lastMistake: { id: number; trigger: PileCard; revealed: Reveal[]; prevTop: number } | null;
+  syncReason: SyncReason | null;
   lastStar: { id: number; revealed: Reveal[] } | null;
   /** Bumped on every visible event so clients can fire one-shot FX. */
   seq: number;
@@ -217,6 +228,7 @@ export function createGame(playerCount: number, seed: number, now: number, opts:
     starVote: null,
     starCooldownUntil: 0,
     lastMistake: null,
+    syncReason: { kind: "level" },
     lastStar: null,
     seq: 0,
     levelMistakes: 0,
@@ -271,9 +283,10 @@ function appendLog(state: MindState, entries: LogEntry[], mistake = false): Leve
   return log;
 }
 
-function enterSync(state: MindState): MindState {
+function enterSync(state: MindState, syncReason: SyncReason): MindState {
   return {
     ...state,
+    syncReason,
     phase: "sync",
     phaseUntil: null,
     holds: state.holds.map(() => false),
@@ -331,7 +344,7 @@ function nextLevel(state: MindState, now: number): MindState {
     lastReward: null,
     log: [...state.log, { level, hands: hands.map((h) => [...h]), entries: [], mistakes: 0, cleared: false }],
     seq: state.seq + 1,
-  });
+  }, { kind: "level" });
 }
 
 /** Confirms the pending cluster (lowest first) and runs the mistake check (§5-4, §6). */
@@ -376,7 +389,7 @@ function resolveCluster(state: MindState, now: number): MindState {
     lives: state.practice ? state.lives : Math.max(0, state.lives - 1),
     levelMistakes: state.levelMistakes + 1,
     stats: { ...stats, mistakes: stats.mistakes + 1 },
-    lastMistake: { id: state.seq + 1, trigger: sorted[sorted.length - 1], revealed },
+    lastMistake: { id: state.seq + 1, trigger: sorted[sorted.length - 1], revealed, prevTop: pileTop(state) },
     log: appendLog(state, [...entries, ...revealed.map((r) => ({ ...r, t: mistakeT, kind: "mistake" as const }))], true),
     phase: "mistake",
     phaseUntil: now + MISTAKE_MS,
@@ -452,7 +465,9 @@ export function applyAction(state: MindState, action: MindAction, now: number): 
       let next: MindState = { ...state, away };
       if (away.some((a) => a) && (next.phase === "playing" || next.phase === "starVote" || next.phase === "resume")) {
         next = flush(next, now);
-        if (next.phase === "playing" || next.phase === "starVote" || next.phase === "resume") next = enterSync({ ...next, seq: next.seq + 1 });
+        if (next.phase === "playing" || next.phase === "starVote" || next.phase === "resume") {
+          next = enterSync({ ...next, seq: next.seq + 1 }, { kind: "away", seats: away.flatMap((a, seat) => (a ? [seat] : [])) });
+        }
       }
       if (next.phase === "sync") next = { ...next, holds: next.holds.map((h, seat) => h && !away[seat]) };
       return refreshCountdown(next, now);
@@ -497,7 +512,7 @@ export function applyAction(state: MindState, action: MindAction, now: number): 
       if (flushed.phase !== "playing") return flushed;
       const resyncUsed = flushed.resyncUsed.slice();
       resyncUsed[action.seat] += 1;
-      return enterSync({ ...flushed, resyncUsed, seq: flushed.seq + 1 });
+      return enterSync({ ...flushed, resyncUsed, seq: flushed.seq + 1 }, { kind: "resync", seat: action.seat });
     }
     case "starPropose": {
       if (state.phase !== "playing" || !validSeat(state, action.seat)) return state;
@@ -564,7 +579,7 @@ export function tick(state: MindState, now: number): MindState {
       if (state.phaseUntil === null || now < state.phaseUntil) return state;
       if (state.lives <= 0) return { ...state, phase: "lost", phaseUntil: null, seq: state.seq + 1 };
       if (allEmpty(state.hands)) return clearLevel(state, now);
-      return enterSync({ ...state, seq: state.seq + 1 });
+      return enterSync({ ...state, seq: state.seq + 1 }, { kind: "mistake" });
     }
     case "starVote": {
       if (!state.starVote || now < state.starVote.deadline) return state;
@@ -573,7 +588,7 @@ export function tick(state: MindState, now: number): MindState {
     case "starReveal": {
       if (state.phaseUntil === null || now < state.phaseUntil) return state;
       if (allEmpty(state.hands)) return clearLevel(state, now);
-      return enterSync({ ...state, seq: state.seq + 1 });
+      return enterSync({ ...state, seq: state.seq + 1 }, { kind: "star" });
     }
     case "resume": {
       if (state.phaseUntil === null || now < state.phaseUntil) return state;

@@ -139,6 +139,26 @@ describe("playing", () => {
     expect(s.phase).toBe("sync");
   });
 
+  it("records the pile top before the mistake and why the table re-syncs", () => {
+    let s = startPlaying(withHands(createGame(2, 1, T0), [[20, 60], [41, 90]]));
+    s = act(s, { type: "play", seat: 0, card: 20 }, T0 + 4000);
+    s = tick(s, T0 + 4000 + GRACE_MS);
+    s = act(s, { type: "play", seat: 1, card: 41 }, T0 + 6000);
+    s = tick(s, T0 + 6000 + GRACE_MS);
+    s = act(s, { type: "play", seat: 1, card: 90 }, T0 + 8000);
+    s = tick(s, T0 + 8000 + GRACE_MS);
+    expect(s.lastMistake).toMatchObject({ prevTop: 41, trigger: { card: 90, seat: 1 }, revealed: [{ seat: 0, card: 60 }] });
+    s = tick(s, T0 + 8000 + GRACE_MS + MISTAKE_MS);
+    // hands are empty → level clears instead of re-syncing
+    expect(s.phase).toBe("break");
+  });
+
+  it("a resync remembers who asked", () => {
+    let s = startPlaying(withHands(createGame(3, 1, T0), [[10], [50], [90]]));
+    s = act(s, { type: "resync", seat: 2 }, T0 + 4000);
+    expect(s.syncReason).toEqual({ kind: "resync", seat: 2 });
+  });
+
   it("losing the last heart ends the game", () => {
     let s = startPlaying(withHands(createGame(2, 1, T0), [[60], [12]]));
     s = { ...s, lives: 1 };

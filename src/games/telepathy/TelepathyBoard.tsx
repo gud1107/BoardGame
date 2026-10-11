@@ -15,6 +15,7 @@ import {
 import Timeline, { SEAT_COLORS } from "./Timeline";
 import { telepathySound } from "./telepathySound";
 import RulebookModal from "./RulebookModal";
+import HistoryModal from "./HistoryModal";
 
 /**
  * In-game screen for 텔레파시. Purely a view of the host's snapshot + intent
@@ -66,6 +67,83 @@ function RevealChips({ revealed, names, tone }: { revealed: Reveal[]; names: str
   );
 }
 
+/**
+ * The 💔 moment, spelled out: what was on the pile, the card that just
+ * landed (and who played it), the lower cards still in hands (and whose),
+ * plus a 1–100 strip so the ordering is obvious at a glance.
+ */
+function MistakeExplainer({
+  mistake,
+  names,
+  mySeat,
+  lives,
+  practice,
+}: {
+  mistake: NonNullable<MindState["lastMistake"]>;
+  names: string[];
+  mySeat: number;
+  lives: number;
+  practice: boolean;
+}) {
+  const { trigger, revealed, prevTop } = mistake;
+  const pos = (n: number) => `${Math.min(100, Math.max(0, ((n - 1) / 99) * 100))}%`;
+  return (
+    <div className="flex w-full max-w-sm flex-col items-center gap-2.5 text-center">
+      <p className="tlp-pop flex items-center gap-2 text-lg font-black text-rose-200 light:text-rose-700">
+        <span className="text-3xl">💔</span> 실수! {practice ? "(연습 모드 — 하트 그대로)" : `하트 −1 → 남은 하트 ${lives}개`}
+      </p>
+
+      <div className="flex w-full items-stretch gap-2">
+        <div className="flex flex-1 flex-col items-center gap-1 rounded-xl border border-white/15 bg-black/20 p-2 light:border-slate-200 light:bg-white">
+          <span className="text-[10px] font-semibold text-white/50 light:text-slate-500">그 전 더미 맨 위</span>
+          <span className="text-2xl font-black tabular-nums text-white/70 light:text-slate-500">{prevTop > 0 ? prevTop : "—"}</span>
+        </div>
+        <span className="self-center text-lg text-white/40 light:text-slate-400">→</span>
+        <div className="flex flex-[1.4] flex-col items-center gap-1 rounded-xl border-2 border-white/70 bg-white/10 p-2 light:border-slate-400 light:bg-white">
+          <span className="text-[10px] font-semibold text-white/70 light:text-slate-600">방금 낸 카드</span>
+          <span className="text-3xl font-black tabular-nums text-white light:text-slate-900">{trigger.card}</span>
+          <span className="text-[11px] font-bold" style={{ color: seatColor(trigger.seat) }}>
+            {trigger.seat === mySeat ? "내가 냈어요" : `${names[trigger.seat]} 냈어요`}
+          </span>
+        </div>
+      </div>
+
+      <div className="w-full rounded-xl border-2 border-rose-400/70 bg-rose-500/15 p-2.5 light:border-rose-300 light:bg-rose-50">
+        <p className="mb-1.5 text-xs font-bold text-rose-100 light:text-rose-700">
+          그런데 {trigger.card}보다 낮은 카드가 아직 남아 있었어요 ({revealed.length}장 → 모두 버림)
+        </p>
+        <div className="flex flex-wrap justify-center gap-1.5">
+          {revealed.map((r) => (
+            <div key={`${r.seat}-${r.card}`} className="tlp-flip flex flex-col items-center rounded-lg border border-rose-300/60 bg-black/25 px-2.5 py-1 light:bg-white">
+              <span className="text-xl font-black tabular-nums text-white line-through decoration-rose-400/80 light:text-slate-900">{r.card}</span>
+              <span className="text-[10px] font-semibold" style={{ color: seatColor(r.seat) }}>
+                {r.seat === mySeat ? "내 손에 있었음" : `${names[r.seat]} 손에 있었음`}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="relative mt-3 h-6 w-full" aria-hidden>
+        <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/15 light:bg-slate-200" />
+        <span className="absolute -bottom-3 left-0 text-[9px] text-white/40 light:text-slate-400">1</span>
+        <span className="absolute -bottom-3 right-0 text-[9px] text-white/40 light:text-slate-400">100</span>
+        {prevTop > 0 && <span className="absolute top-1/2 h-3 w-1 -translate-x-1/2 -translate-y-1/2 rounded bg-white/50" style={{ left: pos(prevTop) }} />}
+        {revealed.map((r) => (
+          <span key={r.card} className="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-rose-200 bg-rose-500" style={{ left: pos(r.card) }} />
+        ))}
+        <span className="absolute top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center" style={{ left: pos(trigger.card) }}>
+          <span className="h-5 w-1.5 rounded bg-white shadow-[0_0_8px_white]" />
+        </span>
+        <span className="absolute -top-3 -translate-x-1/2 text-[9px] font-bold text-white light:text-slate-800" style={{ left: pos(trigger.card) }}>
+          {trigger.card}
+        </span>
+      </div>
+      <p className="mt-1 text-[11px] text-white/50 light:text-slate-500">빨간 점 = 먼저 나왔어야 할 카드 · 잠시 후 다 같이 🖐 준비부터 이어가요</p>
+    </div>
+  );
+}
+
 export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOffset, onAction }: TelepathyBoardProps) {
   const timed = state.phase !== "won" && state.phase !== "lost";
   const frame = useFrame(timed);
@@ -73,6 +151,7 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
   const sound = telepathySound();
 
   const [rulebook, setRulebook] = useState<null | "all" | "star">(null);
+  const [historyAt, setHistoryAt] = useState<number | null>(null);
   const myHand = state.hands[mySeat] ?? [];
   const myLow = myHand[0];
 
@@ -283,6 +362,13 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
           </button>
           <button
             type="button"
+            onClick={() => setHistoryAt(state.log.length - 1)}
+            className="rounded-full border border-white/20 px-2 py-1 font-semibold text-white/80 transition hover:bg-white/10 light:border-slate-300 light:text-slate-700"
+          >
+            📜 기록
+          </button>
+          <button
+            type="button"
             onClick={() => setRulebook("all")}
             className="rounded-full border border-white/20 px-2 py-1 font-semibold text-white/80 transition hover:bg-white/10 light:border-slate-300 light:text-slate-700"
           >
@@ -353,6 +439,17 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
                 <p className="text-sm font-semibold text-indigo-100 light:text-indigo-700">
                   {state.level > 0 && state.pile.length === 0 && state.levelStartedAt === null ? `레벨 ${state.level} — 1인당 ${state.level}장` : "다시 마음을 맞춰요"}
                 </p>
+                {state.syncReason && state.syncReason.kind !== "level" && (
+                  <p className="max-w-xs rounded-lg border border-sky-300/40 bg-sky-400/10 px-3 py-1.5 text-xs font-semibold text-sky-100 light:border-sky-300 light:bg-sky-50 light:text-sky-800">
+                    {state.syncReason.kind === "resync"
+                      ? `🖐 ${state.syncReason.seat === mySeat ? "내가" : `${names[state.syncReason.seat]}님이`} 다시 맞추기를 요청했어요 — 카드·하트·⚡는 그대로예요`
+                      : state.syncReason.kind === "mistake"
+                        ? "💔 실수 뒤에는 다 같이 마음을 다시 맞추고 이어가요"
+                        : state.syncReason.kind === "star"
+                          ? "⚡ 번뜩임으로 공개된 카드를 보고 다시 맞춰요"
+                          : `📡 ${state.syncReason.seats.map((s) => names[s]).join(", ")}님 연결을 기다리는 중이에요`}
+                  </p>
+                )}
                 <p className="max-w-xs text-xs text-white/60 light:text-slate-500">모두가 🖐를 켜면 3초 뒤 시작해요. 숫자는 말하지 않기!</p>
               </>
             )}
@@ -452,28 +549,26 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
               ⏱ {(flowElapsed / 1000).toFixed(1)}초{state.pausedAt !== null && <span className="ml-1 text-xs text-amber-300 light:text-amber-600">(멈춤)</span>}
             </p>
             {recent.length > 0 && (
-              <div className="flex items-center gap-1.5 text-xs text-white/50 light:text-slate-500">
+              <button
+                type="button"
+                onClick={() => setHistoryAt(state.log.length - 1)}
+                className="flex flex-wrap items-center justify-center gap-1.5 rounded-full px-2 py-0.5 text-xs text-white/50 transition hover:bg-white/10 light:text-slate-500"
+              >
                 이전:
                 {recent.map((p, i) => (
                   <span key={i} className="rounded border px-1.5 tabular-nums" style={{ borderColor: seatColor(p.seat) }} title={names[p.seat]}>
                     {p.card}
                   </span>
                 ))}
-              </div>
+                <span className="font-semibold text-indigo-200 light:text-indigo-600">📜 전체 보기</span>
+              </button>
             )}
             {state.phase === "resume" && <p className="text-xs text-amber-200 light:text-amber-700">⚡ 취소 — 곧 이어서 진행해요</p>}
           </>
         )}
 
         {state.phase === "mistake" && state.lastMistake && (
-          <div className="flex flex-col items-center gap-3 text-center">
-            <span className="tlp-pop text-5xl">💔</span>
-            <p className="text-sm font-bold text-rose-200 light:text-rose-700">
-              {state.lastMistake.trigger.card}이(가) 놓였는데 더 낮은 카드가 남아 있었어요
-            </p>
-            <RevealChips revealed={state.lastMistake.revealed} names={names} tone="rose" />
-            <p className="text-xs text-white/50 light:text-slate-500">{state.practice ? "연습 모드라 하트는 그대로예요" : `하트 −1 · 남은 하트 ${state.lives}개`}</p>
-          </div>
+          <MistakeExplainer mistake={state.lastMistake} names={names} mySeat={mySeat} lives={state.lives} practice={state.practice} />
         )}
 
         {state.phase === "starReveal" && state.lastStar && (
@@ -674,18 +769,29 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
           {state.stars <= 0 && !state.practice && <p className="text-[11px] text-white/50 light:text-slate-500">2·5·8레벨을 통과하면 1개씩 받아요</p>}
         </div>
 
-        <div className="flex flex-wrap justify-center gap-2">
+        <div className="flex w-full max-w-md flex-col gap-2 rounded-xl border-2 border-sky-300/40 bg-sky-400/[0.07] p-3 text-left light:border-sky-300 light:bg-sky-50">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-bold text-sky-200 light:text-sky-800">🖐 다시 맞추기</p>
+            <span className="rounded-full bg-sky-400/15 px-2 py-0.5 text-[11px] font-semibold text-sky-100 light:text-sky-800">
+              이번 레벨 남은 횟수 {resyncLeft} / {RESYNC_PER_LEVEL}
+            </span>
+          </div>
+          <p className="text-xs leading-relaxed text-white/80 light:text-slate-700">
+            흐름이 꼬였다 싶을 때 <b>카드 내기를 잠깐 멈추고</b>, 모두 🖐 준비부터 다시 해요.{" "}
+            <b className="text-emerald-300 light:text-emerald-700">카드·하트·⚡는 그대로</b>, 흐름 시계만 0초로 돌아가요.
+          </p>
           <button
             type="button"
             onClick={() => onAction({ type: "resync", seat: mySeat })}
             disabled={state.phase !== "playing" || resyncLeft <= 0}
-            className="rounded-full border border-white/20 px-4 py-1.5 text-xs font-semibold text-white/70 transition hover:bg-white/10 disabled:opacity-40 light:border-slate-300 light:text-slate-600"
+            className="rounded-lg border border-sky-300/60 py-2 text-sm font-bold text-sky-100 transition hover:bg-sky-400/15 disabled:cursor-not-allowed disabled:opacity-40 light:text-sky-800"
           >
-            🖐 다시 맞추기 ({resyncLeft})
+            {resyncLeft <= 0 ? "🖐 이번 레벨엔 다 썼어요" : state.phase !== "playing" ? "🖐 카드를 내는 중에만 쓸 수 있어요" : "🖐 다시 맞추기 요청"}
           </button>
         </div>
       </div>
       {rulebook && <RulebookModal focus={rulebook === "star" ? "star" : undefined} onClose={() => setRulebook(null)} />}
+      {historyAt !== null && <HistoryModal state={state} names={names} initialIndex={historyAt} onClose={() => setHistoryAt(null)} />}
     </div>
   );
 }

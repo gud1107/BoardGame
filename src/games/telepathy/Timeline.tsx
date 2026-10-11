@@ -10,7 +10,7 @@ export const SEAT_COLORS = ["#38bdf8", "#f472b6", "#a3e635", "#fbbf24", "#c084fc
  * landed, colored by who played it. Mistake reveals are red rings, ⚡ reveals
  * dashed. Shown in the level break and on the result screen.
  */
-export default function Timeline({ log, names }: { log: LevelLog; names: string[] }) {
+export default function Timeline({ log, names, showHands = true }: { log: LevelLog; names: string[]; showHands?: boolean }) {
   const entries = log.entries;
   const maxT = Math.max(1000, ...entries.map((e) => e.t));
   const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}초`;
@@ -57,6 +57,7 @@ export default function Timeline({ log, names }: { log: LevelLog; names: string[
         </span>
         <span>{seconds(maxT)}</span>
       </div>
+      {showHands && (
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
         {log.hands.map((hand, seat) => (
           <span key={seat} className="text-white/70 light:text-slate-600">
@@ -65,6 +66,7 @@ export default function Timeline({ log, names }: { log: LevelLog; names: string[
           </span>
         ))}
       </div>
+      )}
     </div>
   );
 }
