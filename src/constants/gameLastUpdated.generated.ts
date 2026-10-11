@@ -3,9 +3,12 @@
 import type { GameId } from "@/games/types";
 
 export const GAME_LAST_UPDATED: Partial<Record<GameId, string>> = {
-  "ink-duel": "2026-10-09T07:11:21+09:00",
-  "merge-defense": "2026-10-09T04:53:19+09:00",
-  "hungry-shark": "2026-10-08T22:21:44+09:00",
+  "telepathy": "2026-10-11T16:20:13+09:00",
+  "splendor-duel": "2026-10-11T07:32:32+09:00",
+  "coyote": "2026-10-11T06:21:11+09:00",
+  "ink-duel": "2026-10-11T05:50:42+09:00",
+  "hungry-shark": "2026-10-11T04:53:38+09:00",
+  "merge-defense": "2026-10-09T19:04:09+09:00",
   "memory-feast": "2026-10-07T02:19:16+09:00",
   "crab-survival": "2026-10-04T21:58:48+09:00",
   "for-sale": "2026-10-02T02:30:49+09:00",
@@ -17,9 +20,7 @@ export const GAME_LAST_UPDATED: Partial<Record<GameId, string>> = {
   "dalmuti": "2026-09-28T05:29:40+09:00",
   "five-cucumbers": "2026-09-27T22:04:47+09:00",
   "rat-a-tat-cat": "2026-09-27T21:46:44+09:00",
-  "coyote": "2026-09-27T21:44:58+09:00",
   "century": "2026-09-27T21:42:52+09:00",
-  "splendor-duel": "2026-09-27T14:13:08+09:00",
   "lotr-duel": "2026-09-27T01:19:25+09:00",
   "city-chase": "2026-09-25T14:06:32+09:00",
   "mafia": "2026-09-23T00:57:16+09:00",
@@ -46,6 +47,7 @@ export const GAME_LAST_UPDATED: Partial<Record<GameId, string>> = {
 
 /** First commit that touched each game — drives the lobby's NEW badge. */
 export const GAME_ADDED: Partial<Record<GameId, string>> = {
+  "telepathy": "2026-10-11T16:20:13+09:00",
   "merge-defense": "2026-10-08T02:21:30+09:00",
   "ink-duel": "2026-10-07T22:03:43+09:00",
   "crab-survival": "2026-09-27T14:53:13+09:00",
