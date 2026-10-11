@@ -5,6 +5,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import type { BluffRouletteState, CardKind, Resolution, SeatIndex } from "./engine";
 import { paintCard } from "./cardArt";
+import Character from "./Character";
 import { activePull, type ShowdownTimeline } from "./timeline";
 
 /**
@@ -57,12 +58,15 @@ function cardTexture(kind: CardKind | "back"): THREE.CanvasTexture {
   let t = cardTextures.get(kind);
   if (!t) {
     const c = document.createElement("canvas");
-    c.width = 200;
-    c.height = 280;
-    paintCard(c.getContext("2d")!, kind, 200, 280);
-    t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
-    t.anisotropy = 4;
+    c.width = 300;
+    c.height = 420;
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    paintCard(c.getContext("2d")!, kind, 300, 420, () => {
+      tex.needsUpdate = true;
+    });
+    t = tex;
     cardTextures.set(kind, t);
   }
   return t;
@@ -246,7 +250,7 @@ function Card3D({ kind, position, rotation, scale = 1 }: { kind: CardKind | "bac
   return (
     <mesh position={position} rotation={rotation} scale={scale} castShadow>
       <planeGeometry args={[0.32, 0.45]} />
-      <meshStandardMaterial map={cardTexture(kind)} roughness={0.6} side={THREE.DoubleSide} />
+      <meshStandardMaterial map={cardTexture(kind)} roughness={0.45} metalness={0.05} side={THREE.DoubleSide} alphaTest={0.5} />
     </mesh>
   );
 }
@@ -265,7 +269,7 @@ function SuitSign({ suit, hidden }: { suit: BluffRouletteState["tableSuit"]; hid
     <group ref={ref} position={[0, TABLE_Y + 0.42, 0]}>
       <mesh>
         <planeGeometry args={[0.36, 0.5]} />
-        <meshStandardMaterial map={cardTexture(suit)} emissive="#ffffff" emissiveMap={cardTexture(suit)} emissiveIntensity={0.35} side={THREE.DoubleSide} />
+        <meshStandardMaterial map={cardTexture(suit)} emissive="#ffffff" emissiveMap={cardTexture(suit)} emissiveIntensity={0.35} side={THREE.DoubleSide} alphaTest={0.5} />
       </mesh>
       <pointLight color="#ffe6a8" intensity={1.5} distance={2} />
     </group>
@@ -378,25 +382,6 @@ function Revolver({ shots, color }: { shots: number; color: string }) {
   );
 }
 
-function Hat({ color }: { color: string }) {
-  return (
-    <group position={[0, 0.2, 0]}>
-      <mesh castShadow>
-        <cylinderGeometry args={[0.32, 0.32, 0.03, 20]} />
-        <meshStandardMaterial color="#1c1917" roughness={0.8} />
-      </mesh>
-      <mesh position={[0, 0.12, 0]} castShadow>
-        <cylinderGeometry args={[0.17, 0.2, 0.24, 20]} />
-        <meshStandardMaterial color="#1c1917" roughness={0.8} />
-      </mesh>
-      <mesh position={[0, 0.04, 0]}>
-        <cylinderGeometry args={[0.205, 0.205, 0.05, 20]} />
-        <meshStandardMaterial color={color} roughness={0.6} />
-      </mesh>
-    </group>
-  );
-}
-
 /** One opponent: chair, body, head, hat, name, hand fan and revolver — plus their showdown animation. */
 function SeatPiece({
   seat,
@@ -406,7 +391,11 @@ function SeatPiece({
   active,
   showdown,
   isViewer,
+  seatAngles,
+  activeSeatAll,
 }: {
+  seatAngles: Record<SeatIndex, number>;
+  activeSeatAll: SeatIndex | null;
   seat: PublicSeat;
   viewer: SeatIndex;
   n: number;
@@ -417,26 +406,15 @@ function SeatPiece({
 }) {
   const color = SEAT_COLORS[seat.seat % SEAT_COLORS.length];
   const angle = seatAngle(seat.seat, viewer, n);
-  const body = useRef<THREE.Group>(null);
   const gun = useRef<THREE.Group>(null);
   const flash = useRef<THREE.PointLight>(null);
   const ring = useRef<THREE.MeshStandardMaterial>(null);
-  const bodyMat = useRef<THREE.MeshStandardMaterial>(null);
   const seatPos = polar(angle, SEAT_R);
   const gunRest = polar(angle, TABLE_R - 0.5, TABLE_Y + 0.06).add(polar(angle + Math.PI / 2, 0.42));
   const label = useMemo(() => labelTexture(name, color), [name, color]);
 
   useFrame(({ clock }) => {
     const t = nowSec(showdown);
-    const { pending, hitPending, fellAt } = pullFired(showdown, seat.seat, t);
-    const visuallyAlive = seat.alive || hitPending;
-    // breathing idle / fall
-    if (body.current) {
-      const fallT = fellAt !== null ? clamp01((t - fellAt) / 0.6) : visuallyAlive ? 0 : 1;
-      body.current.rotation.x = -easeOut(fallT) * 1.25;
-      body.current.position.y = Math.sin(clock.elapsedTime * 1.6 + seat.seat) * 0.015;
-    }
-    if (bodyMat.current) bodyMat.current.color.set(visuallyAlive ? color : "#44403c");
     if (ring.current) ring.current.emissiveIntensity = active && !showdown ? 1.2 + Math.sin(clock.elapsedTime * 5) * 0.5 : 0;
 
     // gun: rest on table, or rise to the head during this seat's pull
@@ -446,7 +424,7 @@ function SeatPiece({
     const mine = pull && showdown!.res.pulls[pull.index].seat === seat.seat ? pull : null;
     const head = isViewer
       ? new THREE.Vector3(0.3, 2.12, SEAT_R + 0.45)
-      : seatPos.clone().add(new THREE.Vector3(0, 1.95, 0)).add(polar(angle + Math.PI / 2, 0.36));
+      : seatPos.clone().add(new THREE.Vector3(0, 1.62, 0)).add(polar(angle + Math.PI / 2, 0.3)).add(polar(angle + Math.PI, 0.05));
     if (mine) {
       const u = mine.local;
       const up = easeOut(u / 0.35) * (1 - easeOut((u - 2.3) / 0.35));
@@ -462,7 +440,6 @@ function SeatPiece({
       g.rotation.set(0, angle + Math.PI / 2, 0);
       if (flash.current) flash.current.intensity = 0;
     }
-    void pending;
   });
 
   const shotsShown = (() => {
@@ -475,34 +452,30 @@ function SeatPiece({
       {!isViewer && (
         <group position={seatPos.toArray()} rotation-y={angle + Math.PI}>
           {/* chair */}
-          <mesh position={[0, 0.5, -0.32]} castShadow>
-            <boxGeometry args={[0.7, 1.0, 0.08]} />
-            <meshStandardMaterial color="#4a2511" roughness={0.7} />
+          <mesh position={[0, 0.98, -0.36]} castShadow>
+            <boxGeometry args={[0.74, 0.9, 0.07]} />
+            <meshStandardMaterial color="#3f1d0e" roughness={0.55} />
+          </mesh>
+          <mesh position={[0, 1.02, -0.32]}>
+            <boxGeometry args={[0.6, 0.72, 0.02]} />
+            <meshStandardMaterial color="#6b1d2c" roughness={0.9} />
           </mesh>
           <mesh position={[0, 0.48, 0]} castShadow>
             <boxGeometry args={[0.7, 0.07, 0.65]} />
             <meshStandardMaterial color="#5a2e17" roughness={0.7} />
           </mesh>
-          <group ref={body} position={[0, 0, 0]}>
-            <mesh position={[0, 1.08, -0.05]} castShadow>
-              <capsuleGeometry args={[0.27, 0.5, 6, 14]} />
-              <meshStandardMaterial ref={bodyMat} color={color} roughness={0.65} />
-            </mesh>
-            <group position={[0, 1.72, -0.02]}>
-              <mesh castShadow>
-                <sphereGeometry args={[0.22, 20, 16]} />
-                <meshStandardMaterial color="#f1c9a5" roughness={0.7} />
-              </mesh>
-              {[-0.075, 0.075].map((x) => (
-                <mesh key={x} position={[x, 0.03, 0.19]}>
-                  <sphereGeometry args={[0.03, 8, 6]} />
-                  <meshStandardMaterial color="#1c1917" />
-                </mesh>
-              ))}
-              <Hat color={color} />
-            </group>
-          </group>
-          <sprite position={[0, 2.3, 0]} scale={[0.8, 0.2, 1]}>
+          <Character
+            seat={seat.seat}
+            color={color}
+            angle={angle}
+            seatPos={seatPos}
+            seatAngles={seatAngles}
+            seatR={SEAT_R}
+            activeSeat={activeSeatAll}
+            alive={seat.alive}
+            showdown={showdown}
+          />
+          <sprite position={[0, 2.12, 0]} scale={[0.8, 0.2, 1]}>
             <spriteMaterial map={label} transparent depthWrite={false} />
           </sprite>
         </group>
@@ -596,6 +569,7 @@ function CameraRig({ viewer, n, showdown }: { viewer: SeatIndex; n: number; show
 function SceneContents(props: SceneProps) {
   const { playerCount: n, seats, viewerSeat, showdown, quality } = props;
   const tension = useRef(0);
+  const seatAngles = useMemo(() => Object.fromEntries(seats.map((s) => [s.seat, seatAngle(s.seat, viewerSeat, n)])) as Record<SeatIndex, number>, [seats, viewerSeat, n]);
   useEffect(() => {
     const me = seats.find((s) => s.seat === viewerSeat);
     tension.current = me ? me.shots / 5 : 0;
@@ -606,6 +580,9 @@ function SceneContents(props: SceneProps) {
       <fog attach="fog" args={["#0c0706", 6, 13]} />
       <ambientLight intensity={0.22} color="#ffd9b0" />
       <hemisphereLight args={["#ffdcb0", "#1a0e0a", 0.35]} />
+      {/* cool back light so silhouettes separate from the dark room */}
+      <directionalLight position={[0, 3.5, -6]} intensity={0.55} color="#8fb4ff" />
+      <directionalLight position={[0, 2.5, 6]} intensity={0.18} color="#ffd9a8" />
       <Room quality={quality} />
       <Lamp quality={quality} tension={tension} />
       <Table quality={quality} />
@@ -622,6 +599,8 @@ function SceneContents(props: SceneProps) {
           active={props.activeSeat === s.seat}
           showdown={showdown}
           isViewer={s.seat === viewerSeat}
+          seatAngles={seatAngles}
+          activeSeatAll={props.activeSeat}
         />
       ))}
       <CameraRig viewer={viewerSeat} n={n} showdown={showdown} />

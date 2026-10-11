@@ -75,6 +75,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         desc: "3D 살롱 테이블·의심 연출 카메라·💀 해골 모드·살롱 재즈 BGM, 3D 미지원 기기는 2D 테이블로 자동 전환",
       },
       {
+        game: "bluff-roulette",
+        type: "IMPROVE",
+        desc: "카드를 금박 테두리·모서리 표시 디자인으로, 인물을 모자·소품·표정이 있는 신사 캐릭터로 교체 (차례인 사람을 바라보고 방아쇠 때 팔을 듦)",
+      },
+      {
         game: "telepathy",
         type: "FEAT",
         desc: "신규 게임 📡 텔레파시 — 말 없이 1~100 카드를 작은 수부터 함께 내는 2~6인 실시간 협력 게임, 봇과 바로 하기 지원",
