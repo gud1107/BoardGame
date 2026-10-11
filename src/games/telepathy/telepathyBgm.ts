@@ -6,7 +6,9 @@ import { defineSuite, fx, type SfxRecipe, type SuiteConfig } from "@/lib/audio/p
  * a faint bell shimmer. Deliberately no steady pulse at intensity 0: every
  * client's loop runs on its own clock, so it must never read as a shared
  * count. At intensity 1 (last level, or only a handful of cards left) a soft
- * heartbeat and a high glockenspiel join to lift the tension.
+ * heartbeat and a high glockenspiel join to lift the tension. Intensity 2
+ * is the 💔 mistake moment: the bright layers drop out and a D-minor pad +
+ * low choir take over (the board also slows the tempo), then it lifts back.
  *
  * The game's own card/mistake SFX stay in telepathySound.ts; this suite only
  * adds the BGM plus the 효과음-toggle preview and the "last cards are safe" cue.
@@ -31,6 +33,36 @@ const SFX = {
     { inst: "upright", note: "D3", at: 0.36, dur: 1.2, gain: 0.8 },
     ...fx.arp("glock", ["F#6", "A6", "D7", "A6", "D7"], 0.07, 0.5, 0.8).map((p) => ({ ...p, at: (p.at ?? 0) + 0.7 })),
   ],
+  /** Clearing a ❤️ level: warm harp run into a choir chord. */
+  levelClearLife: [
+    ...fx.arp("harp", ["D4", "F#4", "A4", "D5", "F#5"], 0.07, 0.8),
+    ...fx.chord("choir", ["D4", "F#4", "A4", "D5"], 1.7, 0.9, 0.36),
+    { inst: "bell", note: "F#5", at: 0.36, dur: 1.4 },
+    { inst: "upright", note: "D3", at: 0.36, dur: 1.4, gain: 0.8 },
+  ],
+  /** Clearing a ⚡ level: an upward whoosh into bright glock + bell sparkle. */
+  levelClearStar: [
+    fx.whoosh(700, 4200, 0.3, 0.1),
+    ...fx.arp("glock", ["A5", "D6", "F#6", "A6", "D7"], 0.06, 0.6, 0.9).map((p) => ({ ...p, at: (p.at ?? 0) + 0.2 })),
+    ...fx.chord("pad", ["D4", "F#4", "A4", "E5"], 1.5, 0.9, 0.5),
+    { inst: "bell", note: "D6", at: 0.5, dur: 1.4 },
+  ],
+  /** Last level cleared: a ~5s cadence D – G – A – D with choir, strings and bells. */
+  victory: [
+    ...fx.arp("musicbox", ["D5", "F#5", "A5", "D6"], 0.1, 0.8),
+    ...fx.chord("pad", ["D4", "F#4", "A4", "D5"], 1.3, 0.9, 0.45),
+    ...fx.arp("glock", ["F#6", "A6", "D7"], 0.08, 0.6, 0.8).map((p) => ({ ...p, at: (p.at ?? 0) + 0.8 })),
+    ...fx.chord("strings", ["G3", "B3", "D4", "G4"], 0.9, 0.9, 1.6),
+    { inst: "upright", note: "G2", at: 1.6, dur: 0.9 },
+    ...fx.chord("strings", ["A3", "C#4", "E4", "A4"], 0.9, 0.95, 2.4),
+    { inst: "upright", note: "A2", at: 2.4, dur: 0.9 },
+    ...fx.chord("choir", ["D4", "F#4", "A4", "D5"], 2.6, 1, 3.2),
+    ...fx.chord("pad", ["D3", "A3", "F#4"], 2.6, 0.8, 3.2),
+    { inst: "bell", note: "D6", at: 3.2, dur: 2.2 },
+    { inst: "bell", note: "A5", at: 3.5, dur: 1.9 },
+    { inst: "upright", note: "D2", at: 3.2, dur: 2.2 },
+    ...fx.arp("musicbox", ["A5", "D6", "F#6", "A6"], 0.12, 0.8, 0.7).map((p) => ({ ...p, at: (p.at ?? 0) + 3.6 })),
+  ],
 } satisfies Record<string, SfxRecipe>;
 
 export const TELEPATHY_SUITE: SuiteConfig = {
@@ -38,18 +70,22 @@ export const TELEPATHY_SUITE: SuiteConfig = {
   bgmLevel: 0.24,
   tracks: [
     // One token per bar, each chord held two bars: D – G – Bm – A.
-    { voice: "pad", div: 16, gain: 0.55, pattern: "D3+A3+E4 - G3+D4+F#4 - B2+F#3+D4 - A2+E3+C#4 -" },
+    { voice: "pad", div: 16, gain: 0.55, maxLevel: 2, pattern: "D3+A3+E4 - G3+D4+F#4 - B2+F#3+D4 - A2+E3+C#4 -" },
     { voice: "upright", div: 16, gain: 0.45, pattern: "D2 - G2 - B1 - A1 -" },
     {
       voice: "kalimba",
       div: 4,
       gain: 0.5,
+      maxLevel: 2,
       pattern: "F#4 . A4 . | E5 . D5 . | D4 . G4 B4 | A4 . . . | D4 F#4 . A4 | C#5 . . . | E4 . A4 . | C#5 . B4 .",
     },
-    { voice: "bell", div: 8, gain: 0.18, pattern: "A5 . . . . . . . F#5 . . . . . . ." },
+    { voice: "bell", div: 8, gain: 0.18, maxLevel: 2, pattern: "A5 . . . . . . . F#5 . . . . . . ." },
     // Intensity 1: heartbeat + glock sparkle.
     { voice: "softKick", div: 4, gain: 0.55, level: 1, pattern: "x . x . | . . . . | x . x . | . . . ." },
-    { voice: "glock", div: 4, gain: 0.3, level: 1, pattern: "D6 . . . | . . A5 . | . . . . | F#5 . . . | B5 . . . | . . A5 . | . . . . | E6 . . ." },
+    { voice: "glock", div: 4, gain: 0.3, level: 1, maxLevel: 2, pattern: "D6 . . . | . . A5 . | . . . . | F#5 . . . | B5 . . . | . . A5 . | . . . . | E6 . . ." },
+    // Intensity 2 (💔 mistake): the light goes out — minor pad + low choir.
+    { voice: "pad", div: 16, gain: 0.6, level: 2, pattern: "D3+F3+A3 - Bb2+F3+D4 -" },
+    { voice: "choir", div: 16, gain: 0.35, level: 2, pattern: "D3+A3 - F3+D4 -" },
   ],
   sfx: SFX,
 };

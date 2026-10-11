@@ -114,14 +114,6 @@ class TelepathySound {
     this.tone(990, t + 0.12, 0.2, { type: "triangle", gain: 0.25 });
   }
 
-  won() {
-    const ctx = this.ensure();
-    if (!ctx) return;
-    const t = ctx.currentTime;
-    [523.25, 659.25, 783.99, 1046.5, 1318.5, 1568].forEach((f, i) => this.tone(f, t + i * 0.11, 0.9, { type: "triangle", gain: 0.28 }));
-    [261.63, 329.63, 392].forEach((f) => this.tone(f, t + 0.66, 1.4, { type: "sine", gain: 0.2 }));
-  }
-
   lost() {
     const ctx = this.ensure();
     if (!ctx) return;

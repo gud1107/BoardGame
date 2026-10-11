@@ -45,6 +45,8 @@ import TelepathyBoard from "./TelepathyBoard";
 import Timeline from "./Timeline";
 import RulebookModal from "./RulebookModal";
 import { telepathySound } from "./telepathySound";
+import { getTelepathyBgm } from "./telepathyBgm";
+import { readBestScore, saveBestScore } from "./bestScore";
 
 /**
  * 텔레파시 online room. Host-authoritative realtime (see engine.ts): the
@@ -131,6 +133,8 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
   const [options, setOptions] = useState<RoomOptions>({ practice: false });
   const optionsRef = useRef<RoomOptions>(options);
   const [resultLevel, setResultLevel] = useState<number | null>(null);
+  /** This browser's best for the current player count, read when the game started. */
+  const [bestBefore, setBestBefore] = useState(0);
   const [lobbyRulebook, setLobbyRulebook] = useState(false);
 
   const [botSeats, setBotSeats] = useState<SeatIndex[]>([]);
@@ -248,6 +252,7 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
       botMemoryRef.current = createBotMemory();
       lastSeenAtRef.current = {};
       setResultLevel(null);
+      setBestBefore(readBestScore(playerCount));
       const state = createGame(playerCount, seed, Date.now(), { practice });
       gameStateRef.current = state;
       setGameState(state);
@@ -326,6 +331,7 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
       setRoster((payload?.botSeats as SeatIndex[] | undefined) ?? [], (payload?.botLevels as BotLevel[] | undefined) ?? []);
       if (typeof payload?.hostNow === "number") setHostOffset((payload.hostNow as number) - Date.now());
       if (payload?.matchId) matchIdRef.current = String(payload.matchId);
+      setBestBefore(readBestScore(state.playerCount));
       gameStateRef.current = state;
       setGameState(state);
       setPhase("playing");
@@ -611,8 +617,12 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
     const key = matchIdRef.current;
     if (completedMatchRef.current === key) return;
     completedMatchRef.current = key;
-    if (gameState.practice) return; // 연습 모드는 기록하지 않아요 (§14)
     const won = gameState.phase === "won";
+    // Final fanfare / sigh (the board has already unmounted for the result screen).
+    if (won) getTelepathyBgm().play("victory");
+    else telepathySound().lost();
+    if (gameState.practice) return; // 연습 모드는 기록하지 않아요 (§14)
+    saveBestScore(gameState.playerCount, computeScore(gameState));
     const rankings = gameState.hands.map((_, seat) => ({ seat, rank: won ? 1 : 2 }));
     const s = gameState.stats;
     onComplete({
@@ -908,6 +918,18 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
               </div>
             ))}
           </div>
+          {!gameState.practice && (
+            computeScore(gameState) > bestBefore ? (
+              <p className="rounded-full bg-fuchsia-500/20 px-3 py-1 text-sm font-black text-fuchsia-100 light:text-fuchsia-700">
+                🆕 최고 기록 경신! {bestBefore > 0 ? `${bestBefore.toLocaleString()}점 → ` : ""}
+                {computeScore(gameState).toLocaleString()}점 ({gameState.playerCount}인)
+              </p>
+            ) : (
+              <p className="text-xs text-white/60 light:text-slate-500">
+                🏆 {gameState.playerCount}인 최고 기록 {bestBefore.toLocaleString()}점 · 이번 {computeScore(gameState).toLocaleString()}점
+              </p>
+            )
+          )}
           {s.graceSaves > 0 && <p className="text-xs text-indigo-200 light:text-indigo-600">⏱ 0.25초 관용 판정이 {s.graceSaves}번 실수를 막았어요</p>}
           <div className="flex w-full flex-col gap-2 text-left">
             <div className="flex flex-wrap items-center gap-1">
@@ -970,7 +992,7 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
             ))}
           </div>
         )}
-        <TelepathyBoard state={gameState} mySeat={mySeat} names={names} botSeats={botSeatSet} hostOffset={isHost ? 0 : hostOffset} onAction={sendAction} />
+        <TelepathyBoard state={gameState} bestScore={bestBefore} mySeat={mySeat} names={names} botSeats={botSeatSet} hostOffset={isHost ? 0 : hostOffset} onAction={sendAction} />
       </div>,
     );
   }

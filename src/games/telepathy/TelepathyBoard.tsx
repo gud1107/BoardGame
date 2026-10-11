@@ -32,6 +32,8 @@ import HistoryModal from "./HistoryModal";
  */
 export interface TelepathyBoardProps {
   state: MindState;
+  /** This browser's best score for this player count before this game started. */
+  bestScore?: number;
   mySeat: number;
   names: string[];
   botSeats: ReadonlySet<number>;
@@ -48,6 +50,28 @@ function useFrame(active: boolean) {
     return () => window.clearInterval(id);
   }, [active]);
   return frame;
+}
+
+/** Animates a number toward `value` (ease-out) whenever it changes. */
+export function useCountUp(value: number, ms = 900): number {
+  const [shown, setShown] = useState(value);
+  const fromRef = useRef(value);
+  useEffect(() => {
+    const from = fromRef.current;
+    if (from === value) return;
+    let raf = 0;
+    const start = performance.now();
+    const step = (t: number) => {
+      const k = Math.min(1, (t - start) / ms);
+      const v = Math.round(from + (value - from) * (1 - (1 - k) ** 3));
+      fromRef.current = v;
+      setShown(v);
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [value, ms]);
+  return shown;
 }
 
 function seatColor(seat: number) {
@@ -89,22 +113,35 @@ const REWARD_TEXT = { star: "⚡ 번뜩임 +1", life: "❤️ 하트 +1", win: "
  * Level road (1..maxLevel) with the reward icon on each reward level, plus a
  * line spelling out what clearing the current level earns.
  */
-function RewardTrack({ state }: { state: MindState }) {
+function RewardTrack({ state, scoreShown, bestScore }: { state: MindState; scoreShown: number; bestScore: number }) {
   const levels = Array.from({ length: state.maxLevel }, (_, i) => i + 1);
   const cur = state.level;
   const curCleared = state.phase === "break";
   const reward = rewardFor(state, cur);
   const next = levels.find((lv) => lv > cur && rewardFor(state, lv));
   const score = computeScore(state);
+  const counting = scoreShown !== score;
+  const newRecord = bestScore > 0 && score > bestScore;
   return (
     <div className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2.5 light:border-slate-200 light:bg-white">
       <div className="flex items-center justify-between gap-2 text-xs">
-        <span className="font-semibold text-white/60 light:text-slate-500">레벨 진행 · 보상</span>
+        <span className="shrink-0 whitespace-nowrap font-semibold text-white/60 light:text-slate-500">레벨 · 보상</span>
         {state.practice ? (
           <span className="text-white/40 light:text-slate-400">연습 모드 — 점수 없음</span>
         ) : (
-          <span key={score} className="tlp-pop flex items-baseline gap-1 rounded-full border border-yellow-300/50 bg-yellow-400/10 px-2.5 py-0.5 font-bold text-yellow-100 light:border-amber-300 light:bg-amber-50 light:text-amber-800">
-            🏅 지금까지 <span className="text-sm font-black tabular-nums">{score.toLocaleString()}</span>점
+          <span className="flex flex-wrap items-center justify-end gap-1">
+            <span
+              className={`flex items-baseline gap-1 rounded-full border px-2.5 py-0.5 font-bold transition ${
+                counting ? "scale-110 border-yellow-200 bg-yellow-400/30 text-white shadow-[0_0_16px_rgba(250,204,21,0.6)]" : "border-yellow-300/50 bg-yellow-400/10 text-yellow-100"
+              } light:border-amber-300 light:bg-amber-50 light:text-amber-800`}
+            >
+              🏅 지금까지 <span className="text-sm font-black tabular-nums">{scoreShown.toLocaleString()}</span>점
+            </span>
+            {newRecord ? (
+              <span className="tlp-banner rounded-full bg-fuchsia-500/25 px-2 py-0.5 text-[10px] font-black text-fuchsia-100 light:text-fuchsia-700">🆕 최고 기록 경신 중!</span>
+            ) : (
+              bestScore > 0 && <span className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] text-white/60 light:border-slate-200 light:text-slate-500">최고 {bestScore.toLocaleString()}점</span>
+            )}
           </span>
         )}
       </div>
@@ -236,7 +273,7 @@ function MistakeExplainer({
   );
 }
 
-export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOffset, onAction }: TelepathyBoardProps) {
+export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOffset, onAction, bestScore = 0 }: TelepathyBoardProps) {
   const timed = state.phase !== "won" && state.phase !== "lost";
   const frame = useFrame(timed);
   const hostNow = frame.wall + hostOffset;
@@ -350,10 +387,9 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
       else if (state.phase === "break") {
         // Short level-clear fanfare (shared suite → follows the 효과음 toggle).
         const perfect = state.log[state.log.length - 1]?.mistakes === 0;
-        getTelepathyBgm().play(perfect ? "levelClearPerfect" : "levelClear");
+        const reward = state.lastReward?.granted ? state.lastReward.kind : null;
+        getTelepathyBgm().play(reward === "life" ? "levelClearLife" : reward === "star" ? "levelClearStar" : perfect ? "levelClearPerfect" : "levelClear");
       }
-      else if (state.phase === "won") sound.won();
-      else if (state.phase === "lost") sound.lost();
     }
     prevRef.current = { ...prev, pile: state.pile.length, phase: state.phase, level: state.level };
   }, [state, sound]);
@@ -416,8 +452,14 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
   // Everyone else is out → my remaining cards can't be a mistake: say so loudly.
   const safeNow = state.phase === "playing" && myHand.length > 0 && totalLeft === myHand.length;
   const onlyOther = state.phase === "playing" && !safeNow && totalLeft > 0 ? state.hands.findIndex((h, seat) => seat !== mySeat && h.length === totalLeft) : -1;
-  const bgmIntensity = state.level >= state.maxLevel || (state.phase === "playing" && totalLeft <= state.playerCount) ? 1 : 0;
+  // 2 = 💔 mistake (bright layers out, minor pad in, slower), 1 = tense, 0 = calm.
+  const bgmIntensity = state.phase === "mistake" ? 2 : state.level >= state.maxLevel || (state.phase === "playing" && totalLeft <= state.playerCount) ? 1 : 0;
   useSuiteBgm(getTelepathyBgm, timed, bgmIntensity);
+  useEffect(() => {
+    getTelepathyBgm().setTempo(state.phase === "mistake" ? 0.8 : 1);
+    return () => getTelepathyBgm().setTempo(1);
+  }, [state.phase]);
+  const scoreShown = useCountUp(computeScore(state));
 
   const ring = 2 * Math.PI * 54;
   const ringFrac = (flowElapsed % 10_000) / 10_000;
@@ -493,7 +535,7 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
         </div>
       </div>
 
-      {state.phase !== "won" && state.phase !== "lost" && <RewardTrack state={state} />}
+      {state.phase !== "won" && state.phase !== "lost" && <RewardTrack state={state} scoreShown={scoreShown} bestScore={bestScore} />}
 
       {/* Seats */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -711,7 +753,7 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
               <p className="tlp-pop rounded-full border border-yellow-300/50 bg-yellow-400/10 px-3 py-1 text-sm font-bold text-yellow-100 light:border-amber-300 light:bg-amber-50 light:text-amber-800">
                 +{(state.level * 100 + (levelLog.mistakes === 0 ? 50 : 0)).toLocaleString()}점
                 {levelLog.mistakes === 0 && <span className="ml-1 text-xs font-semibold text-emerald-300 light:text-emerald-600">(실수 없이 +50 포함)</span>}
-                <span className="ml-1.5 text-xs font-semibold text-white/60 light:text-slate-500">→ 총 {computeScore(state).toLocaleString()}점</span>
+                <span className="ml-1.5 text-xs font-semibold text-white/60 light:text-slate-500">→ 총 <span className="tabular-nums">{scoreShown.toLocaleString()}</span>점</span>
               </p>
             )}
             {state.practice && levelLog && levelLog.mistakes === 0 && <p className="text-xs font-semibold text-emerald-300 light:text-emerald-600">실수 없이 통과!</p>}
