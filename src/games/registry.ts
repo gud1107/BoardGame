@@ -74,6 +74,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "telepathy",
+    name: "텔레파시",
+    nameEn: "Telepathy",
+    description:
+      "말 한마디 없이 마음을 맞추는 2~6인 실시간 협력 게임. 각자 1~100 숫자 카드를 들고, 차례도 신호도 없이 팀 전체 카드를 작은 수부터 한 장씩 내려놓으세요. 레벨이 오를수록 카드는 늘어나고, 실수하면 하트가 깨집니다. 모두가 흐름 시계 하나에 박자를 맞춰 마지막 레벨까지!",
+    players: { min: 2, max: 6 },
+    playTime: { minMinutes: 10, maxMinutes: 20 },
+    category: "party",
+    thumbnail: { emoji: "📡", gradient: ["#818cf8", "#0f172a"] },
+    tags: ["협력", "실시간", "타이밍", "더마인드", "AI봇"],
+    genres: ["party", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "merge-defense",
     name: "랜덤 합성 디펜스",
     nameEn: "Merge Defense",

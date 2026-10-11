@@ -160,6 +160,13 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["flawless", "🧙", "무결점 소환사", "실패 토큰 없이 승리", 1, k("flawlessWins")],
     ["success-20", "✨", "소환의 대가", "누적 성공 토큰 20개", 20, k("successes")],
   ],
+  telepathy: [
+    ["level-5", "📡", "주파수 맞추기", "한 판에 레벨 5 통과", 5, k("maxLevel")],
+    ["flawless", "🌌", "완전한 동기화", "실수 없이 마지막 레벨까지 승리", 1, k("flawlessWins")],
+    ["no-star", "🧘", "번뜩임 없이", "⚡를 한 번도 안 쓰고 승리", 1, k("noStarWins")],
+    ["perfect-20", "✨", "흔들림 없는 마음", "실수 없이 통과한 레벨 누적 20개", 20, k("perfectLevels")],
+    ["grace-10", "⏱", "아슬아슬", "0.25초 관용 판정으로 실수를 피한 순간 10번", 10, k("graceSaves")],
+  ],
   worm: [
     ["len-50", "🐛", "거대 지렁이", "길이 50 달성", 50, k("maxLength")],
     ["len-150", "🐉", "대지의 용", "길이 150 달성", 150, k("maxLength")],

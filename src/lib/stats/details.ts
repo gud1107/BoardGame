@@ -54,6 +54,13 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "상장폐지·반대매매로 잃은 자산", value: (d) => n(d.delisted) },
     { label: "코인 0으로 끝낸 판 (파산)", value: (d) => n(d.brokeGames) },
   ],
+  telepathy: [
+    { label: "최고 도달 레벨", value: (d) => `레벨 ${n(d.maxLevel)}` },
+    { label: "최고 점수", value: (d) => n(d.maxScore) },
+    { label: "실수 없이 통과한 레벨", value: (d) => n(d.perfectLevels) },
+    { label: "실수 / ⚡ 사용", value: (d) => `${n(d.mistakes)} / ${n(d.starsUsed)}` },
+    { label: "0.25초 관용 판정으로 피한 실수", value: (d) => n(d.graceSaves) },
+  ],
   perudo: [
     { label: "\"페루도!\" 적중률", value: (d) => ratio(d.dudoCorrect, d.dudoCalls) },
     { label: "\"맞아!\" 적중률", value: (d) => ratio(d.calzaCorrect, d.calzaCalls) },

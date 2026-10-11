@@ -1,0 +1,548 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  CANCEL_LOCK_MS,
+  FREE_CANCELS,
+  HOLD_TO_PLAY_MS,
+  pileTop,
+  REACH_VISIBLE_MS,
+  RESYNC_PER_LEVEL,
+  type MindAction,
+  type MindState,
+  type Reveal,
+} from "./engine";
+import Timeline, { SEAT_COLORS } from "./Timeline";
+import { telepathySound } from "./telepathySound";
+
+/**
+ * In-game screen for 텔레파시. Purely a view of the host's snapshot + intent
+ * sender; every rule decision happens on the host (engine.ts).
+ *
+ * Times in the state are host clock — `hostOffset` (host − local) converts.
+ */
+export interface TelepathyBoardProps {
+  state: MindState;
+  mySeat: number;
+  names: string[];
+  botSeats: ReadonlySet<number>;
+  hostOffset: number;
+  onAction: (action: MindAction) => void;
+}
+
+/** Wall + monotonic clock sampled ~20×/s while `active`, so clocks and countdowns move. */
+function useFrame(active: boolean) {
+  const [frame, setFrame] = useState(() => ({ wall: Date.now(), perf: performance.now() }));
+  useEffect(() => {
+    if (!active) return;
+    const id = window.setInterval(() => setFrame({ wall: Date.now(), perf: performance.now() }), 50);
+    return () => window.clearInterval(id);
+  }, [active]);
+  return frame;
+}
+
+function seatColor(seat: number) {
+  return SEAT_COLORS[seat % SEAT_COLORS.length];
+}
+
+function RevealChips({ revealed, names, tone }: { revealed: Reveal[]; names: string[]; tone: "rose" | "amber" }) {
+  return (
+    <div className="flex flex-wrap justify-center gap-2">
+      {revealed.map((r) => (
+        <div
+          key={`${r.seat}-${r.card}`}
+          className={`flex flex-col items-center rounded-xl border px-3 py-1.5 tlp-flip ${
+            tone === "rose" ? "border-rose-400/60 bg-rose-500/15" : "border-amber-300/60 bg-amber-400/10"
+          }`}
+        >
+          <span className="text-xl font-black tabular-nums text-white light:text-slate-900">{r.card}</span>
+          <span className="text-[10px]" style={{ color: seatColor(r.seat) }}>
+            {names[r.seat]}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOffset, onAction }: TelepathyBoardProps) {
+  const timed = state.phase !== "won" && state.phase !== "lost";
+  const frame = useFrame(timed);
+  const hostNow = frame.wall + hostOffset;
+  const sound = telepathySound();
+
+  const myHand = state.hands[mySeat] ?? [];
+  const myLow = myHand[0];
+
+  // ---------------------------------------------------------------- holding
+  const [hold, setHold] = useState<{ start: number; card: number } | null>(null);
+  const reachSentRef = useRef(false);
+  const [sentCard, setSentCard] = useState<number | null>(null);
+  const [cancelInfo, setCancelInfo] = useState<{ level: number; count: number; lockUntil: number }>({ level: state.level, count: 0, lockUntil: 0 });
+  const cancels = cancelInfo.level === state.level ? cancelInfo : { level: state.level, count: 0, lockUntil: 0 };
+  const locked = frame.wall < cancels.lockUntil;
+
+  // The card actually leaves the hand on the host; until the snapshot shows it
+  // gone we fade it locally so the press feels instant (§5-4 "보냄").
+  if (sentCard !== null && myLow !== sentCard) setSentCard(null);
+  const visibleHand = sentCard !== null ? myHand.slice(1) : myHand;
+  const nextCard = visibleHand[0];
+
+  const canPlay = state.phase === "playing" && nextCard !== undefined && sentCard === null && !locked;
+
+  const startHold = useCallback(() => {
+    if (!canPlay || hold !== null || nextCard === undefined) return;
+    sound.unlock();
+    reachSentRef.current = false;
+    setHold({ start: performance.now(), card: nextCard });
+  }, [canPlay, hold, nextCard, sound]);
+
+  const endHold = useCallback(
+    (countAsCancel: boolean) => {
+      if (hold === null) return;
+      setHold(null);
+      if (reachSentRef.current) onAction({ type: "reach", seat: mySeat, on: false });
+      reachSentRef.current = false;
+      if (!countAsCancel) return;
+      const count = cancels.count + 1;
+      setCancelInfo({ level: state.level, count, lockUntil: count > FREE_CANCELS ? Date.now() + CANCEL_LOCK_MS : 0 });
+    },
+    [hold, onAction, mySeat, cancels.count, state.level],
+  );
+
+  // Drive the hold: reach glow after REACH_VISIBLE_MS, play at HOLD_TO_PLAY_MS.
+  useEffect(() => {
+    if (hold === null) return;
+    let raf = 0;
+    const step = () => {
+      const elapsed = performance.now() - hold.start;
+      if (!reachSentRef.current && elapsed >= REACH_VISIBLE_MS) {
+        reachSentRef.current = true;
+        onAction({ type: "reach", seat: mySeat, on: true });
+      }
+      if (elapsed >= HOLD_TO_PLAY_MS) {
+        reachSentRef.current = false;
+        setHold(null);
+        setSentCard(hold.card);
+        onAction({ type: "play", seat: mySeat, card: hold.card });
+        return;
+      }
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => {
+      cancelAnimationFrame(raf);
+      // The engine clears everyone's reach on any phase change, so a hold
+      // dropped below needs no "reach off".
+      reachSentRef.current = false;
+    };
+  }, [hold, onAction, mySeat]);
+
+  // Phase left "playing" or the card vanished (mistake/⚡) mid-hold → drop it, no penalty.
+  if (hold !== null && (state.phase !== "playing" || nextCard !== hold.card)) setHold(null);
+
+  // Space bar = the big card, for keyboards.
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.code !== "Space" || e.repeat) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+      e.preventDefault();
+      startHold();
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.code !== "Space") return;
+      e.preventDefault();
+      endHold(true);
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, [startHold, endHold]);
+
+  const holdProgress = hold === null ? 0 : Math.min(1, Math.max(0, frame.perf - hold.start) / HOLD_TO_PLAY_MS);
+
+  // ------------------------------------------------------------------ sound
+  const prevRef = useRef({ pile: state.pile.length, phase: state.phase, level: state.level, countdown: -1 });
+  useEffect(() => {
+    const prev = prevRef.current;
+    if (state.pile.length > prev.pile && state.level === prev.level) sound.card(pileTop(state));
+    if (state.phase !== prev.phase) {
+      if (state.phase === "mistake") sound.mistake();
+      else if (state.phase === "starReveal") sound.star();
+      else if (state.phase === "starVote") sound.vote();
+      else if (state.phase === "break") sound.clear();
+      else if (state.phase === "won") sound.won();
+      else if (state.phase === "lost") sound.lost();
+    }
+    prevRef.current = { ...prev, pile: state.pile.length, phase: state.phase, level: state.level };
+  }, [state, sound]);
+
+  const countdownLeft = state.phase === "sync" && state.phaseUntil !== null ? Math.max(0, state.phaseUntil - hostNow) : null;
+  const countdownNumber = countdownLeft === null ? null : Math.ceil(countdownLeft / 1000);
+  useEffect(() => {
+    const prev = prevRef.current;
+    if (countdownNumber === null) {
+      prev.countdown = -1;
+      return;
+    }
+    if (countdownNumber !== prev.countdown) {
+      prev.countdown = countdownNumber;
+      if (countdownNumber >= 1) sound.countdown(false);
+    }
+  }, [countdownNumber, sound]);
+  const prevPhaseForGo = useRef(state.phase);
+  useEffect(() => {
+    if (prevPhaseForGo.current === "sync" && state.phase === "playing") sound.countdown(true);
+    prevPhaseForGo.current = state.phase;
+  }, [state.phase, sound]);
+
+  // ------------------------------------------------------------- derived
+  const flowRunning = state.phase === "playing" || state.phase === "starVote" || state.phase === "resume";
+  const flowElapsed = flowRunning ? Math.max(0, (state.pausedAt ?? hostNow) - state.flowStartAt) : 0;
+  const top = pileTop(state);
+  const recent = state.pile.slice(-4, -1);
+  const holdsCount = state.holds.filter(Boolean).length;
+  const myHolding = state.holds[mySeat];
+  const resyncLeft = RESYNC_PER_LEVEL - (state.resyncUsed[mySeat] ?? 0);
+  const starCooldown = Math.max(0, state.starCooldownUntil - hostNow);
+  const canStar = state.phase === "playing" && state.stars > 0 && starCooldown === 0;
+  const vote = state.starVote;
+  const myVote = vote?.yes[mySeat] ?? null;
+  const breakLeft = state.phase === "break" && state.phaseUntil !== null ? Math.max(0, Math.ceil((state.phaseUntil - hostNow) / 1000)) : null;
+  const levelLog = state.log[state.log.length - 1];
+
+  const ring = 2 * Math.PI * 54;
+  const ringFrac = (flowElapsed % 10_000) / 10_000;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <style>{`
+        @keyframes tlp-reach { 0%,100% { box-shadow: 0 0 0 0 rgba(250,204,21,.0) } 50% { box-shadow: 0 0 0 6px rgba(250,204,21,.45) } }
+        .tlp-reach { animation: tlp-reach .8s ease-in-out infinite; }
+        @keyframes tlp-flip { from { transform: rotateY(90deg); opacity: 0 } to { transform: rotateY(0); opacity: 1 } }
+        .tlp-flip { animation: tlp-flip .45s ease-out both; }
+        @keyframes tlp-land { from { transform: translateY(-18px) scale(1.15); opacity: .2 } to { transform: none; opacity: 1 } }
+        .tlp-land { animation: tlp-land .3s cubic-bezier(.2,.9,.3,1.2) both; }
+        @keyframes tlp-shake { 0%,100% { transform: none } 20% { transform: translateX(-6px) } 40% { transform: translateX(6px) } 60% { transform: translateX(-4px) } 80% { transform: translateX(3px) } }
+        .tlp-shake { animation: tlp-shake .5s ease-out; }
+        @keyframes tlp-pop { 0% { transform: scale(.4); opacity: 0 } 60% { transform: scale(1.15); opacity: 1 } 100% { transform: scale(1) } }
+        .tlp-pop { animation: tlp-pop .5s ease-out both; }
+        @media (prefers-reduced-motion: reduce) { .tlp-reach,.tlp-flip,.tlp-land,.tlp-shake,.tlp-pop { animation: none } }
+      `}</style>
+
+      {/* Status strip */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-indigo-400/20 bg-indigo-950/40 px-4 py-2.5 light:border-indigo-200 light:bg-indigo-50">
+        <div className="flex items-baseline gap-2">
+          <span className="text-xs text-indigo-200/70 light:text-indigo-500">레벨</span>
+          <span className="text-xl font-black text-white light:text-slate-900">
+            {state.level}
+            <span className="text-sm font-semibold text-white/40 light:text-slate-400"> / {state.maxLevel}</span>
+          </span>
+          {state.practice && <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-bold text-emerald-200 light:text-emerald-700">연습</span>}
+        </div>
+        <div className="flex items-center gap-3 text-sm">
+          <span className={`flex items-center gap-0.5 ${state.phase === "mistake" ? "tlp-shake" : ""}`} aria-label={`하트 ${state.lives}개`}>
+            {state.practice ? "❤️ ∞" : state.lives > 0 ? Array.from({ length: state.lives }, (_, i) => <span key={i}>❤️</span>) : <span className="text-white/40">💔 0</span>}
+          </span>
+          <span className="flex items-center gap-0.5" aria-label={`번뜩임 ${state.stars}개`}>
+            {state.practice ? "⚡ ∞" : state.stars > 0 ? Array.from({ length: state.stars }, (_, i) => <span key={i}>⚡</span>) : <span className="text-white/40 light:text-slate-400">⚡ 0</span>}
+          </span>
+        </div>
+      </div>
+
+      {/* Seats */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {state.hands.map((hand, seat) => {
+          const reaching = state.reaching[seat] && state.phase === "playing";
+          const away = state.away[seat];
+          return (
+            <div
+              key={seat}
+              className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 transition ${reaching ? "tlp-reach border-yellow-300/70" : "border-white/10 light:border-slate-200"} ${
+                seat === mySeat ? "bg-white/[0.07] light:bg-indigo-50" : "bg-white/[0.03] light:bg-white"
+              }`}
+            >
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: seatColor(seat) }} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-semibold text-white light:text-slate-800">
+                  {names[seat]}
+                  {seat === mySeat && <span className="ml-1 text-indigo-300 light:text-indigo-500">(나)</span>}
+                  {botSeats.has(seat) && !names[seat]?.startsWith("🤖") && <span className="ml-1">🤖</span>}
+                </p>
+                <p className="text-[11px] text-white/50 light:text-slate-500">
+                  {away ? (
+                    <span className="text-amber-300 light:text-amber-600">📡 연결 대기 중</span>
+                  ) : state.phase === "sync" ? (
+                    state.holds[seat] ? <span className="text-emerald-300 light:text-emerald-600">🖐 준비</span> : "…"
+                  ) : state.phase === "break" ? (
+                    state.readies[seat] ? <span className="text-emerald-300 light:text-emerald-600">✓ 준비</span> : "쉬는 중"
+                  ) : reaching ? (
+                    <span className="font-semibold text-yellow-300 light:text-amber-600">✋ 뻗는 중</span>
+                  ) : (
+                    <>카드 {hand.length}장</>
+                  )}
+                </p>
+              </div>
+              <div className="flex -space-x-2">
+                {Array.from({ length: Math.min(hand.length, 6) }, (_, i) => (
+                  <span key={i} className="h-5 w-3.5 rounded-[3px] border border-indigo-200/40 bg-gradient-to-br from-indigo-500 to-violet-700" />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Center stage */}
+      <div className="relative flex min-h-[18rem] flex-col items-center justify-center gap-3 overflow-hidden rounded-3xl border border-indigo-400/20 bg-[radial-gradient(circle_at_50%_40%,rgba(99,102,241,0.25),rgba(15,23,42,0.6)_70%)] p-4 light:border-indigo-200 light:bg-[radial-gradient(circle_at_50%_40%,rgba(199,210,254,0.9),rgba(248,250,252,1)_70%)]">
+        {state.phase === "sync" && (
+          <div className="flex flex-col items-center gap-3 text-center">
+            {countdownNumber !== null && countdownNumber > 0 ? (
+              <span key={countdownNumber} className="tlp-pop text-7xl font-black text-white light:text-indigo-700">
+                {countdownNumber}
+              </span>
+            ) : (
+              <>
+                <p className="text-sm font-semibold text-indigo-100 light:text-indigo-700">
+                  {state.level > 0 && state.pile.length === 0 && state.levelStartedAt === null ? `레벨 ${state.level} — 1인당 ${state.level}장` : "다시 마음을 맞춰요"}
+                </p>
+                <p className="max-w-xs text-xs text-white/60 light:text-slate-500">모두가 🖐를 켜면 3초 뒤 시작해요. 숫자는 말하지 않기!</p>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                sound.unlock();
+                onAction({ type: "hold", seat: mySeat, on: !myHolding });
+              }}
+              disabled={state.away[mySeat]}
+              className={`flex h-24 w-24 flex-col items-center justify-center rounded-full border-2 text-3xl transition ${
+                myHolding
+                  ? "border-emerald-300 bg-emerald-500/30 shadow-[0_0_30px_rgba(52,211,153,0.5)]"
+                  : "border-white/30 bg-white/10 hover:border-white/60 light:border-indigo-300 light:bg-white"
+              }`}
+            >
+              🖐
+              <span className="text-[11px] font-semibold text-white/80 light:text-slate-700">{myHolding ? "준비 완료" : "준비"}</span>
+            </button>
+            <p className="text-xs text-white/50 light:text-slate-500">
+              {holdsCount} / {state.playerCount}명 준비
+            </p>
+          </div>
+        )}
+
+        {(state.phase === "playing" || state.phase === "starVote" || state.phase === "resume") && (
+          <>
+            <div className="relative flex h-40 w-40 items-center justify-center">
+              <svg className="absolute inset-0 -rotate-90" viewBox="0 0 120 120" aria-hidden>
+                <circle cx="60" cy="60" r="54" fill="none" stroke="currentColor" strokeWidth="5" className="text-white/10 light:text-indigo-100" />
+                <circle
+                  cx="60"
+                  cy="60"
+                  r="54"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="5"
+                  strokeLinecap="round"
+                  strokeDasharray={ring}
+                  strokeDashoffset={ring * (1 - ringFrac)}
+                  className="text-indigo-300 light:text-indigo-500"
+                />
+              </svg>
+              <div key={state.pile.length} className="tlp-land flex h-24 w-[4.5rem] flex-col items-center justify-center rounded-xl border-2 border-white/80 bg-gradient-to-br from-slate-50 to-indigo-100 shadow-xl">
+                {top > 0 ? (
+                  <>
+                    <span className="text-3xl font-black tabular-nums text-indigo-900">{top}</span>
+                    <span className="text-[9px]" style={{ color: seatColor(state.pile[state.pile.length - 1].seat) }}>
+                      {names[state.pile[state.pile.length - 1].seat]}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-xs text-indigo-400">비어 있음</span>
+                )}
+              </div>
+            </div>
+            <p className="text-sm font-semibold tabular-nums text-indigo-100 light:text-indigo-700">
+              ⏱ {(flowElapsed / 1000).toFixed(1)}초{state.pausedAt !== null && <span className="ml-1 text-xs text-amber-300 light:text-amber-600">(멈춤)</span>}
+            </p>
+            {recent.length > 0 && (
+              <div className="flex items-center gap-1.5 text-xs text-white/50 light:text-slate-500">
+                이전:
+                {recent.map((p, i) => (
+                  <span key={i} className="rounded border border-white/15 px-1.5 tabular-nums light:border-slate-300">
+                    {p.card}
+                  </span>
+                ))}
+              </div>
+            )}
+            {state.phase === "resume" && <p className="text-xs text-amber-200 light:text-amber-700">⚡ 취소 — 곧 이어서 진행해요</p>}
+          </>
+        )}
+
+        {state.phase === "mistake" && state.lastMistake && (
+          <div className="flex flex-col items-center gap-3 text-center">
+            <span className="tlp-pop text-5xl">💔</span>
+            <p className="text-sm font-bold text-rose-200 light:text-rose-700">
+              {state.lastMistake.trigger.card}이(가) 놓였는데 더 낮은 카드가 남아 있었어요
+            </p>
+            <RevealChips revealed={state.lastMistake.revealed} names={names} tone="rose" />
+            <p className="text-xs text-white/50 light:text-slate-500">{state.practice ? "연습 모드라 하트는 그대로예요" : `하트 −1 · 남은 하트 ${state.lives}개`}</p>
+          </div>
+        )}
+
+        {state.phase === "starReveal" && state.lastStar && (
+          <div className="flex flex-col items-center gap-3 text-center">
+            <span className="tlp-pop text-5xl">⚡</span>
+            <p className="text-sm font-bold text-amber-200 light:text-amber-700">번뜩임! 모두 가장 낮은 카드를 공개했어요</p>
+            <RevealChips revealed={state.lastStar.revealed} names={names} tone="amber" />
+          </div>
+        )}
+
+        {state.phase === "break" && (
+          <div className="flex w-full flex-col items-center gap-3 text-center">
+            <span className="tlp-pop text-4xl">✨</span>
+            <p className="text-lg font-black text-white light:text-slate-900">레벨 {state.level} 통과!</p>
+            {levelLog && levelLog.mistakes === 0 && <p className="text-xs font-semibold text-emerald-300 light:text-emerald-600">실수 없이 통과 +50점</p>}
+            {state.lastReward && (
+              <p className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white light:bg-indigo-100 light:text-indigo-800">
+                보상: {state.lastReward.kind === "life" ? "❤️ 하트 +1" : "⚡ 번뜩임 +1"}
+                {!state.lastReward.granted && " (이미 최대라 사라짐)"}
+              </p>
+            )}
+            {levelLog && <Timeline log={levelLog} names={names} />}
+            <button
+              type="button"
+              onClick={() => onAction({ type: "ready", seat: mySeat })}
+              disabled={state.readies[mySeat]}
+              className="rounded-full bg-indigo-500 px-5 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:opacity-50"
+            >
+              {state.readies[mySeat] ? "다른 사람 기다리는 중…" : `다음 레벨 준비 (${state.level + 1}레벨 · ${state.level + 1}장)`}
+            </button>
+            {breakLeft !== null && <p className="text-[11px] text-white/40 light:text-slate-400">{breakLeft}초 뒤 자동으로 시작</p>}
+          </div>
+        )}
+
+        {/* ⚡ vote overlay */}
+        {state.phase === "starVote" && vote && (
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm light:bg-white/80">
+            <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-2xl border border-amber-300/40 bg-slate-900 p-4 text-center light:border-amber-300 light:bg-white">
+              <p className="text-sm font-bold text-amber-200 light:text-amber-700">⚡ {names[vote.proposer]}님이 번뜩임을 제안했어요</p>
+              <p className="text-xs text-white/60 light:text-slate-500">모두 찬성하면 각자 가장 낮은 카드 1장을 공개하고 버려요</p>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
+                <div className="h-full bg-amber-300" style={{ width: `${Math.max(0, Math.min(100, ((vote.deadline - hostNow) / 8000) * 100))}%` }} />
+              </div>
+              <div className="flex gap-1">
+                {vote.yes.map((v, seat) => (
+                  <span key={seat} title={names[seat]} className="text-sm">
+                    {v === true ? "✅" : "⏳"}
+                  </span>
+                ))}
+              </div>
+              {myVote === null ? (
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => onAction({ type: "starVote", seat: mySeat, yes: false })} className="rounded-full border border-white/20 px-4 py-1.5 text-sm text-white/80 light:border-slate-300 light:text-slate-700">
+                    반대
+                  </button>
+                  <button type="button" onClick={() => onAction({ type: "starVote", seat: mySeat, yes: true })} className="rounded-full bg-amber-400 px-4 py-1.5 text-sm font-semibold text-slate-900">
+                    찬성
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs text-white/60 light:text-slate-500">다른 사람 기다리는 중…</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Discards */}
+      {state.discards.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-white/50 light:text-slate-500">
+          버린 카드:
+          {[...state.discards]
+            .sort((a, b) => a.card - b.card)
+            .map((d) => (
+              <span
+                key={d.card}
+                className={`rounded px-1.5 tabular-nums ${d.reason === "mistake" ? "bg-rose-500/15 text-rose-200 light:text-rose-700" : "border border-dashed border-amber-300/60 text-amber-200 light:text-amber-700"}`}
+              >
+                {d.card}
+              </span>
+            ))}
+        </div>
+      )}
+
+      {/* My hand */}
+      <div className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 light:border-slate-200 light:bg-white">
+        <div className="flex flex-wrap justify-center gap-1.5">
+          {visibleHand.length === 0 ? (
+            <p className="text-xs text-white/50 light:text-slate-500">{sentCard !== null ? "보내는 중…" : "손에 카드가 없어요 — 다른 사람을 기다려요"}</p>
+          ) : (
+            visibleHand.map((c, i) => (
+              <span
+                key={c}
+                className={`rounded-md border px-2 py-0.5 text-sm font-bold tabular-nums ${
+                  i === 0 ? "border-indigo-300 bg-indigo-500/20 text-white light:text-indigo-800" : "border-white/15 text-white/60 light:border-slate-300 light:text-slate-500"
+                }`}
+              >
+                {c}
+              </span>
+            ))
+          )}
+        </div>
+
+        <button
+          type="button"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+            startHold();
+          }}
+          onPointerUp={() => endHold(true)}
+          onPointerCancel={() => endHold(false)}
+          onContextMenu={(e) => e.preventDefault()}
+          disabled={!canPlay && hold === null}
+          aria-label={nextCard !== undefined ? `${nextCard} 카드를 꾹 눌러서 내기` : "낼 카드 없음"}
+          className="relative flex h-36 w-28 touch-none select-none flex-col items-center justify-center rounded-2xl border-2 border-white/80 bg-gradient-to-br from-slate-50 to-indigo-100 shadow-2xl transition active:scale-95 disabled:opacity-40"
+          style={{ WebkitTouchCallout: "none" }}
+        >
+          {holdProgress > 0 && (
+            <span
+              className="pointer-events-none absolute -inset-1.5 rounded-[1.1rem]"
+              style={{ background: `conic-gradient(#facc15 ${holdProgress * 360}deg, transparent 0)`, mask: "radial-gradient(farthest-side, transparent calc(100% - 5px), #000 0)", WebkitMask: "radial-gradient(farthest-side, transparent calc(100% - 5px), #000 0)" }}
+            />
+          )}
+          <span className="text-4xl font-black tabular-nums text-indigo-900">{nextCard ?? "—"}</span>
+          <span className="mt-1 text-[10px] font-semibold text-indigo-500">{locked ? "잠깐! 곧 다시" : "꾹 눌러서 내기"}</span>
+        </button>
+        <p className="text-[11px] text-white/40 light:text-slate-400">
+          0.6초 누르면 나가요 · 누르는 동안 다른 사람에게 ✋가 보여요 · 스페이스바도 돼요
+          {cancels.count > 0 && ` · 취소 ${Math.min(cancels.count, FREE_CANCELS)}/${FREE_CANCELS}`}
+        </p>
+
+        <div className="flex flex-wrap justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => onAction({ type: "starPropose", seat: mySeat })}
+            disabled={!canStar}
+            className="rounded-full border border-amber-300/50 px-4 py-1.5 text-xs font-semibold text-amber-200 transition hover:bg-amber-400/10 disabled:opacity-40 light:text-amber-700"
+          >
+            ⚡ 번뜩임 제안{starCooldown > 0 && state.phase === "playing" ? ` (${Math.ceil(starCooldown / 1000)}초)` : ""}
+          </button>
+          <button
+            type="button"
+            onClick={() => onAction({ type: "resync", seat: mySeat })}
+            disabled={state.phase !== "playing" || resyncLeft <= 0}
+            className="rounded-full border border-white/20 px-4 py-1.5 text-xs font-semibold text-white/70 transition hover:bg-white/10 disabled:opacity-40 light:border-slate-300 light:text-slate-600"
+          >
+            🖐 다시 맞추기 ({resyncLeft})
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
