@@ -77,6 +77,18 @@ const SFX = {
     { inst: "upright", note: "D2", at: 3.2, dur: 2.2 },
     ...fx.arp("musicbox", ["A5", "D6", "F#6", "A6"], 0.12, 0.8, 0.7).map((p) => ({ ...p, at: (p.at ?? 0) + 3.6 })),
   ],
+  /** New personal best: a rising whoosh, a quick glock run, a brass "ta-da" and coin sparkles. ~1.8s. */
+  newRecord: [
+    fx.whoosh(500, 5000, 0.35, 0.12),
+    ...fx.arp("glock", ["D6", "E6", "F#6", "A6", "B6", "D7"], 0.045, 0.4, 0.85).map((p) => ({ ...p, at: (p.at ?? 0) + 0.15 })),
+    ...fx.chord("brass", ["D4", "A4"], 0.18, 1, 0.45),
+    ...fx.chord("brass", ["D4", "F#4", "A4", "D5"], 1.1, 1.1, 0.68),
+    ...fx.chord("pad", ["D4", "F#4", "A4", "D5"], 1.2, 0.8, 0.68),
+    { inst: "bell", note: "A6", at: 0.68, dur: 1.1, gain: 0.7 },
+    ...fx.coin(0.9, 2600, 0.1),
+    ...fx.coin(1.02, 3100, 0.1),
+    ...fx.coin(1.14, 3600, 0.09),
+  ],
   /** Game over (hearts gone): a slow, falling D-minor line that doesn't resolve. ~3.5s. */
   defeat: [
     ...fx.arp("musicbox", ["A5", "F5", "D5", "A4"], 0.32, 1.1, 0.85),

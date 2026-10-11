@@ -460,6 +460,16 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
     return () => getTelepathyBgm().setTempo(1);
   }, [state.phase]);
   const scoreShown = useCountUp(computeScore(state));
+  // 🆕 New personal best: the first time this game's score passes the record,
+  // play the record fanfare once — after the level-clear music (score only
+  // rises on a clear). The final level's record is played by the game
+  // component on the result screen instead (this board unmounts there).
+  const recordBroken = bestScore > 0 && !state.practice && computeScore(state) > bestScore;
+  useEffect(() => {
+    if (!recordBroken) return;
+    const id = window.setTimeout(() => getTelepathyBgm().play("newRecord"), 1700);
+    return () => window.clearTimeout(id);
+  }, [recordBroken]);
 
   const ring = 2 * Math.PI * 54;
   const ringFrac = (flowElapsed % 10_000) / 10_000;

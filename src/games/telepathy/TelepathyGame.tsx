@@ -624,6 +624,15 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
     // Final fanfare / sigh (the board has already unmounted for the result screen).
     getTelepathyBgm().play(won ? "victory" : "defeat");
     if (gameState.practice) return; // 연습 모드는 기록하지 않아요 (§14)
+    // A record that only got broken now (on the final clear / last heart) gets
+    // its fanfare here, after the victory/defeat music.
+    const finalScore = computeScore(gameState);
+    // Score only rises on clears: a loss adds nothing, and on a win the board
+    // already celebrated any record passed before the last level.
+    const last = gameState.log.length - 1;
+    const beforeFinal = computeScore({ ...gameState, phase: "playing", log: gameState.log.map((l, i) => (i === last ? { ...l, cleared: false } : l)) });
+    const brokeNow = won && bestBefore > 0 && finalScore > bestBefore && beforeFinal <= bestBefore;
+    if (brokeNow) window.setTimeout(() => getTelepathyBgm().play("newRecord"), won ? 5200 : 3700);
     saveBestScore(gameState.playerCount, computeScore(gameState), gameState.stats.levelsCleared);
     const rankings = gameState.hands.map((_, seat) => ({ seat, rank: won ? 1 : 2 }));
     const s = gameState.stats;
@@ -644,7 +653,7 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
       })),
       finishedAt: new Date().toISOString(),
     });
-  }, [gameState, mySeat, ids, botTakeover, botSeats, botLevels, onComplete]);
+  }, [gameState, mySeat, ids, botTakeover, botSeats, botLevels, onComplete, bestBefore]);
 
   // ------------------------------------------------------------- leave
   function handleLeave() {
