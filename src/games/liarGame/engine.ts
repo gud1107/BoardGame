@@ -26,6 +26,7 @@
 import { seededRng, shuffle } from "@/lib/rng";
 import { pickByLevel, type BotLevel, type ScoredCandidate } from "../shared/bot/botDifficulty";
 import { CATEGORIES, GENERIC_HINTS, RANDOM_CATEGORY, getCategory, type Category } from "./words";
+import { CATEGORY_BROAD, VAGUE_KEYS, WORD_KEYS } from "./lexicon";
 
 export type Seat = number;
 export type Mode = "classic" | "fool";
@@ -48,6 +49,26 @@ export interface GameOptions {
   /** `words.ts`의 카테고리 id 또는 "random". */
   readonly category: string;
 }
+
+/**
+ * 두 가지 버전(2026-10-11 요청으로 방 만들기 첫 선택으로 분리). 엔진 값은 그대로 `mode`.
+ * - classic "아는 라이어": 라이어는 자기가 라이어인 걸 알고, 카테고리만 받는다.
+ * - fool "모르는 라이어"(룰북 §14.1 바보 모드): 라이어도 비슷한 가짜 제시어를 받아 자기가 라이어인 줄 모른다.
+ */
+export const MODE_INFO: Record<Mode, { emoji: string; name: string; short: string; desc: string }> = {
+  classic: {
+    emoji: "🎭",
+    name: "아는 라이어",
+    short: "라이어가 알고 시작",
+    desc: "라이어는 자기가 라이어인 걸 알고 시작해요. 제시어 없이 카테고리만 듣고, 정체를 숨기며 제시어를 추리하세요.",
+  },
+  fool: {
+    emoji: "🤪",
+    name: "모르는 라이어",
+    short: "라이어도 모르고 시작",
+    desc: "라이어도 비슷한 가짜 제시어를 받아서 자기가 라이어인 줄 몰라요. 모두가 시민인 척… 아니, 진짜 시민이라고 믿고 시작해요!",
+  },
+};
 
 export const DEFAULT_OPTIONS: GameOptions = { rounds: 5, laps: 1, mode: "classic", guessMode: "choice", category: RANDOM_CATEGORY };
 
@@ -183,7 +204,7 @@ export function rejectReason(state: GameState, seat: Seat, text: string, kind: "
     if (/^[ㄱ-ㅎ]+$/.test(norm) && norm.includes(cho)) return "초성 힌트는 금지예요!";
   }
   if (kind === "describe") {
-    if (state.descriptions.some((d) => !d.auto && normalize(d.text) === norm)) return "이미 나온 설명이에요. 다르게 말해보세요.";
+    if (visibleDescriptions(state, seat).some((d) => !d.auto && normalize(d.text) === norm)) return "이미 나온 설명이에요. 다르게 말해보세요.";
   }
   return null;
 }
@@ -285,25 +306,38 @@ export function totalDescriptions(state: GameState): number {
   return state.seatCount * state.options.laps;
 }
 
-/** 설명 단계에서 지금 말할 차례인 좌석(그 외 단계는 null). */
-export function currentDescriber(state: GameState): Seat | null {
-  if (state.phase !== "describe") return null;
-  const n = state.descriptions.length;
-  if (n >= totalDescriptions(state)) return null;
-  return seatsInOrder(state)[n % state.seatCount];
-}
-
 export function currentLap(state: GameState): number {
   return Math.floor(state.descriptions.length / state.seatCount) + 1;
+}
+
+/**
+ * 설명은 바퀴마다 모두 동시에 비공개로 쓴다 — 이번 바퀴에 아직 안 쓴 좌석들.
+ * (차례대로 말하면 뒷사람이 앞사람 설명을 보고 따라 쓸 수 있어서 바꿨다, 2026-10-11 요청.)
+ */
+export function describePending(state: GameState): Seat[] {
+  if (state.phase !== "describe") return [];
+  const lap = currentLap(state);
+  const done = new Set(state.descriptions.filter((d) => d.lap === lap).map((d) => d.seat));
+  return seatsInOrder(state).filter((s) => !done.has(s));
+}
+
+/** 이번 바퀴에서 아직 안 쓴 첫 좌석(테스트·하위 호환용). 실제로는 대기 좌석 누구나 먼저 낼 수 있다. */
+export function currentDescriber(state: GameState): Seat | null {
+  return describePending(state)[0] ?? null;
+}
+
+/** `viewer`에게 보이는 설명 — 설명 단계에선 이번 바퀴 남의 설명이 모두 제출될 때까지 가려진다. */
+export function visibleDescriptions(state: GameState, viewer: Seat): readonly Description[] {
+  if (state.phase !== "describe") return state.descriptions;
+  const lap = currentLap(state);
+  return state.descriptions.filter((d) => d.lap < lap || d.seat === viewer);
 }
 
 /** 지금 결정을 기다리는 모든 좌석(동시 행동 단계 포함). 봇 스케줄러와 무응답 판정이 쓴다. */
 export function pendingSeats(state: GameState): Seat[] {
   switch (state.phase) {
-    case "describe": {
-      const s = currentDescriber(state);
-      return s === null ? [] : [s];
-    }
+    case "describe":
+      return describePending(state);
     case "discuss":
       return Array.from({ length: state.seatCount }, (_, i) => i).filter((s) => !state.readySeats.includes(s));
     case "vote":
@@ -327,7 +361,9 @@ function bumpIdle(state: GameState, seats: readonly Seat[], reset: readonly Seat
   return state.idleStreak.map((v, s) => (seats.includes(s) ? v + 1 : reset.includes(s) ? 0 : v));
 }
 
+/** 바퀴가 다 채워질 때만 단계가 넘어간다(타이머도 바퀴 단위). */
 function afterDescription(state: GameState): GameState {
+  if (state.descriptions.length % state.seatCount !== 0) return state;
   if (state.descriptions.length < totalDescriptions(state)) return { ...state, stage: state.stage + 1 };
   return { ...state, phase: "discuss", stage: state.stage + 1, readySeats: [] };
 }
@@ -430,7 +466,7 @@ function maybeEndVote(state: GameState): GameState {
 export function applyAction(state: GameState, action: EngineAction): GameState {
   switch (action.type) {
     case "DESCRIBE": {
-      if (currentDescriber(state) !== action.seat) return state;
+      if (!describePending(state).includes(action.seat)) return state;
       if (rejectReason(state, action.seat, action.text, "describe")) return state;
       const next: GameState = {
         ...state,
@@ -442,7 +478,7 @@ export function applyAction(state: GameState, action: EngineAction): GameState {
     case "CHAT": {
       if (state.phase === "describe" || state.phase === "ended") return state;
       if (action.seat < 0 || action.seat >= state.seatCount) return state;
-      if (action.mention === undefined && rejectReason(state, action.seat, action.text, "chat")) return state;
+      if (rejectReason(state, action.seat, action.text, "chat")) return state;
       const msg: ChatMessage = {
         seat: action.seat,
         round: state.roundIndex + 1,
@@ -480,12 +516,13 @@ export function applyAction(state: GameState, action: EngineAction): GameState {
       if (action.stage !== state.stage) return state;
       switch (state.phase) {
         case "describe": {
-          const seat = currentDescriber(state);
-          if (seat === null) return state;
+          const missing = describePending(state);
+          if (missing.length === 0) return state;
+          const lap = currentLap(state);
           const next: GameState = {
             ...state,
-            descriptions: [...state.descriptions, { seat, lap: currentLap(state), text: "(시간 초과 — 패스)", auto: true }],
-            idleStreak: bumpIdle(state, [seat], []),
+            descriptions: [...state.descriptions, ...missing.map((seat) => ({ seat, lap, text: "(시간 초과 — 패스)", auto: true }))],
+            idleStreak: bumpIdle(state, missing, []),
           };
           return afterDescription(next);
         }
@@ -539,60 +576,110 @@ export function winnerSeats(state: GameState): Seat[] {
 
 // ---------------------------------------------------------------------------
 // AI 봇 (§7.1) — 자기 좌석이 아는 정보만 쓴다.
+//
+// 사람의 자유로운 설명을 알아듣기 위해 단어별 연상어 사전(lexicon.ts)과 봇 힌트 문장을
+// 합친 "단서 사전"으로 설명마다 단어별 근거 점수(`wordEvidence`, 여러 단어가 공유하는
+// 단서는 IDF로 가중치↓)를 매기고, 카테고리 안 단어들의 확률(`wordPosterior`)로 추리한다.
+// 실력은 LiarBotSkill.test.ts(봇 데이터와 분리된 사람 말투 모음으로 채운 판)로 잰다.
 // ---------------------------------------------------------------------------
 
-const PARTICLES = /(이에요|예요|에서|해요|어요|아요|이요|으로|하고|이랑|랑|은|는|이|가|을|를|에|도|요|의|로|와|과)$/;
+const PARTICLES = /(이에요|예요|에서|해요|어요|아요|이요|으로|하고|이랑|처럼|까지|부터|이죠|이지|죠|지|랑|은|는|이|가|을|를|에|도|요|의|로|와|과|만)$/;
 
+/** 설명을 어절 단위로 자르고 조사·어미를 떼어낸 형태와 원형을 함께 돌려준다. */
 function tokens(text: string): string[] {
-  return text
-    .split(/[\s,.!?~·]+/)
-    .map((t) => t.replace(PARTICLES, ""))
-    .filter((t) => t.length >= 2 || /\d/.test(t));
-}
-
-/** 설명 하나가 단어 후보와 얼마나 맞는지(0~1) — 그 단어의 힌트 사전과 겹치는 토큰 비율. */
-export function wordAffinity(categoryId: string, word: string, text: string): number {
-  const entry = getCategory(categoryId)?.words.find((w) => w.word === word);
-  if (!entry) return 0;
-  const toks = tokens(text);
-  if (toks.length === 0) return 0;
-  const bank = entry.hints.join(" ");
-  const hit = toks.filter((t) => bank.includes(t)).length;
-  return hit / toks.length;
-}
-
-/** 지금까지의 설명(자기 것 제외)으로 매긴 카테고리 내 단어별 그럴듯함. 라이어 봇의 추리. */
-export function candidateScores(state: GameState, viewer: Seat): { word: string; score: number }[] {
-  const plan = currentPlan(state);
-  const cat = getCategory(plan.categoryId)!;
-  const others = state.descriptions.filter((d) => d.seat !== viewer && !d.auto);
-  return cat.words.map((w) => ({
-    word: w.word,
-    score: others.reduce((sum, d) => sum + wordAffinity(plan.categoryId, w.word, d.text), 0),
-  }));
-}
-
-/** 봇이 보는 좌석별 의심도(높을수록 라이어 같음). */
-export function suspicionScores(state: GameState, viewer: Seat): Record<Seat, number> {
-  const plan = currentPlan(state);
-  const believed = knownWordFor(state, viewer) ?? bestGuessWord(state, viewer);
-  const out: Record<Seat, number> = {};
-  for (let s = 0; s < state.seatCount; s++) {
-    if (s === viewer) continue;
-    const mine = state.descriptions.filter((d) => d.seat === s);
-    if (mine.length === 0) {
-      out[s] = 0.5;
-      continue;
-    }
-    let sus = 0;
-    for (const d of mine) {
-      if (d.auto) sus += 1;
-      else sus += 1 - Math.min(1, wordAffinity(plan.categoryId, believed, d.text) * 1.5);
-    }
-    const mentions = state.chat.filter((m) => m.round === state.roundIndex + 1 && m.mention === s && m.seat !== viewer).length;
-    out[s] = sus / mine.length + mentions * CHAT_MENTION_WEIGHT;
+  const out: string[] = [];
+  for (const raw of text.toLowerCase().split(/[\s,.!?~·…()"']+/)) {
+    if (!raw) continue;
+    out.push(raw);
+    const stripped = raw.replace(PARTICLES, "");
+    if (stripped && stripped !== raw) out.push(stripped);
   }
   return out;
+}
+
+function keyMatches(token: string, key: string): boolean {
+  if (key.length === 1) return token.startsWith(key);
+  if (token.includes(key)) return true;
+  return token.length >= 2 && key.includes(token) && token.length >= Math.ceil(key.length * 0.6);
+}
+
+interface CategoryLex {
+  readonly words: readonly string[];
+  readonly keys: ReadonlyMap<string, readonly string[]>;
+  readonly idf: ReadonlyMap<string, number>;
+}
+const lexCache = new Map<string, CategoryLex>();
+const VAGUE = VAGUE_KEYS.split(/\s+/).filter(Boolean);
+
+function categoryLex(categoryId: string): CategoryLex {
+  const cached = lexCache.get(categoryId);
+  if (cached) return cached;
+  const cat = getCategory(categoryId);
+  const words = cat ? cat.words.map((w) => w.word) : [];
+  const keys = new Map<string, string[]>();
+  for (const w of cat?.words ?? []) {
+    const set = new Set<string>((WORD_KEYS[`${categoryId}:${w.word}`] ?? "").split(/\s+/).filter(Boolean));
+    for (const h of w.hints) for (const t of tokens(h)) if (t.length >= 2 && !VAGUE.includes(t)) set.add(t);
+    keys.set(w.word, [...set]);
+  }
+  const df = new Map<string, number>();
+  for (const list of keys.values()) for (const k of list) df.set(k, (df.get(k) ?? 0) + 1);
+  const idf = new Map<string, number>();
+  for (const [k, n] of df) idf.set(k, Math.log(1 + words.length / n));
+  const lex = { words, keys, idf };
+  lexCache.set(categoryId, lex);
+  return lex;
+}
+
+const evidenceCache = new Map<string, number>();
+
+/** 설명 하나가 `word`를 가리킨다는 근거 점수(0 이상). 어절마다 가장 센 단서 하나만 센다. */
+export function wordEvidence(categoryId: string, word: string, text: string): number {
+  const cacheKey = `${categoryId}|${word}|${text}`;
+  const hit = evidenceCache.get(cacheKey);
+  if (hit !== undefined) return hit;
+  const value = computeEvidence(categoryId, word, text);
+  if (evidenceCache.size > 50_000) evidenceCache.clear();
+  evidenceCache.set(cacheKey, value);
+  return value;
+}
+
+function computeEvidence(categoryId: string, word: string, text: string): number {
+  const lex = categoryLex(categoryId);
+  const keys = lex.keys.get(word);
+  if (!keys) return 0;
+  let score = 0;
+  for (const t of tokens(text)) {
+    let best = 0;
+    for (const k of keys) if (keyMatches(t, k)) best = Math.max(best, lex.idf.get(k) ?? 0);
+    score += best;
+  }
+  return score;
+}
+
+/** 0~1 — 이전 버전 API 호환용(근거가 있으면 1에 가깝다). */
+export function wordAffinity(categoryId: string, word: string, text: string): number {
+  const e = wordEvidence(categoryId, word, text);
+  return e / (e + 1);
+}
+
+const POSTERIOR_SHARPNESS = 1.3;
+
+/** 주어진 설명들로 본 카테고리 단어별 확률(합 1). */
+function posteriorFrom(categoryId: string, texts: readonly string[]): { word: string; score: number }[] {
+  const lex = categoryLex(categoryId);
+  const logits = lex.words.map((w) => POSTERIOR_SHARPNESS * texts.reduce((s, t) => s + wordEvidence(categoryId, w, t), 0));
+  const max = Math.max(...logits);
+  const exps = logits.map((l) => Math.exp(l - max));
+  const sum = exps.reduce((a, b) => a + b, 0);
+  return lex.words.map((word, i) => ({ word, score: exps[i] / sum }));
+}
+
+/** `viewer`가 볼 수 있는 남의 설명으로 매긴 카테고리 내 단어별 확률. 라이어 봇의 추리. */
+export function candidateScores(state: GameState, viewer: Seat): { word: string; score: number }[] {
+  const plan = currentPlan(state);
+  const texts = visibleDescriptions(state, viewer).filter((d) => d.seat !== viewer && !d.auto).map((d) => d.text);
+  return posteriorFrom(plan.categoryId, texts);
 }
 
 export function bestGuessWord(state: GameState, viewer: Seat): string {
@@ -601,51 +688,113 @@ export function bestGuessWord(state: GameState, viewer: Seat): string {
   return scored.find((c) => c.score === top)!.word;
 }
 
-/**
- * 밸런스 손잡이(봇끼리 150판 시뮬레이션으로 맞춤 — HANDOFF.md 참고).
- * 봇 시민은 힌트 사전 문장을 그대로 말해서, 라이어 봇이 사전으로 역추적하면 사람보다 훨씬
- * 쉽게 제시어를 알아낸다. 그래서 라이어 봇의 "추리한 단어 힌트 빌려 쓰기"와 "정답 직감"을
- * 레벨별 확률로 묶어 사람 라이어와 비슷한 체감으로 낮춘다.
- */
-function liarBorrowChance(level: BotLevel): number {
-  return 0.15 + 0.045 * level;
-}
-/** 토론 채팅에서 다른 사람이 지목한 좌석에 더하는 의심도(1회당) — 봇끼리 표가 흩어지지 않게. */
-const CHAT_MENTION_WEIGHT = 0.15;
-function liarGuessAccuracy(level: BotLevel): number {
-  return 0.25 + 0.045 * level;
+/** "제시어가 `word`라면" 설명 하나가 얼마나 라이어 같은가(0~1). */
+function descriptionSuspicion(state: GameState, word: string, d: Description): number {
+  const plan = currentPlan(state);
+  if (d.auto) return 1;
+  const lex = categoryLex(plan.categoryId);
+  const own = wordEvidence(plan.categoryId, word, d.text);
+  const other = Math.max(0, ...lex.words.filter((w) => w !== word).map((w) => wordEvidence(plan.categoryId, w, d.text)));
+  let sus: number;
+  if (own > 0 && own >= other * 0.8) sus = 0.08;
+  else if (own > 0) sus = 0.4;
+  else if (other > 0) sus = 0.92; // 다른 단어 얘기를 한다 — 찍어서 틀린 라이어의 전형
+  else {
+    // 무난한 말: 첫 바퀴는 조심하는 시민일 수도 있어 덜, 두 번째 바퀴는 더 의심한다.
+    sus = d.lap > 1 ? 0.75 : 0.55;
+  }
+  // 따라쟁이: 이 설명의 단서가 전부 이전 바퀴 남의 설명에 이미 나왔다.
+  if (own > 0 && d.lap > 1) {
+    const earlier = state.descriptions.filter((e) => e.lap < d.lap && e.seat !== d.seat && !e.auto);
+    const newInfo = tokens(d.text).some((t) => t.length >= 2 && !earlier.some((e) => e.text.includes(t)) && wordEvidence(plan.categoryId, word, t) > 0);
+    if (!newInfo && earlier.length > 0) sus += 0.15;
+  }
+  return Math.min(1, sus);
 }
 
+/** 봇이 보는 좌석별 의심도(높을수록 라이어 같음). 라이어 봇은 자기가 믿는 단어 분포로 기대값을 낸다. */
+export function suspicionScores(state: GameState, viewer: Seat): Record<Seat, number> {
+  const known = knownWordFor(state, viewer);
+  const belief = known ? [{ word: known, score: 1 }] : candidateScores(state, viewer).filter((c) => c.score > 0.02);
+  const out: Record<Seat, number> = {};
+  for (let s = 0; s < state.seatCount; s++) {
+    if (s === viewer) continue;
+    const mine = visibleDescriptions(state, viewer).filter((d) => d.seat === s);
+    let sus = 0.5;
+    if (mine.length > 0) {
+      const total = belief.reduce((a, b) => a + b.score, 0) || 1;
+      sus = 0;
+      for (const b of belief) {
+        const avg = mine.reduce((acc, d) => acc + descriptionSuspicion(state, b.word, d), 0) / mine.length;
+        sus += (b.score / total) * avg;
+      }
+    }
+    const mentions = state.chat.filter((m) => m.round === state.roundIndex + 1 && m.mention === s && m.seat !== viewer && m.seat !== s).length;
+    out[s] = sus + mentions * CHAT_MENTION_WEIGHT;
+  }
+  return out;
+}
+
+/**
+ * 밸런스 손잡이(봇끼리 시뮬레이션 + 사람 말투 평가로 맞춤 — LiarBotSkill.test.ts).
+ * - `liarGuessAccuracy`: 들킨 라이어가 "가장 그럴듯한 후보"를 그대로 고를 확률.
+ * - `citizenCaution`: 시민 봇이 라이어에게 덜 들키는(여러 단어에 두루 맞는) 힌트를 고르는 정도.
+ */
+function liarGuessAccuracy(level: BotLevel): number {
+  return 0.35 + 0.05 * level;
+}
+function citizenCaution(level: BotLevel): number {
+  return 0.1 * level;
+}
+/** 토론 채팅에서 다른 사람이 지목한 좌석에 더하는 의심도(1회당). */
+const CHAT_MENTION_WEIGHT = 0.12;
+
 function describeCandidates(state: GameState, seat: Seat, level: BotLevel, rng: () => number = () => 0): ScoredCandidate<string>[] {
+  void rng;
   const plan = currentPlan(state);
   const cat = getCategory(plan.categoryId)!;
-  const usedNorm = new Set(state.descriptions.map((d) => normalize(d.text)));
+  const visible = visibleDescriptions(state, seat);
+  const usedNorm = new Set(visible.map((d) => normalize(d.text)));
   const fresh = (list: readonly string[]) => list.filter((h) => !usedNorm.has(normalize(h)) && !rejectReason(state, seat, h, "describe"));
   // 힌트를 다 써버린 경우(10인 2바퀴 등)에도 항상 합법 설명이 하나는 있게 하는 번호 붙은 예비 문장.
   const fallback = [{ move: `음… 아까 말한 거랑 비슷해요 (${state.descriptions.length + 1})`, score: 0.1 }];
+  const heard = visible.filter((d) => d.seat !== seat && !d.auto).map((d) => d.text);
   const known = knownWordFor(state, seat);
   if (known) {
     const bank = cat.words.find((w) => w.word === known)?.hints ?? [];
-    const hints = fresh(bank);
-    if (hints.length > 0) return hints.map((h) => ({ move: h, score: 1 }));
+    let options = fresh(bank);
     // 인원이 많아 힌트를 다 쓰면 같은 힌트를 말투만 바꿔 다시 쓴다(사전 단어는 그대로라 시민끼리 통한다).
-    const variants = fresh(bank.flatMap((h) => [`확실히 ${h}`, `${h} 느낌`, `제 생각엔 ${h}`]));
-    if (variants.length > 0) return variants.map((h) => ({ move: h, score: 1 }));
-    const generic = fresh(GENERIC_HINTS).map((h) => ({ move: h, score: 1 }));
-    return generic.length > 0 ? generic : fallback;
+    if (options.length === 0) options = fresh(bank.flatMap((h) => [`확실히 ${h}`, `${h} 느낌`, `제 생각엔 ${h}`]));
+    if (options.length === 0) {
+      const generic = fresh(GENERIC_HINTS).map((h) => ({ move: h, score: 1 }));
+      return generic.length > 0 ? generic : fallback;
+    }
+    // 넓은 표현 중 내 제시어에도 맞는 것(동료 시민 눈엔 자연스럽고 라이어에겐 덜 새는 말).
+    const lap = currentLap(state);
+    const broad = fresh(CATEGORY_BROAD[plan.categoryId] ?? []).filter((h) => descriptionSuspicion(state, known, { seat, lap, text: h, auto: false }) < 0.2);
+    options = [...options, ...broad];
+    // 노련한 시민: 동료에겐 통하지만 라이어가 들었을 때 제시어가 덜 드러나는 말을 고른다.
+    return options.map((h) => {
+      const leak = posteriorFrom(plan.categoryId, [...heard, h]).find((c) => c.word === known)!.score;
+      return { move: h, score: 1 - citizenCaution(level) * leak };
+    });
   }
-  // 라이어: 남의 설명으로 가장 그럴듯한 단어를 추리해 그 단어 힌트로 위장. 아무 단서가 없으면 무난한 말.
-  const scored = candidateScores(state, seat);
-  const best = Math.max(...scored.map((c) => c.score));
-  const generic = fresh(GENERIC_HINTS).map((h) => ({ move: h, score: best > 0 ? 0.4 : 1 }));
-  if (best <= 0 || level <= 2 || rng() > liarBorrowChance(level)) return generic.length > 0 ? generic : fallback;
-  const guesses = scored.filter((c) => c.score >= best * 0.8).map((c) => c.word);
-  const borrowed = guesses.flatMap((w) => fresh(cat.words.find((x) => x.word === w)?.hints ?? []).map((h) => ({ move: h, score: 1 })));
-  const all = [...borrowed, ...generic];
+  // 라이어: 지금까지 들은 설명으로 단어 확률을 세우고, 시민들 눈에 "가장 덜 의심스러울" 말을 고른다.
+  // 기대 의심도 = Σ P(제시어=w) × (제시어가 w일 때 이 말이 얼마나 라이어 같은가).
+  const belief = candidateScores(state, seat).filter((b) => b.score > 0.01);
+  const total = belief.reduce((a, b) => a + b.score, 0) || 1;
+  const lap = currentLap(state);
+  const lines = [...new Set([...cat.words.flatMap((w) => w.hints), ...(CATEGORY_BROAD[plan.categoryId] ?? []), ...GENERIC_HINTS])];
+  const all = fresh(lines).map((h) => {
+    const d: Description = { seat, lap, text: h, auto: false };
+    const expSus = belief.reduce((acc, b) => acc + (b.score / total) * descriptionSuspicion(state, b.word, d), 0);
+    return { move: h, score: 1 - expSus };
+  });
   return all.length > 0 ? all : fallback;
 }
 
 const ACCUSE_LINES = ["{m}님 설명이 좀 애매했어요 🤔", "저는 {m}님이 수상해요", "{m}님, 진짜 제시어 아세요?", "{m}님 말이 다른 사람이랑 결이 달라요", "음… {m}님 쪽이 의심돼요"];
+const DEFEND_LINES = ["저 아니에요! 진짜 알고 말한 거예요", "에이 저는 시민이에요 😅", "제 설명 다시 보세요, 딱 맞잖아요", "억울해요… 저 말고 다른 분 같아요"];
 
 /** 봇의 다음 행동. 결정할 게 없으면 null. `rng`는 기본 Math.random — 봇 판단은 엔진 결정론 계약 밖이다. */
 export function chooseBotAction(state: GameState, seat: Seat, level: BotLevel, rng: () => number = Math.random): EngineAction | null {
@@ -656,8 +805,13 @@ export function chooseBotAction(state: GameState, seat: Seat, level: BotLevel, r
       return { type: "DESCRIBE", seat, text };
     }
     case "discuss": {
-      const spoke = state.chat.some((m) => m.seat === seat && m.round === state.roundIndex + 1);
-      if (!spoke && rng() < 0.7) {
+      const round = state.roundIndex + 1;
+      const mine = state.chat.filter((m) => m.seat === seat && m.round === round);
+      const accusedMe = state.chat.some((m) => m.round === round && m.mention === seat && m.seat !== seat);
+      if (accusedMe && !mine.some((m) => DEFEND_LINES.includes(m.text))) {
+        return { type: "CHAT", seat, text: DEFEND_LINES[Math.floor(rng() * DEFEND_LINES.length)] };
+      }
+      if (!mine.some((m) => m.mention !== undefined) && rng() < 0.7) {
         const sus = suspicionScores(state, seat);
         const targets = Object.entries(sus).map(([s, v]) => ({ move: Number(s), score: v }));
         if (targets.length > 0) {

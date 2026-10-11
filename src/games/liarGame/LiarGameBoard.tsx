@@ -6,13 +6,15 @@ import {
   MAX_CHAT_LEN,
   MAX_DESCRIPTION_LEN,
   MAX_GUESS_LEN,
+  MODE_INFO,
   computeRankings,
-  currentDescriber,
   currentLap,
   currentPlan,
+  describePending,
   knownWordFor,
   pendingSeats,
   rejectReason,
+  visibleDescriptions,
   type ChatMessage,
   type EngineAction,
   type GameState,
@@ -68,15 +70,41 @@ function chatText(m: ChatMessage, names: Record<Seat, string>): string {
   return m.mention !== undefined ? m.text.replace("{m}", names[m.mention] ?? "누군가") : m.text;
 }
 
+/** "🤖 [Lv.5] AI 봇 1" → ["🤖 [Lv.5] AI 봇 1", "AI 봇 1", "봇 1"] — 사람이 채팅에 줄여 쓴 이름도 알아듣게. */
+function nameVariants(name: string): string[] {
+  const out = [name.trim()];
+  const noBadge = name.replace(/^🤖\s*/, "").replace(/^\[Lv\.\d+\]\s*/, "").trim();
+  if (noBadge) out.push(noBadge);
+  const bot = noBadge.match(/봇\s*\d+$/);
+  if (bot) out.push(bot[0]);
+  return out.filter((v) => v.length >= 2);
+}
+
+/** 사람 채팅 속 이름 → 지목 좌석(봇이 사람의 지목을 의심도에 반영할 수 있게). 가장 긴 이름을 우선. */
+function detectMention(text: string, names: Record<Seat, string>, self: Seat): Seat | undefined {
+  let best: { seat: Seat; len: number } | null = null;
+  for (const [k, name] of Object.entries(names)) {
+    const seat = Number(k);
+    if (seat === self || !name) continue;
+    for (const v of nameVariants(name)) {
+      if (text.includes(v) && (!best || v.length > best.len)) best = { seat, len: v.length };
+    }
+  }
+  return best?.seat;
+}
+
 export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats, deadlineMs, nowMs, onAction, onGameEnd }: Props) {
   const plan = currentPlan(state);
   const category = getCategory(plan.categoryId);
+  const mode = MODE_INFO[state.options.mode];
   const known = knownWordFor(state, viewerSeat);
-  const isLiarView = known === null; // 일반 모드 라이어만 자기가 라이어인 걸 안다
-  const describer = currentDescriber(state);
+  const isLiarView = known === null; // "아는 라이어" 버전의 라이어만 자기가 라이어인 걸 안다
   const pending = pendingSeats(state);
+  const writing = describePending(state);
+  const lap = currentLap(state);
   const revealed = state.phase === "roundEnd" || state.phase === "ended";
   const outcome = state.outcome;
+  const visible = visibleDescriptions(state, viewerSeat);
 
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const [hideCard, setHideCard] = useState(false);
@@ -93,14 +121,13 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
     lastStageRef.current = state.stage;
     const sound = getSoundEngine();
     if (state.phase === "roundEnd" && state.outcome) {
-      const iWon = state.outcome.points[viewerSeat] > 0;
-      if (iWon) sound.playCorrectDing();
+      if (state.outcome.points[viewerSeat] > 0) sound.playCorrectDing();
       else sound.playWrongBuzz();
     } else if (state.phase === "ended") {
       sound.playFinishFanfare();
-    } else if (state.phase === "describe" && currentDescriber(state) === viewerSeat) {
+    } else if (state.phase === "describe") {
       sound.playUiClickTick();
-    } else if (state.phase === "vote" || state.phase === "guess") {
+    } else {
       sound.playCardFlick();
     }
   }, [state, viewerSeat]);
@@ -130,7 +157,8 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
       setError(reason);
       return;
     }
-    onAction({ type: "CHAT", seat: viewerSeat, text: chat.trim() });
+    const mention = detectMention(chat, names, viewerSeat);
+    onAction({ type: "CHAT", seat: viewerSeat, text: chat.trim(), ...(mention !== undefined ? { mention } : {}) });
     setChat("");
     setError(null);
   }
@@ -153,13 +181,16 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
         <span className="text-xs font-semibold text-white/50 light:text-slate-500">
           라운드 {state.roundIndex + 1}/{state.plan.length}
         </span>
+        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-white/70 light:bg-slate-100 light:text-slate-600" title={mode.desc}>
+          {mode.emoji} {mode.name}
+        </span>
         <span className="rounded-full bg-fuchsia-500/15 px-2.5 py-1 text-xs font-bold text-fuchsia-200 light:bg-fuchsia-100 light:text-fuchsia-800">
           {category?.emoji} {plan.category}
         </span>
         <span className="text-sm font-bold text-white light:text-slate-900">{PHASE_LABEL[state.phase]}</span>
-        {state.phase === "describe" && (
+        {state.phase === "describe" && state.options.laps > 1 && (
           <span className="text-xs text-white/50 light:text-slate-500">
-            {currentLap(state)}/{state.options.laps}바퀴
+            {lap}/{state.options.laps}바퀴
           </span>
         )}
         <span className="ml-auto flex items-center gap-2">
@@ -181,34 +212,39 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
         </span>
       </div>
 
-      {/* 내 카드 */}
+      {/* 내 카드 — 제시어를 크게 */}
       {!revealed && (
         <button
           type="button"
           onClick={() => setHideCard((v) => !v)}
-          className={`relative overflow-hidden rounded-2xl border px-4 py-4 text-left transition ${
+          className={`relative overflow-hidden rounded-3xl border-2 px-4 py-6 text-center transition sm:py-8 ${
             isLiarView
-              ? "border-rose-400/40 bg-gradient-to-br from-rose-500/20 to-slate-900/40 light:border-rose-300 light:from-rose-50 light:to-white"
-              : "border-emerald-400/30 bg-gradient-to-br from-emerald-500/15 to-slate-900/40 light:border-emerald-300 light:from-emerald-50 light:to-white"
+              ? "border-rose-400/50 bg-gradient-to-br from-rose-500/25 via-slate-900/40 to-slate-900/60 light:border-rose-300 light:from-rose-50 light:via-white light:to-white"
+              : "border-emerald-400/40 bg-gradient-to-br from-emerald-500/20 via-slate-900/40 to-slate-900/60 light:border-emerald-300 light:from-emerald-50 light:via-white light:to-white"
           }`}
         >
           <p className="text-[11px] font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">내 카드 · 눌러서 {hideCard ? "보기" : "가리기"}</p>
           {hideCard ? (
-            <p className="mt-1 text-lg font-bold text-white/40 light:text-slate-400">🂠 가려짐</p>
+            <p className="mt-3 text-2xl font-bold text-white/40 light:text-slate-400">🂠 가려짐</p>
           ) : isLiarView ? (
-            <div className="mt-1">
-              <p className="text-2xl font-black text-rose-200 light:text-rose-700">🎭 당신은 라이어!</p>
-              <p className="mt-1 break-keep text-xs text-white/60 light:text-slate-600">
-                제시어를 모릅니다. 카테고리 <b>{plan.category}</b>만 알고 있어요. 들키지 말고 제시어를 추리하세요.
+            <div className="mt-2 flex flex-col items-center gap-2">
+              <p className="text-4xl font-black text-rose-100 drop-shadow sm:text-5xl light:text-rose-700">🎭 당신은 라이어!</p>
+              <p className="text-base text-white/70 light:text-slate-600">
+                카테고리 <b className="text-2xl font-black text-white light:text-slate-900">{category?.emoji} {plan.category}</b>
               </p>
+              <p className="max-w-md break-keep text-xs text-white/55 light:text-slate-500">제시어를 모릅니다. 들키지 말고, 남의 설명으로 제시어를 추리하세요.</p>
             </div>
           ) : (
-            <div className="mt-1">
-              <p className="text-xs text-white/60 light:text-slate-600">제시어</p>
-              <p className="text-3xl font-black tracking-tight text-emerald-100 light:text-emerald-800">{known}</p>
-              <p className="mt-1 break-keep text-xs text-white/50 light:text-slate-500">
+            <div className="mt-1 flex flex-col items-center gap-1">
+              <p className="text-sm font-semibold text-white/60 light:text-slate-600">
+                {category?.emoji} {plan.category} · 내 제시어
+              </p>
+              <p className="break-keep text-5xl leading-tight font-black tracking-tight text-emerald-50 drop-shadow-[0_2px_12px_rgba(16,185,129,0.45)] sm:text-7xl light:text-emerald-800 light:drop-shadow-none">
+                {known}
+              </p>
+              <p className="mt-1 max-w-md break-keep text-xs text-white/55 light:text-slate-500">
                 제시어를 직접 말하지 말고, 라이어에게 들키지 않게 설명하세요.
-                {state.options.mode === "fool" && " (바보 모드 — 누군가는 다른 제시어를 받았어요!)"}
+                {state.options.mode === "fool" && " (모르는 라이어 버전 — 누군가는 비슷한 다른 제시어를 받았어요!)"}
               </p>
             </div>
           )}
@@ -218,20 +254,21 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
       {/* 좌석 */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {seats.map((seat) => {
-          const mine = state.descriptions.filter((d) => d.seat === seat);
-          const isTurn = describer === seat;
+          const mine = visible.filter((d) => d.seat === seat);
           const isMe = seat === viewerSeat;
           const isLiar = revealed && outcome?.liarSeat === seat;
           const accused = revealed && outcome?.accused === seat;
           const votesFor = revealed && outcome ? (outcome.tally[seat] ?? 0) : null;
+          const stillWriting = state.phase === "describe" && writing.includes(seat);
+          const submittedHidden = state.phase === "describe" && !writing.includes(seat) && !isMe;
           return (
             <div
               key={seat}
               className={`flex flex-col gap-1.5 rounded-xl border p-2.5 transition ${
-                isTurn
-                  ? "border-fuchsia-400/70 bg-fuchsia-500/10 shadow-[0_0_0_2px_rgba(232,121,249,0.25)] light:bg-fuchsia-50"
-                  : isLiar
-                    ? "border-rose-400/60 bg-rose-500/10 light:bg-rose-50"
+                isLiar
+                  ? "border-rose-400/60 bg-rose-500/10 light:bg-rose-50"
+                  : isMe
+                    ? "border-fuchsia-400/50 bg-fuchsia-500/[0.06] light:bg-fuchsia-50/60"
                     : "border-white/10 bg-white/[0.02] light:border-slate-200 light:bg-white"
               }`}
             >
@@ -246,8 +283,8 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
                 </span>
               </div>
               <div className="flex flex-wrap gap-1 text-[10px]">
-                {seat === plan.firstSeat && !revealed && <span className="rounded bg-white/10 px-1 text-white/60 light:bg-slate-100 light:text-slate-500">선</span>}
-                {isTurn && <span className="rounded bg-fuchsia-500/30 px-1 text-fuchsia-100 light:text-fuchsia-800">🗣 설명 중</span>}
+                {stillWriting && <span className="rounded bg-white/10 px-1 text-white/60 light:bg-slate-100 light:text-slate-500">✍️ 작성 중</span>}
+                {submittedHidden && <span className="rounded bg-emerald-500/20 px-1 text-emerald-200 light:text-emerald-700">✅ 제출 · 🔒 모두 쓰면 공개</span>}
                 {state.phase === "discuss" && state.readySeats.includes(seat) && <span className="rounded bg-emerald-500/20 px-1 text-emerald-200 light:text-emerald-700">✅ 준비</span>}
                 {state.phase === "vote" && seat in state.votes && <span className="rounded bg-sky-500/20 px-1 text-sky-200 light:text-sky-700">🗳 투표 완료</span>}
                 {state.phase === "vote" && state.voteRound === 2 && state.candidates.includes(seat) && (
@@ -262,7 +299,7 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
                   {mine.map((d, i) => (
                     <li
                       key={i}
-                      className={`break-keep rounded-lg px-2 py-1 text-xs leading-snug ${
+                      className={`break-keep rounded-lg px-2 py-1 text-sm leading-snug ${
                         d.auto ? "bg-white/5 text-white/35 italic light:bg-slate-50 light:text-slate-400" : "bg-white/10 text-white/90 light:bg-slate-100 light:text-slate-800"
                       }`}
                     >
@@ -272,7 +309,7 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
                   ))}
                 </ul>
               ) : (
-                <p className="text-[11px] text-white/25 light:text-slate-400">아직 설명 없음</p>
+                <p className="text-[11px] text-white/25 light:text-slate-400">{state.phase === "describe" ? "🔒 아직 비공개" : "설명 없음"}</p>
               )}
             </div>
           );
@@ -282,10 +319,11 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
       {/* 단계별 행동 */}
       <div className={`${CARD} flex flex-col gap-3 p-4`}>
         {state.phase === "describe" &&
-          (describer === viewerSeat ? (
+          (writing.includes(viewerSeat) ? (
             <>
               <p className="break-keep text-sm font-semibold text-fuchsia-200 light:text-fuchsia-700">
-                내 차례예요! {isLiarView ? "아는 척 그럴듯하게 한 마디." : "제시어를 한 마디로 설명하세요."}
+                {isLiarView ? "아는 척 그럴듯하게 한 마디!" : "제시어를 한 마디로 설명하세요."}{" "}
+                <span className="font-normal text-white/50 light:text-slate-500">모두 동시에 몰래 쓰고, 전원이 내면 한꺼번에 공개돼요.</span>
               </p>
               <div className="flex gap-2">
                 <input
@@ -301,26 +339,22 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
                   className={INPUT}
                 />
                 <button onClick={submitDescription} disabled={!text.trim()} className={PRIMARY}>
-                  말하기
+                  제출
                 </button>
               </div>
             </>
           ) : (
             <p className="break-keep text-sm text-white/60 light:text-slate-600">
-              <b className="text-white light:text-slate-900">{describer !== null ? names[describer] : ""}</b>님이 설명하는 중… 잘 듣고 라이어를 찾아보세요.
+              ✅ 제출했어요! 다른 사람들이 쓰는 중… ({state.seatCount - writing.length}/{state.seatCount}) 모두 내면 한꺼번에 공개돼요.
             </p>
           ))}
 
         {state.phase === "discuss" && (
           <div className="flex flex-wrap items-center gap-2">
             <p className="break-keep text-sm text-white/70 light:text-slate-600">
-              자유 토론! 수상한 사람을 채팅으로 추궁해 보세요. 준비 {state.readySeats.length}/{state.seatCount}
+              자유 토론! 수상한 사람 이름을 넣어 채팅으로 추궁해 보세요. 준비 {state.readySeats.length}/{state.seatCount}
             </p>
-            <button
-              onClick={() => onAction({ type: "READY", seat: viewerSeat })}
-              disabled={state.readySeats.includes(viewerSeat)}
-              className={`${PRIMARY} ml-auto`}
-            >
+            <button onClick={() => onAction({ type: "READY", seat: viewerSeat })} disabled={state.readySeats.includes(viewerSeat)} className={`${PRIMARY} ml-auto`}>
               {state.readySeats.includes(viewerSeat) ? "✅ 준비 완료" : "🗳️ 투표하러 가기"}
             </button>
           </div>
@@ -361,14 +395,16 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
         {state.phase === "guess" &&
           (pending.includes(viewerSeat) ? (
             <>
-              <p className="break-keep text-sm font-semibold text-rose-200 light:text-rose-700">들켰어요! 마지막 기회 — 제시어를 맞히면 역전승이에요. (기회 1번)</p>
+              <p className="break-keep text-sm font-semibold text-rose-200 light:text-rose-700">
+                {state.options.mode === "fool" ? "🤪 사실 당신이 라이어였어요! " : "들켰어요! "}마지막 기회 — 진짜 제시어를 맞히면 역전승이에요. (기회 1번)
+              </p>
               {state.options.guessMode === "choice" ? (
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {plan.options.map((o) => (
                     <button
                       key={o}
                       onClick={() => submitGuess(o)}
-                      className="rounded-xl border border-white/15 px-3 py-2.5 text-sm font-bold text-white transition hover:border-rose-400 hover:bg-rose-500/10 light:border-slate-300 light:text-slate-800"
+                      className="rounded-xl border border-white/15 px-3 py-3 text-base font-bold text-white transition hover:border-rose-400 hover:bg-rose-500/10 light:border-slate-300 light:text-slate-800"
                     >
                       {o}
                     </button>
@@ -395,28 +431,7 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
               <p className="text-2xl font-black text-white light:text-slate-900">{outcome.winner === "liar" ? "🎭 라이어 승리!" : "🕵️ 시민 승리!"}</p>
               <p className="mt-1 text-xs text-white/60 light:text-slate-600">{REASON_TEXT[outcome.reason]}</p>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-center text-sm">
-              <div className="rounded-xl bg-white/5 p-2 light:bg-slate-50">
-                <p className="text-[11px] text-white/50 light:text-slate-500">라이어</p>
-                <p className="font-bold text-rose-200 light:text-rose-700">{names[outcome.liarSeat]}</p>
-              </div>
-              <div className="rounded-xl bg-white/5 p-2 light:bg-slate-50">
-                <p className="text-[11px] text-white/50 light:text-slate-500">제시어</p>
-                <p className="font-bold text-emerald-200 light:text-emerald-700">{outcome.word}</p>
-              </div>
-              {outcome.fakeWord && (
-                <div className="col-span-2 rounded-xl bg-white/5 p-2 light:bg-slate-50">
-                  <p className="text-[11px] text-white/50 light:text-slate-500">🤪 라이어가 받은 가짜 제시어</p>
-                  <p className="font-bold text-amber-200 light:text-amber-700">{outcome.fakeWord}</p>
-                </div>
-              )}
-              {outcome.reason === "guessed" || outcome.reason === "missed" ? (
-                <div className="col-span-2 rounded-xl bg-white/5 p-2 light:bg-slate-50">
-                  <p className="text-[11px] text-white/50 light:text-slate-500">라이어의 답</p>
-                  <p className="font-bold text-white light:text-slate-800">{outcome.guess ?? "(시간 초과)"}</p>
-                </div>
-              ) : null}
-            </div>
+            <WordReveal outcome={outcome} names={names} mode={state.options.mode} />
             <p className="text-center text-xs text-white/50 light:text-slate-500">
               이번 라운드 점수:{" "}
               {seats
@@ -431,7 +446,7 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
         )}
 
         {state.phase === "ended" && (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-4">
             <p className="text-center text-2xl font-black text-white light:text-slate-900">🏆 최종 결과</p>
             <ol className="flex flex-col gap-1.5">
               {computeRankings(state).map((r) => (
@@ -442,7 +457,8 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
                 </li>
               ))}
             </ol>
-            <HistoryTable history={state.history} names={names} />
+            <p className="text-sm font-bold text-white/80 light:text-slate-700">📜 라운드별 제시어</p>
+            <RoundRecap history={state.history} names={names} mode={state.options.mode} />
             <button onClick={onGameEnd} className={`${PRIMARY} self-center`}>
               결과 확정하고 계속하기
             </button>
@@ -462,8 +478,7 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
             ) : (
               roundChat.map((m, i) => (
                 <p key={i} className="break-keep text-sm text-white/85 light:text-slate-700">
-                  <b className={m.seat === viewerSeat ? "text-fuchsia-300 light:text-fuchsia-700" : "text-white light:text-slate-900"}>{names[m.seat]}</b>{" "}
-                  {chatText(m, names)}
+                  <b className={m.seat === viewerSeat ? "text-fuchsia-300 light:text-fuchsia-700" : "text-white light:text-slate-900"}>{names[m.seat]}</b> {chatText(m, names)}
                 </p>
               ))
             )}
@@ -478,10 +493,14 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
                   setError(null);
                 }}
                 onKeyDown={onEnter(submitChat)}
-                placeholder="의심 가는 사람을 추궁해 보세요"
+                placeholder="의심 가는 사람 이름을 넣어 추궁해 보세요"
                 className={INPUT}
               />
-              <button onClick={submitChat} disabled={!chat.trim()} className="rounded-xl border border-white/15 px-3 py-2 text-sm text-white/80 hover:border-white/30 disabled:opacity-40 light:border-slate-300 light:text-slate-700">
+              <button
+                onClick={submitChat}
+                disabled={!chat.trim()}
+                className="rounded-xl border border-white/15 px-3 py-2 text-sm text-white/80 hover:border-white/30 disabled:opacity-40 light:border-slate-300 light:text-slate-700"
+              >
                 보내기
               </button>
             </div>
@@ -491,9 +510,9 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
 
       {state.history.length > 0 && state.phase !== "ended" && (
         <details className={`${CARD} px-4 py-3`}>
-          <summary className="cursor-pointer text-xs font-semibold text-white/60 light:text-slate-500">📜 지난 라운드 기록 ({state.history.length})</summary>
+          <summary className="cursor-pointer text-xs font-semibold text-white/60 light:text-slate-500">📜 지난 라운드 제시어 ({state.history.length})</summary>
           <div className="mt-2">
-            <HistoryTable history={state.history} names={names} />
+            <RoundRecap history={state.history} names={names} mode={state.options.mode} />
           </div>
         </details>
       )}
@@ -503,32 +522,71 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
   );
 }
 
-function HistoryTable({ history, names }: { history: readonly RoundOutcome[]; names: Record<Seat, string> }) {
+/** 라운드 공개 — 시민 제시어와 라이어 쪽(받은 가짜 제시어 또는 "모름")을 나란히 크게. */
+function WordReveal({ outcome, names, mode }: { outcome: RoundOutcome; names: Record<Seat, string>; mode: GameState["options"]["mode"] }) {
+  const guessed = outcome.reason === "guessed" || outcome.reason === "missed";
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-xs">
-        <thead className="text-white/40 light:text-slate-400">
-          <tr>
-            <th className="py-1 pr-2 font-medium">R</th>
-            <th className="py-1 pr-2 font-medium">제시어</th>
-            <th className="py-1 pr-2 font-medium">라이어</th>
-            <th className="py-1 font-medium">결과</th>
-          </tr>
-        </thead>
-        <tbody className="text-white/80 light:text-slate-700">
-          {history.map((h) => (
-            <tr key={h.round} className="border-t border-white/5 light:border-slate-100">
-              <td className="py-1 pr-2 tabular-nums">{h.round}</td>
-              <td className="py-1 pr-2">
-                {h.category} · <b>{h.word}</b>
-                {h.fakeWord && <span className="text-white/40 light:text-slate-400"> (가짜: {h.fakeWord})</span>}
-              </td>
-              <td className="py-1 pr-2">{names[h.liarSeat]}</td>
-              <td className="py-1">{h.winner === "liar" ? "🎭 라이어" : "🕵️ 시민"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="grid grid-cols-2 gap-2">
+      <div className="flex flex-col items-center gap-1 rounded-2xl border-2 border-emerald-400/40 bg-emerald-500/10 px-2 py-4 text-center light:border-emerald-300 light:bg-emerald-50">
+        <p className="text-xs font-semibold text-emerald-200/80 light:text-emerald-700">🕵️ 시민들의 제시어</p>
+        <p className="break-keep text-3xl leading-tight font-black text-emerald-50 sm:text-4xl light:text-emerald-800">{outcome.word}</p>
+      </div>
+      <div className="flex flex-col items-center gap-1 rounded-2xl border-2 border-rose-400/40 bg-rose-500/10 px-2 py-4 text-center light:border-rose-300 light:bg-rose-50">
+        <p className="text-xs font-semibold text-rose-200/80 light:text-rose-700">
+          🎭 라이어 <b className="text-rose-50 light:text-rose-800">{names[outcome.liarSeat]}</b>
+          {mode === "fool" ? "의 가짜 제시어" : ""}
+        </p>
+        {outcome.fakeWord ? (
+          <p className="break-keep text-3xl leading-tight font-black text-amber-100 sm:text-4xl light:text-amber-700">{outcome.fakeWord}</p>
+        ) : (
+          <p className="break-keep text-lg leading-tight font-bold text-white/60 sm:text-xl light:text-slate-500">제시어 없음<br /><span className="text-xs font-normal">(카테고리만 알았어요)</span></p>
+        )}
+      </div>
+      {guessed && (
+        <div className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-white/5 px-3 py-2 light:bg-slate-50">
+          <span className="text-xs text-white/50 light:text-slate-500">라이어의 마지막 답</span>
+          <span className={`text-xl font-black ${outcome.reason === "guessed" ? "text-emerald-200 light:text-emerald-700" : "text-rose-200 light:text-rose-700"}`}>
+            {outcome.guess ?? "(시간 초과)"} {outcome.reason === "guessed" ? "⭕" : "❌"}
+          </span>
+        </div>
+      )}
     </div>
+  );
+}
+
+/** 게임 종료/지난 라운드 — 라운드마다 시민 제시어 vs 라이어 제시어 카드. */
+function RoundRecap({ history, names, mode }: { history: readonly RoundOutcome[]; names: Record<Seat, string>; mode: GameState["options"]["mode"] }) {
+  return (
+    <ul className="flex flex-col gap-2">
+      {history.map((h) => (
+        <li key={h.round} className="rounded-xl border border-white/10 bg-white/[0.03] p-2.5 light:border-slate-200 light:bg-white">
+          <div className="mb-1.5 flex items-center gap-2 text-xs">
+            <span className="rounded-md bg-white/10 px-1.5 font-bold text-white/80 light:bg-slate-100 light:text-slate-600">R{h.round}</span>
+            <span className="text-white/60 light:text-slate-500">{h.category}</span>
+            <span className={`ml-auto font-bold ${h.winner === "liar" ? "text-rose-200 light:text-rose-700" : "text-emerald-200 light:text-emerald-700"}`}>
+              {h.winner === "liar" ? "🎭 라이어 승" : "🕵️ 시민 승"}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-lg bg-emerald-500/10 px-2 py-1.5 text-center light:bg-emerald-50">
+              <p className="text-[10px] text-emerald-200/80 light:text-emerald-700">시민 제시어</p>
+              <p className="break-keep text-lg font-black text-emerald-50 light:text-emerald-800">{h.word}</p>
+            </div>
+            <div className="rounded-lg bg-rose-500/10 px-2 py-1.5 text-center light:bg-rose-50">
+              <p className="truncate text-[10px] text-rose-200/80 light:text-rose-700">
+                라이어 {names[h.liarSeat]}
+                {mode === "fool" ? " · 가짜" : ""}
+              </p>
+              <p className="break-keep text-lg font-black text-amber-100 light:text-amber-700">{h.fakeWord ?? <span className="text-sm font-semibold text-white/50 light:text-slate-400">모름</span>}</p>
+            </div>
+          </div>
+          {h.guess !== null && (
+            <p className="mt-1 text-center text-[11px] text-white/50 light:text-slate-500">
+              라이어의 답: <b className="text-white/80 light:text-slate-700">{h.guess}</b> {h.reason === "guessed" ? "⭕" : "❌"}
+            </p>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }

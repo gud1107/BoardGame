@@ -21,7 +21,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         <section>
           <h3 className={H3}>한 라운드</h3>
           <ol className="list-decimal space-y-1.5 pl-4 text-white/70 light:text-slate-600">
-            <li><b>🗣️ 설명</b> — 선 플레이어부터 차례로 한 마디씩(방장 설정에 따라 1~2바퀴, 1인 30초).</li>
+            <li><b>🗣️ 설명</b> — 모두 <b>동시에 몰래</b> 한 마디씩 써요. 전원이 내면 한꺼번에 공개(바퀴당 45초, 방장 설정에 따라 1~2바퀴).</li>
             <li><b>💬 토론</b> — 채팅으로 자유롭게 의심하고 해명해요. 모두 &quot;투표하러 가기&quot;를 누르거나 90초가 지나면 투표.</li>
             <li><b>🗳️ 투표</b> — 동시에 라이어라고 생각하는 한 명을 지목(자기 자신은 불가, 30초).</li>
             <li><b>🎭 공개</b> — 최다 득표자의 정체 공개. 시민이면 라이어 승리!</li>
@@ -51,9 +51,10 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         </section>
 
         <section className="rounded-xl border border-fuchsia-300/20 bg-fuchsia-400/5 p-3 light:border-fuchsia-300 light:bg-fuchsia-50">
-          <h3 className="mb-1.5 text-xs font-semibold tracking-wide text-fuchsia-200/90 uppercase light:text-fuchsia-800">방장 설정</h3>
+          <h3 className="mb-1.5 text-xs font-semibold tracking-wide text-fuchsia-200/90 uppercase light:text-fuchsia-800">두 가지 버전 · 방장 설정</h3>
           <ul className="list-disc space-y-1.5 pl-4 text-xs text-white/70 light:text-slate-700">
-            <li><b>🤪 바보 모드</b> — 라이어도 &quot;비슷한 다른 제시어&quot;를 받아서 자기가 라이어인 줄 몰라요.</li>
+            <li><b>🎭 아는 라이어</b> — 라이어는 자기가 라이어인 걸 알고, 카테고리만 받아요.</li>
+            <li><b>🤪 모르는 라이어</b> — 라이어도 &quot;비슷한 다른 제시어&quot;를 받아서 자기가 라이어인 줄 몰라요. 지목되면 그때 알게 돼요.</li>
             <li><b>🔢 객관식 / ✍️ 주관식</b> — 라이어의 정답 맞히기를 6지선다로 할지, 직접 입력으로 할지.</li>
             <li><b>라운드 수 · 설명 바퀴 수 · 카테고리</b>(랜덤 또는 고정).</li>
           </ul>

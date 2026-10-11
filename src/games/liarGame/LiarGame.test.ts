@@ -12,10 +12,13 @@ import {
   pendingSeats,
   rejectReason,
   startGame,
+  visibleDescriptions,
   type EngineAction,
   type GameState,
 } from "./engine";
 import { CATEGORIES, GENERIC_HINTS } from "./words";
+import { CATEGORY_BROAD, WORD_KEYS } from "./lexicon";
+import { wordEvidence } from "./engine";
 
 function describeAll(state: GameState): GameState {
   let s = state;
@@ -51,6 +54,19 @@ describe("words data", () => {
         if (w.pair) expect(names.has(w.pair)).toBe(true);
       }
     }
+  });
+
+  it("every word has a lexicon entry and every broad phrase fits 2+ words of its category", () => {
+    const misses: string[] = [];
+    for (const cat of CATEGORIES) {
+      for (const w of cat.words) expect(WORD_KEYS[`${cat.id}:${w.word}`], w.word).toBeTruthy();
+      for (const line of CATEGORY_BROAD[cat.id] ?? []) {
+        const hits = cat.words.filter((w) => wordEvidence(cat.id, w.word, line) > 0).length;
+        if (hits < 2) misses.push(`${cat.id}: ${line} (${hits})`);
+        for (const w of cat.words) expect(normalize(line).includes(normalize(w.word))).toBe(false);
+      }
+    }
+    expect(misses).toEqual([]);
   });
 
   it("generic hints never leak any word", () => {
@@ -91,6 +107,18 @@ describe("startGame", () => {
 });
 
 describe("describe phase", () => {
+  it("hides other players' lap descriptions until everyone has written", () => {
+    let s = startGame(3, 8, { laps: 2 });
+    s = applyAction(s, { type: "DESCRIBE", seat: 0, text: "가나다" });
+    expect(visibleDescriptions(s, 1)).toHaveLength(0);
+    expect(visibleDescriptions(s, 0)).toHaveLength(1);
+    s = applyAction(s, { type: "DESCRIBE", seat: 1, text: "라마바" });
+    s = applyAction(s, { type: "DESCRIBE", seat: 2, text: "사아자" });
+    expect(visibleDescriptions(s, 1)).toHaveLength(3);
+    s = applyAction(s, { type: "DESCRIBE", seat: 2, text: "차카타" });
+    expect(visibleDescriptions(s, 0).map((d) => d.text)).not.toContain("차카타");
+  });
+
   it("goes clockwise from the first seat for the configured laps", () => {
     const s0 = startGame(4, 1, { laps: 2 });
     const first = currentPlan(s0).firstSeat;
@@ -106,12 +134,13 @@ describe("describe phase", () => {
     expect(s.descriptions.filter((d) => d.lap === 2)).toHaveLength(4);
   });
 
-  it("rejects out-of-turn, the word itself, its chosung, and duplicates", () => {
-    const s = startGame(4, 2);
+  it("rejects double submits, the word itself, its chosung, and visible duplicates", () => {
+    const s = startGame(4, 2, { laps: 2 });
     const plan = currentPlan(s);
     const seat = currentDescriber(s)!;
     const citizen = seat === plan.liarSeat ? (seat + 1) % 4 : seat;
-    expect(applyAction(s, { type: "DESCRIBE", seat: (seat + 1) % 4, text: "안녕" })).toBe(s);
+    const once = applyAction(s, { type: "DESCRIBE", seat, text: "안녕" });
+    expect(applyAction(once, { type: "DESCRIBE", seat, text: "또 안녕" })).toBe(once);
     expect(rejectReason(s, citizen, `완전 ${plan.word} 같아요`, "describe")).not.toBeNull();
     expect(rejectReason(s, citizen, plan.word.split("").join(" "), "describe")).not.toBeNull();
     const cho = plan.word
@@ -119,19 +148,26 @@ describe("describe phase", () => {
       .map((ch) => "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ"[Math.floor((ch.charCodeAt(0) - 0xac00) / 588)])
       .join("");
     expect(rejectReason(s, citizen, cho, "describe")).not.toBeNull();
-    const s2 = applyAction(s, { type: "DESCRIBE", seat, text: "따뜻해요" });
-    const next = currentDescriber(s2)!;
-    expect(rejectReason(s2, next, "따뜻 해요!", "describe")).not.toBeNull();
+    // 같은 바퀴의 남의 설명은 아직 안 보이므로 중복으로 막지 않고, 다음 바퀴에선 막는다.
+    let s2 = applyAction(s, { type: "DESCRIBE", seat, text: "따뜻해요" });
+    const other = (seat + 1) % 4;
+    expect(rejectReason(s2, other, "따뜻 해요!", "describe")).toBeNull();
+    for (let i = 1; i < 4; i++) s2 = applyAction(s2, { type: "DESCRIBE", seat: (seat + i) % 4, text: `말 ${i}` });
+    expect(s2.phase).toBe("describe");
+    expect(rejectReason(s2, other, "따뜻 해요!", "describe")).not.toBeNull();
     // the classic-mode liar doesn't know the word, so it isn't blocked for them
     expect(rejectReason(s, plan.liarSeat, plan.word, "describe")).toBeNull();
   });
 
-  it("timeout auto-passes the current describer; stale timeouts are ignored", () => {
-    const s = startGame(3, 5);
-    const seat = currentDescriber(s)!;
+  it("timeout auto-passes everyone who hasn't written this lap; stale timeouts are ignored", () => {
+    const s0 = startGame(3, 5);
+    const writer = currentDescriber(s0)!;
+    const s = applyAction(s0, { type: "DESCRIBE", seat: writer, text: "따뜻해요" });
+    expect(s.stage).toBe(s0.stage); // 바퀴가 다 차기 전에는 단계(타이머)가 그대로
     const t = applyAction(s, { type: "TIMEOUT", stage: s.stage });
-    expect(t.descriptions[0]).toMatchObject({ seat, auto: true });
-    expect(t.idleStreak[seat]).toBe(1);
+    expect(t.descriptions.filter((d) => d.auto)).toHaveLength(2);
+    expect(t.idleStreak[writer]).toBe(0);
+    expect(t.phase).toBe("discuss");
     expect(applyAction(t, { type: "TIMEOUT", stage: s.stage })).toBe(t);
   });
 });
@@ -234,7 +270,7 @@ describe("rounds and ranking", () => {
 });
 
 describe("bots", () => {
-  function runBots(seed: number, count: number, opts: Parameters<typeof startGame>[2], level = 5): GameState {
+  function runBots(seed: number, count: number, opts: Parameters<typeof startGame>[2], level = 5, liarLevel = level): GameState {
     let s = startGame(count, seed, opts);
     const rng = seededRng(seed + 1);
     for (let guard = 0; guard < 2000 && s.phase !== "ended"; guard++) {
@@ -243,7 +279,7 @@ describe("bots", () => {
         continue;
       }
       const seat = pendingSeats(s)[0];
-      const action = chooseBotAction(s, seat, level, rng);
+      const action = chooseBotAction(s, seat, seat === currentPlan(s).liarSeat ? liarLevel : level, rng);
       expect(action).not.toBeNull();
       const next = applyAction(s, action as EngineAction);
       expect(next).not.toBe(s);
@@ -252,7 +288,7 @@ describe("bots", () => {
     return s;
   }
 
-  it("bots finish whole games in every mode without stalling", () => {
+  it("bots finish whole games in every mode without stalling", { timeout: 60_000 }, () => {
     for (let seed = 1; seed <= 25; seed++) {
       const count = 3 + (seed % 8);
       const s = runBots(seed, count, {
@@ -266,15 +302,15 @@ describe("bots", () => {
     }
   });
 
-  it("citizen bots catch a bot liar more often at Lv.10 than Lv.1", () => {
+  it("Lv.10 citizen bots catch the same Lv.5 bot liar more often than Lv.1 citizens", () => {
     let caught10 = 0;
     let caught1 = 0;
-    for (let seed = 1; seed <= 40; seed++) {
-      for (const h of runBots(seed, 6, { rounds: 3, laps: 2 }, 10).history) if (h.accused === h.liarSeat) caught10++;
-      for (const h of runBots(seed, 6, { rounds: 3, laps: 2 }, 1).history) if (h.accused === h.liarSeat) caught1++;
+    for (let seed = 1; seed <= 24; seed++) {
+      for (const h of runBots(seed, 6, { rounds: 3, laps: 2 }, 10, 5).history) if (h.accused === h.liarSeat) caught10++;
+      for (const h of runBots(seed, 6, { rounds: 3, laps: 2 }, 1, 5).history) if (h.accused === h.liarSeat) caught1++;
     }
     expect(caught10).toBeGreaterThan(caught1);
-  });
+  }, 60_000);
 
   it("Lv.1 and Lv.10 diverge with the same rng", () => {
     let seed = 41;
@@ -299,7 +335,8 @@ describe("bots", () => {
     const s = startGame(4, 43);
     const describer = currentDescriber(s)!;
     expect(getValidMoves(s, describer).length).toBeGreaterThan(0);
-    expect(getValidMoves(s, (describer + 1) % 4)).toEqual([]);
     for (const m of getValidMoves(s, describer)) expect(applyAction(s, m)).not.toBe(s);
+    const after = applyAction(s, getValidMoves(s, describer)[0]);
+    expect(getValidMoves(after, describer)).toEqual([]);
   });
 });

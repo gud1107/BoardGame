@@ -13,6 +13,7 @@ import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity
 import type { PlayableGameProps } from "@/games/types";
 import {
   DEFAULT_OPTIONS,
+  MODE_INFO,
   MAX_PLAYERS,
   MIN_PLAYERS,
   applyAction,
@@ -61,7 +62,7 @@ import { selfResult } from "@/games/shared/selfResult";
  */
 
 const PHASE_DURATION_MS: Record<GameState["phase"], number> = {
-  describe: 30_000,
+  describe: 45_000, // 바퀴마다 모두 동시에 쓰므로 1인 30초가 아니라 바퀴당 45초
   discuss: 90_000,
   vote: 30_000,
   guess: 30_000,
@@ -77,6 +78,8 @@ type Occupant = {
   playerId?: string;
   isHost?: boolean;
   targetPlayerCount?: number;
+  /** 방장이 고른 버전 — 대기실에서 손님도 볼 수 있게 presence에 싣는다. */
+  mode?: GameOptions["mode"];
 };
 
 type Phase = "choose" | "enter-name" | "connecting" | "waiting" | "playing" | "post-game" | "room-full" | "supabase-missing" | "channel-error";
@@ -391,7 +394,7 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
           seat,
           name: myName,
           playerId: myPlayerId,
-          ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current } : {}),
+          ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mode: optionsRef.current.mode } : {}),
         } satisfies Occupant);
         requestStateSync();
         setPhase((p) => (p === "connecting" ? "waiting" : p));
@@ -435,7 +438,7 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
       seat: next,
       name: myName,
       playerId: myPlayerId,
-      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current } : {}),
+      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mode: optionsRef.current.mode } : {}),
     } satisfies Occupant);
   }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost]);
 
@@ -768,7 +771,7 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
         gameId="liar-game"
         icon="🎭"
         title="라이어를 찾아라 온라인 대전"
-        description={<p className="break-keep text-sm text-white/50 light:text-slate-500">3~10명이 각자 기기로 접속해 제시어를 설명하고 라이어를 찾아요. 인원이 모자라면 AI 봇으로 채울 수 있어요.</p>}
+        description={<p className="break-keep text-sm text-white/50 light:text-slate-500">3~10명이 각자 기기로 접속해 제시어를 설명하고 라이어를 찾아요. 🎭 라이어가 알고 시작하는 버전과 🤪 라이어도 모르고 시작하는 버전 중 골라요. 인원이 모자라면 AI 봇으로 채울 수 있어요.</p>}
         actions={
           <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
             <button
@@ -825,6 +828,36 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
         )}
         {intent === "create" && (
           <>
+            <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
+              게임 버전
+              <div className="grid gap-2 sm:grid-cols-2">
+                {(["classic", "fool"] as const).map((m) => {
+                  const info = MODE_INFO[m];
+                  const on = options.mode === m;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setOpt("mode", m)}
+                      aria-pressed={on}
+                      className={`flex flex-col gap-1 rounded-2xl border-2 p-3 text-left transition ${
+                        on
+                          ? m === "classic"
+                            ? "border-rose-400/70 bg-rose-500/15 light:bg-rose-50"
+                            : "border-amber-400/70 bg-amber-500/15 light:bg-amber-50"
+                          : "border-white/10 hover:border-white/30 light:border-slate-200 light:hover:border-slate-400"
+                      }`}
+                    >
+                      <span className="text-base font-black text-white light:text-slate-900">
+                        {info.emoji} {info.name} {on && <span className="text-xs font-semibold text-fuchsia-300 light:text-fuchsia-700">✓ 선택됨</span>}
+                      </span>
+                      <span className="text-xs font-semibold text-white/70 light:text-slate-600">{info.short}</span>
+                      <span className="break-keep text-[11px] leading-snug text-white/50 light:text-slate-500">{info.desc}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <label className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
               인원 수 ({MIN_PLAYERS}~{MAX_PLAYERS}명)
               <div className="flex items-center gap-3">
@@ -854,15 +887,6 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
                 { value: 2 as const, label: "2바퀴 (시민 유리)" },
               ]}
               onChange={(v) => setOpt("laps", v)}
-            />
-            <OptionRow
-              label="모드"
-              value={options.mode}
-              options={[
-                { value: "classic" as const, label: "🎭 기본" },
-                { value: "fool" as const, label: "🤪 바보 모드" },
-              ]}
-              onChange={(v) => setOpt("mode", v)}
             />
             <OptionRow
               label="라이어 정답 맞히기"
@@ -907,9 +931,20 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
             <button onClick={() => navigator.clipboard?.writeText(shareUrl)} className="rounded-full border border-white/15 px-4 py-2 text-xs text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600">
               🔗 초대 링크 복사
             </button>
+            {(() => {
+              const roomMode = (isHost ? options.mode : host?.mode) ?? null;
+              return roomMode ? (
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 light:border-slate-200 light:bg-slate-50">
+                  <p className="text-lg font-black text-white light:text-slate-900">
+                    {MODE_INFO[roomMode].emoji} {MODE_INFO[roomMode].name}
+                  </p>
+                  <p className="text-xs text-white/60 light:text-slate-500">{MODE_INFO[roomMode].short}</p>
+                </div>
+              ) : null;
+            })()}
             {isHost && (
               <p className="break-keep text-xs text-white/40 light:text-slate-400">
-                {options.rounds}라운드 · {options.laps}바퀴 · {options.mode === "fool" ? "🤪 바보 모드" : "🎭 기본"} · {options.guessMode === "choice" ? "6지선다" : "직접 입력"} ·{" "}
+                {options.rounds}라운드 · {options.laps}바퀴 · {options.guessMode === "choice" ? "6지선다" : "직접 입력"} ·{" "}
                 {options.category === RANDOM_CATEGORY ? "랜덤 카테고리" : CATEGORIES.find((c) => c.id === options.category)?.name}
               </p>
             )}

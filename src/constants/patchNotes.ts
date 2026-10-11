@@ -58,6 +58,18 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.57.0",
+    releaseDate: "2026-10-12",
+    title: "🎭 라이어를 찾아라 — 설명 동시 공개, 아는/모르는 라이어 버전, 더 똑똑해진 AI",
+    changes: [
+      { game: "liar-game", type: "FEAT", desc: "🎭 아는 라이어 / 🤪 모르는 라이어 두 버전을 방 만들기 첫 화면에서 골라요 — 대기실·게임 화면에도 버전 표시" },
+      { game: "liar-game", type: "IMPROVE", desc: "설명은 모두 동시에 몰래 쓰고 전원이 내면 한꺼번에 공개 — 남의 설명을 보고 따라 쓸 수 없어요" },
+      { game: "liar-game", type: "IMPROVE", desc: "AI가 사람 말을 알아들어요 — 단어별 연상어 사전과 확률 추리로 Lv.10 라이어 적중 22%→81%, 정답 추리 35%→89%" },
+      { game: "liar-game", type: "IMPROVE", desc: "내 제시어를 큼직하게, 라운드 공개·최종 결과에서 시민 제시어와 라이어 제시어를 나란히 비교" },
+      { game: "liar-game", type: "IMPROVE", desc: "채팅에 이름을 넣어 추궁하면 AI가 알아듣고, 지목당한 AI는 해명해요" },
+    ],
+  },
+  {
     version: "v1.56.0",
     releaseDate: "2026-10-11",
     title: "🎭 신규 게임 라이어를 찾아라, 🎭 신규 3D 게임 블러프 룰렛, 🎵 27개 게임 맞춤 BGM·효과음, 📡 신규 게임 텔레파시, 🏅 전적 업적·모든 게임 전적 기록, ✏️ 낙서 결투 이어 그리기 인식 개선·붓 커서, 🦈 배고픈 상어 각성·내 빌드",
