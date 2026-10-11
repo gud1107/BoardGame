@@ -191,6 +191,14 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "md-combo", label: "최고 치명타 콤보", num: "maxCritCombo", format: "count", unit: "콤보" },
     { id: "md-bonus", label: "콤보 보너스 달성률", num: "comboBonusWaves", den: "lateWaves", minDen: 30, format: "percent" },
   ],
+  telepathy: [
+    { id: "tp-2p", label: "2인 최고 점수", num: "maxScore2p", format: "count", unit: "점" },
+    { id: "tp-3p", label: "3인 최고 점수", num: "maxScore3p", format: "count", unit: "점" },
+    { id: "tp-4p", label: "4인 최고 점수", num: "maxScore4p", format: "count", unit: "점" },
+    { id: "tp-5p", label: "5인 최고 점수", num: "maxScore5p", format: "count", unit: "점" },
+    { id: "tp-6p", label: "6인 최고 점수", num: "maxScore6p", format: "count", unit: "점" },
+    { id: "tp-perfect", label: "무실수 레벨", num: "perfectLevels", format: "count", unit: "개" },
+  ],
   "doodle-phone": [
     { id: "dp-react", label: "받은 반응", num: "reactionsReceived", format: "count", unit: "개" },
     { id: "dp-exact", label: "정확히 맞힘", num: "exactGuesses", format: "count", unit: "번" },

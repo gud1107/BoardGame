@@ -113,6 +113,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         desc: "최고 기록을 넘는 순간 🆕 전용 팡파르(휘익 → 글로켄 → 금관 \"짜잔\" → 동전 반짝임), 마지막 레벨에서 넘기면 승리 음악 뒤에 울려요",
       },
       {
+        game: "telepathy",
+        type: "FEAT",
+        desc: "🏅 인원별 최고 점수 순위표(사람끼리만 보기 지원, /stats 순위에도 추가), 🤖 나만 카드가 남으면 자동으로 내기 ON/OFF",
+      },
+      {
         game: "common",
         type: "FIX",
         desc: "아발론·뱅·마피아·하나미코지 등 15개 게임의 승패가 전적에 안 쌓이던 문제 수정 — 이제 모든 게임 결과가 기록돼요",

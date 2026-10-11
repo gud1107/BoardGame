@@ -41,6 +41,10 @@ export interface TelepathyBoardProps {
   onAction: (action: MindAction) => void;
 }
 
+const AUTO_SAFE_KEY = "telepathy-auto-safe";
+/** Pause between auto-played cards, so each still lands with its own effect + sound. */
+const AUTO_SAFE_DELAY_MS = 650;
+
 /** Wall + monotonic clock sampled ~20×/s while `active`, so clocks and countdowns move. */
 function useFrame(active: boolean) {
   const [frame, setFrame] = useState(() => ({ wall: Date.now(), perf: performance.now() }));
@@ -281,6 +285,25 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
 
   const [rulebook, setRulebook] = useState<null | "all" | "star">(null);
   const [historyAt, setHistoryAt] = useState<number | null>(null);
+  // 🤖 자동 내기: when nobody else holds a card nothing can be a mistake, so
+  // (if switched on) play my remaining cards for me. Remembered per browser.
+  const [autoSafe, setAutoSafe] = useState(() => {
+    try {
+      return window.localStorage.getItem(AUTO_SAFE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleAutoSafe = () => {
+    setAutoSafe((on) => {
+      try {
+        window.localStorage.setItem(AUTO_SAFE_KEY, on ? "0" : "1");
+      } catch {
+        /* not remembered — still works for this session */
+      }
+      return !on;
+    });
+  };
   const myHand = state.hands[mySeat] ?? [];
   const myLow = myHand[0];
 
@@ -460,6 +483,15 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
     return () => getTelepathyBgm().setTempo(1);
   }, [state.phase]);
   const scoreShown = useCountUp(computeScore(state));
+  useEffect(() => {
+    if (!autoSafe || !safeNow || sentCard !== null || hold !== null || nextCard === undefined) return;
+    const card = nextCard;
+    const id = window.setTimeout(() => {
+      setSentCard(card);
+      onAction({ type: "play", seat: mySeat, card });
+    }, AUTO_SAFE_DELAY_MS);
+    return () => window.clearTimeout(id);
+  }, [autoSafe, safeNow, sentCard, hold, nextCard, onAction, mySeat]);
   // 🆕 New personal best: the first time this game's score passes the record,
   // play the record fanfare once — after the level-clear music (score only
   // rises on a clear). The final level's record is played by the game
@@ -894,7 +926,7 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
       >
         {safeNow && (
           <div className="tlp-banner flex w-full max-w-sm flex-col items-center rounded-xl border-2 border-emerald-300 bg-emerald-400/20 px-3 py-2 text-center light:bg-emerald-100">
-            <p className="text-base font-black text-emerald-100 light:text-emerald-800">✅ 남은 카드는 나만! 바로 내세요</p>
+            <p className="text-base font-black text-emerald-100 light:text-emerald-800">{autoSafe ? "🤖 남은 카드는 나만! 자동으로 내는 중…" : "✅ 남은 카드는 나만! 바로 내세요"}</p>
             <p className="text-[11px] text-emerald-100/80 light:text-emerald-700">
               다른 사람 손에 카드가 없어서 {myHand.length > 1 ? `${myHand.length}장 모두 차례로` : "지금 내도"} 실수가 될 수 없어요
             </p>
@@ -942,6 +974,24 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
           )}
           <span className="text-4xl font-black tabular-nums text-indigo-900">{nextCard ?? "—"}</span>
           <span className="mt-1 text-[10px] font-semibold text-indigo-500">{locked ? "잠깐! 곧 다시" : "꾹 눌러서 내기"}</span>
+        </button>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={autoSafe}
+          onClick={toggleAutoSafe}
+          className={`flex w-full max-w-md items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left transition ${
+            autoSafe ? "border-emerald-300/60 bg-emerald-400/10 light:bg-emerald-50" : "border-white/15 bg-white/[0.03] hover:border-white/30 light:border-slate-200 light:bg-white"
+          }`}
+        >
+          <span className="min-w-0">
+            <span className="block text-xs font-bold text-white light:text-slate-800">🤖 나만 남으면 자동으로 내기</span>
+            <span className="block text-[11px] text-white/50 light:text-slate-500">다른 사람 카드가 다 떨어지면 내 카드를 {AUTO_SAFE_DELAY_MS / 1000}초 간격으로 알아서 내요 (실수 걱정 없음)</span>
+          </span>
+          <span className={`relative h-6 w-11 shrink-0 rounded-full transition ${autoSafe ? "bg-emerald-500" : "bg-white/20 light:bg-slate-300"}`}>
+            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${autoSafe ? "left-[22px]" : "left-0.5"}`} />
+          </span>
+          <span className={`w-7 shrink-0 text-right text-[11px] font-black ${autoSafe ? "text-emerald-300 light:text-emerald-700" : "text-white/40 light:text-slate-400"}`}>{autoSafe ? "ON" : "OFF"}</span>
         </button>
         <p className="text-[11px] text-white/40 light:text-slate-400">
           0.6초 누르면 나가요 · 누르는 동안 다른 사람에게 ✋가 보여요 · 스페이스바도 돼요

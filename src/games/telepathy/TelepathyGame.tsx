@@ -48,6 +48,7 @@ import { telepathySound } from "./telepathySound";
 import { getTelepathyBgm } from "./telepathyBgm";
 import { loadBestRecords, readBestScore, saveBestScore } from "./bestScore";
 import BestRecordsPanel from "./BestRecordsPanel";
+import LeaderboardModal from "./LeaderboardModal";
 
 /**
  * 텔레파시 online room. Host-authoritative realtime (see engine.ts): the
@@ -137,6 +138,8 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
   /** This browser's best for the current player count, read when the game started. */
   const [bestBefore, setBestBefore] = useState(0);
   const [lobbyRulebook, setLobbyRulebook] = useState(false);
+  /** Player count the 🏅 순위표 opens on; null = closed. */
+  const [leaderboardFor, setLeaderboardFor] = useState<number | null>(null);
 
   const [botSeats, setBotSeats] = useState<SeatIndex[]>([]);
   const [botLevels, setBotLevels] = useState<BotLevel[]>([]);
@@ -739,6 +742,14 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
           <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
             <BestRecordsPanel />
             <button
+              type="button"
+              onClick={() => setLeaderboardFor(targetPlayerCount)}
+              className="w-full rounded-xl border border-yellow-300/40 py-2 text-xs font-semibold text-yellow-100 transition hover:bg-yellow-400/10 light:border-amber-300 light:text-amber-800"
+            >
+              🏅 다른 사람들과 순위 비교하기
+            </button>
+            {leaderboardFor !== null && <LeaderboardModal initialCount={leaderboardFor} onClose={() => setLeaderboardFor(null)} />}
+            <button
               onClick={() => {
                 setIntent("create");
                 setSoloLevel(null);
@@ -947,6 +958,14 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
           {!gameState.practice && (
             <div className="w-full max-w-sm">
               <BestRecordsPanel highlight={gameState.playerCount} />
+              <button
+                type="button"
+                onClick={() => setLeaderboardFor(gameState.playerCount)}
+                className="mt-2 w-full rounded-xl border border-yellow-300/40 py-2 text-xs font-semibold text-yellow-100 transition hover:bg-yellow-400/10 light:border-amber-300 light:text-amber-800"
+              >
+                🏅 {gameState.playerCount}인 순위표 보기
+              </button>
+              {leaderboardFor !== null && <LeaderboardModal initialCount={leaderboardFor} onClose={() => setLeaderboardFor(null)} />}
             </div>
           )}
           {s.graceSaves > 0 && <p className="text-xs text-indigo-200 light:text-indigo-600">⏱ 0.25초 관용 판정이 {s.graceSaves}번 실수를 막았어요</p>}
