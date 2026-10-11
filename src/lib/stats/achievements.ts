@@ -166,6 +166,12 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["untouched", "😎", "손대지 않은 리볼버", "방아쇠 없이 1위", 1, k("flawlessWins")],
     ["skull", "💀", "해골의 주인", "해골 발동 성공", 1, k("skullTriggers")],
   ],
+  "liar-game": [
+    ["escape-5", "🎭", "완벽한 위장", "라이어로 지목을 5번 피함", 5, k("liarEscapes")],
+    ["guess-3", "🔍", "역전의 한 수", "들킨 뒤 제시어를 맞혀 역전 3번", 3, k("liarGuesses")],
+    ["detect-20", "🕵️", "거짓말 탐지기", "라이어에게 투표 적중 20번", 20, k("correctVotes")],
+    ["score-15", "🏆", "판의 지배자", "한 판 15점 이상", 15, k("maxScore")],
+  ],
   telepathy: [
     ["level-5", "📡", "주파수 맞추기", "한 판에 레벨 5 통과", 5, k("maxLevel")],
     ["flawless", "🌌", "완전한 동기화", "실수 없이 마지막 레벨까지 승리", 1, k("flawlessWins")],

@@ -91,6 +91,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "liar-game",
+    name: "라이어를 찾아라",
+    nameEn: "Find the Liar",
+    description:
+      "모두 같은 제시어를 받았는데 단 한 명, 라이어만 카테고리밖에 모른다! 3~10인이 돌아가며 제시어를 한 마디씩 설명하고, 토론 후 투표로 라이어를 지목하세요. 라이어는 정체를 숨기며 제시어를 추리해, 들켜도 정답을 맞히면 역전승. 바보 모드·6지선다/직접 입력·카테고리 고정 지원.",
+    players: { min: 3, max: 10 },
+    playTime: { minMinutes: 15, maxMinutes: 40 },
+    category: "party",
+    thumbnail: { emoji: "🎭", gradient: ["#e879f9", "#1e1b4b"] },
+    tags: ["라이어게임", "라이어 게임", "추리", "말하기", "블러핑", "AI봇"],
+    genres: ["party", "bluffing"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "telepathy",
     name: "텔레파시",
     nameEn: "Telepathy",

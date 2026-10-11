@@ -332,7 +332,7 @@ export default function GamePlayPage() {
   const pageMaxWidth =
     game.id === "hungry-shark"
       ? "max-w-6xl"
-      : game.id === "doodle-phone"
+      : game.id === "doodle-phone" || game.id === "liar-game"
       ? "max-w-3xl"
       : game.id === "lotr-duel"
       ? "max-w-[96rem]"

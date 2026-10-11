@@ -62,6 +62,13 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "방아쇠 없이 1위", value: (d) => n(d.flawlessWins) },
     { label: "해골 발동", value: (d) => n(d.skullTriggers) },
   ],
+  "liar-game": [
+    { label: "라이어로 지목 피함 / 라이어 라운드", value: (d) => `${n(d.liarEscapes)} / ${n(d.liarRounds)}` },
+    { label: "들킨 뒤 제시어 맞혀 역전", value: (d) => n(d.liarGuesses) },
+    { label: "시민으로 승리 / 시민 라운드", value: (d) => `${n(d.citizenWins)} / ${n(d.citizenRounds)}` },
+    { label: "라이어에게 투표 적중률", value: (d) => ratio(d.correctVotes, d.citizenRounds) },
+    { label: "한 판 최고 점수", value: (d) => n(d.maxScore) },
+  ],
   telepathy: [
     { label: "최고 도달 레벨", value: (d) => `레벨 ${n(d.maxLevel)}` },
     {

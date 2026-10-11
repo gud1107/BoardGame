@@ -93,6 +93,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "오답 없는 퍼펙트", key: "perfectGames", flag: true },
     { label: "Lv.10 봇 상대 승리", key: "lv10BotWins", flag: true },
   ],
+  "liar-game": [
+    { label: "라이어로 지목 피함", key: "liarEscapes", unit: "번" },
+    { label: "들킨 뒤 정답 역전", key: "liarGuesses", unit: "번" },
+    { label: "라이어 투표 적중", key: "correctVotes", unit: "번" },
+    { label: "한 판 최고 점수", key: "maxScore", unit: "점" },
+  ],
   "doodle-phone": [
     { label: "그린 그림", key: "drawings", unit: "장" },
     { label: "원래 문장 정확히 맞힘", key: "exactGuesses", unit: "번" },
@@ -210,6 +216,11 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "tp-5p", label: "5인 최고 점수", num: "maxScore5p", format: "count", unit: "점" },
     { id: "tp-6p", label: "6인 최고 점수", num: "maxScore6p", format: "count", unit: "점" },
     { id: "tp-perfect", label: "무실수 레벨", num: "perfectLevels", format: "count", unit: "개" },
+  ],
+  "liar-game": [
+    { id: "lg-escape", label: "라이어 생존", num: "liarEscapes", format: "count", unit: "번" },
+    { id: "lg-detect", label: "라이어 적중률", num: "correctVotes", den: "citizenRounds", minDen: 10, format: "percent" },
+    { id: "lg-score", label: "한 판 최고 점수", num: "maxScore", format: "count", unit: "점" },
   ],
   "doodle-phone": [
     { id: "dp-react", label: "받은 반응", num: "reactionsReceived", format: "count", unit: "개" },
