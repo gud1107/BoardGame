@@ -14,6 +14,7 @@ import {
 } from "./engine";
 import Timeline, { SEAT_COLORS } from "./Timeline";
 import { telepathySound } from "./telepathySound";
+import RulebookModal from "./RulebookModal";
 
 /**
  * In-game screen for 텔레파시. Purely a view of the host's snapshot + intent
@@ -71,6 +72,7 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
   const hostNow = frame.wall + hostOffset;
   const sound = telepathySound();
 
+  const [rulebook, setRulebook] = useState<null | "all" | "star">(null);
   const myHand = state.hands[mySeat] ?? [];
   const myLow = myHand[0];
 
@@ -244,13 +246,28 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
           </span>
           {state.practice && <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-bold text-emerald-200 light:text-emerald-700">연습</span>}
         </div>
-        <div className="flex items-center gap-3 text-sm">
-          <span className={`flex items-center gap-0.5 ${state.phase === "mistake" ? "tlp-shake" : ""}`} aria-label={`하트 ${state.lives}개`}>
-            {state.practice ? "❤️ ∞" : state.lives > 0 ? Array.from({ length: state.lives }, (_, i) => <span key={i}>❤️</span>) : <span className="text-white/40">💔 0</span>}
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span
+            className={`flex items-center gap-1 rounded-full border border-rose-300/30 bg-rose-500/10 px-2 py-1 font-semibold text-rose-100 light:border-rose-200 light:bg-rose-50 light:text-rose-700 ${state.phase === "mistake" ? "tlp-shake" : ""}`}
+            title="하트: 실수할 때마다 1개씩 깨져요. 0개가 되면 패배"
+          >
+            {state.lives > 0 || state.practice ? "❤️" : "💔"} 하트 {state.practice ? "∞" : state.lives}
           </span>
-          <span className="flex items-center gap-0.5" aria-label={`번뜩임 ${state.stars}개`}>
-            {state.practice ? "⚡ ∞" : state.stars > 0 ? Array.from({ length: state.stars }, (_, i) => <span key={i}>⚡</span>) : <span className="text-white/40 light:text-slate-400">⚡ 0</span>}
-          </span>
+          <button
+            type="button"
+            onClick={() => setRulebook("star")}
+            className="flex items-center gap-1 rounded-full border border-amber-300/50 bg-amber-400/15 px-2 py-1 font-semibold text-amber-100 transition hover:bg-amber-400/25 light:border-amber-300 light:bg-amber-50 light:text-amber-800"
+            title="번뜩임: 모두가 가장 낮은 카드 1장씩 공개하고 버리는 팀 공용 능력 (눌러서 설명 보기)"
+          >
+            ⚡ 번뜩임 {state.practice ? "∞" : state.stars} <span className="text-[10px] opacity-70">ⓘ</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setRulebook("all")}
+            className="rounded-full border border-white/20 px-2 py-1 font-semibold text-white/80 transition hover:bg-white/10 light:border-slate-300 light:text-slate-700"
+          >
+            📖 룰북
+          </button>
         </div>
       </div>
 
@@ -399,6 +416,7 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
             <span className="tlp-pop text-5xl">⚡</span>
             <p className="text-sm font-bold text-amber-200 light:text-amber-700">번뜩임! 모두 가장 낮은 카드를 공개했어요</p>
             <RevealChips revealed={state.lastStar.revealed} names={names} tone="amber" />
+            <p className="max-w-xs text-xs text-white/60 light:text-slate-500">이 카드들은 버려졌어요 (하트는 그대로). 공개된 숫자로 서로 남은 카드가 어느 쯤인지 짐작해 보세요.</p>
           </div>
         )}
 
@@ -409,7 +427,7 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
             {levelLog && levelLog.mistakes === 0 && <p className="text-xs font-semibold text-emerald-300 light:text-emerald-600">실수 없이 통과 +50점</p>}
             {state.lastReward && (
               <p className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white light:bg-indigo-100 light:text-indigo-800">
-                보상: {state.lastReward.kind === "life" ? "❤️ 하트 +1" : "⚡ 번뜩임 +1"}
+                보상: {state.lastReward.kind === "life" ? "❤️ 하트 +1" : "⚡ 번뜩임 +1 (막혔을 때 모두 가장 낮은 카드 1장씩 공개)"}
                 {!state.lastReward.granted && " (이미 최대라 사라짐)"}
               </p>
             )}
@@ -431,14 +449,22 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
           <div className="absolute inset-0 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm light:bg-white/80">
             <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-2xl border border-amber-300/40 bg-slate-900 p-4 text-center light:border-amber-300 light:bg-white">
               <p className="text-sm font-bold text-amber-200 light:text-amber-700">⚡ {names[vote.proposer]}님이 번뜩임을 제안했어요</p>
-              <p className="text-xs text-white/60 light:text-slate-500">모두 찬성하면 각자 가장 낮은 카드 1장을 공개하고 버려요</p>
+              <div className="w-full rounded-lg bg-amber-400/10 px-3 py-2 text-left text-xs leading-relaxed text-white/80 light:bg-amber-50 light:text-slate-700">
+                전원 찬성하면 <b>모두 가장 낮은 카드 1장씩</b> 공개하고 버려요. 실수가 아니라서 <b>하트는 안 잃고</b>, ⚡ 1개를 써요.
+                {myHand[0] !== undefined && (
+                  <span className="mt-1 block">
+                    내 카드 <b className="tabular-nums text-amber-200 light:text-amber-700">{myHand[0]}</b>가 버려져요.
+                  </span>
+                )}
+              </div>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
                 <div className="h-full bg-amber-300" style={{ width: `${Math.max(0, Math.min(100, ((vote.deadline - hostNow) / 8000) * 100))}%` }} />
               </div>
-              <div className="flex gap-1">
+              <div className="flex w-full flex-col gap-0.5 text-left text-[11px]">
                 {vote.yes.map((v, seat) => (
-                  <span key={seat} title={names[seat]} className="text-sm">
-                    {v === true ? "✅" : "⏳"}
+                  <span key={seat} className="flex items-center justify-between gap-2 text-white/70 light:text-slate-600">
+                    <span className="truncate">{names[seat]}</span>
+                    <span className={v === true ? "shrink-0 text-emerald-300 light:text-emerald-600" : "shrink-0 text-white/40 light:text-slate-400"}>{v === true ? "✅ 찬성" : "⏳ 고민 중"}</span>
                   </span>
                 ))}
               </div>
@@ -524,15 +550,43 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
           {cancels.count > 0 && ` · 취소 ${Math.min(cancels.count, FREE_CANCELS)}/${FREE_CANCELS}`}
         </p>
 
-        <div className="flex flex-wrap justify-center gap-2">
+        <div className="flex w-full max-w-md flex-col gap-2 rounded-xl border-2 border-amber-300/40 bg-amber-400/[0.08] p-3 text-left light:border-amber-300 light:bg-amber-50">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-bold text-amber-200 light:text-amber-800">
+              ⚡ 번뜩임 <span className="tabular-nums">{state.practice ? "∞" : `${state.stars}개`}</span>
+            </p>
+            <button type="button" onClick={() => setRulebook("star")} className="text-[11px] font-semibold text-amber-200/80 underline-offset-2 hover:underline light:text-amber-700">
+              ⓘ 자세히
+            </button>
+          </div>
+          <p className="text-xs leading-relaxed text-white/80 light:text-slate-700">
+            막혔을 때 쓰는 <b>팀 능력</b>: <b>모두가 가장 낮은 카드 1장씩</b> 공개하고 버려요. <b className="text-emerald-300 light:text-emerald-700">실수 아님 · 하트 안 잃음</b> · 전원 찬성해야 발동
+          </p>
+          {nextCard !== undefined && (
+            <p className="flex flex-wrap items-center gap-1 text-[11px] text-white/60 light:text-slate-500">
+              지금 쓰면 내 카드
+              <span className="rounded border border-dashed border-amber-300/70 px-1.5 font-bold tabular-nums text-amber-100 light:text-amber-800">{nextCard}</span>
+              가 공개되고 버려져요
+            </p>
+          )}
           <button
             type="button"
             onClick={() => onAction({ type: "starPropose", seat: mySeat })}
             disabled={!canStar}
-            className="rounded-full border border-amber-300/50 px-4 py-1.5 text-xs font-semibold text-amber-200 transition hover:bg-amber-400/10 disabled:opacity-40 light:text-amber-700"
+            className="rounded-lg bg-amber-400 py-2 text-sm font-bold text-slate-900 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-amber-400/25 disabled:text-white/50 light:disabled:text-slate-500"
           >
-            ⚡ 번뜩임 제안{starCooldown > 0 && state.phase === "playing" ? ` (${Math.ceil(starCooldown / 1000)}초)` : ""}
+            {canStar
+              ? "⚡ 번뜩임 쓰기 (모두에게 투표 요청)"
+              : state.stars <= 0
+                ? "⚡ 번뜩임이 없어요"
+                : starCooldown > 0 && state.phase === "playing"
+                  ? `⚡ ${Math.ceil(starCooldown / 1000)}초 뒤 다시 제안 가능`
+                  : "⚡ 카드를 내는 중에만 쓸 수 있어요"}
           </button>
+          {state.stars <= 0 && !state.practice && <p className="text-[11px] text-white/50 light:text-slate-500">2·5·8레벨을 통과하면 1개씩 받아요</p>}
+        </div>
+
+        <div className="flex flex-wrap justify-center gap-2">
           <button
             type="button"
             onClick={() => onAction({ type: "resync", seat: mySeat })}
@@ -543,6 +597,7 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
           </button>
         </div>
       </div>
+      {rulebook && <RulebookModal focus={rulebook === "star" ? "star" : undefined} onClose={() => setRulebook(null)} />}
     </div>
   );
 }

@@ -43,6 +43,7 @@ import {
 import { createBotMemory, runBots } from "./bots";
 import TelepathyBoard from "./TelepathyBoard";
 import Timeline from "./Timeline";
+import RulebookModal from "./RulebookModal";
 import { telepathySound } from "./telepathySound";
 
 /**
@@ -130,6 +131,7 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
   const [options, setOptions] = useState<RoomOptions>({ practice: false });
   const optionsRef = useRef<RoomOptions>(options);
   const [resultLevel, setResultLevel] = useState<number | null>(null);
+  const [lobbyRulebook, setLobbyRulebook] = useState(false);
 
   const [botSeats, setBotSeats] = useState<SeatIndex[]>([]);
   const [botLevels, setBotLevels] = useState<BotLevel[]>([]);
@@ -852,6 +854,10 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
               🧪 연습 모드 (하트·번뜩임 무한, 기록 안 남음)
             </label>
             <p className="text-xs text-white/40 light:text-slate-400">자리가 다 차면 자동으로 시작해요.</p>
+            <button onClick={() => setLobbyRulebook(true)} className="rounded-full border border-white/15 px-4 py-1.5 text-xs text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600">
+              📖 룰북 보기 (⚡ 번뜩임 설명 포함)
+            </button>
+            {lobbyRulebook && <RulebookModal onClose={() => setLobbyRulebook(false)} />}
             {isHost && filled >= MIN_PLAYERS && filled < knownTargetPlayerCount && (
               <button onClick={sendGameStart} className="rounded-full bg-indigo-500 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-400">
                 지금 시작 ({filled}명)
