@@ -1,6 +1,8 @@
 import type { GameMeta } from "@/games/types";
 import { getGameDifficulty } from "./gameDifficulty";
 import { getGameLastUpdated, getGameUpdateCount } from "./gameUpdateCount";
+import { GAME_LAST_COMMIT } from "./gameLastUpdated.generated";
+import type { GameRelease } from "@/lib/admin/gameReleases";
 
 /**
  * Sort options for the lobby's game showcase grid — shared between the
@@ -21,7 +23,16 @@ export type SortOption =
   | "NAME_ASC"
   | "PLAYERS_ASC"
   | "PLAYERS_DESC"
-  | "DIFFICULTY_ASC";
+  | "DIFFICULTY_ASC"
+  | AdminSortOption;
+
+/**
+ * Admin-only "신규 업데이트순" (2026-10-11): newest game-specific commit
+ * first, by commit time, by when it was pushed, or by when it reached
+ * production. Only rendered for site admins (`SortFilterChips` `admin`);
+ * push/deploy times come from `/api/admin/game-releases`.
+ */
+export type AdminSortOption = "ADMIN_COMMIT_DESC" | "ADMIN_PUSH_DESC" | "ADMIN_DEPLOY_DESC";
 
 export const SORT_OPTIONS: { key: SortOption; label: string }[] = [
   { key: "POPULAR_DESC", label: "👑 인기순" },
@@ -31,6 +42,16 @@ export const SORT_OPTIONS: { key: SortOption; label: string }[] = [
   { key: "PLAYERS_DESC", label: "인원 많은순" },
   { key: "DIFFICULTY_ASC", label: "난이도 쉬운순" },
 ];
+
+export const ADMIN_SORT_OPTIONS: { key: AdminSortOption; label: string }[] = [
+  { key: "ADMIN_COMMIT_DESC", label: "🛠 커밋순" },
+  { key: "ADMIN_PUSH_DESC", label: "🛠 푸시순" },
+  { key: "ADMIN_DEPLOY_DESC", label: "🛠 배포순" },
+];
+
+export function isAdminSortOption(option: SortOption): option is AdminSortOption {
+  return option.startsWith("ADMIN_");
+}
 
 export const DEFAULT_SORT_OPTION: SortOption = "POPULAR_DESC";
 
@@ -44,6 +65,25 @@ function byLastUpdatedDesc(a: GameMeta, b: GameMeta): number {
   );
 }
 
+const toMs = (iso: string | null | undefined) => (iso ? Date.parse(iso) || 0 : 0);
+
+/**
+ * Sort key for the admin sorts, in ms. Each basis falls back to the earlier
+ * stage when its own time is unknown (not pushed/deployed yet, or the GitHub
+ * lookup was rate-limited), so a just-committed game still sorts by commit.
+ */
+export function adminReleaseTime(
+  gameId: string,
+  option: AdminSortOption,
+  releases?: Readonly<Record<string, GameRelease>>,
+): number {
+  const r = releases?.[gameId];
+  const commit = toMs(r?.commitAt ?? GAME_LAST_COMMIT[gameId]?.at ?? getGameLastUpdated(gameId));
+  if (option === "ADMIN_COMMIT_DESC") return commit;
+  if (option === "ADMIN_PUSH_DESC") return toMs(r?.pushedAt) || toMs(r?.deployedAt) || commit;
+  return toMs(r?.deployedAt) || toMs(r?.pushedAt) || commit;
+}
+
 /**
  * `playCounts` (all-time plays per game id, from Supabase via
  * `fetchGamePlayStats().total`) is only read by `POPULAR_DESC`; while it's still
@@ -53,9 +93,14 @@ export function sortGamesBy<T extends GameMeta>(
   games: T[],
   option: SortOption,
   playCounts?: ReadonlyMap<string, number>,
+  releases?: Readonly<Record<string, GameRelease>>,
 ): T[] {
   return [...games].sort((a, b) => {
     switch (option) {
+      case "ADMIN_COMMIT_DESC":
+      case "ADMIN_PUSH_DESC":
+      case "ADMIN_DEPLOY_DESC":
+        return adminReleaseTime(b.id, option, releases) - adminReleaseTime(a.id, option, releases) || byLastUpdatedDesc(a, b);
       case "POPULAR_DESC":
         return (
           (playCounts?.get(b.id) ?? 0) - (playCounts?.get(a.id) ?? 0) ||

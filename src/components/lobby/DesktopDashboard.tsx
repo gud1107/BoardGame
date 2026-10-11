@@ -67,6 +67,8 @@ export default function DesktopDashboard({
   monthPlays,
   now,
   rooms,
+  adminSort = false,
+  adminLine,
 }: {
   games: GameMeta[];
   totalCount: number;
@@ -82,6 +84,10 @@ export default function DesktopDashboard({
   now: number;
   /** Live waiting rooms, subscribed once in `page.tsx` and shared with the mobile layout. */
   rooms: ActiveRoomRecord[];
+  /** Site admin — show the 🛠 커밋/푸시/배포순 chips. */
+  adminSort?: boolean;
+  /** Set while a 🛠 sort is active: per-card commit/push/deploy line. */
+  adminLine?: (gameId: string) => React.ReactNode;
 }) {
 
   const liveCountByGame = useMemo(() => {
@@ -130,7 +136,7 @@ export default function DesktopDashboard({
             <span className="shrink-0 text-xs font-medium text-amber-500/60 light:text-amber-700">
               총 {totalCount}개 게임 · 플레이 가능 {playableCount}개
             </span>
-            <SortFilterChips value={sortOption} onChange={onSortChange} className="shrink-0" />
+            <SortFilterChips value={sortOption} onChange={onSortChange} admin={adminSort} className="shrink-0" />
           </div>
         </div>
 
@@ -147,6 +153,7 @@ export default function DesktopDashboard({
                   badge={getGameFreshnessBadge(game.id, now)}
                   plays={monthPlays.get(game.id) ?? 0}
                   now={now}
+                  adminLine={adminLine?.(game.id)}
                 />
               ))}
             </div>

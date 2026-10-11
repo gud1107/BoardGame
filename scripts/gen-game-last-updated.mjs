@@ -1,13 +1,20 @@
 // Regenerates src/constants/gameLastUpdated.generated.ts — the lobby's
-// "최근 업데이트순" sort key and NEW/UPDATED card badges. For each game
-// directory under src/games/ it records the date of the newest commit that
-// touched that game specifically, plus the first commit that ever touched it.
-// Site-wide sweeps (one commit touching many game dirs at once, e.g. the
-// 2026-09-14 dark-theme pass) are skipped for "last updated" so they don't
-// flatten every game onto the same date. Run: npm run gen:last-updated
+// "최근 업데이트순" sort key, NEW/UPDATED card badges, and the admin-only
+// 커밋/푸시/배포순 sorts. For each game directory under src/games/ it records
+// the newest commit that touched that game specifically (date + sha), plus
+// the first commit that ever touched it. Site-wide sweeps (one commit touching
+// many game dirs at once, e.g. the 2026-09-14 dark-theme pass) are skipped for
+// "last updated" so they don't flatten every game onto the same date.
+//
+// Runs as `prebuild` (so every Vercel deploy includes the commit it builds)
+// and by hand: npm run gen:last-updated. Vercel builds from a shallow clone,
+// so rows already in the generated file are merged in (newest `at` wins for
+// last-updated, oldest for added) instead of being dropped; if git is
+// unavailable the existing file is left untouched.
 import { execSync } from "node:child_process";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
+const OUT = "src/constants/gameLastUpdated.generated.ts";
 /** A commit touching more game dirs than this counts as a site-wide sweep. */
 const MAX_GAMES_PER_COMMIT = 3;
 const SKIP_DIRS = new Set(["shared"]);
@@ -21,50 +28,82 @@ const toId = (dir) =>
     .replace(/([a-zA-Z])(\d)/g, "$1-$2")
     .toLowerCase();
 
-const log = execSync(
-  'git log --format=__C__%cI --name-only -- src/games',
-  { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
-);
+/** id → { at, sha? } from one `export const NAME … = {…};` block of the old file. */
+function readExisting(src, name) {
+  const block = src.match(new RegExp(`export const ${name}\\b[^=]*= \\{([\\s\\S]*?)\\n\\};`))?.[1] ?? "";
+  const rows = new Map();
+  for (const m of block.matchAll(/"([a-z0-9-]+)": (?:"([^"]+)"|\{ "at": "([^"]+)", "sha": "([0-9a-f]+)" \})/g)) {
+    rows.set(m[1], m[2] ? { at: m[2] } : { at: m[3], sha: m[4] });
+  }
+  return rows;
+}
 
-const latest = new Map();
-// First commit that ever touched each game dir — its "added" date. Not
-// sweep-filtered: a game's first commit only ever touches its own dir.
-const added = new Map();
+const prevSrc = existsSync(OUT) ? readFileSync(OUT, "utf8") : "";
+const latest = readExisting(prevSrc, "GAME_LAST_COMMIT");
+for (const [id, row] of readExisting(prevSrc, "GAME_LAST_UPDATED")) if (!latest.has(id)) latest.set(id, row);
+const added = readExisting(prevSrc, "GAME_ADDED");
+
+let log;
+try {
+  log = execSync("git log --format=__C__%cI%x09%H --name-only -- src/games", {
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+} catch {
+  console.warn("gen-game-last-updated: git log unavailable — keeping the existing file");
+  process.exit(0);
+}
+
+const newer = (a, b) => Date.parse(a) > Date.parse(b);
 for (const chunk of log.split("__C__").slice(1)) {
-  const [date, ...files] = chunk.trim().split("\n");
+  const [head, ...files] = chunk.trim().split("\n");
+  const [date, sha] = head.split("\t");
   const dirs = new Set(
     files
       .map((f) => f.match(/^src\/games\/([^/]+)\//)?.[1])
       .filter((d) => d && !SKIP_DIRS.has(d) && existsSync(`src/games/${d}`)),
   );
-  for (const dir of dirs) added.set(toId(dir), date); // log is newest-first, so oldest wins
+  // First commit that ever touched each game dir — its "added" date. Not
+  // sweep-filtered: a game's first commit only ever touches its own dir.
+  for (const dir of dirs) {
+    const id = toId(dir);
+    const prev = added.get(id);
+    if (!prev || newer(prev.at, date)) added.set(id, { at: date });
+  }
   if (dirs.size === 0 || dirs.size > MAX_GAMES_PER_COMMIT) continue;
   for (const dir of dirs) {
     const id = toId(dir);
-    if (!latest.has(id)) latest.set(id, date);
+    const prev = latest.get(id);
+    if (!prev || newer(date, prev.at) || (prev.at === date && !prev.sha)) latest.set(id, { at: date, sha });
   }
 }
 
-const toRows = (map) =>
-  [...map.entries()]
-    .sort((a, b) => b[1].localeCompare(a[1]))
-    .map(([id, date]) => `  "${id}": "${date}",`)
-    .join("\n");
+const sorted = (map) => [...map.entries()].sort((a, b) => Date.parse(b[1].at) - Date.parse(a[1].at));
+const dateRows = (map) => sorted(map).map(([id, { at }]) => `  "${id}": "${at}",`).join("\n");
+const commitRows = sorted(latest)
+  .filter(([, row]) => row.sha)
+  .map(([id, { at, sha }]) => `  "${id}": { "at": "${at}", "sha": "${sha}" },`)
+  .join("\n");
 
-writeFileSync(
-  "src/constants/gameLastUpdated.generated.ts",
-  `// AUTO-GENERATED by scripts/gen-game-last-updated.mjs — do not edit by hand.
-// Regenerate with \`npm run gen:last-updated\` after shipping game changes.
+const body = `// AUTO-GENERATED by scripts/gen-game-last-updated.mjs — do not edit by hand.
+// Regenerated on every build (prebuild) and by \`npm run gen:last-updated\`.
 import type { GameId } from "@/games/types";
 
 export const GAME_LAST_UPDATED: Partial<Record<GameId, string>> = {
-${toRows(latest)}
+${dateRows(latest)}
 };
 
 /** First commit that touched each game — drives the lobby's NEW badge. */
 export const GAME_ADDED: Partial<Record<GameId, string>> = {
-${toRows(added)}
+${dateRows(added)}
 };
-`,
-);
-console.log(`${latest.size} games`);
+
+/** Newest game-specific commit (sha + committer date) — the admin 커밋/푸시/배포순 sorts. */
+export const GAME_LAST_COMMIT: Partial<Record<GameId, { at: string; sha: string }>> = {
+${commitRows}
+};
+`;
+if (prevSrc.replace(/\r\n/g, "\n") !== body) {
+  writeFileSync(OUT, body);
+  console.log(`gen-game-last-updated: wrote ${latest.size} games`);
+}

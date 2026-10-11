@@ -6,11 +6,14 @@ export default function GameGrid({
   games,
   monthPlays,
   now,
+  adminLine,
 }: {
   games: GameMeta[];
   /** This month's real starts per game (shown as "🔥 10월 N회 플레이"). */
   monthPlays: ReadonlyMap<string, number>;
   now: number;
+  /** Site admins on a 🛠 sort: per-card commit/push/deploy line. */
+  adminLine?: (gameId: string) => React.ReactNode;
 }) {
   return (
     // Mobile (base, no breakpoint below sm exists in this Tailwind config):
@@ -25,6 +28,7 @@ export default function GameGrid({
           badge={getGameFreshnessBadge(game.id, now)}
           plays={monthPlays.get(game.id) ?? 0}
           now={now}
+          adminLine={adminLine?.(game.id)}
         />
       ))}
     </div>

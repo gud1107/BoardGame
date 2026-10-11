@@ -1,6 +1,6 @@
 "use client";
 
-import { SORT_OPTIONS, type SortOption } from "@/constants/sortOptions";
+import { ADMIN_SORT_OPTIONS, SORT_OPTIONS, type SortOption } from "@/constants/sortOptions";
 
 /**
  * Gold chip strip for picking the lobby showcase grid's sort order — shared
@@ -14,6 +14,7 @@ export default function SortFilterChips({
   value,
   onChange,
   className = "",
+  admin = false,
 }: {
   value: SortOption;
   onChange: (option: SortOption) => void;
@@ -28,6 +29,8 @@ export default function SortFilterChips({
    * was rendering as just "난이도".
    */
   className?: string;
+  /** Site admin — also shows the 🛠 커밋/푸시/배포순 chips (`ADMIN_SORT_OPTIONS`). */
+  admin?: boolean;
 }) {
   return (
     <div className={`-mx-1 flex gap-1.5 overflow-x-auto px-1 py-1 no-scrollbar ${className}`}>
@@ -48,6 +51,29 @@ export default function SortFilterChips({
           </button>
         );
       })}
+      {admin && (
+        <>
+          <span aria-hidden className="mx-0.5 w-px shrink-0 self-stretch bg-white/10 light:bg-slate-200" />
+          {ADMIN_SORT_OPTIONS.map((opt) => {
+            const isActive = value === opt.key;
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => onChange(opt.key)}
+                title="관리자 전용 — 게임별 최신 커밋의 커밋/푸시/운영 배포 시각 기준"
+                className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap transition-all duration-200 ${
+                  isActive
+                    ? "border-violet-400 bg-violet-500/20 text-violet-200 light:text-violet-700"
+                    : "border-violet-400/25 text-violet-300/70 hover:border-violet-400/60 light:border-violet-200 light:text-violet-600"
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </>
+      )}
     </div>
   );
 }

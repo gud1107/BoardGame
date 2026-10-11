@@ -39,6 +39,7 @@ export default function GameShowcaseCard({
   badge = null,
   plays = 0,
   now = 0,
+  adminLine = null,
 }: {
   game: GameMeta;
   liveRoomCount: number;
@@ -46,6 +47,8 @@ export default function GameShowcaseCard({
   plays?: number;
   /** Page-load timestamp, for the play label's month name. */
   now?: number;
+  /** Admin-only commit/push/deploy line (`AdminReleaseLine`), shown under the stats row. */
+  adminLine?: React.ReactNode;
 }) {
   const difficulty = getGameDifficulty(game.id);
   const genreTags = (game.genres ?? []).slice(0, MAX_GENRE_TAGS);
@@ -96,6 +99,7 @@ export default function GameShowcaseCard({
           )}
           <PlayCountLabel plays={plays} now={now} className="font-semibold" />
         </div>
+        {adminLine}
         {genreTags.length > 0 && (
           <div className="mt-auto flex flex-wrap gap-1 pt-1">
             {genreTags.map((genre) => (

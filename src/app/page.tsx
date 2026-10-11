@@ -10,11 +10,15 @@ import DesktopDashboard from "@/components/lobby/DesktopDashboard";
 import PublicRoomBrowser from "@/components/lobby/PublicRoomBrowser";
 import { useActiveRooms } from "@/games/shared/room/useActiveRooms";
 import { PLAYER_FILTERS } from "@/constants/playerFilters";
-import { DEFAULT_SORT_OPTION, type SortOption, sortGamesBy } from "@/constants/sortOptions";
+import { DEFAULT_SORT_OPTION, isAdminSortOption, type SortOption, sortGamesBy } from "@/constants/sortOptions";
 import SortFilterChips from "@/components/lobby/SortFilterChips";
 import { useGameBgm } from "@/lib/audio/useGameBgm";
 import { fetchGamePlayStats } from "@/lib/analytics/playCounts";
 import { applyGameOverrides, fetchGameOverrides, type GameOverride } from "@/lib/siteConfig/siteConfig";
+import { useSubscriptionStore } from "@/store/subscriptionStore";
+import { useIsSiteAdmin } from "@/lib/admin/useIsSiteAdmin";
+import { useGameReleases } from "@/lib/admin/useGameReleases";
+import AdminReleaseLine from "@/components/lobby/AdminReleaseLine";
 
 type GenreFilter = GameGenre | "all";
 
@@ -95,7 +99,16 @@ export default function DashboardPage() {
   const query = queryPick ?? saved.query ?? "";
   const filterIdx = filterIdxPick ?? saved.filterIdx ?? 0;
   const genreFilter = genrePick ?? saved.genreFilter ?? "all";
-  const sortOption = sortPick ?? saved.sortOption ?? DEFAULT_SORT_OPTION;
+  // 🛠 커밋/푸시/배포순 are site-admin only (2026-10-11); anyone else with
+  // one somehow saved falls back to the default.
+  const isAdmin = useIsSiteAdmin(useSubscriptionStore((s) => s.userId));
+  const pickedSort = sortPick ?? saved.sortOption ?? DEFAULT_SORT_OPTION;
+  const sortOption = isAdminSortOption(pickedSort) && !isAdmin ? DEFAULT_SORT_OPTION : pickedSort;
+  const adminSort = isAdminSortOption(sortOption) ? sortOption : null;
+  const releases = useGameReleases(adminSort !== null)?.games;
+  const adminLine = adminSort
+    ? (gameId: string) => <AdminReleaseLine gameId={gameId} release={releases?.[gameId]} option={adminSort} />
+    : undefined;
 
   // Badge clock: 0 until hydrated (no NEW/UPDATED badges or month label in
   // the prerendered HTML), then this load's client time.
@@ -195,11 +208,13 @@ export default function DashboardPage() {
     // end regardless of sort choice — kept in sync with search/genre/
     // player-count filtering above so it applies no matter what was typed
     // or selected.
-    const sorted = sortGamesBy(byGenre, sortOption, playCounts);
+    const sorted = sortGamesBy(byGenre, sortOption, playCounts, releases);
     // Admin-featured games first (stable, so the chosen sort still orders
-    // them among themselves); playability partitioning still runs last.
+    // them among themselves) — except on the admin 🛠 sorts, which want the
+    // raw release order; playability partitioning still runs last.
+    if (isAdminSortOption(sortOption)) return sortByPlayability(sorted);
     return sortByPlayability([...sorted.filter((g) => g.featured), ...sorted.filter((g) => !g.featured)]);
-  }, [baseFiltered, genreFilter, sortOption, playCounts]);
+  }, [baseFiltered, genreFilter, sortOption, playCounts, releases]);
 
   const playableCount = catalog.filter((g) => g.playable).length;
   // One Realtime subscription for both layouts' 🌐 공개방 browser and the
@@ -228,6 +243,8 @@ export default function DashboardPage() {
         monthPlays={monthPlays}
         now={now}
         rooms={rooms}
+        adminSort={isAdmin}
+        adminLine={adminLine}
       />
 
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 xl:hidden">
@@ -297,7 +314,7 @@ export default function DashboardPage() {
           <span className="shrink-0 text-[11px] font-medium text-amber-500/60 light:text-amber-700">
             정렬
           </span>
-          <SortFilterChips value={sortOption} onChange={setSortOption} />
+          <SortFilterChips value={sortOption} onChange={setSortOption} admin={isAdmin} />
         </div>
       </div>
 
@@ -350,7 +367,7 @@ export default function DashboardPage() {
           <span className="shrink-0 text-[11px] font-medium text-amber-500/60 light:text-amber-700">
             정렬
           </span>
-          <SortFilterChips value={sortOption} onChange={setSortOption} />
+          <SortFilterChips value={sortOption} onChange={setSortOption} admin={isAdmin} />
         </div>
 
         <div className="mb-8 flex flex-wrap gap-2">
@@ -408,7 +425,7 @@ export default function DashboardPage() {
         )}
 
         {filtered.length > 0 ? (
-          <GameGrid games={filtered} monthPlays={monthPlays} now={now} />
+          <GameGrid games={filtered} monthPlays={monthPlays} now={now} adminLine={adminLine} />
         ) : (
           <p className="py-16 text-center text-sm text-white/40 light:text-slate-400">검색 결과가 없습니다.</p>
         )}
