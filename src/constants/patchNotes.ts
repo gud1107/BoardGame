@@ -60,8 +60,18 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.56.0",
     releaseDate: "2026-10-11",
-    title: "🎵 27개 게임 맞춤 BGM·효과음, 📡 신규 게임 텔레파시, 🏅 전적 업적·모든 게임 전적 기록, ✏️ 낙서 결투 이어 그리기 인식 개선·붓 커서, 🦈 배고픈 상어 각성·내 빌드",
+    title: "🎭 신규 3D 게임 블러프 룰렛, 🎵 27개 게임 맞춤 BGM·효과음, 📡 신규 게임 텔레파시, 🏅 전적 업적·모든 게임 전적 기록, ✏️ 낙서 결투 이어 그리기 인식 개선·붓 커서, 🦈 배고픈 상어 각성·내 빌드",
     changes: [
+      {
+        game: "bluff-roulette",
+        type: "FEAT",
+        desc: "신규 3D 게임 🎭 블러프 룰렛 — 카드로 거짓말하고 걸리면 6연발 리볼버를 당기는 2~6인 서바이벌, 봇 Lv.1~10 지원",
+      },
+      {
+        game: "bluff-roulette",
+        type: "FEAT",
+        desc: "3D 살롱 테이블·의심 연출 카메라·💀 해골 모드·살롱 재즈 BGM, 3D 미지원 기기는 2D 테이블로 자동 전환",
+      },
       {
         game: "telepathy",
         type: "FEAT",

@@ -74,6 +74,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "bluff-roulette",
+    name: "블러프 룰렛",
+    nameEn: "Bluff Roulette",
+    description:
+      "3D 지하 살롱 테이블에 둘러앉아 카드로 거짓말하는 2~6인 블러핑 서바이벌. 매 라운드 정해진 '오늘의 카드'라고 우기며 1~3장을 엎어 내고, 다음 사람은 믿거나 '거짓말!'을 외칩니다. 틀린 쪽은 다시 장전되지 않는 6연발 리볼버의 방아쇠를 당겨야 하죠. 최후의 1인이 승리!",
+    players: { min: 2, max: 6 },
+    playTime: { minMinutes: 5, maxMinutes: 15 },
+    category: "party",
+    thumbnail: { emoji: "🎭", gradient: ["#b91c1c", "#1c0f0a"] },
+    tags: ["3D", "블러핑", "러시안룰렛", "서바이벌", "AI봇"],
+    genres: ["bluffing", "party", "luck"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "telepathy",
     name: "텔레파시",
     nameEn: "Telepathy",

@@ -54,6 +54,14 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "상장폐지·반대매매로 잃은 자산", value: (d) => n(d.delisted) },
     { label: "코인 0으로 끝낸 판 (파산)", value: (d) => n(d.brokeGames) },
   ],
+  "bluff-roulette": [
+    { label: "\"거짓말!\" 적중률", value: (d) => ratio(d.liarCorrect, d.liarCalls) },
+    { label: "들킨 거짓말 / 거짓 선언", value: (d) => `${n(d.liesCaught)} / ${n(d.liesTold)}` },
+    { label: "방아쇠 생존 / 당긴 방아쇠", value: (d) => `${n(d.survivedPulls)} / ${n(d.triggerPulls)}` },
+    { label: "한 판 최다 생존 방아쇠", value: (d) => n(d.maxPullsSurvived) },
+    { label: "방아쇠 없이 1위", value: (d) => n(d.flawlessWins) },
+    { label: "해골 발동", value: (d) => n(d.skullTriggers) },
+  ],
   telepathy: [
     { label: "최고 도달 레벨", value: (d) => `레벨 ${n(d.maxLevel)}` },
     {

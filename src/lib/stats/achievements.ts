@@ -160,6 +160,12 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["flawless", "🧙", "무결점 소환사", "실패 토큰 없이 승리", 1, k("flawlessWins")],
     ["success-20", "✨", "소환의 대가", "누적 성공 토큰 20개", 20, k("successes")],
   ],
+  "bluff-roulette": [
+    ["detector-20", "🕵", "거짓말 탐지기", "\"거짓말!\" 적중 누적 20회", 20, k("liarCorrect")],
+    ["steel-4", "🍀", "강철 심장", "한 판에서 방아쇠 4번 당기고 살아남기", 4, k("maxPullsSurvived")],
+    ["untouched", "😎", "손대지 않은 리볼버", "방아쇠 없이 1위", 1, k("flawlessWins")],
+    ["skull", "💀", "해골의 주인", "해골 발동 성공", 1, k("skullTriggers")],
+  ],
   telepathy: [
     ["level-5", "📡", "주파수 맞추기", "한 판에 레벨 5 통과", 5, k("maxLevel")],
     ["flawless", "🌌", "완전한 동기화", "실수 없이 마지막 레벨까지 승리", 1, k("flawlessWins")],

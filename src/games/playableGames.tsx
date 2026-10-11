@@ -20,6 +20,7 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   "splendor-duel": dynamic(() => import("./splendorDuel/SplendorDuelGame"), { ssr: false }),
   "lotr-duel": dynamic(() => import("./lotrDuel/LotrDuelGame"), { ssr: false }),
   telepathy: dynamic(() => import("./telepathy/TelepathyGame"), { ssr: false }),
+  "bluff-roulette": dynamic(() => import("./bluffRoulette/BluffRouletteGame"), { ssr: false }),
   "merge-defense": dynamic(() => import("./mergeDefense/MergeDefenseGame"), { ssr: false }),
   "ink-duel": dynamic(() => import("./inkDuel/InkDuelGame"), { ssr: false }),
   "city-chase": dynamic(() => import("./cityChase/CityChaseGame"), { ssr: false }),

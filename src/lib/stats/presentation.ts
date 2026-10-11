@@ -60,6 +60,13 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "마지막 트릭 1로 방어", key: "oneCardDefenses", unit: "번" },
     { label: "탈락", key: "eliminated", flag: true },
   ],
+  "bluff-roulette": [
+    { label: "“거짓말!” 적중", key: "liarCorrect", den: "liarCalls" },
+    { label: "들킨 거짓말", key: "liesCaught", den: "liesTold" },
+    { label: "방아쇠 생존", key: "survivedPulls", den: "triggerPulls" },
+    { label: "방아쇠 없이 1위", key: "flawlessWins", flag: true },
+    { label: "해골 발동", key: "skullTriggers", unit: "번" },
+  ],
   coyote: [
     { label: "“코요테!” 적중", key: "coyoteCorrect", den: "coyoteCalls" },
     { label: "의심받고 버텨낸 선언", key: "bidsHeld", den: "bidsChallenged" },
@@ -160,6 +167,11 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "fc-surv", label: "마지막 트릭 생존율", num: "finalTricksSurvived", den: "finalTricks", minDen: 10, format: "percent" },
     { id: "fc-avg", label: "판당 오이 (적을수록)", num: "cucumbersEaten", den: "played", asc: true, minDen: 10, format: "avg", unit: "개" },
     { id: "fc-15", label: "15로 딴 트릭", num: "topCardTricks", format: "count", unit: "번" },
+  ],
+  "bluff-roulette": [
+    { id: "br-call", label: "거짓말! 적중률", num: "liarCorrect", den: "liarCalls", minDen: 10, format: "percent" },
+    { id: "br-pull", label: "방아쇠 생존", num: "survivedPulls", format: "count", unit: "번" },
+    { id: "br-clean", label: "방아쇠 없이 1위", num: "flawlessWins", format: "count", unit: "번" },
   ],
   coyote: [
     { id: "co-call", label: "코요테! 적중률", num: "coyoteCorrect", den: "coyoteCalls", minDen: 10, format: "percent" },
