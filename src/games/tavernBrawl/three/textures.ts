@@ -226,3 +226,36 @@ export function tagTexture(icons: string, colors: [string, string]): THREE.Canva
   tagCache.set(key, t);
   return t;
 }
+
+const plateCache = new Map<string, THREE.CanvasTexture>();
+/** 아바타 머리 위 이름표: 이름 + 체력 */
+export function plateTexture(name: string, hp: number | null, mine: boolean): THREE.CanvasTexture {
+  const key = `${name}|${hp}|${mine}`;
+  const hit = plateCache.get(key);
+  if (hit) return hit;
+  const c = document.createElement("canvas");
+  c.width = 320;
+  c.height = 96;
+  const g = c.getContext("2d")!;
+  roundRect(g, 4, 6, 312, 84, 30);
+  g.fillStyle = "rgba(12,10,9,0.85)";
+  g.fill();
+  g.lineWidth = 5;
+  g.strokeStyle = mine ? "#4ade80" : "#f87171";
+  g.stroke();
+  g.textBaseline = "middle";
+  g.font = "bold 34px 'Pretendard','Malgun Gothic',sans-serif";
+  g.fillStyle = "#ffffff";
+  const label = name.length > 7 ? `${name.slice(0, 6)}…` : name;
+  g.textAlign = "left";
+  g.fillText(label, 22, 48);
+  if (hp !== null) {
+    g.textAlign = "right";
+    g.font = `bold 36px ${EMOJI_FONT}`;
+    g.fillStyle = hp <= 10 ? "#fca5a5" : "#fecdd3";
+    g.fillText(`❤${Math.max(0, hp)}`, 300, 50);
+  }
+  const t = finish(c);
+  plateCache.set(key, t);
+  return t;
+}

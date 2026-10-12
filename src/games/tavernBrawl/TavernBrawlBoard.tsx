@@ -657,6 +657,7 @@ function ShopView({
               units={me.board.map((u) => ({ ...u, side: 0 as const }))}
               mode="shop"
               apiRef={arenaApi}
+              avatars={me.hero ? [{ key: "me", hero: me.hero, name: "나", side: 0, hp: me.hp, controllable: true }] : undefined}
               quality={quality}
               className="h-64 w-full sm:h-72"
               selected={selection?.kind === "board" ? selection.uid : null}
@@ -679,6 +680,9 @@ function ShopView({
               <p className="pointer-events-none absolute inset-x-0 bottom-3 text-center text-xs text-amber-100/70">손패의 유닛을 골라 탁자에 세우세요.</p>
             )}
             {insertMode && <p className="pointer-events-none absolute inset-x-0 top-2 text-center text-xs font-semibold text-yellow-200">✨ 빛나는 자리를 눌러 세우세요</p>}
+            {!insertMode && me.board.length > 0 && (
+              <p className="pointer-events-none absolute inset-x-0 top-1.5 text-center text-[10px] text-amber-100/55">탁자를 눌러 내 영웅 이동 · PC: WASD/방향키, 스페이스 점프 · 영웅을 누르면 춤</p>
+            )}
           </div>
         ) : (
         <div className="flex min-h-[6rem] flex-wrap items-center gap-x-3 gap-y-3 px-1 pt-2 sm:min-h-[7rem]">
@@ -874,6 +878,8 @@ function CombatView({
   const isMine = mine !== null && c === mine;
   const viewSide = isMine ? sideOfSeat(c, viewerSeat) : 0;
   const pair = combatNames(c, names);
+  const hpOf = (seat: number) => (seat < 0 ? null : state.seats[seat].hp);
+  const hpPair: [number | null, number | null] = viewSide === 0 ? [hpOf(c.a), hpOf(c.b)] : [hpOf(c.b), hpOf(c.a)];
   const shownNames: [string, string] = viewSide === 0 ? pair : [pair[1], pair[0]];
   return (
     <div className="flex flex-col gap-2">
@@ -895,9 +901,9 @@ function CombatView({
         </button>
       </div>
       {view === "3d" ? (
-        <Combat3D key={`${state.round}-${watch}`} combat={c} viewSide={viewSide} names={shownNames} speed={speed} sound={isMine} quality={quality} onFinished={isMine ? finishMine : undefined} />
+        <Combat3D key={`${state.round}-${watch}`} combat={c} viewSide={viewSide} names={shownNames} speed={speed} sound={isMine} quality={quality} hp={hpPair} controllable={isMine} onFinished={isMine ? finishMine : undefined} />
       ) : (
-        <CombatReplay key={`${state.round}-${watch}`} combat={c} viewSide={viewSide} names={shownNames} speed={speed} sound={isMine} onFinished={isMine ? finishMine : undefined} />
+        <CombatReplay key={`${state.round}-${watch}`} combat={c} viewSide={viewSide} names={shownNames} speed={speed} sound={isMine} hp={hpPair} onFinished={isMine ? finishMine : undefined} />
       )}
       {state.eliminatedThisRound.length > 0 && (
         <p className="rounded-xl bg-rose-500/15 px-3 py-1.5 text-center text-xs text-rose-200 light:text-rose-700">

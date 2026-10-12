@@ -121,3 +121,15 @@ export const FIGURES: Record<string, FigureSpec> = {
   t_scrap: { kind: "robot", metal: "#78716c", accent: "#a8a29e", eye: "#fbbf24", form: "bot", size: 0.7 },
   t_skel: H({ skin: "#f5f5f4", body: "#e7e5e4", accent: "#a8a29e", head: "skull", weapon: "dagger", size: 0.65 }),
 };
+
+/** 플레이어 아바타(롤토체스 꼬마 전설이 같은 대표 캐릭터) — 고른 영웅의 모습 */
+export const HERO_FIGURES: Record<string, FigureSpec> = {
+  mage: H({ skin: "#f8d7b0", body: "#1d4ed8", accent: "#93c5fd", head: "wizard", weapon: "staff", robe: true, size: 1.1 }),
+  mercenary: H({ body: "#78350f", accent: "#dc2626", head: "hair", weapon: "bigsword", cape: "#991b1b", size: 1.1 }),
+  castellan: H({ body: "#94a3b8", accent: "#1d4ed8", head: "helm", weapon: "swordShield", cape: "#1e40af", size: 1.12 }),
+  merchant: H({ skin: "#f1c27d", body: "#ca8a04", accent: "#fef08a", head: "crown", weapon: "flask", robe: true, size: 1.15 }),
+  tamer: H({ skin: "#fde7c7", body: "#166534", accent: "#fb923c", head: "hood", weapon: "staff", cape: "#14532d", size: 1.08 }),
+  prophet: H({ skin: "#e9d5ff", body: "#6b21a8", accent: "#f0abfc", head: "hood", weapon: "staff", robe: true, glowEyes: "#e879f9", size: 1.1 }),
+  necro: H({ skin: "#e7e5e4", body: "#1c1917", accent: "#4ade80", head: "skull", weapon: "staff", robe: true, glowEyes: "#4ade80", size: 1.1 }),
+  architect: H({ body: "#ea580c", accent: "#facc15", head: "helm", weapon: "hammer", size: 1.08 }),
+};

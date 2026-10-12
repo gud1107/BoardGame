@@ -11,6 +11,9 @@ import Figure, { type FigureAct } from "./figures";
 import { StyleFxLayer, fxLife, type StyleFxInput, type StyleFxItem } from "./StyleFx";
 import type { AttackKind } from "../attackStyle";
 import { unitTip } from "../UnitTooltip";
+import { Avatar, type AvatarInfo, type AvatarState } from "./Avatar";
+
+export type { AvatarInfo };
 
 /**
  * 여관 난투 3D 탁자. 표시 전용: 보이는 건 화면에 넘겨준 유닛뿐이고, 모든 움직임은 시작 시각 기준
@@ -37,6 +40,10 @@ export interface ArenaApi {
   counter(uid: string, to: string): void;
   /** 상점 탁자: 화면 좌표에서 가장 가까운 "끼워 넣을 자리" 번호(0..보드 수) */
   nearestInsert(clientX: number, clientY: number): number;
+  /** 승리 연출: from 아바타가 to 아바타에게 빛 구슬을 퍼붓는다(구슬 수 = 피해, 최대 12) */
+  avatarStrike(from: string, to: string, damage: number, durMs: number): void;
+  /** 아바타 춤(승리·무승부 세리머니) */
+  avatarDance(key: string): void;
   hit(uid: string, power: number, from?: string): void;
   die(uid: string, durMs: number): void;
   spawn(uid: string): void;
@@ -430,7 +437,17 @@ interface Burst {
 const RING_N = 12;
 const POP_N = 24;
 
-function Effects({ apiRef, sharedRef, addStyleFx }: { apiRef: MutableRefObject<ArenaApi | null>; sharedRef: MutableRefObject<Shared>; addStyleFx: (f: StyleFxInput) => void }) {
+function Effects({
+  apiRef,
+  sharedRef,
+  addStyleFx,
+  avatarsRef,
+}: {
+  apiRef: MutableRefObject<ArenaApi | null>;
+  sharedRef: MutableRefObject<Shared>;
+  addStyleFx: (f: StyleFxInput) => void;
+  avatarsRef: MutableRefObject<Map<string, AvatarState>>;
+}) {
   const camera = useThree((st) => st.camera);
   const gl = useThree((st) => st.gl);
   const parts = useRef<THREE.InstancedMesh>(null);
@@ -473,6 +490,36 @@ function Effects({ apiRef, sharedRef, addStyleFx }: { apiRef: MutableRefObject<A
       },
       counter(uid, to) {
         anim(uid).counter = { start: now(), to };
+      },
+      avatarStrike(from, to, damage, durMs) {
+        const src = avatarsRef.current.get(from);
+        const dst = avatarsRef.current.get(to);
+        if (!src || !dst) return;
+        src.strike = { start: now(), dur: durMs, to };
+        const n = Math.max(1, Math.min(12, damage));
+        const fly = 420;
+        const gap = Math.max(60, (durMs - fly - 150) / n);
+        for (let i = 0; i < n; i++) {
+          window.setTimeout(() => {
+            this.projectile("bolt", i % 3 === 2 ? "#f472b6" : "#fde047", `av:${from}`, `av:${to}`, fly);
+            window.setTimeout(() => {
+              dst.hitAt = now();
+              this.burst(`av:${to}`, "#fde047", 10, 1.6, 0.9);
+              this.shake(2 + Math.min(6, damage * 0.3));
+            }, fly);
+          }, 120 + i * gap);
+        }
+        window.setTimeout(() => {
+          this.popup(`av:${to}`, `-${damage}`, "#ef4444", Math.min(2.4, 1.3 + damage * 0.06));
+          this.ring(`av:${to}`, "#ef4444", 1.6);
+          this.burst(`av:${to}`, "#ef4444", 30, 2.4, 1.4);
+          this.shake(6 + Math.min(8, damage * 0.4));
+          src.danceAt = now() + 250;
+        }, 120 + (n - 1) * gap + fly + 40);
+      },
+      avatarDance(key) {
+        const st = avatarsRef.current.get(key);
+        if (st) st.danceAt = now();
       },
       nearestInsert(clientX, clientY) {
         const rect = gl.domElement.getBoundingClientRect();
@@ -549,7 +596,7 @@ function Effects({ apiRef, sharedRef, addStyleFx }: { apiRef: MutableRefObject<A
     return () => {
       apiRef.current = null;
     };
-  }, [apiRef, sharedRef, addStyleFx, camera, gl]);
+  }, [apiRef, sharedRef, addStyleFx, camera, gl, avatarsRef]);
 
   useFrame(() => {
     const t0 = now();
@@ -631,13 +678,13 @@ function Effects({ apiRef, sharedRef, addStyleFx }: { apiRef: MutableRefObject<A
 
 /* ── 카메라·조명·탁자 ─────────────────────────────────────── */
 
-function CameraRig({ mode, compact, sharedRef }: { mode: "shop" | "combat"; compact: boolean; sharedRef: MutableRefObject<Shared> }) {
+function CameraRig({ mode, compact, sharedRef, withAvatars }: { mode: "shop" | "combat"; compact: boolean; sharedRef: MutableRefObject<Shared>; withAvatars: boolean }) {
   useFrame((st) => {
     const shared = sharedRef.current;
     const cam = st.camera as THREE.PerspectiveCamera;
     const aspect = st.size.width / Math.max(1, st.size.height);
-    const needW = compact ? 5.2 : 8.6;
-    const needH = mode === "combat" ? (compact ? 6.2 : 4.4) : compact ? 3.4 : 2.4;
+    const needW = compact ? (withAvatars ? 5.6 : 5.2) : withAvatars ? (mode === "combat" ? 11.2 : 10.2) : 8.6;
+    const needH = mode === "combat" ? (compact ? (withAvatars ? 7.6 : 6.2) : withAvatars ? 6.0 : 4.6) : compact ? (withAvatars ? 4.4 : 3.4) : withAvatars ? 3.4 : 2.6;
     const tanH = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
     const dist = Math.max(needW / (2 * tanH * aspect), needH / (2 * tanH)) * 1.02;
     const dir = (compact ? new THREE.Vector3(0, 0.9, 0.44) : new THREE.Vector3(0, 0.82, 0.57)).normalize();
@@ -707,6 +754,8 @@ function Table({ mode }: { mode: "shop" | "combat" }) {
 /* ── 공개 컴포넌트 ───────────────────────────────────────── */
 
 export interface Arena3DProps {
+  /** 플레이어 아바타(내 것은 controllable) */
+  avatars?: AvatarInfo[];
   /** 상점 탁자: 유닛을 꾹 눌러/끌기 시작 */
   onGrab?: (uid: string, e: PointerEvent) => void;
   units: ArenaUnit[];
@@ -720,11 +769,30 @@ export interface Arena3DProps {
   className?: string;
 }
 
-function Scene({ units, mode, apiRef, selected, onPick, onGrab, insert, quality }: Arena3DProps) {
+function avatarHome(side: 0 | 1, mode: "shop" | "combat", compact: boolean): THREE.Vector3 {
+  const s = side === 0 ? 1 : -1;
+  if (mode === "shop") return compact ? new THREE.Vector3(1.7, 0, 1.55) : new THREE.Vector3(2.7, 0, 0.75);
+  return compact ? new THREE.Vector3(1.9 * s, 0, 3.3 * s) : new THREE.Vector3(3.9 * s, 0, 1.25 * s);
+}
+
+function Scene({ units, mode, apiRef, selected, onPick, onGrab, insert, quality, avatars }: Arena3DProps) {
   const { size } = useThree();
   const compact = size.width < 640 || size.width / Math.max(1, size.height) < 1.15;
   const sharedRef = useRef<Shared>({ inserts: [], target: new Map(), cur: new Map(), anim: new Map(), shake: { start: -1e9, power: 0 } });
   const [styleFx, setStyleFx] = useState<StyleFxItem[]>([]);
+  const avatarsRef = useRef<Map<string, AvatarState>>(new Map());
+  const myAvatar = avatars?.find((a) => a.controllable);
+  const bounds = useMemo(
+    () =>
+      mode === "shop"
+        ? compact
+          ? { minX: -2.2, maxX: 2.2, minZ: -1.4, maxZ: 1.9 }
+          : { minX: -3.3, maxX: 3.3, minZ: -1.2, maxZ: 1.3 }
+        : compact
+          ? { minX: -2.3, maxX: 2.3, minZ: -3.5, maxZ: 3.5 }
+          : { minX: -4.4, maxX: 4.4, minZ: -2.4, maxZ: 2.4 },
+    [mode, compact],
+  );
   const fxSeq = useRef(0);
   const addStyleFx = useCallback((f: StyleFxInput) => {
     const item = { ...f, id: ++fxSeq.current } as StyleFxItem;
@@ -746,7 +814,27 @@ function Scene({ units, mode, apiRef, selected, onPick, onGrab, insert, quality 
       <ambientLight intensity={0.45} color="#ffe2c2" />
       <hemisphereLight args={["#ffd7a8", "#2a1608", 0.55]} />
       <directionalLight position={[3, 9, 5]} intensity={1.6} color="#fff1dc" castShadow={quality === "high"} shadow-mapSize={[1024, 1024]} />
-      <CameraRig mode={mode} compact={compact} sharedRef={sharedRef} />
+      <CameraRig mode={mode} compact={compact} sharedRef={sharedRef} withAvatars={!!avatars?.length} />
+      {myAvatar && (
+        // 탁자 바닥: 누르면 내 아바타가 그곳으로 걸어감(유닛·자리 클릭은 각자 전파를 막는다)
+        <mesh
+          position={[0, 0.005, 0]}
+          rotation={[-Math.PI / 2, 0, 0]}
+          onClick={(e) => {
+            const st = avatarsRef.current.get(myAvatar.key);
+            if (!st) return;
+            st.keys.clear();
+            st.target = new THREE.Vector3(Math.max(bounds.minX, Math.min(bounds.maxX, e.point.x)), 0, Math.max(bounds.minZ, Math.min(bounds.maxZ, e.point.z)));
+            addStyleFx({ type: "impact", kind: "fairy", color: "#4ade80", at: [st.target.x, 0, st.target.z], dir: [0, 0, -1], start: performance.now(), big: false });
+          }}
+        >
+          <planeGeometry args={[12, 8]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+      )}
+      {avatars?.map((a) => (
+        <Avatar key={a.key} info={a} home={avatarHome(a.side, mode, compact)} bounds={bounds} registry={avatarsRef} cur={sharedRef} memKey={`${mode}:${compact ? "c" : "w"}:${a.key}`} />
+      ))}
       <Table mode={mode} />
       {units.map((u) => (
         <Token key={u.uid} u={u} sharedRef={sharedRef} selected={selected === u.uid} onPick={onPick} onGrab={onGrab} size={compact ? 0.95 : 1.05} facing={0} />
@@ -771,7 +859,7 @@ function Scene({ units, mode, apiRef, selected, onPick, onGrab, insert, quality 
             </mesh>
           );
         })}
-      <Effects apiRef={apiRef} sharedRef={sharedRef} addStyleFx={addStyleFx} />
+      <Effects apiRef={apiRef} sharedRef={sharedRef} addStyleFx={addStyleFx} avatarsRef={avatarsRef} />
       <StyleFxLayer items={styleFx} />
     </>
   );

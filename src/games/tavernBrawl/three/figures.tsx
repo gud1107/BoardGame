@@ -63,6 +63,8 @@ const WOOD = "#7c4a1e";
 export interface FigureAct {
   swing: number;
   hit: number;
+  /** 걷기 0~1 (아바타 이동) */
+  walk?: number;
 }
 
 type Part = "root" | "torso" | "head" | "armL" | "armR" | "legL" | "legR" | "wingL" | "wingR" | "tail" | "spin";
@@ -865,8 +867,8 @@ function hash(s: string) {
   return (Math.abs(h) % 1000) / 1000;
 }
 
-export default function Figure({ defId, uid, golden, actRef }: { defId: string; uid: string; golden: boolean; actRef: MutableRefObject<FigureAct> }) {
-  const spec = FIGURES[defId] ?? FIGURES.n_kid;
+export default function Figure({ defId, uid, golden, actRef, spec: specOverride }: { defId: string; uid: string; golden: boolean; actRef: MutableRefObject<FigureAct>; spec?: FigureSpec }) {
+  const spec = specOverride ?? FIGURES[defId] ?? FIGURES.n_kid;
   const nodes = useRef<Partial<Record<Part, THREE.Group | null>>>({});
   const rig = useMemo<Rig>(() => (part) => (node) => void (nodes.current[part] = node), []);
   const phase = hash(uid) * 10;
@@ -877,6 +879,7 @@ export default function Figure({ defId, uid, golden, actRef }: { defId: string; 
   useFrame(() => {
     const t = performance.now() / 1000 + phase;
     const { swing, hit } = actRef.current;
+    const walking = actRef.current.walk ?? 0;
     const up = Math.max(0, -swing);
     const down = Math.max(0, swing);
     const breathe = Math.sin(t * 2.2);
@@ -904,7 +907,13 @@ export default function Figure({ defId, uid, golden, actRef }: { defId: string; 
     if (armR) armR.rotation.x = -0.1 - up * 2.6 + down * 1.3 + Math.sin(t * 2) * 0.05;
     const armL = nodes.current.armL;
     if (armL) armL.rotation.x = -0.15 - up * 0.6 - down * 0.5 + Math.sin(t * 2 + 1) * 0.05;
-    const walk = Math.sin(t * 9) * (Math.abs(swing) > 0.05 ? 0.4 : 0);
+    const walk = Math.sin(t * (walking > 0.05 ? 13 : 9)) * Math.max(Math.abs(swing) > 0.05 ? 0.4 : 0, walking * 0.7);
+    if (root && walking > 0.05) root.position.y += Math.abs(Math.sin(t * 13)) * 0.05 * walking;
+    if (walking > 0.05) {
+      const swingArm = Math.sin(t * 13) * 0.6 * walking;
+      if (nodes.current.armL) nodes.current.armL.rotation.x += swingArm;
+      if (nodes.current.armR && Math.abs(swing) < 0.05) nodes.current.armR.rotation.x -= swingArm;
+    }
     if (nodes.current.legL) nodes.current.legL.rotation.x = walk;
     if (nodes.current.legR) nodes.current.legR.rotation.x = -walk;
     const flap = Math.sin(t * (Math.abs(swing) > 0.05 ? 18 : 4)) * (Math.abs(swing) > 0.05 ? 0.7 : 0.18);

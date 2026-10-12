@@ -23,6 +23,8 @@ export default function Combat3D({
   speed,
   sound,
   quality,
+  hp,
+  controllable,
   onFinished,
 }: {
   combat: CombatRecord;
@@ -31,12 +33,18 @@ export default function Combat3D({
   speed: number;
   sound: boolean;
   quality: "high" | "low";
+  /** 전투 뒤 체력 [아래(나), 위(상대)] — 유령은 null */
+  hp?: [number | null, number | null];
+  /** 내 아바타를 움직일 수 있는지(내 전투) */
+  controllable?: boolean;
   onFinished?: () => void;
 }) {
   const frames = useMemo(() => simulateCombat(combat.sideA, combat.sideB, combat.seed, true).frames, [combat]);
   const [idx, setIdx] = useState(0);
   const [impacted, setImpacted] = useState(false);
   const [feed, setFeed] = useState<FeedItem[]>([]);
+  /** 승리 연출이 끝났는지 — 끝나기 전엔 진 쪽 체력을 피해 전 값으로 보여 준다 */
+  const [struck, setStruck] = useState(false);
   const api = useRef<ArenaApi | null>(null);
   const finishedRef = useRef(false);
   const feedSeq = useRef(0);
@@ -231,6 +239,30 @@ export default function Combat3D({
       }
     } else if (ev.t === "end") {
       s?.play(ev.winner === null ? "draw" : ev.winner === viewSide ? "win" : "lose");
+      // 롤토체스처럼: 이긴 쪽 아바타가 진 쪽 아바타에게 빛 구슬을 퍼붓는다
+      const winKey = ev.winner === null ? null : ev.winner === viewSide ? "bottom" : "top";
+      const loseKey = winKey === "bottom" ? "top" : "bottom";
+      const loserHp = loseKey === "bottom" ? hp?.[0] : hp?.[1];
+      if (winKey && combat.damage > 0 && loserHp !== null && loserHp !== undefined) {
+        const dur = 1800 / Math.max(1, speed / 1.5);
+        later(250, () => {
+          a()?.avatarStrike(winKey, loseKey, combat.damage, dur);
+          s?.play("launch_magic");
+        });
+        const n = Math.max(1, Math.min(12, combat.damage));
+        for (let i = 0; i < n; i++) later(250 + 120 + i * Math.max(60, (dur - 570) / n) + 420, () => s?.play("atk_bolt"));
+        later(250 + dur, () => {
+          setStruck(true);
+          s?.play("impactHeavy", combat.damage);
+        });
+      } else if (winKey) {
+        later(300, () => a()?.avatarDance(winKey));
+      } else {
+        later(300, () => {
+          a()?.avatarDance("bottom");
+          a()?.avatarDance("top");
+        });
+      }
     } else if (ev.t === "start") {
       s?.play("clash");
       later(120, () => a()?.shake(6));
@@ -248,6 +280,16 @@ export default function Combat3D({
   const heroA = viewSide === 0 ? combat.sideA.hero : combat.sideB.hero;
   const heroB = viewSide === 0 ? combat.sideB.hero : combat.sideA.hero;
   const result = ev.t === "end" ? (ev.winner === null ? "draw" : ev.winner === viewSide ? "win" : "loss") : null;
+  // 진 쪽 체력은 구슬이 다 맞을 때까지 피해 전 값
+  const loserBottom = combat.winner !== null && combat.winner !== viewSide;
+  const shownHp: [number | null, number | null] = [
+    hp?.[0] == null ? null : hp[0] + (!struck && loserBottom && combat.winner !== null ? combat.damage : 0),
+    hp?.[1] == null ? null : hp[1] + (!struck && !loserBottom && combat.winner !== null ? combat.damage : 0),
+  ];
+  const avatars = [
+    { key: "bottom", hero: heroA, name: names[0], side: 0 as const, hp: shownHp[0], controllable: !!controllable },
+    { key: "top", hero: heroB, name: names[1], side: 1 as const, hp: shownHp[1] },
+  ];
   const attackerName =
     ev.t === "attack" ? (() => {
       const u = [...(prev?.sides.flat() ?? []), ...frame.sides.flat()].find((x) => x.uid === ev.from);
@@ -257,7 +299,7 @@ export default function Combat3D({
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-amber-900/50 bg-stone-950">
-      <Arena3D units={units} mode="combat" apiRef={api} quality={quality} className="h-[30rem] w-full sm:h-[32rem]" />
+      <Arena3D units={units} mode="combat" apiRef={api} quality={quality} avatars={avatars} className="h-[30rem] w-full sm:h-[32rem]" />
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent px-3 py-2 text-xs text-amber-100">
         <span>
           {heroB ? HERO_BY_ID[heroB].emoji : "👻"} {names[1]}
@@ -285,8 +327,8 @@ export default function Combat3D({
         </div>
       )}
       {result && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-          <div className="tb-slam rounded-2xl border border-white/20 bg-black/85 px-7 py-5 text-center shadow-2xl">
+        <div className="pointer-events-none absolute inset-x-0 top-9 flex justify-center">
+          <div className="tb-slam rounded-2xl border border-white/20 bg-black/80 px-6 py-3 text-center shadow-2xl">
             <p className={`text-3xl font-black ${result === "win" ? "text-yellow-300" : result === "loss" ? "text-rose-400" : "text-white/80"}`}>
               {result === "win" ? "🏆 승리!" : result === "loss" ? "💔 패배" : "🤝 무승부"}
             </p>

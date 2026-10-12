@@ -21,7 +21,7 @@ import { getTavernBrawlSound } from "./tavernBrawlBgm";
  *   이후   제자리로 복귀. 죽음은 부풀었다가 회전하며 산산조각, 소환은 튀어 오르며 등장.
  */
 
-export const STEP_MS: Record<Frame["ev"]["t"], number> = { start: 900, soc: 750, ability: 700, attack: 1050, deaths: 600, end: 1700 };
+export const STEP_MS: Record<Frame["ev"]["t"], number> = { start: 900, soc: 750, ability: 700, attack: 1050, deaths: 600, end: 3000 };
 /** 돌진이 대상에 닿는 시점(공격 프레임 길이 대비) */
 export const IMPACT_AT = 0.42;
 
@@ -59,6 +59,7 @@ export default function CombatReplay({
   names,
   speed,
   sound,
+  hp,
   onFinished,
 }: {
   combat: CombatRecord;
@@ -67,12 +68,17 @@ export default function CombatReplay({
   names: [string, string];
   speed: number;
   sound: boolean;
+  /** 전투 뒤 체력 [아래(나), 위(상대)] — 유령은 null */
+  hp?: [number | null, number | null];
   onFinished?: () => void;
 }) {
   const frames = useMemo(() => simulateCombat(combat.sideA, combat.sideB, combat.seed, true).frames, [combat]);
   const [idx, setIdx] = useState(0);
   /** 공격 프레임에서 충돌이 일어났는지 — 그 전엔 맞기 전 체력을 보여 준다 */
   const [impacted, setImpacted] = useState(false);
+  const [struck, setStruck] = useState(false);
+  const topBadge = useRef<HTMLSpanElement>(null);
+  const bottomBadge = useRef<HTMLSpanElement>(null);
   const [fx, setFx] = useState<Fx[]>([]);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const feedSeq = useRef(0);
@@ -429,6 +435,41 @@ export default function CombatReplay({
       }
     } else if (ev.t === "end") {
       s?.play(ev.winner === null ? "draw" : ev.winner === viewSide ? "win" : "lose");
+      // 승리 연출: 이긴 쪽 영웅 배지 → 진 쪽 영웅 배지로 빛 구슬
+      const winBottom = ev.winner === viewSide;
+      const loserHp = ev.winner === null ? null : winBottom ? hp?.[1] : hp?.[0];
+      const from = winBottom ? bottomBadge.current : topBadge.current;
+      const to = winBottom ? topBadge.current : bottomBadge.current;
+      if (ev.winner !== null && combat.damage > 0 && loserHp != null && from && to) {
+        const fc = center(from);
+        const tc = center(to);
+        const n = Math.max(1, Math.min(12, combat.damage));
+        const dur = 1800 / Math.max(1, speed / 1.5);
+        const gap = Math.max(60, (dur - 570) / n);
+        s?.play("launch_magic");
+        for (let i = 0; i < n; i++) {
+          timers.push(
+            window.setTimeout(() => {
+              addFx([{ kind: "proj", x: fc.x, y: fc.y, tx: tc.x - fc.x, ty: tc.y - fc.y, style: "bolt", color: i % 3 === 2 ? "#f472b6" : "#fde047", dur: 420 }], 450);
+              timers.push(
+                window.setTimeout(() => {
+                  s?.play("atk_bolt");
+                  addFx([{ kind: "burst", x: tc.x, y: tc.y, color: "#fde047", count: 8, spread: 40 }], 700);
+                  if (typeof to.animate === "function") to.animate([{ transform: "translateX(-4px)" }, { transform: "translateX(4px)" }, { transform: "none" }], { duration: 160 });
+                }, 420),
+              );
+            }, 120 + i * gap),
+          );
+        }
+        timers.push(
+          window.setTimeout(() => {
+            setStruck(true);
+            s?.play("impactHeavy", combat.damage);
+            shake(8);
+            addFx([{ kind: "dmg", x: tc.x, y: tc.y - 10, text: `-${combat.damage}`, size: 44, tone: "red" }, { kind: "ring", x: tc.x, y: tc.y, color: "#ef4444" }], 1100);
+          }, 120 + (n - 1) * gap + 460),
+        );
+      }
     } else if (ev.t === "start") {
       s?.play("clash");
       shake(5);
@@ -465,6 +506,11 @@ export default function CombatReplay({
   const heroA = viewSide === 0 ? combat.sideA.hero : combat.sideB.hero;
   const heroB = viewSide === 0 ? combat.sideB.hero : combat.sideA.hero;
   const result = ev.t === "end" ? (ev.winner === null ? "draw" : ev.winner === viewSide ? "win" : "loss") : null;
+  const loserBottom = combat.winner !== null && combat.winner !== viewSide;
+  const shownHp: [number | null, number | null] = [
+    hp?.[0] == null ? null : hp[0] + (!struck && loserBottom ? combat.damage : 0),
+    hp?.[1] == null ? null : hp[1] + (!struck && combat.winner !== null && !loserBottom ? combat.damage : 0),
+  ];
 
   return (
     <div
@@ -473,7 +519,10 @@ export default function CombatReplay({
     >
       <div className="flex items-center justify-between px-3 pt-2 text-xs text-amber-100/80 light:text-amber-900">
         <span>
-          {heroB ? HERO_BY_ID[heroB].emoji : "👻"} {names[1]}
+          <span ref={topBadge} className="inline-flex items-center gap-1 rounded-full bg-black/40 px-2 py-0.5">
+            <span className="text-base">{heroB ? HERO_BY_ID[heroB].emoji : "👻"}</span> {names[1]}
+            {shownHp[1] !== null && <b className="text-rose-300">❤{shownHp[1]}</b>}
+          </span>
         </span>
         <span className="text-white/40 light:text-amber-800/60">
           {Math.min(idx + 1, frames.length)} / {frames.length}
@@ -500,11 +549,14 @@ export default function CombatReplay({
       </div>
       <div className="flex items-center justify-between px-3 pb-2 text-xs text-amber-100/80 light:text-amber-900">
         <span>
-          {heroA ? HERO_BY_ID[heroA].emoji : "👻"} {names[0]}
+          <span ref={bottomBadge} className="inline-flex items-center gap-1 rounded-full bg-black/40 px-2 py-0.5">
+            <span className="text-base">{heroA ? HERO_BY_ID[heroA].emoji : "👻"}</span> {names[0]}
+            {shownHp[0] !== null && <b className="text-rose-300">❤{shownHp[0]}</b>}
+          </span>
         </span>
       </div>
       {result && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/45">
+        <div className="pointer-events-none absolute inset-x-0 top-1/2 z-50 flex -translate-y-1/2 justify-center">
           <div className="tb-slam rounded-2xl border border-white/20 bg-black/85 px-7 py-5 text-center shadow-2xl">
             <p className={`text-3xl font-black ${result === "win" ? "text-yellow-300" : result === "loss" ? "text-rose-400" : "text-white/80"}`}>
               {result === "win" ? "🏆 승리!" : result === "loss" ? "💔 패배" : "🤝 무승부"}
