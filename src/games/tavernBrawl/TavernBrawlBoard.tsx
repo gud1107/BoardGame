@@ -25,6 +25,7 @@ import RulebookModal from "./RulebookModal";
 import { AbilityText } from "./AbilityFeed";
 import { UnitTooltipHost, unitTip } from "./UnitTooltip";
 import { EmoteBubble, EmotePicker, type EmoteKind, type EmoteSlot } from "./emotes";
+import SynergyTracker from "./SynergyTracker";
 import { getTavernBrawlSound } from "./tavernBrawlBgm";
 import type { ArenaApi } from "./three/Arena3D";
 import { webglAvailable } from "./three/webgl";
@@ -284,6 +285,18 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
     </div>
   );
 
+  // 롤토체스식 시너지 표: 상점은 내 보드, 전투는 그 전투의 내 편(+상대 탭)
+  const myCombat = state.phase === "combat" ? combatFor(state, viewerSeat) : null;
+  const mySide = myCombat ? sideOfSeat(myCombat, viewerSeat) : 0;
+  const trackerBoard = myCombat ? (mySide === 0 ? myCombat.sideA.board : myCombat.sideB.board) : me.board;
+  const trackerEnemy = myCombat ? (mySide === 0 ? myCombat.sideB.board : myCombat.sideA.board) : undefined;
+  const tracker =
+    state.phase === "shop" || state.phase === "combat"
+      ? (layout: "column" | "strip") => (
+          <SynergyTracker board={trackerBoard} owned={[...me.board, ...me.hand]} tribesInPlay={state.tribesInPlay} enemyBoard={trackerEnemy} layout={layout} />
+        )
+      : null;
+
   let body: React.ReactNode;
   if (state.phase === "heroPick") body = <HeroPick state={state} viewerSeat={viewerSeat} names={names} onAction={onAction} />;
   else if (state.phase === "shop" && me.alive) body = <ShopView state={state} viewerSeat={viewerSeat} onAction={onAction} view={view} quality={quality} myEmote={emotes[viewerSeat]} />;
@@ -296,8 +309,12 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
       <style>{COMBAT_CSS}</style>
       <UnitTooltipHost />
       {header}
-      <div className="grid gap-3 lg:grid-cols-[1fr_17rem]">
-        <div className="min-w-0">{body}</div>
+      <div className={`grid gap-3 lg:grid-cols-[1fr_17rem] ${tracker ? "xl:grid-cols-[15rem_1fr_17rem]" : ""}`}>
+        {tracker && <div className="relative z-40 hidden xl:block">{tracker("column")}</div>}
+        <div className="min-w-0">
+          {tracker && <div className="mb-2 xl:hidden">{tracker("strip")}</div>}
+          {body}
+        </div>
         {state.phase !== "heroPick" && state.phase !== "ended" && (
           <PlayersPanel state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} onInspect={setInspect} emotes={emotes} />
         )}
@@ -351,6 +368,23 @@ function HeroPick({ state, viewerSeat, names, onAction }: { state: GameState; vi
 
 /* ── 상점 ─────────────────────────────────────────────────── */
 
+/** 칸 제한 표시: 여유(초록) · 1칸 남음(주황) · 꽉 참(빨강, 깜빡) */
+function CapBadge({ label, n, max }: { label: string; n: number; max: number }) {
+  const full = n >= max;
+  const near = !full && n >= max - 1;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-sm font-black tabular-nums ${
+        full ? "tb-upglow border-rose-300 bg-rose-600 text-white" : near ? "border-amber-300/70 bg-amber-500/20 text-amber-100" : "border-emerald-300/50 bg-emerald-500/15 text-emerald-100"
+      }`}
+      title={full ? `${label}이(가) 꽉 찼어요` : `${label} ${max - n}칸 남음`}
+    >
+      {label} {n}/{max}
+      {full && <span className="text-[11px]">꽉 참!</span>}
+    </span>
+  );
+}
+
 /* ── 골드·등급업 HUD ─────────────────────────────────────── */
 
 /** 큰 골드 표시 — 바뀔 때마다 번쩍이며 +N/−N이 떠오른다 */
@@ -395,9 +429,9 @@ function UpgradePanel({ tier, cost, base, gold, onUpgrade }: { tier: number; cos
   const can = tier < 6 && gold >= cost;
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className="inline-flex flex-col items-center rounded-xl border border-sky-300/40 bg-sky-900/40 px-2 py-0.5 leading-tight" title="여관 등급이 높을수록 높은 등급 유닛과 상점 칸이 늘어나요">
+      <span className="inline-flex flex-col items-center rounded-xl border-2 border-sky-300/60 bg-sky-900/60 px-2.5 py-0.5 leading-tight" title="여관 등급이 높을수록 높은 등급 유닛과 상점 칸이 늘어나요">
         <span className="text-[10px] font-semibold text-sky-200/80">🏠 여관</span>
-        <span className="text-sm font-black text-sky-100">
+        <span className="text-lg font-black text-sky-50">
           {tier}등급 <span className="text-[10px] text-yellow-300">{"★".repeat(tier)}</span>
         </span>
       </span>
@@ -501,12 +535,23 @@ function ShopView({
     onAction(a);
   };
   const buy = (slot: number) => {
-    if (me.gold < BUY_COST || me.hand.length >= HAND_MAX || !me.shop[slot]) return;
+    if (me.hand.length >= HAND_MAX) {
+      showToast(`🖐️ 손패 ${me.hand.length}/${HAND_MAX} 꽉 참`, "보드에 내거나 팔아서 손패를 비우세요");
+      return;
+    }
+    if (me.gold < BUY_COST) {
+      showToast(`🪙 골드 부족`, `구매에 ${BUY_COST}골드가 필요해요 (지금 ${me.gold})`);
+      return;
+    }
+    if (!me.shop[slot]) return;
     send({ type: "BUY", seat: viewerSeat, round, slot }, "buy");
     setSel(null);
   };
   const play = (uid: string, index: number) => {
-    if (me.board.length >= BOARD_MAX) return;
+    if (me.board.length >= BOARD_MAX) {
+      showToast(`⚔️ 보드 ${me.board.length}/${BOARD_MAX} 꽉 참`, "보드 유닛을 팔거나(상점으로 끌기) 자리를 비우세요");
+      return;
+    }
     const u = me.hand.find((x) => x.uid === uid);
     if (u) {
       const d = unitDef(u.defId);
@@ -525,6 +570,28 @@ function ShopView({
     send({ type: "SELL", seat: viewerSeat, round, uid }, "sell");
     setSel(null);
   };
+  const reroll = () => {
+    if (me.freeRerolls === 0 && me.gold < REROLL_COST) return;
+    send({ type: "REROLL", seat: viewerSeat, round }, "reroll");
+    setSel(null);
+  };
+  const rerollRef = useRef(reroll);
+  const freezeRef = useRef(() => send({ type: "FREEZE", seat: viewerSeat, round }, "freeze"));
+  useEffect(() => {
+    rerollRef.current = reroll;
+    freezeRef.current = () => send({ type: "FREEZE", seat: viewerSeat, round }, "freeze");
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+      if (e.code === "KeyR") rerollRef.current();
+      else if (e.code === "KeyF") freezeRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const activatePower = (target?: string) => {
     if (hero) showToast(`${hero.emoji} ${hero.power}`, hero.text);
     send({ type: "HERO_POWER", seat: viewerSeat, round, target }, "power");
@@ -690,30 +757,42 @@ function ShopView({
         {dragging && dragging.data.from !== "shop" && (
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-black/55 text-sm font-black text-yellow-200">💰 여기에 놓으면 판매 +{sellPreview}골드</div>
         )}
-        <div className="flex items-center gap-2">
-          <p className={LABEL}>
-            🍺 상점 ({me.tier}등급) · 1장 🪙{BUY_COST}
-            <span className="hidden sm:inline"> · 유닛을 여기로 끌어다 놓으면 판매</span>
-          </p>
-          <button
-            onClick={() => send({ type: "FREEZE", seat: viewerSeat, round }, "freeze")}
-            className={`${BTN_DARK} ml-auto py-1 ${me.frozen ? "ring-2 ring-sky-300" : ""}`}
-            title="고정하면 다음 라운드에도 같은 상점이 유지돼요"
-          >
-            {me.frozen ? "🔒 고정됨" : "🔓 고정"}
-          </button>
-          <button
-            disabled={me.freeRerolls === 0 && me.gold < REROLL_COST}
-            onClick={() => {
-              send({ type: "REROLL", seat: viewerSeat, round }, "reroll");
-              setSel(null);
-            }}
-            className={`${BTN_DARK} py-1`}
-          >
-            🔄 {me.freeRerolls > 0 ? `무료 ${me.freeRerolls}` : `🪙${REROLL_COST}`}
-          </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-2">
+            <span className="rounded-xl bg-gradient-to-b from-sky-400 to-sky-700 px-3 py-1 text-lg font-black leading-tight text-white shadow-[0_0_12px_rgba(56,189,248,0.4)]" title="여관 등급 — 상점에 나오는 유닛의 최고 등급">
+              🏠 {me.tier}등급 <span className="text-sm text-yellow-300">{"★".repeat(me.tier)}</span>
+            </span>
+            <span className="flex flex-col text-[11px] leading-tight text-white/60 light:text-slate-500">
+              <span>
+                상점 {me.shop.length}칸 · {me.tier}★까지 · 1장 🪙{BUY_COST}
+              </span>
+              <span className="hidden sm:inline">유닛을 여기로 끌어다 놓으면 판매</span>
+            </span>
+          </span>
+          <span className="ml-auto flex gap-2">
+            <button
+              onClick={() => send({ type: "FREEZE", seat: viewerSeat, round }, "freeze")}
+              className={`flex h-11 flex-col items-center justify-center rounded-xl px-3 leading-tight transition hover:scale-105 ${
+                me.frozen ? "bg-gradient-to-b from-sky-300 to-sky-500 text-black shadow-[0_0_14px_rgba(125,211,252,0.7)]" : "border-2 border-sky-400/60 bg-sky-950/60 text-sky-100"
+              }`}
+              title="잠그면 다음 라운드에도 같은 상점이 유지돼요 (단축키 F)"
+            >
+              <span className="text-sm font-black">{me.frozen ? "🔒 잠금 해제" : "🔓 상점 잠금"}</span>
+              <span className="text-[10px] opacity-70">F</span>
+            </button>
+            <button
+              disabled={me.freeRerolls === 0 && me.gold < REROLL_COST}
+              onClick={reroll}
+              className="flex h-11 flex-col items-center justify-center rounded-xl bg-gradient-to-b from-amber-300 to-amber-600 px-4 leading-tight text-black shadow-[0_0_12px_rgba(251,191,36,0.4)] transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
+              title="상점을 새로 뽑아요 (단축키 R)"
+            >
+              <span className="text-sm font-black">🔄 새로고침</span>
+              <span className="text-[11px] font-bold">{me.freeRerolls > 0 ? `무료 ${me.freeRerolls}회` : `🪙${REROLL_COST}`} · R</span>
+            </button>
+          </span>
         </div>
-        <div className={`flex min-h-[6rem] flex-wrap items-center gap-3 px-1 pt-2 sm:min-h-[7rem] ${me.frozen ? "rounded-xl bg-sky-400/10" : ""}`}>
+        {me.frozen && <p className="rounded-lg bg-sky-400/15 px-2 py-1 text-xs font-bold text-sky-100">🔒 상점 잠김 — 다음 라운드에도 이 유닛들이 그대로 남아요</p>}
+        <div className={`flex min-h-[6rem] flex-wrap items-center gap-3 px-1 pt-2 sm:min-h-[7rem] ${me.frozen ? "rounded-xl bg-sky-400/10 ring-2 ring-sky-300/50" : ""}`}>
           {me.shop.map((id, slot) =>
             id ? (
               <UnitCard
@@ -746,7 +825,7 @@ function ShopView({
       {/* 보드 */}
       <div data-drop="board" className={`${PANEL} flex flex-col gap-2 transition ${dragging ? "ring-1 ring-emerald-300/40" : ""} ${hoverDrop?.startsWith("board") ? "ring-2 ring-emerald-300/80" : ""}`}>
         <p className={LABEL}>
-          ⚔️ 내 보드 {me.board.length}/{BOARD_MAX} · 왼쪽부터 공격해요
+          <CapBadge label="⚔️ 보드" n={me.board.length} max={BOARD_MAX} /> <span className="ml-1">왼쪽부터 공격해요</span>
         </p>
         {view === "3d" ? (
           <div data-drop="board3d" className="relative overflow-hidden rounded-xl">
@@ -807,13 +886,12 @@ function ShopView({
           {me.board.length === 0 && !insertMode && <span className="text-xs text-white/40 light:text-amber-800/50">손패의 유닛을 골라 보드에 내세요.</span>}
         </div>
         )}
-        <SynergyBar board={me.board} />
       </div>
 
       {/* 손패 */}
       <div data-drop="hand" className={`${PANEL} flex flex-col gap-2 transition ${hoverDrop === "hand" ? "ring-2 ring-sky-300/80" : ""}`}>
         <p className={LABEL}>
-          🖐️ 손패 {me.hand.length}/{HAND_MAX} · 같은 유닛 3장 = 황금
+          <CapBadge label="🖐️ 손패" n={me.hand.length} max={HAND_MAX} /> <span className="ml-1">같은 유닛 3장 = 황금</span>
         </p>
         <div className="flex min-h-[6rem] flex-wrap items-center gap-3 px-1 pt-2 sm:min-h-[7rem]">
           {me.hand.map((u) => (

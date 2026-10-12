@@ -54,11 +54,12 @@ export interface UnitDef {
   ev?: number;
 }
 
-export const TRIBES: Record<Tribe, { name: string; emoji: string; color: string; levels: [number, string][] }> = {
+export const TRIBES: Record<Tribe, { name: string; emoji: string; color: string; short: string; levels: [number, string][] }> = {
   knight: {
     name: "기사단",
     emoji: "🛡️",
     color: "#60a5fa",
+    short: "보호막으로 버티는 방패 군단",
     levels: [
       [2, "전투 시작: 모든 기사단 +1/+1, 가장 왼쪽 기사단에 보호막"],
       [4, "전투 시작: 모든 기사단 +1/+1, 보호막"],
@@ -69,6 +70,7 @@ export const TRIBES: Record<Tribe, { name: string; emoji: string; color: string;
     name: "야수",
     emoji: "🐾",
     color: "#f59e0b",
+    short: "죽으면 새끼를 남기는 무리",
     levels: [
       [2, "전투 중 소환되는 야수 +2/+2"],
       [4, "전투 중 소환되는 야수 +3/+3"],
@@ -79,6 +81,7 @@ export const TRIBES: Record<Tribe, { name: string; emoji: string; color: string;
     name: "기계",
     emoji: "⚙️",
     color: "#94a3b8",
+    short: "팔면 골드, 쓰러져도 부활",
     levels: [
       [2, "기계를 팔면 골드 +1 추가"],
       [4, "전투 시작: 모든 기계 +1/+2"],
@@ -89,6 +92,7 @@ export const TRIBES: Record<Tribe, { name: string; emoji: string; color: string;
     name: "원소",
     emoji: "🔥",
     color: "#f97316",
+    short: "상점에서 점점 강해짐",
     levels: [
       [2, "상점 단계마다 새로고침 1회 무료"],
       [4, "원소를 살 때마다 그 원소 +1/+1"],
@@ -99,6 +103,7 @@ export const TRIBES: Record<Tribe, { name: string; emoji: string; color: string;
     name: "망령",
     emoji: "👻",
     color: "#a78bfa",
+    short: "아군이 죽을수록 강해짐",
     levels: [
       [2, "전투 시작: 모든 망령 +1/+1"],
       [4, "아군이 죽을 때마다 모든 망령 공격력 +1"],
@@ -109,6 +114,7 @@ export const TRIBES: Record<Tribe, { name: string; emoji: string; color: string;
     name: "용족",
     emoji: "🐲",
     color: "#ef4444",
+    short: "전투 시작에 크게 강해짐",
     levels: [
       [2, "전투 시작: 모든 용족 +1/+1"],
       [4, "전투 시작: 모든 용족 +3/+3 (2단계 대신)"],
@@ -119,6 +125,7 @@ export const TRIBES: Record<Tribe, { name: string; emoji: string; color: string;
     name: "해양",
     emoji: "🌊",
     color: "#06b6d4",
+    short: "해양을 살 때마다 함께 성장",
     levels: [
       [2, "해양 유닛을 살 때 보드의 다른 해양 +1/+1"],
       [4, "해양 유닛을 살 때 보드의 다른 해양 +2/+2"],
@@ -129,6 +136,7 @@ export const TRIBES: Record<Tribe, { name: string; emoji: string; color: string;
     name: "악마",
     emoji: "😈",
     color: "#dc2626",
+    short: "강하지만 체력을 대가로",
     levels: [
       [2, "전투 시작: 모든 악마 +2/+2 · 대가: 상점 단계마다 내 체력 −1"],
       [4, "전투 시작: 모든 악마 +4/+4 (대가 같음)"],
@@ -139,6 +147,7 @@ export const TRIBES: Record<Tribe, { name: string; emoji: string; color: string;
     name: "숲",
     emoji: "🌿",
     color: "#22c55e",
+    short: "라운드마다 자라는 숲",
     levels: [
       [2, "상점 단계가 끝날 때 무작위 숲 1명 +1/+1"],
       [4, "상점 단계가 끝날 때 모든 숲 +1/+1"],
@@ -149,6 +158,7 @@ export const TRIBES: Record<Tribe, { name: string; emoji: string; color: string;
     name: "요정",
     emoji: "🧚",
     color: "#e879f9",
+    short: "쓰러지면 아군에게 힘을",
     levels: [
       [2, "요정이 죽으면 무작위 아군 +3/+3"],
       [4, "요정이 죽으면 무작위 아군 +4/+4"],
@@ -157,16 +167,16 @@ export const TRIBES: Record<Tribe, { name: string; emoji: string; color: string;
   },
 };
 
-export const CLASSES: Record<ClassId, { name: string; emoji: string; color: string; levels: [number, string][] }> = {
-  warrior: { name: "전사", emoji: "⚔️", color: "#f97316", levels: [[2, "전투 시작: 전사 +2/+0"], [4, "전투 시작: 전사 +4/+1"], [6, "전투 시작: 전사 +7/+3"]] },
-  guardian: { name: "수호자", emoji: "🧱", color: "#a8a29e", levels: [[2, "전투 시작: 수호자 +0/+2"], [4, "전투 시작: 수호자 +0/+4, 도발"], [6, "전투 시작: 모든 아군 +0/+4, 수호자 도발"]] },
-  assassin: { name: "암살자", emoji: "🗡️", color: "#a3e635", levels: [[2, "암살자는 공격력이 가장 높은 적을 노리고(도발 무시) 공격할 때 반격을 받지 않음, +2/+1"], [4, "(2) + 암살자 +4/+2"], [6, "(2)(4) + 암살자에게 독"]] },
-  mage: { name: "마법사", emoji: "🔮", color: "#818cf8", levels: [[2, "전투 시작: 마법사마다 무작위 적에게 피해 2"], [4, "마법사마다 피해 3"], [6, "마법사마다 피해 5"]] },
-  ranger: { name: "궁수", emoji: "🏹", color: "#84cc16", levels: [[2, "전투 시작: 궁수 +1/+1, 궁수마다 무작위 적에게 자기 공격력만큼 선제 사격"], [4, "(2) + 궁수 +3/+3, 연타"], [6, "(2) + 궁수 +5/+5, 연타"]] },
-  cleric: { name: "성직자", emoji: "🕊️", color: "#fde68a", levels: [[2, "전투 시작: 성직자 +0/+2, 무작위 아군 2명 보호막"], [4, "성직자 +0/+2, 아군 4명 보호막"], [6, "성직자 +0/+2, 모든 아군 보호막"]] },
-  berserker: { name: "광전사", emoji: "🪓", color: "#ef4444", levels: [[2, "광전사가 피해를 받고 살아남으면 공격력 +1"], [4, "공격력 +2"], [6, "공격력 +4"]] },
-  summoner: { name: "소환사", emoji: "📜", color: "#c084fc", levels: [[2, "소환사가 죽으면 2/2 정령 소환"], [4, "4/4 정령"], [6, "7/7 정령"]] },
-  plunderer: { name: "약탈자", emoji: "💰", color: "#facc15", levels: [[2, "전투 시작: 약탈자 +2/+2 · 다음 라운드 골드 +1 (이기면 +1 더)"], [4, "약탈자 +3/+3 · 골드 +2 (이기면 +1 더)"], [6, "약탈자 +5/+5 · 골드 +4 (이기면 +1 더)"]] },
+export const CLASSES: Record<ClassId, { name: string; emoji: string; color: string; short: string; levels: [number, string][] }> = {
+  warrior: { name: "전사", emoji: "⚔️", color: "#f97316", short: "공격력이 크게 오름", levels: [[2, "전투 시작: 전사 +2/+0"], [4, "전투 시작: 전사 +4/+1"], [6, "전투 시작: 전사 +7/+3"]] },
+  guardian: { name: "수호자", emoji: "🧱", color: "#a8a29e", short: "튼튼한 체력과 도발", levels: [[2, "전투 시작: 수호자 +0/+2"], [4, "전투 시작: 수호자 +0/+4, 도발"], [6, "전투 시작: 모든 아군 +0/+4, 수호자 도발"]] },
+  assassin: { name: "암살자", emoji: "🗡️", color: "#a3e635", short: "가장 센 적을 반격 없이", levels: [[2, "암살자는 공격력이 가장 높은 적을 노리고(도발 무시) 공격할 때 반격을 받지 않음, +2/+1"], [4, "(2) + 암살자 +4/+2"], [6, "(2)(4) + 암살자에게 독"]] },
+  mage: { name: "마법사", emoji: "🔮", color: "#818cf8", short: "전투 시작 마법 피해", levels: [[2, "전투 시작: 마법사마다 무작위 적에게 피해 2"], [4, "마법사마다 피해 3"], [6, "마법사마다 피해 5"]] },
+  ranger: { name: "궁수", emoji: "🏹", color: "#84cc16", short: "선제 사격과 연타", levels: [[2, "전투 시작: 궁수 +1/+1, 궁수마다 무작위 적에게 자기 공격력만큼 선제 사격"], [4, "(2) + 궁수 +3/+3, 연타"], [6, "(2) + 궁수 +5/+5, 연타"]] },
+  cleric: { name: "성직자", emoji: "🕊️", color: "#fde68a", short: "아군에게 보호막", levels: [[2, "전투 시작: 성직자 +0/+2, 무작위 아군 2명 보호막"], [4, "성직자 +0/+2, 아군 4명 보호막"], [6, "성직자 +0/+2, 모든 아군 보호막"]] },
+  berserker: { name: "광전사", emoji: "🪓", color: "#ef4444", short: "맞을수록 강해짐", levels: [[2, "광전사가 피해를 받고 살아남으면 공격력 +1"], [4, "공격력 +2"], [6, "공격력 +4"]] },
+  summoner: { name: "소환사", emoji: "📜", color: "#c084fc", short: "쓰러지면 정령 소환", levels: [[2, "소환사가 죽으면 2/2 정령 소환"], [4, "4/4 정령"], [6, "7/7 정령"]] },
+  plunderer: { name: "약탈자", emoji: "💰", color: "#facc15", short: "이기면 골드가 더", levels: [[2, "전투 시작: 약탈자 +2/+2 · 다음 라운드 골드 +1 (이기면 +1 더)"], [4, "약탈자 +3/+3 · 골드 +2 (이기면 +1 더)"], [6, "약탈자 +5/+5 · 골드 +4 (이기면 +1 더)"]] },
 };
 
 export const CLASS_ORDER: ClassId[] = ["warrior", "guardian", "assassin", "mage", "ranger", "cleric", "berserker", "summoner", "plunderer"];
