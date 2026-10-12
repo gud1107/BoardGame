@@ -60,18 +60,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.58.0",
     releaseDate: "2026-10-13",
-    title: "🍺 여관 난투 — 직업 9개·새 종족 4개·유닛 75종, 판마다 바뀌는 종족",
+    title: "🏙️ 신규 게임 단어 마천루 — 주제 단어를 쏟아내 3D 탑 쌓기, 🍺 여관 난투 — 직업 9개·새 종족 4개·유닛 75종, 판마다 바뀌는 종족",
     changes: [
       { game: "tavern-brawl", type: "FEAT", desc: "직업 시너지 9개 — 전사·수호자·암살자·마법사·궁수·성직자·광전사·소환사·약탈자, 모든 유닛이 종족+직업 두 가지 시너지" },
       { game: "tavern-brawl", type: "FEAT", desc: "새 종족 🌊 해양 · 😈 악마 · 🌿 숲 · 🧚 요정과 새 유닛 33종(총 75종), 새 키워드 ⚡ 연타" },
       { game: "tavern-brawl", type: "FEAT", desc: "판마다 종족 10개 중 7개만 상점에 나와 매번 다른 판, 새 유닛 모두 전용 3D 캐릭터" },
-    ],
-  },
-  {
-    version: "v1.58.0",
-    releaseDate: "2026-10-13",
-    title: "🏙️ 신규 게임 단어 마천루 — 주제 단어를 쏟아내 3D 탑 쌓기",
-    changes: [
       { game: "word-tower", type: "FEAT", desc: "신규 게임 🏙️ 단어 마천루 — 주제가 뜨면 모두 동시에 단어를 입력해 3D 탑을 쌓는 2~8인 실시간 단어 게임, AI 봇과 혼자서도 바로" },
       { game: "word-tower", type: "FEAT", desc: "25개 주제 사전, 단어 1개 = 글자 수만큼 층(최대 4층), 사전에 없는 단어는 다른 플레이어 투표로 심사, 라운드 1등·연승 기록" },
       { game: "word-tower", type: "FEAT", desc: "🧊 3D 무대 — 단어 블록이 떨어져 쌓이고, 심사에서 거절되면 굴러떨어지고, 1등 탑엔 왕관 · 2D 화면 전환 버튼" },

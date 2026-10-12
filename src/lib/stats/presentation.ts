@@ -105,6 +105,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "만든 습관", key: "habitsFormed", unit: "개" },
     { label: "붕괴 없는 일주일", key: "flawlessWeeks", flag: true },
   ],
+  "word-tower": [
+    { label: "라운드 1등", key: "roundWins", unit: "번" },
+    { label: "최고 층수", key: "maxHeight", unit: "층" },
+    { label: "최고 연승", key: "bestStreak", unit: "연승" },
+    { label: "쌓은 단어", key: "words", unit: "개" },
+  ],
   "liar-game": [
     { label: "라이어로 지목 피함", key: "liarEscapes", unit: "번" },
     { label: "들킨 뒤 정답 역전", key: "liarGuesses", unit: "번" },
@@ -238,6 +244,11 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "glp-score", label: "한 판 최고 점수", num: "maxScore", format: "count", unit: "점" },
     { id: "glp-goals", label: "인생 목표 달성", num: "goalsMet", format: "count", unit: "번" },
     { id: "glp-habits", label: "만든 습관", num: "habitsFormed", format: "count", unit: "개" },
+  ],
+  "word-tower": [
+    { id: "wt-height", label: "한 라운드 최고 층수", num: "maxHeight", format: "count", unit: "층" },
+    { id: "wt-wins", label: "라운드 1등", num: "roundWins", format: "count", unit: "번" },
+    { id: "wt-streak", label: "최고 연승", num: "bestStreak", format: "count", unit: "연승" },
   ],
   "liar-game": [
     { id: "lg-escape", label: "라이어 생존", num: "liarEscapes", format: "count", unit: "번" },

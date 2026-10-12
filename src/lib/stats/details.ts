@@ -76,6 +76,13 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "붕괴 없는 일주일", value: (d) => n(d.flawlessWeeks) },
     { label: "약속 성사 / 기회 카드", value: (d) => `${n(d.matches)} / ${n(d.opportunities)}` },
   ],
+  "word-tower": [
+    { label: "라운드 1등", value: (d) => n(d.roundWins) },
+    { label: "최고 연승", value: (d) => n(d.bestStreak) },
+    { label: "한 라운드 최고 층수", value: (d) => `${n(d.maxHeight)}층` },
+    { label: "쌓은 단어 / 누적 층수", value: (d) => `${n(d.words)} / ${n(d.totalHeight)}층` },
+    { label: "심사 인정 / 거절", value: (d) => `${n(d.approvedWords)} / ${n(d.rejectedWords)}` },
+  ],
   "liar-game": [
     { label: "라이어로 지목 피함 / 라이어 라운드", value: (d) => `${n(d.liarEscapes)} / ${n(d.liarRounds)}` },
     { label: "들킨 뒤 제시어 맞혀 역전", value: (d) => n(d.liarGuesses) },

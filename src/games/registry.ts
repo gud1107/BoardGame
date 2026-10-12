@@ -123,6 +123,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "word-tower",
+    name: "단어 마천루",
+    nameEn: "Word Skyscraper",
+    description:
+      "주제가 공개되면 모두 동시에 그 주제의 단어를 쏟아내 3D 탑을 쌓는 2~8인 실시간 단어 게임! 단어 하나가 글자 수만큼의 층이 되고, 라운드가 끝났을 때 가장 높은 탑이 1등. 남의 단어는 결과 때까지 비밀, 사전에 없는 단어는 다른 플레이어들이 투표로 심사해요. 과일·동물·나라 등 25개 주제, AI 봇 지원.",
+    players: { min: 2, max: 8 },
+    playTime: { minMinutes: 5, maxMinutes: 15 },
+    category: "party",
+    thumbnail: { emoji: "🏙️", gradient: ["#38bdf8", "#0b1022"] },
+    tags: ["단어", "단어쌓기", "단어 쌓기", "한글", "순발력", "3D", "AI봇"],
+    genres: ["party", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "liar-game",
     name: "라이어를 찾아라",
     nameEn: "Find the Liar",

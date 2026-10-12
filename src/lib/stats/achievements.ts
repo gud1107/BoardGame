@@ -178,6 +178,13 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["habits-4", "🌱", "루틴 마스터", "수면이 아닌 습관 4개로 마무리", 4, k("maxHabits")],
     ["flawless-3", "🧘", "번아웃 제로", "붕괴 없이 일주일 3번", 3, k("flawlessWeeks")],
   ],
+  "word-tower": [
+    ["win-1", "🏙️", "첫 마천루", "라운드 1등 1번", 1, k("roundWins")],
+    ["height-40", "🏗️", "초고층 건축가", "한 라운드 40층 이상", 40, k("maxHeight")],
+    ["streak-3", "🔥", "연속 준공", "라운드 3연승", 3, k("bestStreak")],
+    ["words-300", "📚", "걸어 다니는 사전", "누적 단어 300개", 300, k("words")],
+    ["approved-20", "🗳️", "설득의 달인", "심사로 인정받은 단어 20개", 20, k("approvedWords")],
+  ],
   "liar-game": [
     ["escape-5", "🎭", "완벽한 위장", "라이어로 지목을 5번 피함", 5, k("liarEscapes")],
     ["guess-3", "🔍", "역전의 한 수", "들킨 뒤 제시어를 맞혀 역전 3번", 3, k("liarGuesses")],
