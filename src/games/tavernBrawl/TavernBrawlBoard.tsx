@@ -23,6 +23,7 @@ import UnitCard, { UnitDetail, type CardUnit } from "./UnitCard";
 import CombatReplay, { COMBAT_CSS, sideOfSeat } from "./CombatReplay";
 import RulebookModal from "./RulebookModal";
 import { AbilityText } from "./AbilityFeed";
+import { UnitTooltipHost, unitTip } from "./UnitTooltip";
 import { getTavernBrawlSound } from "./tavernBrawlBgm";
 import type { ArenaApi } from "./three/Arena3D";
 import { webglAvailable } from "./three/webgl";
@@ -273,6 +274,7 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
   return (
     <div className="flex flex-col gap-3">
       <style>{COMBAT_CSS}</style>
+      <UnitTooltipHost />
       {header}
       <div className="grid gap-3 lg:grid-cols-[1fr_17rem]">
         <div className="min-w-0">{body}</div>
@@ -483,6 +485,7 @@ function ShopView({
     let state: DragState = { data, card, x: sx, y: sy, active: false };
     dragRef.current = state;
     const activate = () => {
+      unitTip.hide();
       state = { ...state, active: true };
       dragRef.current = state;
       setDrag(state);

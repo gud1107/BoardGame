@@ -3,6 +3,8 @@
 import type { Keyword } from "./units";
 import { CLASSES, KEYWORDS, TRIBES, unitDef } from "./units";
 import { AbilityText } from "./AbilityFeed";
+import { unitTip } from "./UnitTooltip";
+import { useRef } from "react";
 
 export interface CardUnit {
   defId: string;
@@ -53,17 +55,40 @@ export default function UnitCard({
   const hasShield = unit.kw.includes("shield");
   const liftCls = lift === "up" ? "-translate-y-6 scale-110 z-20" : lift === "down" ? "translate-y-6 scale-110 z-20" : "";
   const flashCls = flash === "hit" ? "tb-shake" : flash === "dead" ? "opacity-30 grayscale scale-90" : "";
+  const cls = d.cls ? CLASSES[d.cls] : null;
+  const lastPointer = useRef("mouse");
+  const tipAt = (el: HTMLElement) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.right, y: r.top };
+  };
   return (
     <button
       type="button"
-      onClick={onClick}
-      onPointerDown={onPointerDown}
+      onClick={(e) => {
+        if (onClick) onClick();
+        else if (lastPointer.current !== "mouse") {
+          // 터치: 누를 데가 없는 카드(전투·관전)는 탭하면 설명
+          const p = tipAt(e.currentTarget);
+          unitTip.toggle(unit, p.x, p.y);
+        }
+      }}
+      onPointerEnter={(e) => {
+        if (e.pointerType !== "mouse") return;
+        const p = tipAt(e.currentTarget);
+        unitTip.show(unit, p.x, p.y);
+      }}
+      onPointerLeave={(e) => {
+        if (e.pointerType === "mouse") unitTip.hide();
+      }}
+      onPointerDown={(e) => {
+        lastPointer.current = e.pointerType;
+        onPointerDown?.(e);
+      }}
       onContextMenu={onPointerDown ? (e) => e.preventDefault() : undefined}
       style={onPointerDown ? { WebkitTouchCallout: "none", userSelect: "none" } : undefined}
       className={`relative shrink-0 select-none rounded-xl transition-all duration-200 ${w} ${liftCls} ${flashCls} ${dim ? "opacity-50" : ""} ${glow ? "tb-glow" : ""} ${
         selected ? "ring-2 ring-yellow-300 ring-offset-2 ring-offset-transparent -translate-y-1" : ""
       } ${onClick ? "cursor-pointer" : "cursor-default"}`}
-      title={`${d.name} (${d.tier}등급${tribe ? ` · ${tribe.name}` : ""}) ${d.text}`}
     >
       <div
         className={`absolute inset-0 overflow-hidden rounded-xl border-2 bg-gradient-to-b ${TIER_BG[d.tier]} ${
@@ -71,8 +96,17 @@ export default function UnitCard({
         } ${hasShield ? "outline outline-2 outline-offset-1 outline-amber-200/80" : ""}`}
       >
         {unit.golden && <div className="tb-golden pointer-events-none absolute inset-0" />}
-        <div className={`flex h-[62%] items-center justify-center ${emoji} drop-shadow`}>{d.emoji}</div>
+        <div className={`flex h-[54%] items-center justify-center ${emoji} drop-shadow`}>{d.emoji}</div>
         <div className="truncate px-1 text-center text-[9px] font-semibold leading-tight text-white/90 sm:text-[10px]">{d.name}</div>
+        <div className="truncate px-0.5 text-center text-[8px] leading-tight sm:text-[9px]">
+          <span style={{ color: tribe?.color ?? "#cbd5e1" }}>{tribe ? tribe.name : "중립"}</span>
+          {cls && (
+            <>
+              <span className="text-white/40">·</span>
+              <span style={{ color: cls.color }}>{cls.name}</span>
+            </>
+          )}
+        </div>
         <div className="mt-0.5 flex justify-center gap-0.5 text-[9px] leading-none">
           {unit.kw.map((k) => (
             <span key={k} title={KEYWORDS[k].name}>

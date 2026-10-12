@@ -198,3 +198,31 @@ export function woodTexture(): THREE.CanvasTexture {
   woodTex.repeat.set(3, 2);
   return woodTex;
 }
+
+const tagCache = new Map<string, THREE.CanvasTexture>();
+/** 3D 말 머리 위 종족·직업 아이콘 꼬리표 */
+export function tagTexture(icons: string, colors: [string, string]): THREE.CanvasTexture {
+  const key = `${icons}|${colors.join()}`;
+  const hit = tagCache.get(key);
+  if (hit) return hit;
+  const c = document.createElement("canvas");
+  c.width = 160;
+  c.height = 80;
+  const g = c.getContext("2d")!;
+  roundRect(g, 4, 6, 152, 68, 32);
+  const grad = g.createLinearGradient(0, 0, 160, 0);
+  grad.addColorStop(0, colors[0]);
+  grad.addColorStop(1, colors[1]);
+  g.fillStyle = "rgba(12,10,9,0.82)";
+  g.fill();
+  g.lineWidth = 5;
+  g.strokeStyle = grad;
+  g.stroke();
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.font = `44px ${EMOJI_FONT}`;
+  g.fillText(icons, 80, 42);
+  const t = finish(c);
+  tagCache.set(key, t);
+  return t;
+}

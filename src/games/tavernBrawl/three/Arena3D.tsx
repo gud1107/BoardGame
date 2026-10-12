@@ -5,10 +5,12 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber"
 import * as THREE from "three";
 import type { Snap } from "../combat";
 import { unitDef } from "../units";
-import { popupTexture, statTexture, woodTexture } from "./textures";
+import { popupTexture, statTexture, tagTexture, woodTexture } from "./textures";
+import { CLASSES, TRIBES } from "../units";
 import Figure, { type FigureAct } from "./figures";
 import { StyleFxLayer, fxLife, type StyleFxInput, type StyleFxItem } from "./StyleFx";
 import type { AttackKind } from "../attackStyle";
+import { unitTip } from "../UnitTooltip";
 
 /**
  * 여관 난투 3D 탁자. 표시 전용: 보이는 건 화면에 넘겨준 유닛뿐이고, 모든 움직임은 시작 시각 기준
@@ -146,6 +148,11 @@ function Token({
   const d = unitDef(u.defId);
   const m = u.golden ? 2 : 1;
   const atkTex = useMemo(() => statTexture(u.atk, "atk", u.atk > d.atk * m), [u.atk, d.atk, m]);
+  const tagTex = useMemo(() => {
+    const tribe = d.tribe ? TRIBES[d.tribe] : null;
+    const cls = d.cls ? CLASSES[d.cls] : null;
+    return tagTexture(`${tribe?.emoji ?? "⚪"}${cls?.emoji ?? ""}`, [tribe?.color ?? "#94a3b8", cls?.color ?? tribe?.color ?? "#94a3b8"]);
+  }, [d.tribe, d.cls]);
   const hpTex = useMemo(() => statTexture(Math.max(0, u.hp), "hp", u.hp > d.hp * m), [u.hp, d.hp, m]);
 
   useFrame(() => {
@@ -309,7 +316,14 @@ function Token({
       <group scale={size}>
       <group ref={body}>
         <group
-          onClick={click}
+          onClick={
+            click ??
+            ((e: ThreeEvent<MouseEvent>) => {
+              // 누를 데가 없는 3D 말(전투)은 탭하면 설명
+              e.stopPropagation();
+              unitTip.toggle(u, e.nativeEvent.clientX, e.nativeEvent.clientY);
+            })
+          }
           onPointerDown={
             onGrab
               ? (e: ThreeEvent<PointerEvent>) => {
@@ -318,8 +332,15 @@ function Token({
                 }
               : undefined
           }
-          onPointerOver={onPick ? () => (document.body.style.cursor = "pointer") : undefined}
-          onPointerOut={onPick ? () => (document.body.style.cursor = "") : undefined}
+          onPointerOver={(e: ThreeEvent<PointerEvent>) => {
+            e.stopPropagation();
+            document.body.style.cursor = "pointer";
+            if (e.nativeEvent.pointerType === "mouse") unitTip.show(u, e.nativeEvent.clientX, e.nativeEvent.clientY);
+          }}
+          onPointerOut={(e: ThreeEvent<PointerEvent>) => {
+            document.body.style.cursor = "";
+            if (e.nativeEvent.pointerType === "mouse") unitTip.hide();
+          }}
         >
           {/* 받침 */}
           <mesh position={[0, 0.07, 0]} castShadow receiveShadow>
@@ -341,6 +362,10 @@ function Token({
             <Figure defId={u.defId} uid={u.uid} golden={u.golden} actRef={act} />
           </group>
           <pointLight ref={flashRef} position={[0, 0.7, 0.4]} color="#ffffff" intensity={0} distance={1.8} decay={1.5} />
+          {/* 종족·직업 꼬리표(전투·상점 모두) — 마우스를 올리면 전체 설명 */}
+          <sprite position={[0, 1.72, 0]} scale={[0.46, 0.23, 1]} renderOrder={3}>
+            <spriteMaterial map={tagTex} toneMapped={false} depthTest={false} transparent />
+          </sprite>
           <sprite position={[-0.34, 0.16, 0.38]} scale={[0.28, 0.28, 1]} renderOrder={2}>
             <spriteMaterial map={atkTex} toneMapped={false} depthTest={false} />
           </sprite>
