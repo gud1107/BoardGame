@@ -3,8 +3,11 @@
 import type { GameId } from "@/games/types";
 
 export const GAME_LAST_UPDATED: Partial<Record<GameId, string>> = {
-  "bluff-roulette": "2026-10-11T21:38:27+09:00",
-  "liar-game": "2026-10-11T21:18:45+09:00",
+  "tavern-brawl": "2026-10-13T02:33:06+09:00",
+  "word-tower": "2026-10-13T02:13:49+09:00",
+  "god-life-planner": "2026-10-12T02:06:55+09:00",
+  "bluff-roulette": "2026-10-12T02:06:34+09:00",
+  "liar-game": "2026-10-12T02:05:12+09:00",
   "telepathy": "2026-10-11T19:34:55+09:00",
   "splendor-duel": "2026-10-11T07:32:32+09:00",
   "coyote": "2026-10-11T06:21:11+09:00",
@@ -49,6 +52,9 @@ export const GAME_LAST_UPDATED: Partial<Record<GameId, string>> = {
 
 /** First commit that touched each game — drives the lobby's NEW badge. */
 export const GAME_ADDED: Partial<Record<GameId, string>> = {
+  "word-tower": "2026-10-13T00:27:13+09:00",
+  "tavern-brawl": "2026-10-12T21:28:54+09:00",
+  "god-life-planner": "2026-10-12T02:06:55+09:00",
   "liar-game": "2026-10-11T21:18:45+09:00",
   "bluff-roulette": "2026-10-11T21:14:27+09:00",
   "telepathy": "2026-10-11T16:20:13+09:00",
@@ -95,8 +101,11 @@ export const GAME_ADDED: Partial<Record<GameId, string>> = {
 
 /** Newest game-specific commit (sha + committer date) — the admin 커밋/푸시/배포순 sorts. */
 export const GAME_LAST_COMMIT: Partial<Record<GameId, { at: string; sha: string }>> = {
-  "bluff-roulette": { "at": "2026-10-11T21:38:27+09:00", "sha": "aaab0c84f8aa13ca8b8169ffd99895a496f133a8" },
-  "liar-game": { "at": "2026-10-11T21:18:45+09:00", "sha": "f0cba415d36b25835e6597c06b2e08a82269259f" },
+  "tavern-brawl": { "at": "2026-10-13T02:33:06+09:00", "sha": "800a97198415b5fb2fc5bb0a36ab248306b56c2b" },
+  "word-tower": { "at": "2026-10-13T02:13:49+09:00", "sha": "7f4e550a2664ef5571ed05648a7879bb6b093d9a" },
+  "god-life-planner": { "at": "2026-10-12T02:06:55+09:00", "sha": "159cc103ce5cd2c72a610342f56481a285ecdfc0" },
+  "bluff-roulette": { "at": "2026-10-12T02:06:34+09:00", "sha": "78dae6da5f6f720b6ed9a0e33e1e5d355fba955a" },
+  "liar-game": { "at": "2026-10-12T02:05:12+09:00", "sha": "6c0b5f8138dc61e5e4d04d6cbe51c244b461dabd" },
   "telepathy": { "at": "2026-10-11T19:34:55+09:00", "sha": "32a71cb8c1194ea47044ed9d816a3899f1049aba" },
   "splendor-duel": { "at": "2026-10-11T07:32:32+09:00", "sha": "c302e0030f2f86ebfc282255993f8540e9e6708d" },
   "coyote": { "at": "2026-10-11T06:21:11+09:00", "sha": "6b86778daf6650699a033f2eb14d42c0c86a3eb7" },

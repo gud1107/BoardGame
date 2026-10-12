@@ -37,6 +37,11 @@ export interface GhDeployment {
   created_at: string;
 }
 
+export interface GhCommit {
+  sha: string;
+  commit: { committer: { date: string } };
+}
+
 export interface GhStatus {
   state: string;
   context: string;
@@ -50,7 +55,8 @@ export const VERCEL_ENVIRONMENT = "Production – board-game";
  * The deployment that first shipped commit `sha` (committed at `commitAt`):
  * the oldest one at or after it in main's order. Commits older than the
  * fetched `/commits` page fall back to "first deployment finished after the
- * commit" — rebases refresh committer dates, so this rarely misfires.
+ * commit" — rebases refresh committer dates, so this rarely misfires —
+ * or null when the commit predates every fetched deployment.
  */
 export function findShippingDeployment(
   sha: string,
@@ -59,6 +65,9 @@ export function findShippingDeployment(
   deployments: readonly GhDeployment[],
 ): GhDeployment | null {
   const idx = commitOrder.get(sha);
+  // Older than every fetched deployment: the one that shipped it fell off the
+  // page, so any match here would be a much later, unrelated build.
+  if (idx === undefined && deployments.every((d) => Date.parse(d.created_at) > Date.parse(commitAt))) return null;
   let best: GhDeployment | null = null;
   for (const d of deployments) {
     const dIdx = commitOrder.get(d.sha);
@@ -82,4 +91,21 @@ export function readVercelStatuses(statuses: readonly GhStatus[]): Pick<GameRele
   if (latest && (latest.state === "failure" || latest.state === "error")) return { pushedAt, deployedAt: null, state: "failed" };
   if (latest) return { pushedAt, deployedAt: null, state: "building" };
   return { pushedAt: null, deployedAt: null, state: "unknown" };
+}
+
+/** Same rules as `scripts/gen-game-last-updated.mjs`: dir → id, `shared` skipped. */
+const toGameId = (dir: string) =>
+  dir
+    .replace(/([a-z])([A-Z])/g, "$1-$2")
+    .replace(/([A-Z])([A-Z][a-z])/g, "$1-$2")
+    .replace(/([a-zA-Z])(\d)/g, "$1-$2")
+    .toLowerCase();
+const MAX_GAMES_PER_COMMIT = 3;
+
+/** Game ids one commit counts as "updated" for — none for a site-wide sweep. */
+export function gameIdsTouched(files: readonly { filename: string }[]): string[] {
+  const dirs = new Set(
+    files.map((f) => f.filename.match(/^src\/games\/([^/]+)\//)?.[1]).filter((d): d is string => !!d && d !== "shared"),
+  );
+  return dirs.size > MAX_GAMES_PER_COMMIT ? [] : [...dirs].map(toGameId);
 }

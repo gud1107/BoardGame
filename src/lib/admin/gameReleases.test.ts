@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findShippingDeployment, readVercelStatuses, VERCEL_CONTEXT } from "./gameReleases";
+import { findShippingDeployment, gameIdsTouched, readVercelStatuses, VERCEL_CONTEXT } from "./gameReleases";
 
 // main, newest first: d (head) → c → b → a
 const order = new Map(["d", "c", "b", "a"].map((sha, i) => [sha, i]));
@@ -25,6 +25,26 @@ describe("findShippingDeployment", () => {
     // x/y are deployments of commits that also fell off the page
     const older = [...deploys, { sha: "x", created_at: "2026-10-11T11:00:00Z" }, { sha: "y", created_at: "2026-10-11T11:30:00Z" }];
     expect(findShippingDeployment("old", "2026-10-11T11:10:00Z", order, older)?.sha).toBe("y");
+  });
+
+  it("returns null for an off-page commit older than every fetched deployment", () => {
+    expect(findShippingDeployment("old", "2026-10-11T11:00:00Z", order, deploys)).toBeNull();
+  });
+});
+
+describe("gameIdsTouched", () => {
+  const f = (...names: string[]) => names.map((filename) => ({ filename }));
+
+  it("maps game dirs to ids like the generator script", () => {
+    expect(gameIdsTouched(f("src/games/tavernBrawl/a.ts", "src/games/mineOfOblivion2/b.ts", "src/app/page.tsx")).sort()).toEqual([
+      "mine-of-oblivion-2",
+      "tavern-brawl",
+    ]);
+    expect(gameIdsTouched(f("src/games/shared/x.ts", "src/games/five-cucumbers/y.ts"))).toEqual(["five-cucumbers"]);
+  });
+
+  it("skips site-wide sweeps", () => {
+    expect(gameIdsTouched(f("src/games/a/x.ts", "src/games/b/x.ts", "src/games/c/x.ts", "src/games/d/x.ts"))).toEqual([]);
   });
 });
 
