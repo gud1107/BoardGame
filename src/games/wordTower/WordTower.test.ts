@@ -219,7 +219,7 @@ describe("🎯 정답 모으기 mode", () => {
   const topicOf = (s: GameState) => CLOSED_TOPICS.find((t) => t.id === s.topics[s.roundIndex])!;
 
   it("closed topics have 4~10 Hangul answers and no clashing aliases", () => {
-    expect(CLOSED_TOPICS.length).toBeGreaterThanOrEqual(20);
+    expect(CLOSED_TOPICS.length).toBeGreaterThanOrEqual(50);
     for (const t of CLOSED_TOPICS) {
       expect(t.answers.length, t.id).toBeGreaterThanOrEqual(4);
       expect(t.answers.length, t.id).toBeLessThanOrEqual(10);
@@ -318,5 +318,16 @@ describe("🎯 정답 모으기 mode", () => {
       found[10] += s.entries.filter((e) => e.seat === 1 && e.status === "ok").length;
     }
     expect(found[10]).toBeGreaterThan(found[1]);
+  });
+});
+
+describe("closed topic notes", () => {
+  it("every closed topic has a short note shown after the round", async () => {
+    const { CLOSED_BY_ID } = await import("./closedTopics");
+    for (const t of CLOSED_TOPICS) {
+      const note = CLOSED_BY_ID.get(t.id)?.note ?? "";
+      expect(note.length, t.id).toBeGreaterThan(10);
+      expect(note.length, t.id).toBeLessThanOrEqual(90);
+    }
   });
 });

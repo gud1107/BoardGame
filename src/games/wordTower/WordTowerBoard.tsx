@@ -363,6 +363,11 @@ function ResultPanel({ state, viewerSeat, names, isHost, onAction }: { state: Ga
         {winners.length === 0 ? "이번 라운드는 1등이 없어요" : `🏆 ${winners.map((s) => (s === viewerSeat ? "나" : names[s])).join(", ")} ${winners.length > 1 ? "공동 1등!" : "1등!"}`}
       </p>
       <AnswerReveal state={state} viewerSeat={viewerSeat} names={names} entries={record.entries} topicId={record.topicId} />
+      {closedTopicOf(record.topicId)?.note && (
+        <p className="rounded-xl border border-sky-300/25 bg-sky-400/10 px-3 py-2 text-sm break-keep text-sky-50 light:border-sky-200 light:bg-sky-50 light:text-sky-900">
+          💡 <b>{closedTopicOf(record.topicId)!.name}</b> — {closedTopicOf(record.topicId)!.note}
+        </p>
+      )}
       <ol className="flex flex-col gap-2">
         {ranking.map((r) => (
           <li key={r.seat} className={`rounded-xl border px-3 py-2 ${r.seat === viewerSeat ? "border-amber-400/50 bg-amber-400/10" : "border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-slate-50"}`}>
@@ -449,6 +454,7 @@ export default function WordTowerBoard({ state, viewerSeat, names, connectedSeat
   const showResult = state.phase === "result" || state.phase === "ended";
   // 정답 모으기는 모두의 답이 공개 — 탑 블록에도 단어가 보인다.
   const closedMode = closedTopicOf(state.topics[state.roundIndex]) !== null;
+  const closedCount = closedTopicOf(state.topics[state.roundIndex])?.answers.length ?? null;
   const leaders = useMemo(() => (showResult ? (state.history[state.history.length - 1]?.winners ?? []) : currentLeaders(state)), [showResult, state]);
 
   const towers: TowerView[] = useMemo(
@@ -506,6 +512,7 @@ export default function WordTowerBoard({ state, viewerSeat, names, connectedSeat
         </span>
         <span className="text-lg font-black text-white light:text-slate-900">
           {topic.emoji} {topic.name}
+          {closedCount !== null && <span className="ml-1.5 align-middle text-sm font-bold text-amber-300 light:text-amber-700">정답 {closedCount}개</span>}
         </span>
         <span className="text-xs text-white/50 light:text-slate-500">{phaseLabel[state.phase]}</span>
         <span className="rounded-full border border-white/15 px-2 py-0.5 text-[11px] text-white/60 light:border-slate-300 light:text-slate-500">
@@ -541,6 +548,7 @@ export default function WordTowerBoard({ state, viewerSeat, names, connectedSeat
             <span className="text-xs font-bold tracking-widest text-sky-200/80">ROUND {state.roundIndex + 1}</span>
             <span className="animate-[pulse_1s_ease-in-out_infinite] text-7xl">{topic.emoji}</span>
             <span className="mt-1 text-4xl font-black text-white drop-shadow">{topic.name}</span>
+            {closedCount !== null && <span className="mt-2 rounded-full bg-amber-400 px-4 py-1 text-lg font-black text-slate-900">🎯 정답 {closedCount}개</span>}
             <span className="mt-2 text-sm text-white/70">곧 시작해요{remaining !== null ? ` · ${remaining}` : ""}</span>
           </div>
         )}
