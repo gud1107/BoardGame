@@ -80,13 +80,6 @@ function combatNames(c: CombatRecord, names: Record<Seat, string>): [string, str
   return [names[c.a] ?? `${c.a + 1}번`, c.b === -1 ? `👻 ${c.ghostOf !== null ? names[c.ghostOf] : "유령"}의 유령` : (names[c.b] ?? `${c.b + 1}번`)];
 }
 
-function readDrag(e: React.DragEvent): DragData | null {
-  try {
-    return JSON.parse(e.dataTransfer.getData("text/plain")) as DragData;
-  } catch {
-    return null;
-  }
-}
 
 function SynergyBar({ board, compact }: { board: CardUnit[]; compact?: boolean }) {
   const [open, setOpen] = useState<string | null>(null);
@@ -448,14 +441,100 @@ function ShopView({
   const powerReady = hero && hero.cost !== null && !me.powerUsed && me.gold >= hero.cost && (!["mage", "tamer"].includes(hero.id) || me.board.length > 0);
   const insertMode = selection?.kind === "hand" || selection?.kind === "board";
 
-  const onDropBoard = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    const d = readDrag(e);
-    if (!d) return;
-    if (d.from === "hand") play(d.uid, index);
-    else if (d.from === "board") move(d.uid, index);
-    else if (d.from === "shop") buy(d.slot);
+  /* ── 끌어다 놓기(마우스·터치 공통, 포인터 이벤트) ──────────────
+   * 마우스는 6px 움직이면, 터치는 0.25초 꾹 누르면 끌기 시작(그 전에 움직이면 화면 스크롤).
+   * 놓은 자리의 data-drop으로 판단: sell(판매) · hand · board · board:i · board3d(3D 탁자 → 가장 가까운 자리). */
+  type DragState = { data: DragData; card: CardUnit; x: number; y: number; active: boolean };
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const [hoverDrop, setHoverDrop] = useState<string | null>(null);
+  const dragRef = useRef<DragState | null>(null);
+  const suppressClickRef = useRef(false);
+  const dropAt = (x: number, y: number): { key: string; el: HTMLElement } | null => {
+    for (const el of document.elementsFromPoint(x, y)) {
+      const key = (el as HTMLElement).dataset?.drop;
+      if (key) return { key, el: el as HTMLElement };
+    }
+    return null;
   };
+  const finishDrop = (d: DragState) => {
+    const hit = dropAt(d.x, d.y);
+    if (!hit) return;
+    const { data } = d;
+    const k = hit.key;
+    if (k === "sell") {
+      if (data.from !== "shop") sell(data.uid);
+      return;
+    }
+    if (data.from === "shop") {
+      if (k === "hand" || k.startsWith("board")) buy(data.slot);
+      return;
+    }
+    let index = me.board.length;
+    if (k.startsWith("board:")) index = Number(k.slice(6));
+    else if (k === "board3d") index = arenaApi.current?.nearestInsert(d.x, d.y) ?? me.board.length;
+    else if (k !== "board") return;
+    if (data.from === "hand") play(data.uid, index);
+    else move(data.uid, index);
+  };
+  const startDrag = (data: DragData, card: CardUnit, ev: { clientX: number; clientY: number; pointerType: string }) => {
+    const sx = ev.clientX;
+    const sy = ev.clientY;
+    const touch = ev.pointerType === "touch";
+    let state: DragState = { data, card, x: sx, y: sy, active: false };
+    dragRef.current = state;
+    const activate = () => {
+      state = { ...state, active: true };
+      dragRef.current = state;
+      setDrag(state);
+      suppressClickRef.current = true;
+      if (touch) navigator.vibrate?.(12);
+      sfx("play");
+    };
+    const holdTimer = touch ? window.setTimeout(activate, 250) : null;
+    const onMove = (e: PointerEvent) => {
+      const moved = Math.hypot(e.clientX - sx, e.clientY - sy);
+      if (!state.active) {
+        if (touch) {
+          if (moved > 10) cleanup(); // 꾹 누르기 전에 움직이면 스크롤
+          return;
+        }
+        if (moved < 6) return;
+        activate();
+      }
+      state = { ...state, x: e.clientX, y: e.clientY };
+      dragRef.current = state;
+      setDrag(state);
+      setHoverDrop(dropAt(e.clientX, e.clientY)?.key ?? null);
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (state.active) e.preventDefault();
+    };
+    const onUp = () => {
+      if (state.active) finishDrop(state);
+      cleanup();
+    };
+    function cleanup() {
+      if (holdTimer) window.clearTimeout(holdTimer);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", cleanup);
+      window.removeEventListener("touchmove", onTouchMove);
+      dragRef.current = null;
+      setDrag(null);
+      setHoverDrop(null);
+      window.setTimeout(() => (suppressClickRef.current = false), 0);
+    }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", cleanup);
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+  };
+  const dragging = drag?.active ? drag : null;
+  const sellPreview = dragging && dragging.data.from !== "shop" ? (() => {
+    const id = "uid" in dragging.data ? dragging.data.uid : null;
+    const u = [...me.board, ...me.hand].find((x) => x.uid === id);
+    return u ? sellValue(me, u) : 1;
+  })() : 0;
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -505,18 +584,16 @@ function ShopView({
 
       {/* 상점 */}
       <div
-        className={`${PANEL} flex flex-col gap-2`}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          e.preventDefault();
-          const d = readDrag(e);
-          if (d && d.from !== "shop") sell(d.uid);
-        }}
+        data-drop={dragging && dragging.data.from !== "shop" ? "sell" : undefined}
+        className={`${PANEL} relative flex flex-col gap-2 transition ${dragging && dragging.data.from !== "shop" ? "ring-2 ring-yellow-300/70" : ""} ${hoverDrop === "sell" ? "scale-[1.01] bg-yellow-400/10" : ""}`}
       >
+        {dragging && dragging.data.from !== "shop" && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-black/55 text-sm font-black text-yellow-200">💰 여기에 놓으면 판매 +{sellPreview}골드</div>
+        )}
         <div className="flex items-center gap-2">
           <p className={LABEL}>
             🍺 상점 ({me.tier}등급) · 1장 🪙{BUY_COST}
-            <span className="hidden sm:inline"> · 팔려면 여기로 끌어다 놓기</span>
+            <span className="hidden sm:inline"> · 유닛을 여기로 끌어다 놓으면 판매</span>
           </p>
           <button
             onClick={() => send({ type: "FREEZE", seat: viewerSeat, round }, "freeze")}
@@ -544,9 +621,10 @@ function ShopView({
                 unit={protoCard(id)}
                 selected={selection?.kind === "shop" && selection.slot === slot}
                 dim={me.gold < BUY_COST}
-                onClick={() => setSel(selection?.kind === "shop" && selection.slot === slot ? null : { kind: "shop", slot })}
-                draggable
-                onDragStart={(e) => e.dataTransfer.setData("text/plain", JSON.stringify({ from: "shop", slot }))}
+                onClick={() => {
+                  if (!suppressClickRef.current) setSel(selection?.kind === "shop" && selection.slot === slot ? null : { kind: "shop", slot });
+                }}
+                onPointerDown={(e) => startDrag({ from: "shop", slot }, protoCard(id), e)}
               />
             ) : (
               <div key={slot} className="h-[5.4rem] w-[3.9rem] rounded-xl border border-dashed border-white/10 sm:h-[6.8rem] sm:w-20 light:border-amber-300" />
@@ -566,12 +644,12 @@ function ShopView({
       )}
 
       {/* 보드 */}
-      <div className={`${PANEL} flex flex-col gap-2`} onDragOver={(e) => e.preventDefault()} onDrop={(e) => onDropBoard(e, me.board.length)}>
+      <div data-drop="board" className={`${PANEL} flex flex-col gap-2 transition ${dragging ? "ring-1 ring-emerald-300/40" : ""} ${hoverDrop?.startsWith("board") ? "ring-2 ring-emerald-300/80" : ""}`}>
         <p className={LABEL}>
           ⚔️ 내 보드 {me.board.length}/{BOARD_MAX} · 왼쪽부터 공격해요
         </p>
         {view === "3d" ? (
-          <div className="relative overflow-hidden rounded-xl">
+          <div data-drop="board3d" className="relative overflow-hidden rounded-xl">
             <Arena3D
               units={me.board.map((u) => ({ ...u, side: 0 as const }))}
               mode="shop"
@@ -579,7 +657,12 @@ function ShopView({
               quality={quality}
               className="h-64 w-full sm:h-72"
               selected={selection?.kind === "board" ? selection.uid : null}
+              onGrab={(uid, e) => {
+                const u = me.board.find((x) => x.uid === uid);
+                if (u) startDrag({ from: "board", uid }, u, e);
+              }}
               onPick={(uid) => {
+                if (suppressClickRef.current) return;
                 if (targeting) return activatePower(uid);
                 setSel(selection?.kind === "board" && selection.uid === uid ? null : { kind: "board", uid });
               }}
@@ -597,10 +680,7 @@ function ShopView({
         ) : (
         <div className="flex min-h-[6rem] flex-wrap items-center gap-x-3 gap-y-3 px-1 pt-2 sm:min-h-[7rem]">
           {me.board.map((u, i) => (
-            <div key={u.uid} className="flex items-center gap-1.5" onDragOver={(e) => e.preventDefault()} onDrop={(e) => {
-              e.stopPropagation();
-              onDropBoard(e, i);
-            }}>
+            <div key={u.uid} data-drop={`board:${i}`} className={`flex items-center gap-1.5 rounded-xl ${hoverDrop === `board:${i}` ? "outline-2 outline-dashed outline-emerald-300" : ""}`}>
               {insertMode && <InsertMark onClick={() => (selection!.kind === "hand" ? play(selection!.uid, i) : move(selection!.uid, i))} />}
               <UnitCard
                 unit={u}
@@ -608,11 +688,12 @@ function ShopView({
                 float={boosts[u.uid] ?? null}
                 selected={selection?.kind === "board" && selection.uid === u.uid}
                 onClick={() => {
+                  if (suppressClickRef.current) return;
                   if (targeting) return activatePower(u.uid);
                   setSel(selection?.kind === "board" && selection.uid === u.uid ? null : { kind: "board", uid: u.uid });
                 }}
-                draggable
-                onDragStart={(e) => e.dataTransfer.setData("text/plain", JSON.stringify({ from: "board", uid: u.uid }))}
+                onPointerDown={(e) => startDrag({ from: "board", uid: u.uid }, u, e)}
+                dim={dragging?.data.from === "board" && dragging.data.uid === u.uid}
               />
             </div>
           ))}
@@ -626,7 +707,7 @@ function ShopView({
       </div>
 
       {/* 손패 */}
-      <div className={`${PANEL} flex flex-col gap-2`}>
+      <div data-drop="hand" className={`${PANEL} flex flex-col gap-2 transition ${hoverDrop === "hand" ? "ring-2 ring-sky-300/80" : ""}`}>
         <p className={LABEL}>
           🖐️ 손패 {me.hand.length}/{HAND_MAX} · 같은 유닛 3장 = 황금
         </p>
@@ -636,14 +717,35 @@ function ShopView({
               key={u.uid}
               unit={u}
               selected={selection?.kind === "hand" && selection.uid === u.uid}
-              onClick={() => setSel(selection?.kind === "hand" && selection.uid === u.uid ? null : { kind: "hand", uid: u.uid })}
-              draggable
-              onDragStart={(e) => e.dataTransfer.setData("text/plain", JSON.stringify({ from: "hand", uid: u.uid }))}
+              onClick={() => {
+                if (!suppressClickRef.current) setSel(selection?.kind === "hand" && selection.uid === u.uid ? null : { kind: "hand", uid: u.uid });
+              }}
+              onPointerDown={(e) => startDrag({ from: "hand", uid: u.uid }, u, e)}
+              dim={dragging?.data.from === "hand" && dragging.data.uid === u.uid}
             />
           ))}
           {me.hand.length === 0 && <span className="text-xs text-white/40 light:text-amber-800/50">상점에서 산 유닛이 여기로 와요.</span>}
         </div>
       </div>
+
+      {/* 끌기: 손가락을 따라오는 카드 + 화면 아래 판매/구매 막대 */}
+      {dragging && (
+        <>
+          <div className="pointer-events-none fixed z-[60] -translate-x-1/2 -translate-y-[70%] rotate-6 opacity-90 drop-shadow-[0_10px_18px_rgba(0,0,0,0.6)]" style={{ left: dragging.x, top: dragging.y }}>
+            <UnitCard unit={dragging.card} />
+          </div>
+          <div
+            data-drop={dragging.data.from === "shop" ? "hand" : "sell"}
+            className={`fixed inset-x-3 bottom-3 z-[55] flex items-center justify-center rounded-2xl border-2 border-dashed py-4 text-sm font-black shadow-2xl transition ${
+              dragging.data.from === "shop"
+                ? `border-sky-300 bg-sky-950/90 text-sky-100 ${hoverDrop === "hand" ? "scale-105 bg-sky-800/95" : ""}`
+                : `border-yellow-300 bg-stone-950/90 text-yellow-200 ${hoverDrop === "sell" ? "scale-105 bg-yellow-700/90 text-white" : ""}`
+            }`}
+          >
+            {dragging.data.from === "shop" ? `🛒 여기(또는 손패·보드)에 놓으면 구매 🪙${BUY_COST}` : `💰 여기에 놓으면 판매 +${sellPreview}골드`}
+          </div>
+        </>
+      )}
 
       {/* 선택 정보 + 행동 */}
       {(selectedUnit || shopUnit) && (

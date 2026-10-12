@@ -124,6 +124,12 @@ export default function Combat3D({
       const lethal = frame.sides.flat().some((u) => (u.uid === ev.to || ev.splash.includes(u.uid)) && u.hp <= 0);
       const hold = Math.min(0.16, 0.05 + dmgOf * 0.009) + (lethal ? 0.05 : 0);
       a()?.attack(ev.from, ev.to, D * 0.92, IMPACT_AT, hold, style.ranged);
+      // 공격 예고: 내 공격은 초록, 상대 공격은 빨강 조준선
+      a()?.aim(ev.from, ev.to, D * IMPACT_AT, ev.side === viewSide ? "#4ade80" : "#f87171", style.ranged);
+      const defender = [...(prev?.sides.flat() ?? []), ...frame.sides.flat()].find((u) => u.uid === ev.to);
+      const attackerBefore = prev?.sides.flat().find((u) => u.uid === ev.from);
+      const attackerAfter = frame.sides.flat().find((u) => u.uid === ev.from);
+      const countered = !!defender && defender.atk > 0 && !!attackerBefore && !!attackerAfter && (attackerAfter.hp < attackerBefore.hp || frame.popped.includes(ev.from));
       if (style.ranged) {
         const launchAt = D * 0.25;
         later(launchAt, () => {
@@ -139,6 +145,15 @@ export default function Combat3D({
         a()?.impactFx(style.kind, style.color, ev.to, ev.from, big);
         for (const sp of ev.splash) a()?.impactFx(style.kind, style.color, sp, ev.from, false);
         hits(frame, (uid) => (uid === ev.from ? ev.to : ev.from));
+        if (countered && defender) {
+          // 반격: 맞은 쪽도 받아친다 — 그 캐릭터의 타격 그림을 공격자에게
+          const ds = attackStyle(defender.defId);
+          a()?.counter(ev.to, ev.from);
+          later(70, () => {
+            a()?.impactFx(ds.ranged ? "punch" : ds.kind, ds.color, ev.from, ev.to, false);
+            a()?.popup(ev.to, "반격!", "#fca5a5", 0.6);
+          });
+        }
         const heavy = style.kind === "smash" || style.kind === "cannon" || style.kind === "lightning";
         a()?.shake(3 + dmgOf * 1.2 + (lethal ? 5 : 0) + (heavy ? 4 : 0));
         s?.play(`atk_${style.kind}`);
@@ -236,7 +251,8 @@ export default function Combat3D({
   const attackerName =
     ev.t === "attack" ? (() => {
       const u = [...(prev?.sides.flat() ?? []), ...frame.sides.flat()].find((x) => x.uid === ev.from);
-      return u ? `${unitDef(u.defId).emoji} ${unitDef(u.defId).name} — ${attackStyle(u.defId).verb}` : null;
+      const t = [...(prev?.sides.flat() ?? []), ...frame.sides.flat()].find((x) => x.uid === ev.to);
+      return u ? `${unitDef(u.defId).emoji} ${unitDef(u.defId).name} — ${attackStyle(u.defId).verb}${t ? ` → ${unitDef(t.defId).emoji} ${unitDef(t.defId).name}` : ""}` : null;
     })() : null;
 
   return (
@@ -253,7 +269,7 @@ export default function Combat3D({
       <AbilityFeed items={feed} />
       {attackerName && (
         <div className="pointer-events-none absolute bottom-9 left-1/2 -translate-x-1/2">
-          <span key={idx} className="tb-banner rounded-full bg-black/60 px-3 py-0.5 text-[11px] font-semibold text-white/85">
+          <span key={idx} className={`tb-banner whitespace-nowrap rounded-full px-3 py-0.5 text-[11px] font-semibold text-white ${ev.t === "attack" && ev.side === viewSide ? "bg-emerald-900/80" : "bg-rose-900/80"}`}>
             {attackerName}
           </span>
         </div>

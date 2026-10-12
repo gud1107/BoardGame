@@ -64,6 +64,8 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     changes: [
       { game: "tavern-brawl", type: "FEAT", desc: "직업 시너지 9개 — 전사·수호자·암살자·마법사·궁수·성직자·광전사·소환사·약탈자, 모든 유닛이 종족+직업 두 가지 시너지" },
       { game: "tavern-brawl", type: "FEAT", desc: "새 종족 🌊 해양 · 😈 악마 · 🌿 숲 · 🧚 요정과 새 유닛 33종(총 75종), 새 키워드 ⚡ 연타" },
+      { game: "tavern-brawl", type: "IMPROVE", desc: "끌어다 놓아 판매 — 손패·보드 유닛(3D 말 포함)을 화면 아래 💰 막대나 상점으로, 터치는 꾹 눌러 끌기" },
+      { game: "tavern-brawl", type: "IMPROVE", desc: "전투가 한눈에 — 공격 전 조준선과 표적, 맞은 쪽의 반격 동작, '공격자 → 대상' 표시" },
       { game: "tavern-brawl", type: "IMPROVE", desc: "캐릭터별 공격·피격 연출 — 베기·할퀴기·물기·화살·불꽃·번개 등 18가지, 원거리는 제자리에서 발사, 몸 재질별 파편과 효과음" },
       { game: "tavern-brawl", type: "IMPROVE", desc: "능력 하이라이트 — 발동한 유닛이 빛나고 능력 피드에 이름·효과 표시, 상점 강화도 표시, 영웅은 3명 중 선택" },
       { game: "tavern-brawl", type: "FEAT", desc: "판마다 종족 10개 중 7개만 상점에 나와 매번 다른 판, 새 유닛 모두 전용 3D 캐릭터" },

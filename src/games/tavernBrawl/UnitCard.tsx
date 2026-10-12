@@ -24,8 +24,7 @@ export default function UnitCard({
   float,
   lift,
   onClick,
-  draggable,
-  onDragStart,
+  onPointerDown,
   glow,
 }: {
   unit: CardUnit;
@@ -39,8 +38,8 @@ export default function UnitCard({
   /** 공격 중 — 상대 쪽으로 튀어 나감 */
   lift?: "up" | "down" | null;
   onClick?: () => void;
-  draggable?: boolean;
-  onDragStart?: (e: React.DragEvent) => void;
+  /** 끌어다 놓기 시작(포인터) */
+  onPointerDown?: (e: React.PointerEvent) => void;
   /** 능력 하이라이트(방금 강화됨) */
   glow?: boolean;
 }) {
@@ -58,8 +57,9 @@ export default function UnitCard({
     <button
       type="button"
       onClick={onClick}
-      draggable={draggable}
-      onDragStart={onDragStart}
+      onPointerDown={onPointerDown}
+      onContextMenu={onPointerDown ? (e) => e.preventDefault() : undefined}
+      style={onPointerDown ? { WebkitTouchCallout: "none", userSelect: "none" } : undefined}
       className={`relative shrink-0 select-none rounded-xl transition-all duration-200 ${w} ${liftCls} ${flashCls} ${dim ? "opacity-50" : ""} ${glow ? "tb-glow" : ""} ${
         selected ? "ring-2 ring-yellow-300 ring-offset-2 ring-offset-transparent -translate-y-1" : ""
       } ${onClick ? "cursor-pointer" : "cursor-default"}`}

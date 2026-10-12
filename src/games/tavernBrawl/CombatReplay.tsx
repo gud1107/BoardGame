@@ -36,7 +36,8 @@ type Fx =
   | { id: number; kind: "ring"; x: number; y: number; color: string }
   | { id: number; kind: "slash"; x: number; y: number; angle: number }
   | { id: number; kind: "glyph"; x: number; y: number; style: AttackKind; color: string; angle: number }
-  | { id: number; kind: "proj"; x: number; y: number; tx: number; ty: number; style: AttackKind; color: string; dur: number };
+  | { id: number; kind: "proj"; x: number; y: number; tx: number; ty: number; style: AttackKind; color: string; dur: number }
+  | { id: number; kind: "aim"; x: number; y: number; tx: number; ty: number; color: string; dur: number };
 
 type NoId<T> = T extends unknown ? Omit<T, "id"> : never;
 type FxInput = Exclude<NoId<Fx>, { kind: "burst" }> | { kind: "burst"; x: number; y: number; color: string; count: number; spread: number };
@@ -204,6 +205,21 @@ export default function CombatReplay({
       const t = el(ev.to);
       const attacker = [...(prev?.sides.flat() ?? []), ...frame.sides.flat()].find((u) => u.uid === ev.from);
       const style = attackStyle(attacker?.defId ?? "n_kid");
+      const defender = [...(prev?.sides.flat() ?? []), ...frame.sides.flat()].find((u) => u.uid === ev.to);
+      const attackerBefore = prev?.sides.flat().find((u) => u.uid === ev.from);
+      const attackerAfter = frame.sides.flat().find((u) => u.uid === ev.from);
+      const countered = !!defender && defender.atk > 0 && !!attackerBefore && !!attackerAfter && (attackerAfter.hp < attackerBefore.hp || frame.popped.includes(ev.from));
+      if (a && t) {
+        const ac0 = center(a);
+        const tc0 = center(t);
+        // 공격 예고: 조준선 + 표적 (렌더 직후 한 틱 뒤)
+        timers.push(
+          window.setTimeout(
+            () => addFx([{ kind: "aim", x: ac0.x, y: ac0.y, tx: tc0.x, ty: tc0.y, color: ev.side === viewSide ? "#4ade80" : "#f87171", dur: D * IMPACT_AT }], D * IMPACT_AT),
+            0,
+          ),
+        );
+      }
       const willHurt = (() => {
         if (!prev) return 0;
         const hp = new Map(prev.sides.flat().map((u) => [u.uid, u.hp]));
@@ -269,6 +285,25 @@ export default function CombatReplay({
           if (glyphs.length) addFx(glyphs, 900);
           s?.play(`atk_${style.kind}`);
           if (prev) hitUnits(prev, frame, [ev.to, ...ev.splash], big);
+          if (countered && defender && a && t && typeof t.animate === "function") {
+            // 반격: 맞은 쪽이 공격자 쪽으로 받아친다
+            const ds = attackStyle(defender.defId);
+            const ac = center(a);
+            const tc = center(t);
+            const dx = ac.x - tc.x;
+            const dy = ac.y - tc.y;
+            t.animate(
+              [{ transform: "translate(0,0)" }, { transform: `translate(${dx * 0.22}px,${dy * 0.22}px) scale(1.08)`, offset: 0.4 }, { transform: "translate(0,0)" }],
+              { duration: 380, easing: "ease-out", delay: 60 },
+            );
+            addFx(
+              [
+                { kind: "glyph", x: ac.x, y: ac.y, style: ds.ranged ? "punch" : ds.kind, color: ds.color, angle: (Math.atan2(dy, dx) * 180) / Math.PI },
+                { kind: "dmg", x: tc.x, y: tc.y - 46, text: "반격!", size: 15, tone: "red" },
+              ],
+              900,
+            );
+          }
           shake(3 + willHurt * 1.1 + (lethal ? 4 : 0));
           if (frame.popped.length) s?.play("shieldPop");
           if (willHurt > 0) s?.play(lethal ? "impactHeavy" : "impact", willHurt);
@@ -518,6 +553,21 @@ function FxNode({ f }: { f: Fx }) {
     );
   }
   if (f.kind === "glyph") return <Glyph f={f} />;
+  if (f.kind === "aim") {
+    const mx = (f.x + f.tx) / 2;
+    const my = (f.y + f.ty) / 2 - Math.max(30, Math.abs(f.tx - f.x) * 0.25);
+    return (
+      <svg className="tb-aim pointer-events-none absolute left-0 top-0 overflow-visible" width="1" height="1" style={{ ["--dur" as string]: `${f.dur}ms` }}>
+        <defs>
+          <marker id={`ah${f.id}`} viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill={f.color} />
+          </marker>
+        </defs>
+        <path d={`M${f.x},${f.y} Q${mx},${my} ${f.tx},${f.ty}`} fill="none" stroke={f.color} strokeWidth="3" strokeDasharray="7 6" strokeLinecap="round" markerEnd={`url(#ah${f.id})`} className="tb-march" style={{ filter: `drop-shadow(0 0 4px ${f.color})` }} />
+        <circle cx={f.tx} cy={f.ty} r="30" fill="none" stroke="#ef4444" strokeWidth="3" strokeDasharray="12 7" className="tb-reticle" style={{ transformOrigin: `${f.tx}px ${f.ty}px` }} />
+      </svg>
+    );
+  }
   if (f.kind === "slash") {
     return <span className="tb-slash absolute" style={{ left: f.x, top: f.y, ["--a" as string]: `${f.angle}deg` }} />;
   }
@@ -639,6 +689,12 @@ export const COMBAT_CSS = `
 .tb-spin { animation: tb-spin .6s ease-out forwards; }
 @keyframes tb-bolt { 0%,30%,60% { opacity:1; } 15%,45% { opacity:.2; } 100% { opacity:0; } }
 .tb-bolt { animation: tb-bolt .45s linear forwards; }
+@keyframes tb-march { to { stroke-dashoffset: -26; } }
+.tb-march { animation: tb-march .45s linear infinite; }
+@keyframes tb-reticle { 0% { transform: scale(1.5) rotate(0); opacity:0; } 30% { opacity:1; } 100% { transform: scale(1) rotate(120deg); opacity:1; } }
+.tb-reticle { animation: tb-reticle var(--dur, .45s) ease-out forwards; }
+@keyframes tb-aim { 0% { opacity:0; } 15% { opacity:1; } 85% { opacity:1; } 100% { opacity:0; } }
+.tb-aim { animation: tb-aim var(--dur) linear forwards; }
 @keyframes tb-feed { 0% { opacity:0; transform:translateX(-24px) scale(.9); } 60% { opacity:1; transform:translateX(3px) scale(1.03); } 100% { transform:none; } }
 .tb-feed { animation: tb-feed .35s cubic-bezier(.2,.9,.3,1.2); }
 @keyframes tb-glow { 0%,100% { box-shadow:0 0 0 rgba(253,224,71,0); } 30% { box-shadow:0 0 22px 6px rgba(253,224,71,.85); } }

@@ -14,14 +14,15 @@ export type V3 = [number, number, number];
 
 export type StyleFxItem =
   | { id: number; type: "proj"; kind: AttackKind; color: string; from: V3; to: V3; start: number; dur: number }
-  | { id: number; type: "impact"; kind: AttackKind; color: string; at: V3; dir: V3; start: number; big: boolean };
+  | { id: number; type: "impact"; kind: AttackKind; color: string; at: V3; dir: V3; start: number; big: boolean }
+  | { id: number; type: "aim"; color: string; from: V3; to: V3; start: number; dur: number; ranged: boolean };
 
 type NoId<T> = T extends unknown ? Omit<T, "id"> : never;
 export type StyleFxInput = NoId<StyleFxItem>;
 
 /** 수명(ms) — 부모가 이 시간이 지나면 지운다 */
 export function fxLife(f: StyleFxItem): number {
-  return f.type === "proj" ? f.dur + 50 : 900;
+  return f.type === "proj" || f.type === "aim" ? f.dur + 50 : 900;
 }
 
 const now = () => performance.now();
@@ -380,10 +381,70 @@ function Impact({ f }: { f: Extract<StyleFxItem, { type: "impact" }> }) {
   return <>{parts}</>;
 }
 
+
+/* ── 조준선 + 표적 ─────────────────────────────────────── */
+
+/** 공격 예고: 공격자 → 대상으로 흐르는 점선 호와 대상 발밑의 빨간 표적 */
+function Aim({ f }: { f: Extract<StyleFxItem, { type: "aim" }> }) {
+  const dots = useRef<(THREE.Mesh | null)[]>([]);
+  const reticle = useRef<THREE.Group>(null);
+  const from = new THREE.Vector3(...f.from);
+  const to = new THREE.Vector3(...f.to);
+  const N = 14;
+  const lift = f.ranged ? 1.2 : 0.7;
+  useFrame(() => {
+    const t = (now() - f.start) / f.dur;
+    const on = t >= 0 && t <= 1;
+    const appear = Math.min(1, t * 4);
+    const fadeOut = t > 0.85 ? Math.max(0, 1 - (t - 0.85) / 0.15) : 1;
+    dots.current.forEach((m, i) => {
+      if (!m) return;
+      m.visible = on && i / N <= appear;
+      const k = ((i + ((now() / 90) % 1)) % N) / N;
+      const p = from.clone().lerp(to, k);
+      p.y = 0.12 + Math.sin(Math.PI * k) * lift;
+      m.position.copy(p);
+      (m.material as THREE.MeshBasicMaterial).opacity = 0.85 * fadeOut;
+    });
+    const r = reticle.current;
+    if (r) {
+      r.visible = on;
+      r.rotation.y = now() / 400;
+      r.scale.setScalar((1.25 - 0.25 * Math.min(1, t * 3)) * (1 + Math.sin(now() / 80) * 0.05));
+      r.traverse((x) => {
+        const m = (x as THREE.Mesh).material as THREE.MeshBasicMaterial | undefined;
+        if (m) m.opacity = fadeOut;
+      });
+    }
+  });
+  return (
+    <>
+      {Array.from({ length: N }, (_, i) => (
+        <mesh key={i} ref={(m) => void (dots.current[i] = m)} visible={false}>
+          <sphereGeometry args={[0.045, 8, 6]} />
+          <meshBasicMaterial color={f.color} toneMapped={false} transparent depthWrite={false} />
+        </mesh>
+      ))}
+      <group ref={reticle} position={[f.to[0], 0.05, f.to[2]]} visible={false}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.5, 0.57, 40]} />
+          <meshBasicMaterial color="#ef4444" toneMapped={false} transparent side={THREE.DoubleSide} depthWrite={false} />
+        </mesh>
+        {[0, 1, 2, 3].map((i) => (
+          <mesh key={i} position={[Math.cos((i * Math.PI) / 2) * 0.66, 0, Math.sin((i * Math.PI) / 2) * 0.66]} rotation={[-Math.PI / 2, 0, (i * Math.PI) / 2]}>
+            <planeGeometry args={[0.2, 0.06]} />
+            <meshBasicMaterial color="#fecaca" toneMapped={false} transparent side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+        ))}
+      </group>
+    </>
+  );
+}
+
 export function StyleFxLayer({ items }: { items: StyleFxItem[] }) {
   return (
     <>
-      {items.map((f) => (f.type === "proj" ? <Projectile key={f.id} f={f} /> : <Impact key={f.id} f={f} />))}
+      {items.map((f) => (f.type === "proj" ? <Projectile key={f.id} f={f} /> : f.type === "aim" ? <Aim key={f.id} f={f} /> : <Impact key={f.id} f={f} />))}
     </>
   );
 }

@@ -29,6 +29,12 @@ export interface ArenaApi {
   projectile(kind: AttackKind, color: string, from: string, to: string, durMs: number): void;
   /** 충돌 순간의 스타일 이펙트(베기 궤적·할퀸 자국·번개…) */
   impactFx(kind: AttackKind, color: string, uid: string, from: string | null, big: boolean): void;
+  /** 공격 예고: 조준선 + 표적(durMs 동안) */
+  aim(from: string, to: string, durMs: number, color: string, ranged: boolean): void;
+  /** 반격: uid가 to 쪽으로 짧게 받아친다 */
+  counter(uid: string, to: string): void;
+  /** 상점 탁자: 화면 좌표에서 가장 가까운 "끼워 넣을 자리" 번호(0..보드 수) */
+  nearestInsert(clientX: number, clientY: number): number;
   hit(uid: string, power: number, from?: string): void;
   die(uid: string, durMs: number): void;
   spawn(uid: string): void;
@@ -42,6 +48,7 @@ export interface ArenaApi {
 type Anim = {
   atk?: { start: number; dur: number; impact: number; hold: number; to: string; ranged?: boolean };
   knock?: { start: number; dir: THREE.Vector3; power: number };
+  counter?: { start: number; to: string };
   flash?: number;
   die?: { start: number; dur: number };
   spawn?: number;
@@ -100,6 +107,8 @@ function bounce(t: number) {
 /* ── 공유 상태 ───────────────────────────────────────────── */
 
 interface Shared {
+  /** 상점 탁자에서 끼워 넣을 자리들(0..n) */
+  inserts: THREE.Vector3[];
   target: Map<string, THREE.Vector3>;
   cur: Map<string, THREE.Vector3>;
   anim: Map<string, Anim>;
@@ -110,7 +119,23 @@ interface Shared {
 
 const TIER_BASE = ["#334155", "#64748b", "#10b981", "#0ea5e9", "#8b5cf6", "#f59e0b", "#f43f5e"];
 
-function Token({ u, sharedRef, selected, onPick, size, facing }: { u: ArenaUnit; sharedRef: MutableRefObject<Shared>; selected: boolean; onPick?: (uid: string) => void; size: number; facing: number }) {
+function Token({
+  u,
+  sharedRef,
+  selected,
+  onPick,
+  onGrab,
+  size,
+  facing,
+}: {
+  u: ArenaUnit;
+  sharedRef: MutableRefObject<Shared>;
+  selected: boolean;
+  onPick?: (uid: string) => void;
+  onGrab?: (uid: string, e: PointerEvent) => void;
+  size: number;
+  facing: number;
+}) {
   const group = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
   const act = useRef<FigureAct>({ swing: 0, hit: 0 });
@@ -211,6 +236,18 @@ function Token({ u, sharedRef, selected, onPick, size, facing }: { u: ArenaUnit;
         b.rotation.x += -0.3 * k * Math.sign(a.knock.dir.z || 1);
       }
     }
+    if (a?.counter) {
+      const t = (t0 - a.counter.start) / 420;
+      const to = shared.cur.get(a.counter.to);
+      if (t >= 1 || !to) a.counter = undefined;
+      else if (t >= 0) {
+        const v = to.clone().sub(cur).setY(0);
+        const k = Math.sin(Math.PI * Math.min(1, t * 1.6));
+        b.rotation.y = Math.atan2(v.x, v.z);
+        b.position.addScaledVector(v.normalize(), 0.35 * k);
+        swing = t < 0.25 ? -t / 0.25 : Math.max(0, 1 - (t - 0.25) / 0.5);
+      }
+    }
     if (a?.flash !== undefined) {
       const t = (t0 - a.flash) / 1000;
       if (t > 0.5) a.flash = undefined;
@@ -273,6 +310,14 @@ function Token({ u, sharedRef, selected, onPick, size, facing }: { u: ArenaUnit;
       <group ref={body}>
         <group
           onClick={click}
+          onPointerDown={
+            onGrab
+              ? (e: ThreeEvent<PointerEvent>) => {
+                  e.stopPropagation();
+                  onGrab(u.uid, e.nativeEvent);
+                }
+              : undefined
+          }
           onPointerOver={onPick ? () => (document.body.style.cursor = "pointer") : undefined}
           onPointerOut={onPick ? () => (document.body.style.cursor = "") : undefined}
         >
@@ -361,6 +406,8 @@ const RING_N = 12;
 const POP_N = 24;
 
 function Effects({ apiRef, sharedRef, addStyleFx }: { apiRef: MutableRefObject<ArenaApi | null>; sharedRef: MutableRefObject<Shared>; addStyleFx: (f: StyleFxInput) => void }) {
+  const camera = useThree((st) => st.camera);
+  const gl = useThree((st) => st.gl);
   const parts = useRef<THREE.InstancedMesh>(null);
   const bursts = useRef<Burst[]>([]);
   const nextPart = useRef(0);
@@ -393,6 +440,30 @@ function Effects({ apiRef, sharedRef, addStyleFx }: { apiRef: MutableRefObject<A
         const a = posOf(from).add(new THREE.Vector3(0, 0.85, 0));
         const b = posOf(to).add(new THREE.Vector3(0, 0.7, 0));
         addStyleFx({ type: "proj", kind, color, from: [a.x, a.y, a.z], to: [b.x, b.y, b.z], start: now(), dur: durMs });
+      },
+      aim(from, to, durMs, color, ranged) {
+        const a = posOf(from);
+        const b = posOf(to);
+        addStyleFx({ type: "aim", color, from: [a.x, a.y, a.z], to: [b.x, b.y, b.z], start: now(), dur: durMs, ranged });
+      },
+      counter(uid, to) {
+        anim(uid).counter = { start: now(), to };
+      },
+      nearestInsert(clientX, clientY) {
+        const rect = gl.domElement.getBoundingClientRect();
+        let best = shared.inserts.length - 1;
+        let bestD = Infinity;
+        shared.inserts.forEach((p, k) => {
+          const v = p.clone().setY(0.5).project(camera);
+          const x = ((v.x + 1) / 2) * rect.width + rect.left;
+          const y = ((1 - v.y) / 2) * rect.height + rect.top;
+          const d = Math.hypot(x - clientX, y - clientY);
+          if (d < bestD) {
+            bestD = d;
+            best = k;
+          }
+        });
+        return Math.max(0, best);
       },
       impactFx(kind, color, uid, from, big) {
         const at = posOf(uid);
@@ -453,7 +524,7 @@ function Effects({ apiRef, sharedRef, addStyleFx }: { apiRef: MutableRefObject<A
     return () => {
       apiRef.current = null;
     };
-  }, [apiRef, sharedRef, addStyleFx]);
+  }, [apiRef, sharedRef, addStyleFx, camera, gl]);
 
   useFrame(() => {
     const t0 = now();
@@ -611,6 +682,8 @@ function Table({ mode }: { mode: "shop" | "combat" }) {
 /* ── 공개 컴포넌트 ───────────────────────────────────────── */
 
 export interface Arena3DProps {
+  /** 상점 탁자: 유닛을 꾹 눌러/끌기 시작 */
+  onGrab?: (uid: string, e: PointerEvent) => void;
   units: ArenaUnit[];
   mode: "shop" | "combat";
   apiRef: MutableRefObject<ArenaApi | null>;
@@ -622,10 +695,10 @@ export interface Arena3DProps {
   className?: string;
 }
 
-function Scene({ units, mode, apiRef, selected, onPick, insert, quality }: Arena3DProps) {
+function Scene({ units, mode, apiRef, selected, onPick, onGrab, insert, quality }: Arena3DProps) {
   const { size } = useThree();
   const compact = size.width < 640 || size.width / Math.max(1, size.height) < 1.15;
-  const sharedRef = useRef<Shared>({ target: new Map(), cur: new Map(), anim: new Map(), shake: { start: -1e9, power: 0 } });
+  const sharedRef = useRef<Shared>({ inserts: [], target: new Map(), cur: new Map(), anim: new Map(), shake: { start: -1e9, power: 0 } });
   const [styleFx, setStyleFx] = useState<StyleFxItem[]>([]);
   const fxSeq = useRef(0);
   const addStyleFx = useCallback((f: StyleFxInput) => {
@@ -637,7 +710,9 @@ function Scene({ units, mode, apiRef, selected, onPick, insert, quality }: Arena
   // 목표 위치 갱신(현재 위치는 각 토큰이 부드럽게 따라감) — 그리기 전에 반영
   useLayoutEffect(() => {
     sharedRef.current.target = pos;
-  }, [pos]);
+    const mineCount = units.filter((u) => u.side === 0).length;
+    sharedRef.current.inserts = Array.from({ length: mineCount + 1 }, (_, k) => insertPos(units, pos, k, compact));
+  }, [pos, units, compact]);
   const mine = units.filter((u) => u.side === 0).length;
   return (
     <>
@@ -649,7 +724,7 @@ function Scene({ units, mode, apiRef, selected, onPick, insert, quality }: Arena
       <CameraRig mode={mode} compact={compact} sharedRef={sharedRef} />
       <Table mode={mode} />
       {units.map((u) => (
-        <Token key={u.uid} u={u} sharedRef={sharedRef} selected={selected === u.uid} onPick={onPick} size={compact ? 0.95 : 1.05} facing={0} />
+        <Token key={u.uid} u={u} sharedRef={sharedRef} selected={selected === u.uid} onPick={onPick} onGrab={onGrab} size={compact ? 0.95 : 1.05} facing={0} />
       ))}
       {insert &&
         Array.from({ length: mine + 1 }, (_, k) => {
