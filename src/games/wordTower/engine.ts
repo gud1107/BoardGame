@@ -3,6 +3,7 @@ import { filterProfanity } from "@/lib/chat/profanity";
 import type { BotLevel } from "@/games/shared/bot/botDifficulty";
 import { TOPICS, TOPIC_BY_ID, topicDictionary, topicWordList } from "./words";
 import { CLOSED_BY_ID, CLOSED_TOPICS, closedAnswerFor, type ClosedTopic } from "./closedTopics";
+import { categoriesFor, topicIdsFor } from "./categories";
 
 /**
  * 단어 마천루 엔진 (boardGameRule/단어마천루/단어마천루.md).
@@ -50,9 +51,17 @@ export interface GameOptions {
   readonly rounds: number;
   readonly buildSeconds: number;
   readonly mode: Mode;
+  /** 고른 주제 카테고리 id(그 모드의 것만). 비어 있으면 전체 주제에서 무작위. */
+  readonly categories: readonly string[];
 }
 
-export const DEFAULT_OPTIONS: GameOptions = { rounds: 5, buildSeconds: 60, mode: "open" };
+export const DEFAULT_OPTIONS: GameOptions = { rounds: 5, buildSeconds: 60, mode: "open", categories: [] };
+
+/** 이 옵션으로 나올 수 있는 주제 id들 — 라운드 수는 이 개수를 넘지 못한다. */
+export function topicPool(options: Pick<GameOptions, "mode" | "categories">): string[] {
+  const all = (options.mode === "closed" ? CLOSED_TOPICS : TOPICS).map((t) => t.id);
+  return topicIdsFor(options.mode, options.categories, all);
+}
 
 /** 단계별 제한 시간(ms). 쌓기는 방장 설정, 끝난 판은 0(타이머 없음). */
 export function phaseDurationMs(state: Pick<GameState, "phase" | "options">): number {
@@ -296,19 +305,19 @@ export function voteTally(state: GameState, id: number): { yes: number; no: numb
 // ---------------------------------------------------------------------------
 
 function clampOptions(options: Partial<GameOptions> | undefined): GameOptions {
-  const rounds = Math.max(1, Math.min(TOPICS.length, Math.round(options?.rounds ?? DEFAULT_OPTIONS.rounds)));
   const buildSeconds = Math.max(15, Math.min(180, Math.round(options?.buildSeconds ?? DEFAULT_OPTIONS.buildSeconds)));
   const mode: Mode = options?.mode === "closed" ? "closed" : "open";
-  return { rounds: mode === "closed" ? Math.min(rounds, CLOSED_TOPICS.length) : rounds, buildSeconds, mode };
+  const valid = new Set(categoriesFor(mode).map((c) => c.id));
+  const categories = (Array.isArray(options?.categories) ? options.categories : []).filter((id) => valid.has(id));
+  // 주제가 겹치지 않게 — 고른 카테고리의 주제 수보다 라운드가 많으면 줄인다.
+  const poolSize = topicPool({ mode, categories }).length;
+  const rounds = Math.max(1, Math.min(poolSize, Math.round(options?.rounds ?? DEFAULT_OPTIONS.rounds)));
+  return { rounds, buildSeconds, mode, categories };
 }
 
 export function startGame(seatCount: number, seed: number, options?: Partial<GameOptions>): GameState {
   const opts = clampOptions(options);
-  const pool = opts.mode === "closed" ? CLOSED_TOPICS : TOPICS;
-  const topics = shuffle(
-    pool.map((t) => t.id),
-    seededRng(seed),
-  ).slice(0, opts.rounds);
+  const topics = shuffle(topicPool(opts), seededRng(seed)).slice(0, opts.rounds);
   const zeros = Array.from({ length: seatCount }, () => 0);
   return {
     seatCount,

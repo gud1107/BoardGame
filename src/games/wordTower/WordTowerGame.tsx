@@ -25,6 +25,7 @@ import {
   computeRankings,
   phaseDurationMs,
   reviewComplete,
+  topicPool,
   startGame,
   winnerSeats,
   type EngineAction,
@@ -33,6 +34,7 @@ import {
   type Seat,
 } from "./engine";
 import WordTowerBoard from "./WordTowerBoard";
+import { categoriesFor } from "./categories";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, FillEmptySeatsButton, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import RulebookGate from "@/components/lobby/RulebookGate";
@@ -76,6 +78,7 @@ type Occupant = {
   targetPlayerCount?: number;
   /** 방장이 고른 모드 — 대기실에서 손님도 볼 수 있게 presence에 싣는다. */
   mode?: GameOptions["mode"];
+  categories?: readonly string[];
 };
 
 type Phase = "choose" | "enter-name" | "connecting" | "waiting" | "playing" | "post-game" | "room-full" | "supabase-missing" | "channel-error";
@@ -388,7 +391,7 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
           seat,
           name: myName,
           playerId: myPlayerId,
-          ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mode: optionsRef.current.mode } : {}),
+          ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mode: optionsRef.current.mode, categories: optionsRef.current.categories } : {}),
         } satisfies Occupant);
         requestStateSync();
         setPhase((p) => (p === "connecting" ? "waiting" : p));
@@ -406,6 +409,13 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
   const deviceId = typeof window !== "undefined" ? getDeviceId() : "";
   const host = occupants.find((o) => o.isHost);
   const knownTargetPlayerCount = host?.targetPlayerCount ?? targetPlayerCount;
+  const hostCategories = host?.categories ?? [];
+  const guestCategoryLabel = host?.mode
+    ? categoriesFor(host.mode)
+        .filter((c) => hostCategories.includes(c.id))
+        .map((c) => `${c.emoji} ${c.name}`)
+        .join(", ")
+    : "";
   const reclaimAttemptsRef = useRef(0);
 
   useEffect(() => {
@@ -432,7 +442,7 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
       seat: next,
       name: myName,
       playerId: myPlayerId,
-      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mode: optionsRef.current.mode } : {}),
+      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mode: optionsRef.current.mode, categories: optionsRef.current.categories } : {}),
     } satisfies Occupant);
   }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost]);
 
@@ -853,7 +863,7 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
                     <button
                       key={m}
                       type="button"
-                      onClick={() => setOptions((o) => ({ ...o, mode: m, buildSeconds: m === "closed" ? 45 : 60 }))}
+                      onClick={() => setOptions((o) => ({ ...o, mode: m, buildSeconds: m === "closed" ? 45 : 60, categories: o.mode === m ? o.categories : [] }))}
                       aria-pressed={on}
                       className={`flex flex-col gap-1 rounded-2xl border-2 p-3 text-left transition ${
                         on
@@ -893,6 +903,41 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
                 </button>
               </div>
             </label>
+            <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
+              주제 카테고리 <span className="text-[11px] text-white/45 light:text-slate-400">여러 개 고를 수 있어요 · 고른 카테고리 안에서 주제가 무작위로 나와요</span>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setOpt("categories", [])}
+                  aria-pressed={options.categories.length === 0}
+                  className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${options.categories.length === 0 ? "border-sky-400/60 bg-sky-400/10 text-sky-100 light:text-sky-700" : "border-white/15 text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-500"}`}
+                >
+                  🎲 전체 랜덤
+                </button>
+                {categoriesFor(options.mode).map((c) => {
+                  const on = options.categories.includes(c.id);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => setOpt("categories", on ? options.categories.filter((id) => id !== c.id) : [...options.categories, c.id])}
+                      className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${on ? "border-sky-400/60 bg-sky-400/10 text-sky-100 light:text-sky-700" : "border-white/15 text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-500"}`}
+                    >
+                      {c.emoji} {c.name} <span className="opacity-60">{c.topicIds.length}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {(() => {
+                const pool = topicPool(options).length;
+                return pool < options.rounds ? (
+                  <span className="text-[11px] text-amber-300 light:text-amber-700">고른 카테고리의 주제가 {pool}개라 {pool}라운드로 진행해요</span>
+                ) : (
+                  <span className="text-[11px] text-white/45 light:text-slate-400">나올 수 있는 주제 {pool}개</span>
+                );
+              })()}
+            </div>
             <OptionRow label="라운드 수 (라운드마다 다른 주제)" value={options.rounds} options={ROUND_OPTIONS.map((r) => ({ value: r as number, label: `${r}라운드` }))} onChange={(v) => setOpt("rounds", v)} />
             <OptionRow label="쌓기 시간" value={options.buildSeconds} options={BUILD_SECONDS_OPTIONS.map((sec) => ({ value: sec as number, label: `${sec}초` }))} onChange={(v) => setOpt("buildSeconds", v)} />
           </>
@@ -934,9 +979,11 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
                 </div>
               ) : null;
             })()}
+            {!isHost && guestCategoryLabel && <p className="break-keep text-xs text-white/50 light:text-slate-500">주제: {guestCategoryLabel}</p>}
             {isHost && (
               <p className="break-keep text-xs text-white/40 light:text-slate-400">
-                {options.rounds}라운드 · 쌓기 {options.buildSeconds}초
+                {Math.min(options.rounds, topicPool(options).length)}라운드 · 쌓기 {options.buildSeconds}초 ·{" "}
+                {options.categories.length === 0 ? "전체 주제" : categoriesFor(options.mode).filter((c) => options.categories.includes(c.id)).map((c) => `${c.emoji} ${c.name}`).join(", ")}
               </p>
             )}
             <p className="text-xs text-white/50 light:text-slate-500">

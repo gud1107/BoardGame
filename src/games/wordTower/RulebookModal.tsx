@@ -23,7 +23,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         <section>
           <h3 className={H3}>한 라운드</h3>
           <ol className="list-decimal space-y-1.5 pl-4 text-white/70 light:text-slate-600">
-            <li><b>📣 주제 공개</b> (3초)</li>
+            <li><b>📣 주제 공개</b> (3초) — 방장이 고른 카테고리(안 고르면 전체) 안에서 무작위, 같은 주제는 다시 안 나와요.</li>
             <li><b>🏗️ 쌓기</b> (방장 설정 45/60/90초) — 단어를 하나씩 입력하고 엔터. <b>남의 단어는 안 보이고</b> 탑 높이만 보여요.</li>
             <li><b>🗳️ 심사</b> (최대 25초) — 사전에 없는 단어가 있을 때만. 다른 사람들이 ✅/❌로 결정해요.</li>
             <li><b>🏆 결과</b> — 모든 단어 공개, 순위 발표.</li>

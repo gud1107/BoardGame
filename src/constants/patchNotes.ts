@@ -78,6 +78,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       { game: "word-tower", type: "FEAT", desc: "신규 게임 🏙️ 단어 마천루 — 주제가 뜨면 모두 동시에 단어를 입력해 3D 탑을 쌓는 2~8인 실시간 단어 게임, AI 봇과 혼자서도 바로" },
       { game: "word-tower", type: "FEAT", desc: "25개 주제 사전, 단어 1개 = 글자 수만큼 층(최대 4층), 사전에 없는 단어는 다른 플레이어 투표로 심사, 라운드 1등·연승 기록" },
       { game: "word-tower", type: "FEAT", desc: "🎯 정답 모으기 버전 추가 — 계절(4개)·요일(7개)·행성(8개)처럼 정답이 정해진 53개 주제, 실시간 공개·선착순, 끝나면 💡 설명" },
+      { game: "word-tower", type: "FEAT", desc: "🗂️ 방 만들 때 주제 카테고리 선택 — 먹거리·생물·지리·한국 문화 등 여러 개 골라 그 안에서만 무작위 출제" },
       { game: "word-tower", type: "FEAT", desc: "🧊 3D 무대 — 단어 블록이 떨어져 쌓이고, 심사에서 거절되면 굴러떨어지고, 1등 탑엔 왕관 · 2D 화면 전환 버튼" },
     ],
   },

@@ -331,3 +331,31 @@ describe("closed topic notes", () => {
     }
   });
 });
+
+describe("topic categories", () => {
+  it("every topic belongs to exactly one category of its mode", async () => {
+    const { CATEGORIES } = await import("./categories");
+    for (const [mode, ids] of [["open", TOPICS.map((t) => t.id)], ["closed", CLOSED_TOPICS.map((t) => t.id)]] as const) {
+      const cats = CATEGORIES.filter((c) => c.mode === mode);
+      for (const id of ids) expect(cats.filter((c) => c.topicIds.includes(id)).length, `${mode}:${id}`).toBe(1);
+      for (const c of cats) for (const id of c.topicIds) expect(ids, `${c.id}:${id}`).toContain(id);
+    }
+  });
+
+  it("draws only from the chosen categories and caps rounds at the pool size", async () => {
+    const { CATEGORIES } = await import("./categories");
+    const geo = CATEGORIES.find((c) => c.id === "c-geo")!;
+    const s = startGame(2, 9, { mode: "closed", rounds: 7, categories: ["c-geo"] });
+    expect(s.options.rounds).toBe(geo.topicIds.length);
+    expect(s.topics.every((id) => geo.topicIds.includes(id))).toBe(true);
+    expect(new Set(s.topics).size).toBe(s.topics.length);
+    // 다른 모드의 카테고리는 무시 → 전체
+    const t = startGame(2, 9, { mode: "open", rounds: 5, categories: ["c-geo"] });
+    expect(t.options.categories).toEqual([]);
+    expect(t.topics.length).toBe(5);
+    // 여러 카테고리
+    const u = startGame(2, 3, { mode: "open", rounds: 7, categories: ["o-food", "o-life"] });
+    const allowed = CATEGORIES.filter((c) => c.id === "o-food" || c.id === "o-life").flatMap((c) => c.topicIds);
+    expect(u.topics.every((id) => allowed.includes(id))).toBe(true);
+  });
+});
