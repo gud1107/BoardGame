@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
-import { synergyLevel, tribeCounts, type UnitInstance } from "./combat";
+import { classCounts, synergyLevel, tribeCounts, type UnitInstance } from "./combat";
 import {
   BOARD_MAX,
   BUY_COST,
@@ -18,7 +18,7 @@ import {
   type GameState,
   type Seat,
 } from "./engine";
-import { HERO_BY_ID, TRIBES, TRIBE_ORDER, unitDef, type Tribe } from "./units";
+import { CLASSES, CLASS_ORDER, HERO_BY_ID, TRIBES, TRIBE_ORDER, unitDef } from "./units";
 import UnitCard, { UnitDetail, type CardUnit } from "./UnitCard";
 import CombatReplay, { COMBAT_CSS, sideOfSeat } from "./CombatReplay";
 import RulebookModal from "./RulebookModal";
@@ -88,36 +88,41 @@ function readDrag(e: React.DragEvent): DragData | null {
 }
 
 function SynergyBar({ board, compact }: { board: CardUnit[]; compact?: boolean }) {
-  const [open, setOpen] = useState<Tribe | null>(null);
-  const counts = tribeCounts(board);
-  const present = TRIBE_ORDER.filter((t) => counts[t] > 0);
-  if (present.length === 0) return compact ? null : <p className="text-[11px] text-white/35 light:text-amber-800/50">같은 종족 2·4·6명을 모으면 시너지가 켜져요.</p>;
+  const [open, setOpen] = useState<string | null>(null);
+  const tc = tribeCounts(board);
+  const cc = classCounts(board);
+  const items = [
+    ...TRIBE_ORDER.filter((t) => tc[t] > 0).map((t) => ({ key: t, n: tc[t], ...TRIBES[t] })),
+    ...CLASS_ORDER.filter((k) => cc[k] > 0).map((k) => ({ key: k, n: cc[k], ...CLASSES[k] })),
+  ].sort((x, y) => synergyLevel(y.n) - synergyLevel(x.n) || y.n - x.n);
+  if (items.length === 0) return compact ? null : <p className="text-[11px] text-white/35 light:text-amber-800/50">같은 종족·직업을 2·4·6명 모으면 시너지가 켜져요.</p>;
+  const sel = items.find((i) => i.key === open);
   return (
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap gap-1">
-        {present.map((t) => {
-          const lv = synergyLevel(counts[t]);
-          const next = [2, 4, 6].find((x) => x > counts[t]);
+        {items.map((it) => {
+          const lv = synergyLevel(it.n);
+          const next = [2, 4, 6].find((x) => x > it.n);
           return (
             <button
-              key={t}
+              key={it.key}
               type="button"
-              onClick={() => setOpen(open === t ? null : t)}
+              onClick={() => setOpen(open === it.key ? null : it.key)}
               className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
                 lv ? "border-yellow-300/70 bg-yellow-300/15 text-yellow-100 light:text-amber-900" : "border-white/15 text-white/55 light:border-amber-300 light:text-amber-800/70"
               }`}
-              style={lv ? { boxShadow: `0 0 8px ${TRIBES[t].color}66` } : undefined}
+              style={lv ? { boxShadow: `0 0 8px ${it.color}66` } : undefined}
             >
-              {TRIBES[t].emoji} {TRIBES[t].name} {counts[t]}
+              {it.emoji} {it.name} {it.n}
               {next ? <span className="opacity-60">/{next}</span> : " ✓"}
             </button>
           );
         })}
       </div>
-      {open && (
+      {sel && (
         <ul className="rounded-lg bg-black/30 px-2 py-1 text-[11px] text-white/70 light:bg-white light:text-slate-600">
-          {TRIBES[open].levels.map(([n, text]) => (
-            <li key={n} className={counts[open] >= n ? "font-semibold text-yellow-200 light:text-amber-700" : ""}>
+          {sel.levels.map(([n, text]) => (
+            <li key={n} className={sel.n >= n ? "font-semibold text-yellow-200 light:text-amber-700" : ""}>
               ({n}) {text}
             </li>
           ))}
@@ -242,6 +247,11 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
     <div className="flex flex-wrap items-center gap-2">
       <span className="rounded-full bg-amber-500/20 px-2.5 py-0.5 text-xs font-bold text-amber-200 light:text-amber-800">🍺 여관 난투</span>
       {state.round > 0 && <span className="text-xs text-white/60 light:text-slate-600">{state.round}라운드</span>}
+      {state.tribesInPlay && (
+        <span className="text-xs text-white/50 light:text-slate-500" title={`이번 판 종족: ${state.tribesInPlay.map((t) => TRIBES[t].name).join(", ")}`}>
+          이번 판 {state.tribesInPlay.map((t) => TRIBES[t].emoji).join("")}
+        </span>
+      )}
       <span className="text-xs text-white/50 light:text-slate-500">
         {state.phase === "heroPick" ? "영웅 고르기" : state.phase === "shop" ? "🛒 상점 단계" : state.phase === "combat" ? "⚔️ 전투" : "🏁 끝"}
       </span>

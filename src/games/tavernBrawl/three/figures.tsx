@@ -57,16 +57,17 @@ const WOOD = "#7c4a1e";
 /* ── 스펙 ─────────────────────────────────────────────────── */
 
 type Weapon = "sword" | "bigsword" | "shield" | "swordShield" | "bow" | "staff" | "dagger" | "wrench" | "hammer" | "shovel" | "flask" | "mace" | "none";
-type Head = "helm" | "plume" | "hood" | "crown" | "wizard" | "hair" | "skull" | "visor" | "bare";
+type Head = "helm" | "plume" | "hood" | "crown" | "wizard" | "hair" | "skull" | "visor" | "horns" | "bare";
 
 export type FigureSpec =
-  | { kind: "human"; skin: string; body: string; accent: string; head: Head; weapon: Weapon; cape?: string; robe?: boolean; mount?: string; size?: number; glowEyes?: string }
-  | { kind: "beast"; fur: string; belly: string; ears: "pointy" | "long" | "round"; tail: "bushy" | "short" | "none"; tusks?: boolean; trunk?: boolean; shell?: string; size: number; long?: boolean }
+  | { kind: "human"; skin: string; body: string; accent: string; head: Head; weapon: Weapon; cape?: string; robe?: boolean; mount?: string; size?: number; glowEyes?: string; wings?: string }
+  | { kind: "beast"; fur: string; belly: string; ears: "pointy" | "long" | "round"; tail: "bushy" | "short" | "none"; tusks?: boolean; trunk?: boolean; shell?: string; size: number; long?: boolean; antlers?: boolean; horn?: boolean }
   | { kind: "robot"; metal: string; accent: string; eye: string; form: "mouse" | "bot" | "golem" | "tank" | "smith" | "titan"; size?: number }
   | { kind: "elemental"; color: string; core: string; form: "flame" | "drop" | "tornado" | "lava" | "storm" | "star"; size?: number }
   | { kind: "wraith"; cloak: string; eye: string; size?: number }
   | { kind: "dragon"; skin: string; belly: string; wing: string; size: number; form: "whelp" | "lizard" | "wyrm" | "bat" | "drake" | "elder" }
-  | { kind: "bird"; color: string; beak: string };
+  | { kind: "bird"; color: string; beak: string }
+  | { kind: "critter"; form: "crab" | "fish" | "octopus" | "eel" | "shark" | "sprout" | "mushroom" | "tree" | "butterfly" | "moon"; color: string; accent: string; size?: number };
 
 const H = (o: Partial<Extract<FigureSpec, { kind: "human" }>> & { head: Head; weapon: Weapon }): FigureSpec => ({ kind: "human", skin: "#f1c27d", body: "#64748b", accent: "#facc15", ...o });
 
@@ -121,6 +122,48 @@ export const FIGURES: Record<string, FigureSpec> = {
   n_priest: H({ body: "#f8fafc", accent: "#fbbf24", head: "hood", weapon: "staff", robe: true }),
   n_general: H({ body: "#991b1b", accent: "#facc15", head: "plume", weapon: "sword", cape: "#facc15", size: 1.1 }),
   n_alch: H({ body: "#7e22ce", accent: "#fbbf24", head: "wizard", weapon: "flask", robe: true, size: 1.05 }),
+  // 해양
+  s_crab: { kind: "critter", form: "crab", color: "#dc2626", accent: "#fca5a5", size: 0.85 },
+  s_fish: { kind: "critter", form: "fish", color: "#f97316", accent: "#fde68a", size: 0.8 },
+  s_eel: { kind: "critter", form: "eel", color: "#65a30d", accent: "#fde047" },
+  s_pirate: H({ body: "#1e3a8a", accent: "#facc15", head: "hair", weapon: "sword", cape: "#111827" }),
+  s_octo: { kind: "critter", form: "octopus", color: "#9333ea", accent: "#e9d5ff" },
+  s_shark: { kind: "critter", form: "shark", color: "#64748b", accent: "#e2e8f0", size: 1.05 },
+  s_siren: H({ skin: "#99f6e4", body: "#0f766e", accent: "#67e8f9", head: "hair", weapon: "staff", robe: true, size: 1.05 }),
+  s_kraken: { kind: "critter", form: "octopus", color: "#7f1d1d", accent: "#fca5a5", size: 1.35 },
+  // 악마
+  dm_imp: H({ skin: "#dc2626", body: "#7f1d1d", accent: "#1c1917", head: "horns", weapon: "dagger", size: 0.7, glowEyes: "#fde047" }),
+  dm_boar: { kind: "beast", fur: "#7f1d1d", belly: "#fb923c", ears: "pointy", tail: "short", tusks: true, size: 0.85 },
+  dm_warlock: H({ skin: "#d8b4fe", body: "#3b0764", accent: "#a21caf", head: "hood", weapon: "staff", robe: true, glowEyes: "#ef4444" }),
+  dm_shade: { kind: "wraith", cloak: "#3b0764", eye: "#f472b6" },
+  dm_brute: H({ skin: "#b91c1c", body: "#450a0a", accent: "#fef3c7", head: "horns", weapon: "hammer", size: 1.15, glowEyes: "#fde047" }),
+  dm_general: H({ skin: "#7f1d1d", body: "#1c1917", accent: "#f97316", head: "horns", weapon: "bigsword", cape: "#7f1d1d", size: 1.15, glowEyes: "#f97316" }),
+  dm_archfiend: H({ skin: "#44403c", body: "#292524", accent: "#e7e5e4", head: "horns", weapon: "bigsword", cape: "#450a0a", size: 1.32, glowEyes: "#ef4444" }),
+  // 숲
+  sy_sprout: { kind: "critter", form: "sprout", color: "#16a34a", accent: "#4ade80", size: 0.8 },
+  sy_mush: { kind: "critter", form: "mushroom", color: "#dc2626", accent: "#fafafa" },
+  sy_fox: { kind: "beast", fur: "#ea580c", belly: "#fff7ed", ears: "pointy", tail: "bushy", size: 0.7 },
+  sy_elf: H({ skin: "#fde7c7", body: "#15803d", accent: "#bbf7d0", head: "hood", weapon: "bow" }),
+  sy_treant: { kind: "critter", form: "tree", color: "#15803d", accent: "#22c55e", size: 1.1 },
+  sy_druid: { kind: "beast", fur: "#a16207", belly: "#fef3c7", ears: "pointy", tail: "short", antlers: true, size: 1.05 },
+  sy_worldtree: { kind: "critter", form: "tree", color: "#4d7c0f", accent: "#a3e635", size: 1.4 },
+  // 요정
+  f_butterfly: { kind: "critter", form: "butterfly", color: "#f472b6", accent: "#fbcfe8", size: 0.8 },
+  f_trickster: H({ skin: "#fbcfe8", body: "#7e22ce", accent: "#facc15", head: "wizard", weapon: "dagger", size: 0.75, wings: "#e9d5ff" }),
+  f_moon: { kind: "critter", form: "moon", color: "#c7d2fe", accent: "#e0e7ff" },
+  f_unicorn: { kind: "beast", fur: "#f8fafc", belly: "#fbcfe8", ears: "pointy", tail: "bushy", horn: true, size: 0.95 },
+  f_nymph: H({ skin: "#fbcfe8", body: "#16a34a", accent: "#f9a8d4", head: "hair", weapon: "bow", wings: "#bbf7d0" }),
+  f_queen: H({ skin: "#fde7f3", body: "#f9a8d4", accent: "#fef08a", head: "crown", weapon: "staff", robe: true, wings: "#f5d0fe", size: 1.1 }),
+  f_oberon: H({ skin: "#e0e7ff", body: "#4338ca", accent: "#fde047", head: "crown", weapon: "staff", robe: true, wings: "#a5f3fc", size: 1.2 }),
+  // 중립 추가
+  n_bandit: H({ body: "#78350f", accent: "#dc2626", head: "hair", weapon: "dagger" }),
+  n_ninja: H({ skin: "#e5e7eb", body: "#111827", accent: "#ef4444", head: "hood", weapon: "dagger" }),
+  n_sniper: H({ body: "#3f6212", accent: "#d9f99d", head: "plume", weapon: "bow", cape: "#365314" }),
+  // 토큰 추가
+  t_imp: H({ skin: "#ef4444", body: "#991b1b", accent: "#1c1917", head: "horns", weapon: "none", size: 0.55, glowEyes: "#fde047" }),
+  t_sapling: { kind: "critter", form: "sprout", color: "#15803d", accent: "#86efac", size: 1 },
+  t_fairy: { kind: "critter", form: "butterfly", color: "#c084fc", accent: "#f5d0fe", size: 0.65 },
+  t_spirit: { kind: "elemental", color: "#93c5fd", core: "#eff6ff", form: "star", size: 0.6 },
   // 토큰
   t_bunny: { kind: "beast", fur: "#fafaf9", belly: "#fecdd3", ears: "long", tail: "short", size: 0.45 },
   t_wolf: { kind: "beast", fur: "#9ca3af", belly: "#f3f4f6", ears: "pointy", tail: "bushy", size: 0.6 },
@@ -287,6 +330,15 @@ function HeadGear({ head, skin, body, accent, glowEyes }: { head: Head; skin: st
           <P g="box" c={skin} p={[0, -0.12, 0.05]} s={[0.12, 0.06, 0.1]} />
         </>
       );
+    case "horns":
+      return (
+        <>
+          <P g="sphere" c={skin} s={0.16} />
+          {e}
+          <P g="cone" c={accent} p={[-0.1, 0.15, 0]} s={[0.035, 0.16, 0.035]} r={[0, 0, 0.5]} />
+          <P g="cone" c={accent} p={[0.1, 0.15, 0]} s={[0.035, 0.16, 0.035]} r={[0, 0, -0.5]} />
+        </>
+      );
     case "visor":
       return (
         <>
@@ -350,6 +402,12 @@ function Human({ s, rig }: { s: Extract<FigureSpec, { kind: "human" }>; rig: Rig
           <P g="box" c={s.accent} p={[0, 0.04, 0]} s={[0.4, 0.06, 0.26]} o={{ metal: 0.6, rough: 0.35 }} />
           {metal && <P g="box" c={s.accent} p={[0, 0.27, 0.125]} s={[0.08, 0.26, 0.01]} />}
           {s.cape && <P g="box" c={s.cape} p={[0, 0.12, -0.15]} s={[0.4, 0.62, 0.03]} r={[0.12, 0, 0]} />}
+          {s.wings &&
+            [-1, 1].map((sx) => (
+              <group key={sx} ref={sx < 0 ? rig("wingL") : rig("wingR")} position={[sx * 0.08, 0.32, -0.14]}>
+                <P g="sphere" c={s.wings!} p={[sx * 0.2, 0.08, 0]} s={[0.2, 0.26, 0.02]} r={[0, 0, sx * -0.5]} o={{ alpha: 0.6, glow: 0.6 }} />
+              </group>
+            ))}
           <group ref={rig("head")} position={[0, 0.6, 0]}>
             <HeadGear head={s.head} skin={s.skin} body={s.body} accent={s.accent} glowEyes={s.glowEyes} />
           </group>
@@ -405,6 +463,15 @@ function Beast({ s, rig }: { s: Extract<FigureSpec, { kind: "beast" }>; rig: Rig
           {s.ears === "long" &&
             [-1, 1].map((sx) => <P key={sx} g="sphere" c={s.fur} p={[sx * 0.07, 0.27, -0.02]} s={[0.05, 0.18, 0.03]} r={[0, 0, -sx * 0.15]} />)}
           {s.ears === "round" && [-1, 1].map((sx) => <P key={sx} g="sphere" c={s.fur} p={[sx * 0.14, 0.15, -0.02]} s={[0.07, 0.07, 0.03]} />)}
+          {s.antlers &&
+            [-1, 1].map((sx) => (
+              <group key={sx} position={[sx * 0.09, 0.16, -0.02]} rotation={[0, 0, -sx * 0.4]}>
+                <P g="cyl" c="#d6c7a1" p={[0, 0.12, 0]} s={[0.018, 0.25, 0.018]} />
+                <P g="cyl" c="#d6c7a1" p={[sx * 0.05, 0.18, 0]} s={[0.014, 0.12, 0.014]} r={[0, 0, -sx * 0.8]} />
+                <P g="cyl" c="#d6c7a1" p={[-sx * 0.04, 0.2, 0]} s={[0.014, 0.1, 0.014]} r={[0, 0, sx * 0.7]} />
+              </group>
+            ))}
+          {s.horn && <P g="cone" c="#fde68a" p={[0, 0.2, 0.1]} s={[0.03, 0.22, 0.03]} r={[0.6, 0, 0]} o={{ glow: 0.8, metal: 0.5 }} />}
           {s.tusks &&
             [-1, 1].map((sx) => <P key={sx} g="cone" c="#fffbeb" p={[sx * 0.09, -0.12, 0.16]} s={[0.025, 0.22, 0.025]} r={[2.2, 0, -sx * 0.25]} />)}
           {s.trunk && <P g="cyl" c={s.fur} p={[0, -0.15, 0.17]} s={[0.04, 0.26, 0.04]} r={[0.35, 0, 0]} />}
@@ -685,6 +752,177 @@ function Bird({ s, rig }: { s: Extract<FigureSpec, { kind: "bird" }>; rig: Rig }
   );
 }
 
+
+/* ── 작은 생물·식물 ─────────────────────────────────────── */
+
+function Critter({ s, rig }: { s: Extract<FigureSpec, { kind: "critter" }>; rig: Rig }) {
+  const eyes = (y: number, z: number, x = 0.06, c = EYE, glow = 0) => (
+    <>
+      <P g="sphere" c={c} p={[-x, y, z]} s={0.028} o={{ glow }} />
+      <P g="sphere" c={c} p={[x, y, z]} s={0.028} o={{ glow }} />
+    </>
+  );
+  switch (s.form) {
+    case "crab":
+      return (
+        <group ref={rig("torso")} position={[0, 0.16, 0]}>
+          <P g="sphere" c={s.color} s={[0.3, 0.13, 0.22]} o={{ rough: 0.4 }} />
+          <group ref={rig("head")}>
+            {[-1, 1].map((sx) => (
+              <group key={sx}>
+                <P g="cyl" c={s.color} p={[sx * 0.07, 0.15, 0.12]} s={[0.012, 0.12, 0.012]} />
+                <P g="sphere" c={EYE} p={[sx * 0.07, 0.22, 0.12]} s={0.03} />
+              </group>
+            ))}
+          </group>
+          {[-1, 1].map((sx) => (
+            <group key={sx} ref={sx < 0 ? rig("armL") : rig("armR")} position={[sx * 0.26, 0.04, 0.12]}>
+              <P g="sphere" c={s.color} p={[sx * 0.06, 0.06, 0.08]} s={[0.1, 0.07, 0.08]} />
+              <P g="cone" c={s.accent} p={[sx * 0.06, 0.1, 0.17]} s={[0.04, 0.1, 0.03]} r={[1.3, 0, 0]} />
+            </group>
+          ))}
+          {[-1, 1].flatMap((sx) => [-0.08, 0, 0.08].map((z) => <P key={`${sx}${z}`} g="cyl" c={s.color} p={[sx * 0.27, -0.08, z]} s={[0.014, 0.16, 0.014]} r={[0, 0, sx * 0.7]} />))}
+        </group>
+      );
+    case "fish":
+    case "shark": {
+      const shark = s.form === "shark";
+      return (
+        <group ref={rig("torso")} position={[0, 0.38, 0]}>
+          <P g="sphere" c={s.color} s={shark ? [0.17, 0.2, 0.45] : [0.12, 0.16, 0.24]} />
+          <P g="sphere" c={s.accent} p={[0, -0.06, 0.03]} s={shark ? [0.13, 0.12, 0.38] : [0.09, 0.1, 0.18]} />
+          <group ref={rig("head")} position={[0, 0, shark ? 0.3 : 0.15]}>
+            {eyes(0.05, 0.08, shark ? 0.1 : 0.07)}
+            {shark && <P g="box" c="#fafafa" p={[0, -0.07, 0.1]} s={[0.12, 0.02, 0.04]} />}
+          </group>
+          {shark && <P g="cone" c={s.color} p={[0, 0.25, -0.02]} s={[0.04, 0.2, 0.14]} r={[-0.3, 0, 0]} />}
+          <group ref={rig("tail")} position={[0, 0, shark ? -0.42 : -0.22]}>
+            <P g="cone" c={s.color} p={[0, 0, -0.06]} s={[0.03, 0.18, 0.2]} r={[Math.PI / 2, 0, 0]} />
+          </group>
+          {[-1, 1].map((sx) => (
+            <group key={sx} ref={sx < 0 ? rig("wingL") : rig("wingR")} position={[sx * (shark ? 0.15 : 0.1), -0.06, 0.05]}>
+              <P g="cone" c={s.accent} p={[sx * 0.06, 0, 0]} s={[0.05, 0.12, 0.02]} r={[0, 0, sx * -1.2]} />
+            </group>
+          ))}
+        </group>
+      );
+    }
+    case "octopus": {
+      const big = (s.size ?? 1) > 1.1;
+      return (
+        <group ref={rig("torso")} position={[0, 0.12, 0]}>
+          <group ref={rig("head")} position={[0, 0.4, 0]}>
+            <P g="sphere" c={s.color} s={[0.24, 0.28, 0.24]} o={{ rough: 0.35 }} />
+            {eyes(-0.02, 0.21, 0.08, big ? "#fde047" : EYE, big ? 2 : 0)}
+          </group>
+          <group ref={rig("spin")}>
+            {Array.from({ length: 6 }, (_, i) => {
+              const a = (i / 6) * Math.PI * 2;
+              return <P key={i} g="cone" c={s.color} p={[Math.cos(a) * 0.17, 0.08, Math.sin(a) * 0.17]} s={[0.05, 0.36, 0.05]} r={[Math.sin(a) * 0.9, 0, -Math.cos(a) * 0.9]} />;
+            })}
+          </group>
+        </group>
+      );
+    }
+    case "eel":
+      return (
+        <group ref={rig("torso")}>
+          <group ref={rig("spin")}>
+            {Array.from({ length: 6 }, (_, i) => (
+              <P key={i} g="sphere" c={i % 2 ? s.color : s.accent} p={[Math.sin(i * 1.1) * 0.12, 0.12 + i * 0.1, Math.cos(i * 1.1) * 0.08]} s={0.09 - i * 0.004} o={{ glow: 0.3 }} />
+            ))}
+          </group>
+          <group ref={rig("head")} position={[0, 0.72, 0.05]}>
+            <P g="sphere" c={s.color} s={[0.1, 0.09, 0.13]} o={{ glow: 0.3 }} />
+            {eyes(0.03, 0.1, 0.05, "#fde047", 2)}
+          </group>
+        </group>
+      );
+    case "sprout":
+      return (
+        <group ref={rig("torso")}>
+          <P g="cyl" c="#78350f" p={[0, 0.06, 0]} s={[0.14, 0.12, 0.14]} />
+          <P g="cyl" c={s.color} p={[0, 0.25, 0]} s={[0.025, 0.3, 0.025]} />
+          <group ref={rig("head")} position={[0, 0.42, 0]}>
+            <P g="sphere" c={s.accent} p={[-0.1, 0, 0]} s={[0.12, 0.04, 0.07]} r={[0, 0, 0.4]} />
+            <P g="sphere" c={s.accent} p={[0.1, 0.02, 0]} s={[0.12, 0.04, 0.07]} r={[0, 0, -0.4]} />
+            {eyes(-0.12, 0.08, 0.04)}
+          </group>
+        </group>
+      );
+    case "mushroom":
+      return (
+        <group ref={rig("torso")}>
+          <P g="cyl" c="#fef3c7" p={[0, 0.18, 0]} s={[0.1, 0.36, 0.1]} />
+          <group ref={rig("head")} position={[0, 0.4, 0]}>
+            <P g="sphere" c={s.color} s={[0.28, 0.17, 0.28]} />
+            {[0, 1, 2, 3, 4].map((i) => (
+              <P key={i} g="sphere" c="#fafafa" p={[Math.cos(i * 1.3) * 0.17, 0.11, Math.sin(i * 1.3) * 0.17]} s={0.035} />
+            ))}
+          </group>
+          {eyes(0.22, 0.1, 0.04)}
+        </group>
+      );
+    case "tree": {
+      const big = (s.size ?? 1) > 1.2;
+      return (
+        <group>
+          {[-1, 1].map((sx) => (
+            <group key={sx} ref={sx < 0 ? rig("legL") : rig("legR")} position={[sx * 0.1, 0.18, 0]}>
+              <P g="cyl" c="#5b3a1a" p={[0, -0.09, 0]} s={[0.06, 0.2, 0.06]} r={[0, 0, sx * 0.3]} />
+            </group>
+          ))}
+          <group ref={rig("torso")} position={[0, 0.18, 0]}>
+            <P g="cyl" c="#6b4423" p={[0, 0.25, 0]} s={[0.14, 0.5, 0.14]} o={{ rough: 1 }} />
+            {eyes(0.32, 0.13, 0.05, big ? "#bef264" : "#fde047", 2)}
+            <group ref={rig("head")} position={[0, 0.62, 0]}>
+              <P g="sphere" c={s.color} s={0.3} o={{ glow: big ? 0.25 : 0 }} />
+              <P g="sphere" c={s.accent} p={[-0.2, -0.05, 0.05]} s={0.18} o={{ glow: big ? 0.25 : 0 }} />
+              <P g="sphere" c={s.accent} p={[0.2, -0.03, 0]} s={0.18} o={{ glow: big ? 0.25 : 0 }} />
+            </group>
+            {[-1, 1].map((sx) => (
+              <group key={sx} ref={sx < 0 ? rig("armL") : rig("armR")} position={[sx * 0.14, 0.38, 0]}>
+                <P g="cyl" c="#6b4423" p={[sx * 0.1, -0.05, 0]} s={[0.035, 0.25, 0.035]} r={[0, 0, sx * 1.1]} />
+              </group>
+            ))}
+          </group>
+        </group>
+      );
+    }
+    case "butterfly":
+      return (
+        <group ref={rig("torso")} position={[0, 0.45, 0]}>
+          <P g="sphere" c="#3f3f46" s={[0.04, 0.16, 0.04]} />
+          <group ref={rig("head")} position={[0, 0.16, 0]}>
+            <P g="sphere" c={s.accent} s={0.07} />
+            {eyes(0.01, 0.06, 0.03)}
+          </group>
+          {[-1, 1].map((sx) => (
+            <group key={sx} ref={sx < 0 ? rig("wingL") : rig("wingR")}>
+              <P g="sphere" c={s.color} p={[sx * 0.16, 0.06, 0]} s={[0.15, 0.13, 0.015]} o={{ glow: 0.5, alpha: 0.85 }} />
+              <P g="sphere" c={s.accent} p={[sx * 0.12, -0.1, 0]} s={[0.09, 0.08, 0.015]} o={{ glow: 0.5, alpha: 0.85 }} />
+            </group>
+          ))}
+        </group>
+      );
+    default:
+      // moon
+      return (
+        <group ref={rig("torso")} position={[0, 0.55, 0]}>
+          <group ref={rig("spin")}>
+            <mesh geometry={GEO.torus} material={mat(s.color, { glow: 1.6 })} scale={[0.28, 0.28, 0.5]} rotation={[0, 0, 0.6]} />
+          </group>
+          <group ref={rig("head")} position={[0.12, 0.02, 0.12]}>
+            {eyes(0, 0, 0.04, "#1e3a8a")}
+          </group>
+          {[0, 1, 2].map((i) => (
+            <P key={i} g="oct" c={s.accent} p={[Math.cos(i * 2.1) * 0.38, Math.sin(i * 2.1) * 0.2, 0]} s={0.03} o={{ glow: 2 }} />
+          ))}
+        </group>
+      );
+  }
+}
+
 /* ── 용 ───────────────────────────────────────────────────── */
 
 function Dragon({ s, rig }: { s: Extract<FigureSpec, { kind: "dragon" }>; rig: Rig }) {
@@ -749,7 +987,7 @@ export default function Figure({ defId, uid, golden, actRef }: { defId: string; 
   const rig = useMemo<Rig>(() => (part) => (node) => void (nodes.current[part] = node), []);
   const phase = hash(uid) * 10;
   const sparkle = useRef<THREE.Group>(null);
-  const size = ("size" in spec && spec.size ? spec.size : 1) * (golden ? 1.12 : 1);
+  const size = Math.min(1.2, "size" in spec && spec.size ? spec.size : 1) * (golden ? 1.12 : 1);
   const kind = spec.kind;
 
   useFrame(() => {
@@ -800,6 +1038,7 @@ export default function Figure({ defId, uid, golden, actRef }: { defId: string; 
   else if (spec.kind === "elemental") body = <Elemental s={spec} rig={rig} />;
   else if (spec.kind === "wraith") body = <Wraith s={spec} rig={rig} />;
   else if (spec.kind === "bird") body = <Bird s={spec} rig={rig} />;
+  else if (spec.kind === "critter") body = <Critter s={spec} rig={rig} />;
   else body = <Dragon s={spec} rig={rig} />;
 
   return (

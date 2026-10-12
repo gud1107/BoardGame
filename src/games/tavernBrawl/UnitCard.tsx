@@ -1,7 +1,7 @@
 "use client";
 
 import type { Keyword } from "./units";
-import { KEYWORDS, TRIBES, unitDef } from "./units";
+import { CLASSES, KEYWORDS, TRIBES, unitDef } from "./units";
 
 export interface CardUnit {
   defId: string;
@@ -88,6 +88,11 @@ export default function UnitCard({
           {tribe.emoji}
         </span>
       )}
+      {d.cls && (
+        <span className="absolute -top-1.5 -left-1.5 rounded-full bg-black/70 px-0.5 text-[10px] leading-4" title={CLASSES[d.cls].name}>
+          {CLASSES[d.cls].emoji}
+        </span>
+      )}
       <span className={`absolute -bottom-1.5 -left-1.5 flex items-center justify-center rounded-full border border-black/40 bg-amber-500 font-bold text-white ${stat} ${buffedAtk ? "text-lime-200" : ""}`}>
         {unit.atk}
       </span>
@@ -111,7 +116,8 @@ export function UnitDetail({ unit }: { unit: CardUnit }) {
         {d.emoji} {unit.golden ? "황금 " : ""}
         {d.name} <span className="text-yellow-400">{"★".repeat(d.tier)}</span>{" "}
         <span className="font-normal text-white/50 light:text-slate-500">
-          {tribe ? `${tribe.emoji} ${tribe.name}` : "중립"} · {unit.atk}/{unit.hp}
+          {tribe ? `${tribe.emoji} ${tribe.name}` : "중립"}
+          {d.cls ? ` · ${CLASSES[d.cls].emoji} ${CLASSES[d.cls].name}` : ""} · {unit.atk}/{unit.hp}
         </span>
       </p>
       {d.text && (

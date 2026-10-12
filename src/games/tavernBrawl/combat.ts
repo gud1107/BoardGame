@@ -1,5 +1,5 @@
 import { seededRng } from "@/lib/rng";
-import { KEYWORDS, unitDef, type Effect, type HeroId, type Keyword, type Tribe } from "./units";
+import { KEYWORDS, unitDef, type ClassId, type Effect, type HeroId, type Keyword, type Tribe } from "./units";
 
 /**
  * 여관 난투 전투 시뮬레이터 — 순수 함수. 같은 (보드A, 보드B, 영웅, 시드) → 항상 같은 결과·같은 프레임.
@@ -69,12 +69,31 @@ export function tribeOf(defId: string): Tribe | null {
 
 /** 보드 위 종족 수(같은 유닛 중복 포함, 황금도 1). */
 export function tribeCounts(board: readonly { defId: string }[]): Record<Tribe, number> {
-  const c: Record<Tribe, number> = { knight: 0, beast: 0, mech: 0, elemental: 0, undead: 0, dragon: 0 };
+  const c: Record<Tribe, number> = { knight: 0, beast: 0, mech: 0, elemental: 0, undead: 0, dragon: 0, sea: 0, demon: 0, sylvan: 0, fae: 0 };
   for (const u of board) {
     const t = tribeOf(u.defId);
     if (t) c[t]++;
   }
   return c;
+}
+
+export function classOf(defId: string): ClassId | null {
+  return unitDef(defId).cls;
+}
+
+/** 보드 위 직업 수(같은 유닛 중복 포함, 황금도 1). */
+export function classCounts(board: readonly { defId: string }[]): Record<ClassId, number> {
+  const c: Record<ClassId, number> = { warrior: 0, guardian: 0, assassin: 0, mage: 0, ranger: 0, cleric: 0, berserker: 0, summoner: 0, plunderer: 0 };
+  for (const u of board) {
+    const k = classOf(u.defId);
+    if (k) c[k]++;
+  }
+  return c;
+}
+
+/** 단계별 값 고르기: lv 2/4/6 → v2/v4/v6, 0 → 0 */
+export function byLevel(lv: number, v2: number, v4: number, v6: number): number {
+  return lv >= 6 ? v6 : lv >= 4 ? v4 : lv >= 2 ? v2 : 0;
 }
 
 export function synergyLevel(count: number): 0 | 2 | 4 | 6 {
@@ -114,6 +133,11 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
   ];
   const heroes = [a.hero, b.hero] as const;
   const counts = [tribeCounts(a.board), tribeCounts(b.board)];
+  const ccounts = [classCounts(a.board), classCounts(b.board)];
+  const clv = (side: 0 | 1, k: ClassId) => synergyLevel(ccounts[side][k]);
+  const tlv = (side: 0 | 1, t: Tribe) => synergyLevel(counts[side][t]);
+  /** 이번 행동에서 피해를 받은 유닛(광전사 판정용) */
+  const hurt = new Set<CU>();
   const necroUsed = [false, false];
   let summonN = 0;
   const frames: Frame[] = [];
@@ -131,12 +155,18 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
       return;
     }
     u.hp -= amount;
+    hurt.add(u);
     if (poison) u.poisoned = true;
   }
 
   function targetsFor(side: 0 | 1, source: CU | null, target: string, tribe?: Tribe): CU[] {
     const list = sides[side].filter((u) => u.hp > 0 && !u.poisoned && (!tribe || tribeOf(u.defId) === tribe));
+    const foes = sides[1 - side].filter((u) => u.hp > 0 && !u.poisoned);
     switch (target) {
+      case "randomEnemy":
+        return foes.length ? [pick(foes)] : [];
+      case "allEnemies":
+        return foes;
       case "self":
         return source && source.hp > 0 ? [source] : [];
       case "randomOther": {
@@ -157,7 +187,7 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
   /** 소환된 야수에 붙는 시너지 보너스 */
   function beastBonus(side: 0 | 1): number {
     const lv = synergyLevel(counts[side].beast);
-    return lv === 6 ? 4 : lv === 4 ? 2 : lv === 2 ? 1 : 0;
+    return byLevel(lv, 2, 3, 5);
   }
 
   function summon(side: 0 | 1, defId: string, golden: boolean, at: number): CU | null {
@@ -179,7 +209,7 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
     for (const e of effects) {
       if (e.kind === "buff") {
         for (const u of targetsFor(side, source, e.target, e.tribe)) {
-          u.atk += e.atk * m;
+          u.atk = Math.max(0, u.atk + e.atk * m);
           u.hp += e.hp * m;
         }
       } else if (e.kind === "grant") {
@@ -203,7 +233,19 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
     return u.hp <= 0 || u.poisoned;
   }
 
+  /** 광전사: 피해를 받고 살아남은 광전사 공격력 +1/+2/+4 */
+  function berserkerRage() {
+    for (const u of hurt) {
+      if (isDead(u) || classOf(u.defId) !== "berserker") continue;
+      const side = sides[0].includes(u) ? 0 : sides[1].includes(u) ? 1 : -1;
+      if (side < 0) continue;
+      u.atk += byLevel(clv(side as 0 | 1, "berserker"), 1, 2, 4);
+    }
+    hurt.clear();
+  }
+
   function processDeaths(order: [0 | 1, 0 | 1]) {
+    berserkerRage();
     for (let guard = 0; guard < 50; guard++) {
       const dead: { side: 0 | 1; u: CU; idx: number }[] = [];
       for (const side of order) {
@@ -242,7 +284,28 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
             removeKw(r, "reborn");
           }
         }
+        // 소환사: 죽으면 정령
+        if (classOf(d.u.defId) === "summoner") {
+          const v = byLevel(clv(d.side, "summoner"), 2, 4, 7);
+          if (v) {
+            const sp = summon(d.side, "t_spirit", false, at + (sides[d.side].length - before));
+            if (sp) {
+              sp.atk = v;
+              sp.hp = v;
+            }
+          }
+        }
         shift[d.side] += sides[d.side].length - before;
+        // 요정: 죽으면 무작위 아군 강화
+        if (tribeOf(d.u.defId) === "fae") {
+          const v = byLevel(tlv(d.side, "fae"), 3, 4, 6);
+          const alive = sides[d.side].filter((x) => !isDead(x));
+          if (v && alive.length) {
+            const t = pick(alive);
+            t.atk += v;
+            t.hp += v;
+          }
+        }
         // 아군 사망 반응
         for (const ally of sides[d.side]) {
           if (ally.hp <= 0) continue;
@@ -274,11 +337,9 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
     if (kn) {
       const knights = list.filter((u) => tribeOf(u.defId) === "knight");
       for (const u of kn === 2 ? knights.slice(0, 1) : knights) addKw(u, "shield");
-      if (kn === 6) {
-        for (const u of knights) {
-          u.atk += 2;
-          u.hp += 2;
-        }
+      for (const u of knights) {
+        u.atk += kn === 6 ? 3 : 1;
+        u.hp += kn === 6 ? 3 : 1;
       }
       push({ t: "soc", side, uid: null, label: `🛡️ 기사단 ${kn}` });
     }
@@ -300,7 +361,7 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
         u.hp += 1;
       }
       if (un === 6) for (const u of list) if (tribeOf(u.defId) === "undead") addKw(u, "reborn");
-      push({ t: "soc", side, uid: null, label: `💀 망령 ${un}` });
+      push({ t: "soc", side, uid: null, label: `👻 망령 ${un}` });
     }
     const dr = synergyLevel(c.dragon);
     if (dr) {
@@ -313,6 +374,85 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
       if (dr === 6) for (const u of sides[1 - side]) damage(u, 3, false);
       push({ t: "soc", side, uid: null, label: `🐲 용족 ${dr}` });
       if (dr === 6) processDeaths(order);
+    }
+    const de = synergyLevel(c.demon);
+    if (de) {
+      const v = byLevel(de, 2, 4, 7);
+      for (const u of list) {
+        if (tribeOf(u.defId) !== "demon") continue;
+        u.atk += v;
+        u.hp += v;
+      }
+      push({ t: "soc", side, uid: null, label: `😈 악마 ${de}` });
+    }
+    // ── 직업 ──
+    const of = (k: ClassId) => list.filter((u) => classOf(u.defId) === k);
+    const wa = clv(side, "warrior");
+    if (wa) {
+      for (const u of of("warrior")) {
+        u.atk += byLevel(wa, 2, 4, 7);
+        u.hp += byLevel(wa, 0, 1, 3);
+      }
+      push({ t: "soc", side, uid: null, label: `⚔️ 전사 ${wa}` });
+    }
+    const gu = clv(side, "guardian");
+    if (gu) {
+      for (const u of of("guardian")) {
+        u.hp += byLevel(gu, 2, 4, 0);
+        if (gu >= 4) addKw(u, "taunt");
+      }
+      if (gu === 6) for (const u of list) u.hp += 4;
+      push({ t: "soc", side, uid: null, label: `🧱 수호자 ${gu}` });
+    }
+    const asn = clv(side, "assassin");
+    if (asn) {
+      for (const u of of("assassin")) {
+        u.atk += byLevel(asn, 2, 4, 4);
+        u.hp += byLevel(asn, 1, 2, 2);
+        if (asn === 6) addKw(u, "poison");
+      }
+      push({ t: "soc", side, uid: null, label: `🗡️ 암살자 ${asn}` });
+    }
+    const ra = clv(side, "ranger");
+    if (ra) {
+      for (const u of of("ranger")) {
+        u.atk += byLevel(ra, 1, 3, 5);
+        u.hp += byLevel(ra, 1, 3, 5);
+        if (ra >= 4) addKw(u, "windfury");
+      }
+      // 선제 사격: 반격 없이 자기 공격력만큼
+      for (const u of of("ranger")) {
+        const foes = sides[1 - side].filter((x) => !isDead(x));
+        if (foes.length && u.atk > 0) damage(pick(foes), u.atk, hasKw(u, "poison"));
+      }
+      push({ t: "soc", side, uid: null, label: `🏹 궁수 ${ra} — 선제 사격` });
+      processDeaths(order);
+    }
+    const pl = clv(side, "plunderer");
+    if (pl) {
+      for (const u of of("plunderer")) {
+        u.atk += byLevel(pl, 2, 3, 5);
+        u.hp += byLevel(pl, 2, 3, 5);
+      }
+      push({ t: "soc", side, uid: null, label: `💰 약탈자 ${pl}` });
+    }
+    const cl = clv(side, "cleric");
+    if (cl && list.length) {
+      for (const u of of("cleric")) u.hp += 2;
+      const n = cl === 6 ? list.length : cl === 4 ? 4 : 2;
+      const pool = [...list];
+      for (let i = 0; i < n && pool.length; i++) addKw(pool.splice(Math.floor(rng() * pool.length), 1)[0], "shield");
+      push({ t: "soc", side, uid: null, label: `🕊️ 성직자 ${cl}` });
+    }
+    const mg = clv(side, "mage");
+    if (mg) {
+      const dmg = byLevel(mg, 2, 3, 5);
+      for (let i = of("mage").length; i > 0; i--) {
+        const foes = sides[1 - side].filter((u) => !isDead(u));
+        if (foes.length) damage(pick(foes), dmg, false);
+      }
+      push({ t: "soc", side, uid: null, label: `🔮 마법사 ${mg}` });
+      processDeaths(order);
     }
   }
   for (const side of order) {
@@ -344,18 +484,26 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
     for (let i = 0; i < list.length && list[idx].atk <= 0; i++) idx = (idx + 1) % list.length;
     const attacker = list[idx];
     const enemy = (1 - turn) as 0 | 1;
-    const taunts = sides[enemy].filter((u) => hasKw(u, "taunt"));
-    const defender = pick(taunts.length ? taunts : sides[enemy]);
-    const ad = unitDef(attacker.defId);
-    if (ad.onAttack) runEffects(turn, attacker, ad.onAttack, attacker.golden, idx);
-    const dIdx = sides[enemy].indexOf(defender);
-    const splash = hasKw(attacker, "cleave") ? [sides[enemy][dIdx - 1], sides[enemy][dIdx + 1]].filter((u): u is CU => !!u) : [];
-    const atkPoison = hasKw(attacker, "poison");
-    damage(defender, attacker.atk, atkPoison);
-    for (const s of splash) damage(s, attacker.atk, atkPoison);
-    damage(attacker, defender.atk, hasKw(defender, "poison"));
-    push({ t: "attack", side: turn, from: attacker.uid, to: defender.uid, splash: splash.map((s) => s.uid) });
-    processDeaths(turn === 0 ? [0, 1] : [1, 0]);
+    const swings = hasKw(attacker, "windfury") ? 2 : 1;
+    for (let sw = 0; sw < swings; sw++) {
+      if (isDead(attacker) || !sides[turn].includes(attacker) || sides[enemy].length === 0) break;
+      const taunts = sides[enemy].filter((u) => hasKw(u, "taunt"));
+      // 암살자(시너지 2 이상): 도발 무시하고 공격력이 가장 높은 적
+      const sneaky = classOf(attacker.defId) === "assassin" && clv(turn, "assassin") >= 2;
+      const defender = sneaky
+        ? sides[enemy].reduce((hi, u) => (u.atk > hi.atk ? u : hi), sides[enemy][0])
+        : pick(taunts.length ? taunts : sides[enemy]);
+      const ad = unitDef(attacker.defId);
+      if (ad.onAttack) runEffects(turn, attacker, ad.onAttack, attacker.golden, idx);
+      const dIdx = sides[enemy].indexOf(defender);
+      const splash = hasKw(attacker, "cleave") ? [sides[enemy][dIdx - 1], sides[enemy][dIdx + 1]].filter((u): u is CU => !!u) : [];
+      const atkPoison = hasKw(attacker, "poison");
+      damage(defender, attacker.atk, atkPoison);
+      for (const s of splash) damage(s, attacker.atk, atkPoison);
+      if (!sneaky) damage(attacker, defender.atk, hasKw(defender, "poison"));
+      push({ t: "attack", side: turn, from: attacker.uid, to: defender.uid, splash: splash.map((s) => s.uid) });
+      processDeaths(turn === 0 ? [0, 1] : [1, 0]);
+    }
     const after = sides[turn].indexOf(attacker);
     ptr[turn] = after >= 0 ? after + 1 : idx;
     turn = enemy;

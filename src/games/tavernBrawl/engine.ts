@@ -1,5 +1,5 @@
 import { seededRng, shuffle } from "@/lib/rng";
-import { baseInstance, simulateCombat, synergyLevel, tribeCounts, type CombatSide, type UnitInstance } from "./combat";
+import { baseInstance, byLevel, classCounts, simulateCombat, synergyLevel, tribeCounts, type CombatSide, type UnitInstance } from "./combat";
 import {
   HEROES,
   HERO_BY_ID,
@@ -7,11 +7,17 @@ import {
   POOL_UNITS,
   SHOP_SLOTS,
   TIER_ODDS,
+  TRIBE_ORDER,
   UPGRADE_BASE,
   unitDef,
   type Effect,
   type HeroId,
+  type Tribe,
+  type UnitDef,
 } from "./units";
+
+/** 한 판에 나오는 종족 수(10개 중) — 전장처럼 판마다 바꿔 풀이 묽어지지 않게 */
+export const TRIBES_PER_GAME = 7;
 
 /**
  * 여관 난투 — 하스스톤 전장·롤토체스 계열 오토배틀러. 순수 리듀서(ARCHITECTURE.md §1).
@@ -80,6 +86,8 @@ export interface SeatState {
   recentOpps: number[];
   lastResult: "win" | "loss" | "draw" | null;
   poolDelta: Record<string, number>;
+  /** 약탈자 시너지로 다음 라운드에 더 받을 골드 */
+  bonusGold: number;
   acted: boolean;
   inCombat: boolean;
   combatDone: boolean;
@@ -103,6 +111,8 @@ export type Phase = "heroPick" | "shop" | "combat" | "ended";
 
 export interface GameState {
   seed: number;
+  /** 이번 판 상점에 나오는 종족(중립은 항상) */
+  tribesInPlay: Tribe[];
   options: GameOptions;
   seatCount: number;
   round: number;
@@ -157,6 +167,11 @@ export function poolScale(playerCount: number): number {
   return playerCount <= 3 ? 0.5 : playerCount <= 5 ? 0.7 : playerCount <= 6 ? 0.85 : 1;
 }
 
+/** 이번 판 풀에 들어가는 유닛 */
+export function inPlay(st: { tribesInPlay?: Tribe[] }, d: UnitDef): boolean {
+  return !d.token && (d.tribe === null || !st.tribesInPlay || st.tribesInPlay.includes(d.tribe));
+}
+
 export function totalCopies(defId: string, playerCount: number): number {
   return Math.ceil(POOL_COPIES[unitDef(defId).tier] * poolScale(playerCount));
 }
@@ -168,10 +183,10 @@ function copiesOf(u: UnitInstance): number {
 
 function computePool(st: GameState): Record<string, number> {
   const pool: Record<string, number> = {};
-  for (const d of POOL_UNITS) pool[d.id] = totalCopies(d.id, st.seatCount);
+  for (const d of POOL_UNITS) if (inPlay(st, d)) pool[d.id] = totalCopies(d.id, st.seatCount);
   for (const s of st.seats) {
     if (!s.alive) continue;
-    for (const u of [...s.hand, ...s.board]) pool[u.defId] = (pool[u.defId] ?? 0) - copiesOf(u);
+    for (const u of [...s.hand, ...s.board]) if (u.defId in pool) pool[u.defId] -= copiesOf(u);
   }
   for (const k of Object.keys(pool)) pool[k] = Math.max(0, pool[k]);
   return pool;
@@ -198,12 +213,12 @@ function weightedPick(entries: [string, number][], rng: () => number): string | 
 function rollShop(st: GameState, s: SeatState, seat: Seat) {
   const rng = seatRng(st, s, seat);
   const pool = effectivePool(st, s);
-  const slots = SHOP_SLOTS[s.tier];
+  const slots = SHOP_SLOTS[s.tier] + (s.hero === "mercenary" ? 1 : 0);
   const shop: (string | null)[] = [];
   for (let i = 0; i < slots; i++) {
     const byTier: Record<number, [string, number][]> = {};
     for (const d of POOL_UNITS) {
-      if (d.tier > s.tier || (pool[d.id] ?? 0) <= 0) continue;
+      if (d.tier > s.tier || !inPlay(st, d) || (pool[d.id] ?? 0) <= 0) continue;
       (byTier[d.tier] ??= []).push([d.id, pool[d.id]]);
     }
     const odds = TIER_ODDS[s.tier].map((p, idx) => [String(idx + 1), byTier[idx + 1] ? p : 0] as [string, number]);
@@ -220,7 +235,7 @@ function discoverOptions(st: GameState, s: SeatState, seat: Seat, tier: number):
   const rng = seatRng(st, s, seat);
   const pool = effectivePool(st, s);
   for (let t = tier; t >= 1; t--) {
-    const ids = POOL_UNITS.filter((d) => d.tier === t && (pool[d.id] ?? 0) > 0).map((d) => d.id);
+    const ids = POOL_UNITS.filter((d) => d.tier === t && inPlay(st, d) && (pool[d.id] ?? 0) > 0).map((d) => d.id);
     if (ids.length > 0) return shuffle(ids, rng).slice(0, 3);
   }
   return [];
@@ -296,9 +311,19 @@ function gainUnit(s: SeatState, seat: Seat, defId: string): UnitInstance {
   const inst = baseInstance(defId, false, newUid(s, seat));
   s.hand.push(inst);
   s.poolDelta[defId] = (s.poolDelta[defId] ?? 0) - 1;
-  if (unitDef(defId).tribe === "elemental" && synergyLevel(tribeCounts(s.board).elemental) >= 4) {
+  const tribe = unitDef(defId).tribe;
+  if (tribe === "elemental" && synergyLevel(tribeCounts(s.board).elemental) >= 4) {
     inst.atk += 1;
     inst.hp += 1;
+  }
+  // 해양: 해양 유닛을 얻으면 보드의 다른 해양 강화
+  if (tribe === "sea") {
+    const v = byLevel(synergyLevel(tribeCounts(s.board).sea), 1, 2, 3);
+    for (const u of s.board) {
+      if (unitDef(u.defId).tribe !== "sea") continue;
+      u.atk += v;
+      u.hp += v;
+    }
   }
   checkTriple(s, seat, defId);
   return inst;
@@ -325,6 +350,9 @@ function emptyStats(): SeatStats {
 export function startGame(playerCount: number, seed: number, options: GameOptions = DEFAULT_OPTIONS): GameState {
   const n = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, playerCount));
   const heroRng = seededRng(mix(seed, 4242));
+  const tribesInPlay = shuffle(TRIBE_ORDER, seededRng(mix(seed, 777)))
+    .slice(0, TRIBES_PER_GAME)
+    .sort((x, y) => TRIBE_ORDER.indexOf(x) - TRIBE_ORDER.indexOf(y));
   const deck = shuffle(
     HEROES.map((h) => h.id),
     heroRng,
@@ -353,6 +381,7 @@ export function startGame(playerCount: number, seed: number, options: GameOption
     recentOpps: [],
     lastResult: null,
     poolDelta: {},
+    bonusGold: 0,
     acted: false,
     inCombat: false,
     combatDone: true,
@@ -360,6 +389,7 @@ export function startGame(playerCount: number, seed: number, options: GameOption
   }));
   return {
     seed,
+    tribesInPlay,
     options,
     seatCount: n,
     round: 0,
@@ -399,8 +429,12 @@ function startShop(st: GameState): GameState {
     s.powerUsed = false;
     s.upCost = Math.max(0, s.upCost - 1);
     const streak = s.winStreak >= 3 || s.lossStreak >= 3 ? 1 : 0;
-    s.gold = roundGold(st.round) + streak;
-    s.freeRerolls = (synergyLevel(tribeCounts(s.board).elemental) >= 2 ? 1 : 0) + (s.hero === "mercenary" ? 2 : 0);
+    s.gold = roundGold(st.round) + streak + (s.bonusGold ?? 0);
+    s.bonusGold = 0;
+    // 악마의 대가: 시너지가 켜져 있으면 체력 −1 (1 아래로는 안 떨어짐)
+    const demons = tribeCounts(s.board).demon;
+    if (synergyLevel(demons) >= 2) s.hp = Math.max(1, s.hp - 1);
+    s.freeRerolls = (synergyLevel(tribeCounts(s.board).elemental) >= 2 ? 1 : 0) + (s.hero === "mercenary" ? 3 : 0);
     for (const u of s.board) runShopEffects(st, s, seat, u, unitDef(u.defId).shopStart, u.golden);
     if (s.frozen) {
       s.shop = s.shop.filter((x): x is string => !!x);
@@ -568,6 +602,16 @@ function resolveShop(st: GameState): GameState {
     while (s.discover.length > 0) applyShopAction(st, s, { type: "DISCOVER", seat, round: st.round, pick: 0 });
     s.ready = true;
     for (const u of [...s.board]) runShopEffects(st, s, seat, u, unitDef(u.defId).shopEnd, u.golden);
+    const syLv = synergyLevel(tribeCounts(s.board).sylvan);
+    if (syLv) {
+      const trees = s.board.filter((u) => unitDef(u.defId).tribe === "sylvan");
+      const v = syLv === 6 ? 2 : 1;
+      const targets = syLv === 2 ? [trees[Math.floor(seatRng(st, s, seat)() * trees.length)]] : trees;
+      for (const u of targets) {
+        u.atk += v;
+        u.hp += v;
+      }
+    }
     if (synergyLevel(tribeCounts(s.board).elemental) >= 6) {
       for (const u of s.board) {
         if (unitDef(u.defId).tribe !== "elemental") continue;
@@ -587,6 +631,8 @@ function resolveShop(st: GameState): GameState {
     s.recentOpps = [...s.recentOpps, opp].slice(-2);
     s.inCombat = true;
     s.combatDone = false;
+    const plunder = byLevel(synergyLevel(classCounts(s.board).plunderer), 1, 2, 4);
+    s.bonusGold = plunder ? plunder + (result === "win" ? 1 : 0) : 0;
     if (result === "win") {
       s.winStreak++;
       s.lossStreak = 0;

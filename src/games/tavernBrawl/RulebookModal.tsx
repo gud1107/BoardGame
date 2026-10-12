@@ -1,7 +1,7 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { HEROES, KEYWORDS, TRIBES, TRIBE_ORDER } from "./units";
+import { CLASSES, CLASS_ORDER, HEROES, KEYWORDS, TRIBES, TRIBE_ORDER } from "./units";
 
 const H3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
 const LIST = "list-disc space-y-1.5 pl-4 text-white/70 light:text-slate-600";
@@ -48,6 +48,13 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         </section>
 
         <section>
+          <h3 className={H3}>종족 · 직업</h3>
+          <p className="break-keep text-white/70 light:text-slate-600">
+            모든 유닛은 <b>종족</b>(중립 제외) 하나와 <b>직업</b> 하나를 가져요. 보드 위 같은 종족·직업이 2·4·6명이면 각각 시너지가 켜져요. 종족은 10개 중 <b>한 판에 7개</b>만 상점에 나와요(화면 위 「이번 판」).
+          </p>
+        </section>
+
+        <section>
           <h3 className={H3}>종족 시너지 (보드 위 같은 종족 수)</h3>
           <ul className="space-y-1.5 text-white/70 light:text-slate-600">
             {TRIBE_ORDER.map((t) => (
@@ -56,6 +63,20 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
                   {TRIBES[t].emoji} {TRIBES[t].name}
                 </b>{" "}
                 — {TRIBES[t].levels.map(([n, text]) => `(${n}) ${text}`).join(" · ")}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section>
+          <h3 className={H3}>직업 시너지 (보드 위 같은 직업 수)</h3>
+          <ul className="space-y-1.5 text-white/70 light:text-slate-600">
+            {CLASS_ORDER.map((k) => (
+              <li key={k}>
+                <b>
+                  {CLASSES[k].emoji} {CLASSES[k].name}
+                </b>{" "}
+                — {CLASSES[k].levels.map(([n, text]) => `(${n}) ${text}`).join(" · ")}
               </li>
             ))}
           </ul>

@@ -14,7 +14,8 @@ import {
 } from "./engine";
 import { chooseBotAction } from "./bot";
 import { playBotGame } from "./sim";
-import { unitDef, type HeroId } from "./units";
+import { TRIBE_ORDER, unitDef, type HeroId } from "./units";
+import { TRIBES_PER_GAME } from "./engine";
 
 let n = 0;
 const unit = (defId: string, patch: Partial<UnitInstance> = {}): UnitInstance => ({ ...baseInstance(defId, false, `u${n++}`), ...patch });
@@ -194,7 +195,8 @@ describe("rounds", () => {
   it("pool never goes negative and returns sold copies", () => {
     const st = pickHeroes(startGame(8, 61));
     for (const s of st.seats) for (const v of Object.values(effectivePool(st, s))) expect(v).toBeGreaterThanOrEqual(0);
-    expect(st.pool.b_dog).toBe(totalCopies("b_dog", 8));
+    const any = Object.keys(st.pool)[0];
+    expect(st.pool[any]).toBe(totalCopies(any, 8));
   });
 
   it.each([2, 3, 5, 8])("%i bots finish a game with consistent placements", (players) => {
@@ -226,5 +228,61 @@ describe("rounds", () => {
       state.seats.forEach((s, i) => (levels[i] === 10 ? (hi += s.place!) : (lo += s.place!)));
     }
     expect(hi).toBeLessThan(lo);
+  });
+});
+
+describe("tribes in play & classes", () => {
+  it("each game draws 7 distinct tribes and shops only offer those (or neutrals)", () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      let st = pickHeroes(startGame(8, seed));
+      expect(new Set(st.tribesInPlay).size).toBe(TRIBES_PER_GAME);
+      for (const t of st.tribesInPlay) expect(TRIBE_ORDER).toContain(t);
+      for (let r = 0; r < 4; r++) {
+        for (const seat of st.seats) {
+          for (const id of seat.shop) {
+            const t = id ? unitDef(id).tribe : null;
+            if (t) expect(st.tribesInPlay).toContain(t);
+          }
+        }
+        st = applyAction(st, { type: "TIMEOUT", stage: st.stage });
+        st = applyAction(st, { type: "TIMEOUT", stage: st.stage });
+      }
+      expect(Object.keys(st.pool).every((id) => !unitDef(id).tribe || st.tribesInPlay.includes(unitDef(id).tribe!))).toBe(true);
+    }
+  });
+
+  it("assassins (2+) take no counter-damage when they attack", () => {
+    const r = simulateCombat(side([unit("u_crow", { uid: "a1" }), unit("u_crow", { uid: "a2" })]), side([unit("n_merc", { uid: "m", atk: 5, hp: 40 })]), 4, true);
+    for (let i = 1; i < r.frames.length; i++) {
+      const ev = r.frames[i].ev;
+      if (ev.t !== "attack" || !ev.from.startsWith("a")) continue;
+      const before = r.frames[i - 1].sides.flat().find((u) => u.uid === ev.from)!;
+      const after = r.frames[i].sides.flat().find((u) => u.uid === ev.from)!;
+      expect(after.hp).toBe(before.hp);
+    }
+  });
+
+  it("windfury attacks twice in a row", () => {
+    const r = simulateCombat(side([unit("s_octo", { uid: "w", hp: 50 })]), side([unit("n_merc", { atk: 1, hp: 60 })]), 9, true);
+    const attacks = r.frames.filter((f) => f.ev.t === "attack").map((f) => (f.ev.t === "attack" ? f.ev.from : ""));
+    const i = attacks.indexOf("w");
+    expect(attacks[i + 1]).toBe("w");
+  });
+
+  it("rangers (2+) open with a volley", () => {
+    const r = simulateCombat(side([unit("sy_elf"), unit("n_sniper")]), side([unit("n_merc", { hp: 60 })]), 2, true);
+    expect(r.frames.some((f) => f.ev.t === "soc" && f.ev.label.includes("선제 사격"))).toBe(true);
+  });
+
+  it("demon synergy costs 1 HP at each shop start", () => {
+    let st = pickHeroes(startGame(2, 81));
+    const s = structuredClone(st);
+    s.seats[0].board = [unit("dm_imp"), unit("dm_boar")];
+    s.seats[0].hp = 20;
+    st = applyAction(s, { type: "TIMEOUT", stage: s.stage });
+    const lost = 20 - st.seats[0].hp;
+    st = applyAction(st, { type: "TIMEOUT", stage: st.stage });
+    expect(st.phase).toBe("shop");
+    expect(20 - st.seats[0].hp).toBe(lost + 1);
   });
 });

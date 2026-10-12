@@ -1,4 +1,4 @@
-import { simulateCombat, synergyLevel, tribeCounts, type CombatSide, type UnitInstance } from "./combat";
+import { classCounts, simulateCombat, synergyLevel, tribeCounts, type CombatSide, type UnitInstance } from "./combat";
 import {
   BOARD_MAX,
   BUY_COST,
@@ -66,6 +66,7 @@ export function unitValue(u: UnitInstance): number {
   if (u.kw.includes("poison")) v += 5;
   if (u.kw.includes("reborn")) v += d.atk * g * 0.6 + 1;
   if (u.kw.includes("cleave")) v += u.atk * 0.5;
+  if (u.kw.includes("windfury")) v += u.atk * 0.8;
   return v;
 }
 
@@ -99,6 +100,12 @@ function buyScore(state: GameState, seat: Seat, defId: string, p: Profile): numb
     if (c + 1 === 2 || c + 1 === 4 || c + 1 === 6) v += 4;
     if (mainTribe(all) === d.tribe) v += 2;
   }
+  if (p.synergy && d.cls) {
+    const cc = classCounts([...s.board, ...s.hand])[d.cls];
+    if (cc + 1 === 2 || cc + 1 === 4 || cc + 1 === 6) v += 3;
+  }
+  // 악마의 대가(체력)는 체력이 낮을 때 부담
+  if (d.tribe === "demon" && s.hp <= 10) v -= 4;
   return v;
 }
 
