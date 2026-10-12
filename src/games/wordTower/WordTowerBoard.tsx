@@ -7,10 +7,13 @@ import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { webglAvailable } from "./three/webgl";
 import {
   MAX_WORDS_PER_ROUND,
+  MODE_INFO,
   checkWord,
+  closedTopicOf,
   computeRankings,
   currentLeaders,
   currentTopic,
+  foundAnswers,
   pendingEntries,
   phaseDurationMs,
   roundRanking,
@@ -62,6 +65,7 @@ interface Props {
 }
 
 function statusChip(e: Entry, mine: boolean): string {
+  if (e.bonus) return "border-yellow-300/80 bg-yellow-400/20 text-yellow-100 light:bg-yellow-50 light:text-yellow-800";
   switch (e.status) {
     case "pending":
       return "border-violet-400/60 bg-violet-500/15 text-violet-100 light:bg-violet-50 light:text-violet-700 border-dashed";
@@ -137,7 +141,14 @@ function WordInput({ state, viewerSeat, onAction }: { state: GameState; viewerSe
       return;
     }
     onAction({ type: "SUBMIT", seat: viewerSeat, text });
-    setFeedback({ ok: true, text: check.inDict ? `✅ ${check.word} +${check.blocks}층` : `🟣 ${check.word} — 사전에 없어서 라운드 끝에 심사받아요` });
+    const closed = closedTopicOf(state.topics[state.roundIndex]) !== null;
+    setFeedback(
+      closed
+        ? check.inDict
+          ? { ok: true, text: `✅ 정답! ${check.word} +${check.blocks}층` }
+          : { ok: false, text: `❌ "${check.word}"은(는) 정답이 아니에요 −1층` }
+        : { ok: true, text: check.inDict ? `✅ ${check.word} +${check.blocks}층` : `🟣 ${check.word} — 사전에 없어서 라운드 끝에 심사받아요` },
+    );
     el.value = "";
     el.focus();
   }
@@ -159,7 +170,7 @@ function WordInput({ state, viewerSeat, onAction }: { state: GameState; viewerSe
           autoCorrect="off"
           spellCheck={false}
           maxLength={20}
-          placeholder={`${currentTopic(state).emoji} ${currentTopic(state).name} 단어 입력 후 엔터`}
+          placeholder={closedTopicOf(state.topics[state.roundIndex]) ? `${currentTopic(state).emoji} ${currentTopic(state).name} 정답 입력 후 엔터` : `${currentTopic(state).emoji} ${currentTopic(state).name} 단어 입력 후 엔터`}
           onKeyDown={(e) => {
             if (e.key !== "Enter") return;
             e.preventDefault();
@@ -180,7 +191,7 @@ function WordInput({ state, viewerSeat, onAction }: { state: GameState; viewerSe
         </button>
       </form>
       <div className="flex min-h-5 items-center justify-between gap-2 text-xs">
-        <span className={`break-keep ${feedback?.ok === false ? "text-rose-300 light:text-rose-600" : "text-white/60 light:text-slate-500"}`}>{feedback?.text ?? "띄어쓰기는 무시돼요 · 사전에 없는 단어는 심사를 받아요"}</span>
+        <span className={`break-keep ${feedback?.ok === false ? "text-rose-300 light:text-rose-600" : "text-white/60 light:text-slate-500"}`}>{feedback?.text ?? (closedTopicOf(state.topics[state.roundIndex]) ? "정답 2층 · 오답 −1층 · 나만 찾으면 +1 · 전부 찾으면 +3" : "띄어쓰기는 무시돼요 · 사전에 없는 단어는 심사를 받아요")}</span>
         <span className="shrink-0 text-white/40 light:text-slate-400">
           {mineCount}/{MAX_WORDS_PER_ROUND}
         </span>
@@ -254,6 +265,59 @@ function ReviewPanel({ state, viewerSeat, names, voterSeats, onAction }: { state
   );
 }
 
+/* ── 정답 모으기 ──────────────────────────────────────────── */
+
+/** 쌓기 중: 정답 N개 중 내가 찾은 것(찾은 칸엔 단어, 못 찾은 칸은 ?). */
+function AnswerSlots({ state, viewerSeat }: { state: GameState; viewerSeat: Seat }) {
+  const closed = closedTopicOf(state.topics[state.roundIndex]);
+  if (!closed) return null;
+  const found = new Set(foundAnswers(state.entries, viewerSeat));
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-xs font-bold text-amber-200 light:text-amber-700">
+        🎯 정답 {closed.answers.length}개 중 {found.size}개
+      </span>
+      {closed.answers.map((a, i) => (
+        <span
+          key={a.word}
+          className={`min-w-8 rounded-lg border px-2 py-0.5 text-center text-xs font-bold ${found.has(a.word) ? "border-emerald-400/60 bg-emerald-500/20 text-emerald-100 light:bg-emerald-50 light:text-emerald-800" : "border-dashed border-white/20 text-white/30 light:border-slate-300 light:text-slate-400"}`}
+        >
+          {found.has(a.word) ? a.word : i + 1}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** 결과: 정답 전부 공개 + 누가 찾았는지(색 점), 아무도 못 찾은 정답은 흐리게. */
+function AnswerReveal({ state, viewerSeat, names, entries, topicId }: { state: GameState; viewerSeat: Seat; names: Record<Seat, string>; entries: readonly Entry[]; topicId: string }) {
+  const closed = closedTopicOf(topicId);
+  if (!closed) return null;
+  const finders = (word: string) => Array.from({ length: state.seatCount }, (_, seat) => seat).filter((seat) => foundAnswers(entries, seat).includes(word));
+  return (
+    <div className="flex flex-wrap justify-center gap-1.5">
+      {closed.answers.map((a) => {
+        const who = finders(a.word);
+        return (
+          <span
+            key={a.word}
+            title={who.map((s) => (s === viewerSeat ? "나" : names[s])).join(", ") || "아무도 못 찾음"}
+            className={`flex items-center gap-1 rounded-xl border px-2.5 py-1 text-sm font-bold ${who.length === 0 ? "border-dashed border-white/20 text-white/40 light:border-slate-300 light:text-slate-400" : who.length === 1 ? "border-yellow-300/70 bg-yellow-400/15 text-yellow-100 light:bg-yellow-50 light:text-yellow-800" : "border-white/15 bg-white/5 text-white light:border-slate-200 light:bg-slate-50 light:text-slate-800"}`}
+          >
+            {a.word}
+            <span className="flex gap-0.5">
+              {who.map((seat) => (
+                <span key={seat} className="h-2 w-2 rounded-full" style={{ background: SEAT_COLORS[seat % SEAT_COLORS.length] }} />
+              ))}
+            </span>
+          </span>
+        );
+      })}
+      <p className="w-full text-center text-[11px] text-white/45 light:text-slate-500">노란 칸 = 혼자 찾은 정답(+1층) · 점선 = 아무도 못 찾음</p>
+    </div>
+  );
+}
+
 /* ── 라운드 결과 ──────────────────────────────────────────── */
 
 function ResultPanel({ state, viewerSeat, names, isHost, onAction }: { state: GameState; viewerSeat: Seat; names: Record<Seat, string>; isHost: boolean; onAction: (a: EngineAction) => void }) {
@@ -265,6 +329,7 @@ function ResultPanel({ state, viewerSeat, names, isHost, onAction }: { state: Ga
       <p className="text-center text-lg font-black break-keep text-white light:text-slate-900">
         {winners.length === 0 ? "이번 라운드는 1등이 없어요" : `🏆 ${winners.map((s) => (s === viewerSeat ? "나" : names[s])).join(", ")} ${winners.length > 1 ? "공동 1등!" : "1등!"}`}
       </p>
+      <AnswerReveal state={state} viewerSeat={viewerSeat} names={names} entries={record.entries} topicId={record.topicId} />
       <ol className="flex flex-col gap-2">
         {ranking.map((r) => (
           <li key={r.seat} className={`rounded-xl border px-3 py-2 ${r.seat === viewerSeat ? "border-amber-400/50 bg-amber-400/10" : "border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-slate-50"}`}>
@@ -369,7 +434,8 @@ export default function WordTowerBoard({ state, viewerSeat, names, connectedSeat
               id: e.id,
               blocks: e.blocks,
               status: e.status,
-              label: isMe || showResult || (state.phase === "review" && e.status === "pending") ? e.word : null,
+              label: isMe || showResult || e.bonus || (state.phase === "review" && e.status === "pending") ? e.word : null,
+              bonus: e.bonus === true,
             })),
         };
       }),
@@ -407,6 +473,9 @@ export default function WordTowerBoard({ state, viewerSeat, names, connectedSeat
           {topic.emoji} {topic.name}
         </span>
         <span className="text-xs text-white/50 light:text-slate-500">{phaseLabel[state.phase]}</span>
+        <span className="rounded-full border border-white/15 px-2 py-0.5 text-[11px] text-white/60 light:border-slate-300 light:text-slate-500">
+          {MODE_INFO[state.options.mode].emoji} {MODE_INFO[state.options.mode].name}
+        </span>
         <span className="ml-auto flex items-center gap-1.5">
           <SuiteSoundHud suite={getWordTowerSound} icon="🏗️" label="Sky Builders" preview="approve" />
           {canWebgl && (
@@ -449,6 +518,7 @@ export default function WordTowerBoard({ state, viewerSeat, names, connectedSeat
       {state.phase === "build" && (
         <div className={`${PANEL} flex flex-col gap-2`}>
           <WordInput key={state.roundIndex} state={state} viewerSeat={viewerSeat} onAction={onAction} />
+          <AnswerSlots state={state} viewerSeat={viewerSeat} />
           <div className="flex flex-wrap gap-1">
             {state.entries
               .filter((e) => e.seat === viewerSeat)

@@ -184,6 +184,7 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["streak-3", "🔥", "연속 준공", "라운드 3연승", 3, k("bestStreak")],
     ["words-300", "📚", "걸어 다니는 사전", "누적 단어 300개", 300, k("words")],
     ["approved-20", "🗳️", "설득의 달인", "심사로 인정받은 단어 20개", 20, k("approvedWords")],
+    ["complete-5", "🎯", "정답 수집가", "정답 모으기에서 정답 전부 찾기 5번", 5, k("completedTopics")],
   ],
   "liar-game": [
     ["escape-5", "🎭", "완벽한 위장", "라이어로 지목을 5번 피함", 5, k("liarEscapes")],

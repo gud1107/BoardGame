@@ -14,12 +14,14 @@ import type { PlayableGameProps } from "@/games/types";
 import {
   BUILD_SECONDS_OPTIONS,
   DEFAULT_OPTIONS,
+  MODE_INFO,
   MAX_PLAYERS,
   MIN_PLAYERS,
   ROUND_OPTIONS,
   applyAction,
   botDelayMs,
   chooseBotWord,
+  closedTopicOf,
   computeRankings,
   phaseDurationMs,
   reviewComplete,
@@ -72,6 +74,8 @@ type Occupant = {
   playerId?: string;
   isHost?: boolean;
   targetPlayerCount?: number;
+  /** 방장이 고른 모드 — 대기실에서 손님도 볼 수 있게 presence에 싣는다. */
+  mode?: GameOptions["mode"];
 };
 
 type Phase = "choose" | "enter-name" | "connecting" | "waiting" | "playing" | "post-game" | "room-full" | "supabase-missing" | "channel-error";
@@ -384,7 +388,7 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
           seat,
           name: myName,
           playerId: myPlayerId,
-          ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current } : {}),
+          ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mode: optionsRef.current.mode } : {}),
         } satisfies Occupant);
         requestStateSync();
         setPhase((p) => (p === "connecting" ? "waiting" : p));
@@ -428,7 +432,7 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
       seat: next,
       name: myName,
       playerId: myPlayerId,
-      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current } : {}),
+      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mode: optionsRef.current.mode } : {}),
     } satisfies Occupant);
   }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost]);
 
@@ -675,14 +679,16 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
       self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }, (seat): Record<string, number> => {
         const mine = gameState.history.flatMap((h) => h.entries.filter((e) => e.seat === seat));
+        const closedRounds = gameState.history.filter((h) => closedTopicOf(h.topicId));
         return {
           roundWins: gameState.wins[seat] ?? 0,
           bestStreak: gameState.bestStreak[seat] ?? 0,
           maxHeight: Math.max(0, ...gameState.history.map((h) => h.heights[seat] ?? 0)),
           totalHeight: gameState.totals[seat] ?? 0,
-          words: mine.filter((e) => e.status === "ok" || e.status === "approved").length,
+          words: mine.filter((e) => !e.bonus && (e.status === "ok" || e.status === "approved")).length,
           approvedWords: mine.filter((e) => e.status === "approved").length,
           rejectedWords: mine.filter((e) => e.status === "rejected").length,
+          completedTopics: closedRounds.filter((h) => h.entries.some((e) => e.seat === seat && e.bonus && e.word.startsWith("🏁"))).length,
         };
       }),
       finishedAt: new Date().toISOString(),
@@ -837,6 +843,36 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
         )}
         {intent === "create" && (
           <>
+            <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
+              게임 버전
+              <div className="grid gap-2 sm:grid-cols-2">
+                {(["open", "closed"] as const).map((m) => {
+                  const info = MODE_INFO[m];
+                  const on = options.mode === m;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setOptions((o) => ({ ...o, mode: m, buildSeconds: m === "closed" ? 45 : 60 }))}
+                      aria-pressed={on}
+                      className={`flex flex-col gap-1 rounded-2xl border-2 p-3 text-left transition ${
+                        on
+                          ? m === "open"
+                            ? "border-sky-400/70 bg-sky-500/15 light:bg-sky-50"
+                            : "border-amber-400/70 bg-amber-500/15 light:bg-amber-50"
+                          : "border-white/10 hover:border-white/30 light:border-slate-200 light:hover:border-slate-400"
+                      }`}
+                    >
+                      <span className="text-base font-black text-white light:text-slate-900">
+                        {info.emoji} {info.name} {on && <span className="text-xs font-semibold text-sky-300 light:text-sky-700">✓ 선택됨</span>}
+                      </span>
+                      <span className="text-xs font-semibold text-white/70 light:text-slate-600">{info.short}</span>
+                      <span className="break-keep text-[11px] leading-snug text-white/50 light:text-slate-500">{info.desc}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <label className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
               인원 수 ({MIN_PLAYERS}~{MAX_PLAYERS}명)
               <div className="flex items-center gap-3">
@@ -887,6 +923,17 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
             <button onClick={() => navigator.clipboard?.writeText(shareUrl)} className="rounded-full border border-white/15 px-4 py-2 text-xs text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600">
               🔗 초대 링크 복사
             </button>
+            {(() => {
+              const roomMode = (isHost ? options.mode : host?.mode) ?? null;
+              return roomMode ? (
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 light:border-slate-200 light:bg-slate-50">
+                  <p className="text-lg font-black text-white light:text-slate-900">
+                    {MODE_INFO[roomMode].emoji} {MODE_INFO[roomMode].name}
+                  </p>
+                  <p className="text-xs text-white/60 light:text-slate-500">{MODE_INFO[roomMode].short}</p>
+                </div>
+              ) : null;
+            })()}
             {isHost && (
               <p className="break-keep text-xs text-white/40 light:text-slate-400">
                 {options.rounds}라운드 · 쌓기 {options.buildSeconds}초

@@ -20,6 +20,8 @@ export interface SlabView {
   id: number;
   /** null = 남의 단어(비공개) → 창문 무늬. */
   label: string | null;
+  /** 정답 모으기 보너스 층 — 금색. */
+  bonus?: boolean;
   blocks: number;
   status: EntryStatus;
 }
@@ -233,7 +235,7 @@ function Tower({ tower, x }: { tower: TowerView; x: number }) {
       )}
       <group ref={group}>
         {placed.map(({ slab, baseY }) => (
-          <Slab key={slab.id} slab={slab} color={tower.color} baseY={baseY} />
+          <Slab key={slab.id} slab={slab} color={slab.bonus ? "#eab308" : tower.color} baseY={baseY} />
         ))}
         <NameTag tower={tower} topY={top} />
         {tower.crowned && <Crown topY={top + 0.3} />}

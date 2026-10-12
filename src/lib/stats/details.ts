@@ -81,7 +81,8 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "최고 연승", value: (d) => n(d.bestStreak) },
     { label: "한 라운드 최고 층수", value: (d) => `${n(d.maxHeight)}층` },
     { label: "쌓은 단어 / 누적 층수", value: (d) => `${n(d.words)} / ${n(d.totalHeight)}층` },
-    { label: "심사 인정 / 거절", value: (d) => `${n(d.approvedWords)} / ${n(d.rejectedWords)}` },
+    { label: "심사 인정 / 거절·오답", value: (d) => `${n(d.approvedWords)} / ${n(d.rejectedWords)}` },
+    { label: "정답 전부 찾기 (🎯 정답 모으기)", value: (d) => n(d.completedTopics) },
   ],
   "liar-game": [
     { label: "라이어로 지목 피함 / 라이어 라운드", value: (d) => `${n(d.liarEscapes)} / ${n(d.liarRounds)}` },

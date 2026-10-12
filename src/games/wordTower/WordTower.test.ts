@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { seededRng } from "@/lib/rng";
 import {
+  CLOSED_BLOCKS,
+  COMPLETE_BONUS,
+  UNIQUE_BONUS,
   applyAction,
   blocksFor,
   checkWord,
@@ -16,6 +19,7 @@ import {
   type GameState,
 } from "./engine";
 import { TOPICS, topicDictionary, topicWordList } from "./words";
+import { CLOSED_TOPICS, closedAnswerFor } from "./closedTopics";
 
 const act = (s: GameState, a: EngineAction) => applyAction(s, a);
 const timeout = (s: GameState) => act(s, { type: "TIMEOUT", stage: s.stage });
@@ -206,5 +210,91 @@ describe("bots", () => {
       heights[10] += towerHeight(s.entries, 1);
     }
     expect(heights[10]).toBeGreaterThan(heights[1] * 2);
+  });
+});
+
+describe("🎯 정답 모으기 mode", () => {
+  function closedBuilding(seats = 3, seed = 11): GameState {
+    return timeout(startGame(seats, seed, { rounds: 3, buildSeconds: 45, mode: "closed" }));
+  }
+  const topicOf = (s: GameState) => CLOSED_TOPICS.find((t) => t.id === s.topics[s.roundIndex])!;
+
+  it("closed topics have 4~10 Hangul answers and no clashing aliases", () => {
+    expect(CLOSED_TOPICS.length).toBeGreaterThanOrEqual(20);
+    for (const t of CLOSED_TOPICS) {
+      expect(t.answers.length, t.id).toBeGreaterThanOrEqual(4);
+      expect(t.answers.length, t.id).toBeLessThanOrEqual(10);
+      const seen = new Map<string, string>();
+      for (const ans of t.answers) {
+        for (const w of [ans.word, ...(ans.aliases ?? [])]) {
+          expect(w, `${t.id}:${w}`).toMatch(/^[가-힣]{1,8}$/);
+          expect(seen.has(w), `${t.id}: ${w} used twice`).toBe(false);
+          seen.set(w, ans.word);
+          expect(closedAnswerFor(t.id, w)).toBe(ans.word);
+        }
+      }
+    }
+  });
+
+  it("draws only closed topics", () => {
+    const s = startGame(2, 5, { rounds: 7, mode: "closed" });
+    expect(s.topics.every((id) => CLOSED_TOPICS.some((t) => t.id === id))).toBe(true);
+    expect(startGame(2, 5).options.mode).toBe("open");
+  });
+
+  it("aliases count as the same answer; wrong answers cost a floor without review", () => {
+    let s = closedBuilding();
+    const t = topicOf(s);
+    const withAlias = t.answers.find((x) => x.aliases?.length) ?? t.answers[0];
+    const alias = withAlias.aliases?.[0] ?? withAlias.word;
+    s = act(s, { type: "SUBMIT", seat: 0, text: alias });
+    expect(s.entries[0]).toMatchObject({ word: withAlias.word, status: "ok", blocks: CLOSED_BLOCKS });
+    expect(checkWord(s, 0, withAlias.word).ok).toBe(false); // 이미 찾은 정답
+    s = act(s, { type: "SUBMIT", seat: 0, text: "가나다" });
+    expect(s.entries[1].status).toBe("rejected");
+    expect(towerHeight(s.entries, 0)).toBe(CLOSED_BLOCKS - 1);
+    s = timeout(s);
+    expect(s.phase).toBe("result"); // 심사 없음
+  });
+
+  it("unique and completion bonuses land as bonus floors", () => {
+    let s = closedBuilding(2);
+    const t = topicOf(s);
+    for (const ans of t.answers) s = act(s, { type: "SUBMIT", seat: 0, text: ans.word });
+    s = act(s, { type: "SUBMIT", seat: 1, text: t.answers[0].word });
+    s = timeout(s);
+    const n = t.answers.length;
+    const rec = s.history[0];
+    expect(rec.heights[0]).toBe(n * CLOSED_BLOCKS + (n - 1) * UNIQUE_BONUS + COMPLETE_BONUS);
+    expect(rec.heights[1]).toBe(CLOSED_BLOCKS);
+    expect(rec.accepted[0]).toBe(n); // 보너스 층은 단어 수에 안 셈
+    expect(rec.entries.filter((e) => e.bonus).length).toBe(2);
+    expect(rec.winners).toEqual([0]);
+  });
+
+  it("the same answer is allowed again in a later round (e.g. 도 in 계이름 and 윷놀이)", () => {
+    const yut = CLOSED_TOPICS.find((t) => t.id === "c-yut")!;
+    const sol = CLOSED_TOPICS.find((t) => t.id === "c-solfege")!;
+    expect(closedAnswerFor(yut.id, "도")).toBe("도");
+    expect(closedAnswerFor(sol.id, "도")).toBe("도");
+  });
+
+  it("bots only submit answers or plain wrong guesses, and Lv.10 finds more", () => {
+    const found: Record<number, number> = { 1: 0, 10: 0 };
+    for (let seed = 1; seed <= 30; seed++) {
+      let s = closedBuilding(2, seed);
+      const rng = seededRng(seed);
+      for (let i = 0; i < 14; i++) {
+        for (const [seat, level] of [[0, 1], [1, 10]] as const) {
+          const w = chooseBotWord(s, seat, level, rng);
+          if (!w) continue;
+          expect(checkWord(s, seat, w).ok).toBe(true);
+          s = act(s, { type: "SUBMIT", seat, text: w });
+        }
+      }
+      found[1] += s.entries.filter((e) => e.seat === 0 && e.status === "ok").length;
+      found[10] += s.entries.filter((e) => e.seat === 1 && e.status === "ok").length;
+    }
+    expect(found[10]).toBeGreaterThan(found[1]);
   });
 });

@@ -1,7 +1,8 @@
 import { seededRng, shuffle } from "@/lib/rng";
 import { filterProfanity } from "@/lib/chat/profanity";
 import type { BotLevel } from "@/games/shared/bot/botDifficulty";
-import { TOPICS, TOPIC_BY_ID, topicDictionary, topicWordList, type Topic } from "./words";
+import { TOPICS, TOPIC_BY_ID, topicDictionary, topicWordList } from "./words";
+import { CLOSED_BY_ID, CLOSED_TOPICS, closedAnswerFor, type ClosedTopic } from "./closedTopics";
 
 /**
  * 단어 마천루 엔진 (boardGameRule/단어마천루/단어마천루.md).
@@ -21,14 +22,38 @@ export const MAX_WORDS_PER_ROUND = 30;
 export const MAX_PENDING_PER_ROUND = 6;
 export const MAX_BLOCKS_PER_WORD = 4;
 export const ROUND_OPTIONS = [3, 5, 7] as const;
-export const BUILD_SECONDS_OPTIONS = [45, 60, 90] as const;
+export const BUILD_SECONDS_OPTIONS = [30, 45, 60, 90] as const;
+
+/** open = 🏗️ 자유 쌓기(주제 사전 + 심사), closed = 🎯 정답 모으기(정답 4~10개 고정, §15). */
+export type Mode = "open" | "closed";
+
+/** 🎯 정답 모으기 점수(§15): 정답 2층, 오답 −1층, 나만 찾은 정답 +1층, 전부 찾으면 +3층. */
+export const CLOSED_BLOCKS = 2;
+export const UNIQUE_BONUS = 1;
+export const COMPLETE_BONUS = 3;
+
+export const MODE_INFO: Record<Mode, { emoji: string; name: string; short: string; desc: string }> = {
+  open: {
+    emoji: "🏗️",
+    name: "자유 쌓기",
+    short: "주제에 맞는 단어를 아는 만큼 마구 쌓기",
+    desc: "과일·동물처럼 정답이 끝없는 주제. 단어 하나 = 글자 수만큼 층(최대 4층), 사전에 없는 단어는 다른 사람 투표로 심사.",
+  },
+  closed: {
+    emoji: "🎯",
+    name: "정답 모으기",
+    short: "정답이 4~10개뿐인 주제에서 전부 찾기",
+    desc: "계절(봄·여름·가을·겨울)처럼 정답이 정해진 주제. 정답 2층, 오답 −1층, 나만 찾은 정답 +1층, 전부 찾으면 +3층.",
+  },
+};
 
 export interface GameOptions {
   readonly rounds: number;
   readonly buildSeconds: number;
+  readonly mode: Mode;
 }
 
-export const DEFAULT_OPTIONS: GameOptions = { rounds: 5, buildSeconds: 60 };
+export const DEFAULT_OPTIONS: GameOptions = { rounds: 5, buildSeconds: 60, mode: "open" };
 
 /** 단계별 제한 시간(ms). 쌓기는 방장 설정, 끝난 판은 0(타이머 없음). */
 export function phaseDurationMs(state: Pick<GameState, "phase" | "options">): number {
@@ -46,7 +71,7 @@ export function phaseDurationMs(state: Pick<GameState, "phase" | "options">): nu
   }
 }
 
-/** ok = 사전 단어(확정), pending = 심사 대기, approved/rejected = 심사 결과. */
+/** ok = 사전 단어·정답(확정), pending = 심사 대기, approved/rejected = 심사 결과(정답 모으기에선 rejected = 오답). */
 export type EntryStatus = "ok" | "pending" | "approved" | "rejected";
 
 export interface Entry {
@@ -55,6 +80,8 @@ export interface Entry {
   readonly word: string;
   readonly blocks: number;
   readonly status: EntryStatus;
+  /** 정답 모으기 라운드 끝 보너스 층(나만 찾음·완성) — 단어가 아니다. */
+  readonly bonus?: true;
 }
 
 export interface RoundRecord {
@@ -110,10 +137,31 @@ export function blocksFor(word: string): number {
   return Math.min(MAX_BLOCKS_PER_WORD, word.length);
 }
 
-export function currentTopic(state: GameState): Topic {
-  return TOPIC_BY_ID.get(state.topics[state.roundIndex]) ?? TOPICS[0];
+export interface TopicInfo {
+  readonly id: string;
+  readonly name: string;
+  readonly emoji: string;
 }
 
+export function topicInfo(id: string): TopicInfo {
+  return CLOSED_BY_ID.get(id) ?? TOPIC_BY_ID.get(id) ?? TOPICS[0];
+}
+
+export function currentTopic(state: GameState): TopicInfo {
+  return topicInfo(state.topics[state.roundIndex]);
+}
+
+/** 정답 모으기 주제(자유 쌓기면 null). */
+export function closedTopicOf(topicId: string): ClosedTopic | null {
+  return CLOSED_BY_ID.get(topicId) ?? null;
+}
+
+/** 이 좌석이 이번 라운드에 찾은 정답(대표 표기). */
+export function foundAnswers(entries: readonly Entry[], seat: Seat): string[] {
+  return entries.filter((e) => e.seat === seat && e.status === "ok" && !e.bonus).map((e) => e.word);
+}
+
+/** inDict: 자유 쌓기 = 사전 단어, 정답 모으기 = 정답. 정답 모으기에서 word는 정답의 대표 표기. */
 export type WordCheck = { ok: true; word: string; inDict: boolean; blocks: number } | { ok: false; reason: string };
 
 export function checkWord(state: GameState, seat: Seat, text: string): WordCheck {
@@ -123,10 +171,18 @@ export function checkWord(state: GameState, seat: Seat, text: string): WordCheck
   if (!word) return { ok: false, reason: "단어를 입력하세요" };
   if (!/^[가-힣]+$/.test(word)) return { ok: false, reason: "한글 단어만 쓸 수 있어요 (자음·모음만 쓰거나 영어·숫자는 안 돼요)" };
   if (word.length > MAX_WORD_LEN) return { ok: false, reason: `${MAX_WORD_LEN}글자까지만 쓸 수 있어요` };
-  if (state.used[seat]?.includes(word)) return { ok: false, reason: `"${word}"은(는) 이미 쓴 단어예요` };
   if (filterProfanity(word).flagged) return { ok: false, reason: "쓸 수 없는 단어예요" };
   const mine = state.entries.filter((e) => e.seat === seat);
   if (mine.length >= MAX_WORDS_PER_ROUND) return { ok: false, reason: `한 라운드에 ${MAX_WORDS_PER_ROUND}개까지 쌓을 수 있어요` };
+  const closed = closedTopicOf(state.topics[state.roundIndex]);
+  if (closed) {
+    // 정답 모으기: 라운드 안에서만 중복 검사(다른 주제에 같은 정답이 있을 수 있음, 예: 계이름·윷놀이의 "도").
+    const answer = closedAnswerFor(closed.id, word);
+    if (answer && mine.some((e) => e.word === answer)) return { ok: false, reason: `"${answer}"은(는) 이미 찾은 정답이에요` };
+    if (!answer && mine.some((e) => e.word === word)) return { ok: false, reason: `"${word}"은(는) 이미 틀린 답이에요` };
+    return answer ? { ok: true, word: answer, inDict: true, blocks: CLOSED_BLOCKS } : { ok: true, word, inDict: false, blocks: 0 };
+  }
+  if (state.used[seat]?.includes(word)) return { ok: false, reason: `"${word}"은(는) 이미 쓴 단어예요` };
   const inDict = topicDictionary(state.topics[state.roundIndex]).has(word);
   if (!inDict && mine.filter((e) => e.status === "pending").length >= MAX_PENDING_PER_ROUND) {
     return { ok: false, reason: `사전에 없는 단어는 라운드당 ${MAX_PENDING_PER_ROUND}개까지만 심사받을 수 있어요` };
@@ -161,7 +217,7 @@ function roundLines(entries: readonly Entry[], seatCount: number, withPending: b
     seat,
     height: towerHeight(entries, seat, withPending),
     rejected: entries.filter((e) => e.seat === seat && e.status === "rejected").length,
-    accepted: entries.filter((e) => e.seat === seat && (e.status === "ok" || e.status === "approved" || (withPending && e.status === "pending"))).length,
+    accepted: entries.filter((e) => e.seat === seat && !e.bonus && (e.status === "ok" || e.status === "approved" || (withPending && e.status === "pending"))).length,
   }));
 }
 
@@ -231,13 +287,15 @@ export function voteTally(state: GameState, id: number): { yes: number; no: numb
 function clampOptions(options: Partial<GameOptions> | undefined): GameOptions {
   const rounds = Math.max(1, Math.min(TOPICS.length, Math.round(options?.rounds ?? DEFAULT_OPTIONS.rounds)));
   const buildSeconds = Math.max(15, Math.min(180, Math.round(options?.buildSeconds ?? DEFAULT_OPTIONS.buildSeconds)));
-  return { rounds, buildSeconds };
+  const mode: Mode = options?.mode === "closed" ? "closed" : "open";
+  return { rounds: mode === "closed" ? Math.min(rounds, CLOSED_TOPICS.length) : rounds, buildSeconds, mode };
 }
 
 export function startGame(seatCount: number, seed: number, options?: Partial<GameOptions>): GameState {
   const opts = clampOptions(options);
+  const pool = opts.mode === "closed" ? CLOSED_TOPICS : TOPICS;
   const topics = shuffle(
-    TOPICS.map((t) => t.id),
+    pool.map((t) => t.id),
     seededRng(seed),
   ).slice(0, opts.rounds);
   const zeros = Array.from({ length: seatCount }, () => 0);
@@ -261,7 +319,24 @@ export function startGame(seatCount: number, seed: number, options?: Partial<Gam
   };
 }
 
-function finishRound(state: GameState): GameState {
+/** 정답 모으기 라운드 끝 보너스 층 — 나만 찾은 정답 +1씩, 전부 찾으면 +3 (§15). */
+function closedBonuses(state: GameState): Entry[] {
+  const closed = closedTopicOf(state.topics[state.roundIndex]);
+  if (!closed) return [];
+  const found = Array.from({ length: state.seatCount }, (_, seat) => foundAnswers(state.entries, seat));
+  const out: Entry[] = [];
+  let id = state.nextId;
+  for (let seat = 0; seat < state.seatCount; seat++) {
+    const unique = found[seat].filter((w) => found.every((other, o) => o === seat || !other.includes(w))).length;
+    if (unique > 0 && state.seatCount > 1) out.push({ id: id++, seat, word: `⭐ 나만 찾음 ×${unique}`, blocks: unique * UNIQUE_BONUS, status: "ok", bonus: true });
+    if (found[seat].length >= closed.answers.length) out.push({ id: id++, seat, word: "🏁 전부 찾음", blocks: COMPLETE_BONUS, status: "ok", bonus: true });
+  }
+  return out;
+}
+
+function finishRound(prev: GameState): GameState {
+  const bonus = closedBonuses(prev);
+  const state = bonus.length > 0 ? { ...prev, entries: [...prev.entries, ...bonus], nextId: prev.nextId + bonus.length } : prev;
   const lines = roundLines(state.entries, state.seatCount, false);
   const winners = leadersOf(lines);
   const streak = state.streak.map((s, seat) => (winners.includes(seat) ? s + 1 : 0));
@@ -311,7 +386,8 @@ export function applyAction(state: GameState, action: EngineAction): GameState {
     case "SUBMIT": {
       const check = checkWord(state, action.seat, action.text);
       if (!check.ok) return state;
-      const entry: Entry = { id: state.nextId, seat: action.seat, word: check.word, blocks: check.blocks, status: check.inDict ? "ok" : "pending" };
+      const closed = closedTopicOf(state.topics[state.roundIndex]) !== null;
+      const entry: Entry = { id: state.nextId, seat: action.seat, word: check.word, blocks: check.blocks, status: check.inDict ? "ok" : closed ? "rejected" : "pending" };
       return {
         ...state,
         entries: [...state.entries, entry],
@@ -384,8 +460,23 @@ export function chooseBotWord(state: GameState, seat: Seat, level: BotLevel, rng
   const mine = state.entries.filter((e) => e.seat === seat);
   if (mine.length >= MAX_WORDS_PER_ROUND) return null;
 
-  // 낮은 레벨은 가끔 다른 주제 단어를 잘못 낸다 → 보류 단어가 되어 사람의 심사를 받는다.
   const mistakeRate = (0.1 * (10 - l)) / 9;
+
+  const closed = closedTopicOf(topicId);
+  if (closed) {
+    // 정답 모으기: 아는 정답만, 낮은 레벨은 가끔 틀린 답(다른 주제의 정답)
+    const mineWords = new Set(mine.map((e) => e.word));
+    if (rng() < mistakeRate * 1.5) {
+      const other = CLOSED_TOPICS[Math.floor(rng() * CLOSED_TOPICS.length)];
+      const guess = other.answers[Math.floor(rng() * other.answers.length)].word;
+      if (!closedAnswerFor(topicId, guess) && !mineWords.has(guess)) return guess;
+    }
+    const knowClosed = 0.3 + (0.7 * (l - 1)) / 9;
+    const left = closed.answers.map((x) => x.word).filter((x) => !mineWords.has(x) && hash01(`${seat}:${topicId}:${x}`) < knowClosed);
+    return left.length > 0 ? left[Math.floor(rng() * left.length)] : null;
+  }
+
+  // 낮은 레벨은 가끔 다른 주제 단어를 잘못 낸다 → 보류 단어가 되어 사람의 심사를 받는다.
   const pendingCount = mine.filter((e) => e.status === "pending").length;
   if (pendingCount < 2 && rng() < mistakeRate) {
     const dict = topicDictionary(topicId);

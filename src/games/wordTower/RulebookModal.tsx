@@ -58,8 +58,18 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           </ul>
         </section>
 
+        <section className="rounded-xl border border-amber-300/20 bg-amber-400/5 p-3 light:border-amber-300 light:bg-amber-50">
+          <h3 className="mb-1.5 text-xs font-semibold tracking-wide text-amber-200/90 uppercase light:text-amber-800">🎯 정답 모으기 버전 (방 만들 때 선택)</h3>
+          <ul className="list-disc space-y-1.5 pl-4 text-xs text-white/70 light:text-slate-700">
+            <li>정답이 <b>4~10개로 정해진 주제</b> — 계절(봄·여름·가을·겨울), 요일, 태양계 행성, 무지개 색…</li>
+            <li>정답 <b>2층</b>, 오답 <b>−1층</b>(심사 없음). 다른 표기도 정답(월=월요일, 녹색=초록).</li>
+            <li>라운드 끝: <b>나만 찾은 정답 +1층씩</b>, <b>전부 찾으면 +3층</b> — 금색 블록으로 올라가요.</li>
+            <li>화면에 &quot;정답 N개 중 몇 개&quot;가 보여서 남은 개수를 알 수 있어요. 결과 때 정답 전부 공개.</li>
+          </ul>
+        </section>
+
         <section className="rounded-xl border border-sky-300/20 bg-sky-400/5 p-3 light:border-sky-300 light:bg-sky-50">
-          <h3 className="mb-1.5 text-xs font-semibold tracking-wide text-sky-200/90 uppercase light:text-sky-800">주제 {TOPICS.length}개 (라운드마다 겹치지 않게 무작위)</h3>
+          <h3 className="mb-1.5 text-xs font-semibold tracking-wide text-sky-200/90 uppercase light:text-sky-800">🏗️ 자유 쌓기 주제 {TOPICS.length}개 (라운드마다 겹치지 않게 무작위)</h3>
           <p className="break-keep text-xs leading-relaxed text-white/70 light:text-slate-700">{TOPICS.map((t) => `${t.emoji} ${t.name}`).join(" · ")}</p>
           <p className="mt-1.5 break-keep text-[11px] text-white/50 light:text-slate-500">🐾 동물은 새·바다 생물·곤충 단어도 인정해요.</p>
         </section>

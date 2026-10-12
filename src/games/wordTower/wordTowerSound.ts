@@ -73,6 +73,7 @@ export function wordTowerCues(viewer: number) {
           continue;
         }
         if (e.status === "pending") cues.push("pending");
+        else if (e.status === "rejected") cues.push("reject");
         else {
           const h = next.entries.filter((x) => x.seat === viewer && x.status === "ok").reduce((a, x) => a + x.blocks, 0);
           cues.push({ name: "place", arg: h });
