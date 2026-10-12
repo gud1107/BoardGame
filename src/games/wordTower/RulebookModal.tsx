@@ -67,6 +67,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
             <li>정답은 <b>선착순</b> — 먼저 낸 한 사람만 차지(<b>2층</b>). 이미 차지된 정답은 못 내요. 오답은 <b>−1층</b>(심사 없음).</li>
             <li>다른 표기도 정답(월=월요일, 녹색=초록). 정답이 모두 차지되면 시간이 남아도 라운드 끝.</li>
             <li>혼자 정답을 전부 차지하면 <b>🧹 싹쓸이 +3층</b>.</li>
+            <li><b>인원이 많을수록 정답이 많은 주제만</b> 나와요 — 2~3명 4개 이상 · 4명 5개 · 5명 6개 · 6명 7개 · 7~8명 8개 이상.</li>
             <li>주제가 뜰 때 <b>맞춰야 할 정답 수</b>가 나오고, 라운드가 끝나면 정답 전부와 <b>💡 짧은 설명</b>이 나와요.</li>
             <li className="text-white/50 light:text-slate-500">주제 {CLOSED_TOPICS.length}개: {CLOSED_TOPICS.map((t) => `${t.name}(${t.answers.length})`).join(" · ")}</li>
           </ul>

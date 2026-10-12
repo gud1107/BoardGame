@@ -304,6 +304,34 @@ export function voteTally(state: GameState, id: number): { yes: number; no: numb
 // 리듀서
 // ---------------------------------------------------------------------------
 
+/**
+ * 🎯 정답 모으기: 인원이 많을수록 정답이 많은 주제만 (§15). 정답이 적은 주제는 인원이 적을 때만 나온다.
+ * 2~3명 4개 이상 · 4명 5개 · 5명 6개 · 6명 7개 · 7~8명 8개 이상.
+ */
+export function minAnswersFor(seatCount: number): number {
+  return Math.max(4, Math.min(8, seatCount + 1));
+}
+
+/** 라운드 주제 고르기. 정답 모으기에서 조건을 만족하는 주제가 라운드 수보다 적으면 정답이 많은 순으로 채운다. */
+function pickTopics(opts: GameOptions, seatCount: number, rng: () => number): string[] {
+  const pool = shuffle(topicPool(opts), rng);
+  if (opts.mode !== "closed") return pool.slice(0, opts.rounds);
+  const size = (id: string) => CLOSED_BY_ID.get(id)?.answers.length ?? 0;
+  const min = minAnswersFor(seatCount);
+  const fit = pool.filter((id) => size(id) >= min);
+  if (fit.length >= opts.rounds) return fit.slice(0, opts.rounds);
+  // 부족하면 남은 주제 중 정답이 많은 것부터(같은 수끼리는 섞인 순서 그대로) 채우고, 라운드 순서는 다시 섞는다.
+  const rest = pool.filter((id) => size(id) < min).sort((a, b) => size(b) - size(a));
+  return shuffle([...fit, ...rest.slice(0, opts.rounds - fit.length)], rng);
+}
+
+/** 이 인원·옵션에서 정답 모으기 조건(최소 정답 수)을 만족하는 주제 수 — 방 만들기 안내용. */
+export function fittingTopicCount(options: Pick<GameOptions, "mode" | "categories">, seatCount: number): number {
+  if (options.mode !== "closed") return topicPool(options).length;
+  const min = minAnswersFor(seatCount);
+  return topicPool(options).filter((id) => (CLOSED_BY_ID.get(id)?.answers.length ?? 0) >= min).length;
+}
+
 function clampOptions(options: Partial<GameOptions> | undefined): GameOptions {
   const buildSeconds = Math.max(15, Math.min(180, Math.round(options?.buildSeconds ?? DEFAULT_OPTIONS.buildSeconds)));
   const mode: Mode = options?.mode === "closed" ? "closed" : "open";
@@ -317,7 +345,7 @@ function clampOptions(options: Partial<GameOptions> | undefined): GameOptions {
 
 export function startGame(seatCount: number, seed: number, options?: Partial<GameOptions>): GameState {
   const opts = clampOptions(options);
-  const topics = shuffle(topicPool(opts), seededRng(seed)).slice(0, opts.rounds);
+  const topics = pickTopics(opts, seatCount, seededRng(seed));
   const zeros = Array.from({ length: seatCount }, () => 0);
   return {
     seatCount,

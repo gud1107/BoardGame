@@ -29,13 +29,13 @@ export const CATEGORIES: readonly TopicCategory[] = [
     emoji: "🔭",
     topicIds: ["c-season", "c-rainbow", "c-planet", "c-moon", "c-earth", "c-compass", "c-8dir"],
   },
-  { id: "c-geo", mode: "closed", name: "지리", emoji: "🗺️", topicIds: ["c-ocean", "c-continent", "c-metro", "c-province", "c-rivers"] },
+  { id: "c-geo", mode: "closed", name: "지리", emoji: "🗺️", topicIds: ["c-ocean", "c-continent", "c-metro", "c-province", "c-rivers", "c-paldo", "c-bigcity"] },
   {
     id: "c-korea",
     mode: "closed",
     name: "한국 문화·역사",
     emoji: "🏯",
-    topicIds: ["c-palace", "c-samul", "c-trigram", "c-sagunja", "c-sasin", "c-gates", "c-holiday", "c-national", "c-pansori", "c-obang", "c-banknote", "c-yut"],
+    topicIds: ["c-palace", "c-samul", "c-trigram", "c-sagunja", "c-sasin", "c-gates", "c-holiday", "c-national", "c-pansori", "c-obang", "c-banknote", "c-yut", "c-joseon"],
   },
   {
     id: "c-school",
@@ -57,6 +57,8 @@ export const CATEGORIES: readonly TopicCategory[] = [
       "c-finger",
       "c-orchestra",
       "c-siblings",
+      "c-vowels",
+      "c-eng-num",
     ],
   },
   {
@@ -71,7 +73,7 @@ export const CATEGORIES: readonly TopicCategory[] = [
     mode: "closed",
     name: "놀이·스포츠·군대",
     emoji: "⚽",
-    topicIds: ["c-chess", "c-janggi", "c-suits", "c-soccer", "c-basketball", "c-olympic", "c-rank", "c-forces"],
+    topicIds: ["c-chess", "c-janggi", "c-suits", "c-soccer", "c-basketball", "c-olympic", "c-rank", "c-forces", "c-officer"],
   },
 ];
 

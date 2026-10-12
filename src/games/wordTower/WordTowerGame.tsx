@@ -26,6 +26,8 @@ import {
   phaseDurationMs,
   reviewComplete,
   topicPool,
+  minAnswersFor,
+  fittingTopicCount,
   startGame,
   winnerSeats,
   type EngineAction,
@@ -937,6 +939,12 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
                   <span className="text-[11px] text-white/45 light:text-slate-400">나올 수 있는 주제 {pool}개</span>
                 );
               })()}
+              {options.mode === "closed" && (
+                <span className="break-keep text-[11px] text-amber-200/80 light:text-amber-700">
+                  👥 {targetPlayerCount}명이면 정답이 <b>{minAnswersFor(targetPlayerCount)}개 이상</b>인 주제만 나와요 (해당 주제 {fittingTopicCount(options, targetPlayerCount)}개
+                  {fittingTopicCount(options, targetPlayerCount) < Math.min(options.rounds, topicPool(options).length) ? " — 모자라면 정답이 많은 주제부터 채워요" : ""})
+                </span>
+              )}
             </div>
             <OptionRow label="라운드 수 (라운드마다 다른 주제)" value={options.rounds} options={ROUND_OPTIONS.map((r) => ({ value: r as number, label: `${r}라운드` }))} onChange={(v) => setOpt("rounds", v)} />
             <OptionRow label="쌓기 시간" value={options.buildSeconds} options={BUILD_SECONDS_OPTIONS.map((sec) => ({ value: sec as number, label: `${sec}초` }))} onChange={(v) => setOpt("buildSeconds", v)} />

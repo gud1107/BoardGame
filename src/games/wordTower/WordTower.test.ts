@@ -359,3 +359,28 @@ describe("topic categories", () => {
     expect(u.topics.every((id) => allowed.includes(id))).toBe(true);
   });
 });
+
+describe("answer count scales with players (정답 모으기)", () => {
+  it("big tables only get topics with many answers when enough exist", async () => {
+    const { minAnswersFor } = await import("./engine");
+    const { CLOSED_BY_ID } = await import("./closedTopics");
+    expect([2, 3, 4, 5, 6, 7, 8].map(minAnswersFor)).toEqual([4, 4, 5, 6, 7, 8, 8]);
+    for (let seed = 1; seed <= 20; seed++) {
+      const s = startGame(8, seed, { mode: "closed", rounds: 7 });
+      expect(s.topics.every((id) => CLOSED_BY_ID.get(id)!.answers.length >= 8)).toBe(true);
+      expect(new Set(s.topics).size).toBe(7);
+    }
+    // 2명이면 정답 4개짜리도 나올 수 있다
+    const small = Array.from({ length: 30 }, (_, i) => startGame(2, i + 1, { mode: "closed", rounds: 7 })).flatMap((s) => s.topics);
+    expect(small.some((id) => CLOSED_BY_ID.get(id)!.answers.length === 4)).toBe(true);
+  });
+
+  it("falls back to the largest topics when the categories are too small", async () => {
+    const { CLOSED_BY_ID } = await import("./closedTopics");
+    const s = startGame(8, 4, { mode: "closed", rounds: 5, categories: ["c-east"] });
+    expect(s.topics.length).toBe(5);
+    const sizes = s.topics.map((id) => CLOSED_BY_ID.get(id)!.answers.length).sort((a, b) => b - a);
+    expect(sizes[0]).toBe(10); // 십간
+    expect(sizes).toEqual([10, 5, 5, 4, 4]);
+  });
+});
