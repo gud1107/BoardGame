@@ -22,8 +22,49 @@ const SFX = {
   power: [fx.whoosh(300, 2400, 0.3, 0.12), ...fx.arp("bell", ["A5", "E6"], 0.08, 0.5, 0.6)],
   ready: [fx.click(1500, 0.12), ...fx.arp("pluck", ["D5", "A5"], 0.06, 0.25, 0.7)],
   attack: [fx.whoosh(900, 300, 0.12, 0.1), fx.thud(150, 0.2, 0.42, 0.08)],
-  shieldPop: [...fx.crack(0, 0.3), ...fx.arp("glock", ["B6", "G6"], 0.03, 0.2, 0.5)],
-  death: [fx.thud(90, 0.35, 0.5), fx.buzz(300, 90, 0.3, 0.08, 0.02)],
+  /** 예비 동작 끝 — 칼바람 */
+  swing: [fx.whoosh(2600, 500, 0.16, 0.16), fx.whoosh(1200, 300, 0.12, 0.08, 0.03)],
+  /** 충돌 — 피해(arg)가 클수록 낮고 무겁고 길게 */
+  impact: (dmg: number) => {
+    const d = Math.max(1, Math.min(15, dmg));
+    return [
+      fx.thud(110 - d * 3, 0.22 + d * 0.02, 0.5 + d * 0.025),
+      ...fx.crack(0, 0.25 + d * 0.025),
+      { wave: "noise", dur: 0.06, peak: 0.25, attack: 0.001, filter: { type: "highpass", freq: 2500 } },
+      ...(d >= 6 ? [{ inst: "taiko", note: "C2", gain: 0.9 }] : []),
+    ];
+  },
+  /** 일격에 쓰러뜨림 — 충돌 + 금속성 울림 + 저음 붐 */
+  impactHeavy: (dmg: number) => {
+    const d = Math.max(1, Math.min(15, dmg));
+    return [
+      fx.thud(70, 0.45, 0.7),
+      ...fx.crack(0, 0.45 + d * 0.02),
+      { inst: "taiko", note: "C2", gain: 1 },
+      { inst: "timpani", note: "D2", at: 0.02, dur: 0.6 },
+      { wave: "square", freq: 1800, to: 900, glide: 0.25, dur: 0.3, peak: 0.06, attack: 0.001 },
+      { wave: "noise", dur: 0.08, peak: 0.3, attack: 0.001, filter: { type: "highpass", freq: 3000 } },
+    ];
+  },
+  /** 전투 시작 — 칼 맞부딪힘 */
+  clash: [
+    fx.whoosh(3000, 800, 0.15, 0.12),
+    { wave: "square", freq: 2400, to: 1900, glide: 0.4, dur: 0.45, peak: 0.05, attack: 0.001, at: 0.12 },
+    { wave: "sine", freq: 3300, dur: 0.5, peak: 0.08, attack: 0.001, at: 0.12 },
+    ...fx.crack(0.12, 0.3),
+    { inst: "taiko", note: "C2", at: 0.12 },
+  ],
+  shieldPop: [
+    { wave: "noise", dur: 0.25, peak: 0.3, attack: 0.001, filter: { type: "highpass", freq: 4000, to: 9000 } },
+    ...fx.arp("glock", ["E7", "B6", "G6", "E6"], 0.025, 0.35, 0.7),
+    ...fx.arp("bell", ["B6", "E7"], 0.03, 0.5, 0.4),
+  ],
+  death: [
+    fx.thud(60, 0.5, 0.65),
+    ...fx.crack(0, 0.5),
+    { wave: "noise", dur: 0.5, peak: 0.25, attack: 0.002, filter: { type: "bandpass", freq: 1800, to: 200, q: 0.8 } },
+    fx.buzz(260, 60, 0.4, 0.09, 0.05),
+  ],
   summon: [fx.pop(300, 900, 0.2), fx.pop(500, 1200, 0.14, 0.06)],
   soc: [fx.whoosh(400, 2000, 0.25, 0.1), { inst: "bell", note: "D6", at: 0.1, dur: 0.6, gain: 0.5 }],
   win: [
