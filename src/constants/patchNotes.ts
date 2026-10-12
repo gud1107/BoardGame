@@ -64,6 +64,8 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     changes: [
       { game: "tavern-brawl", type: "FEAT", desc: "신규 게임 🍺 여관 난투 — 하스스톤 전장·롤토체스 같은 2~8인 오토배틀러, 동시 상점 + 자동 전투, AI 봇과 혼자서도 바로" },
       { game: "tavern-brawl", type: "FEAT", desc: "유닛 42종·영웅 8명·종족 시너지 6개, 3장 합성 황금 유닛과 발견, 여관 등급업, 유령 대전, 전투 재생·관전" },
+      { game: "tavern-brawl", type: "FEAT", desc: "🧊 3D 여관 탁자 — 유닛이 탁자 위 말로 서고 3D로 싸워요, 2D 화면 전환 버튼" },
+      { game: "tavern-brawl", type: "IMPROVE", desc: "타격감 강화 — 도약 공격, 히트스톱, 번쩍임·넉백, 파편·충격파, 큰 피해 숫자, 화면 흔들림, 묵직한 효과음·진동" },
       { game: "liar-game", type: "FEAT", desc: "🎭 아는 라이어 / 🤪 모르는 라이어 두 버전을 방 만들기 첫 화면에서 골라요 — 대기실·게임 화면에도 버전 표시" },
       { game: "liar-game", type: "IMPROVE", desc: "설명은 모두 동시에 몰래 쓰고 전원이 내면 한꺼번에 공개 — 남의 설명을 보고 따라 쓸 수 없어요" },
       { game: "liar-game", type: "IMPROVE", desc: "AI가 사람 말을 알아들어요 — 단어별 연상어 사전과 확률 추리로 Lv.10 라이어 적중 22%→81%, 정답 추리 35%→89%" },

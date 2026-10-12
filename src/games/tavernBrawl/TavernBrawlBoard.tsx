@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { synergyLevel, tribeCounts, type UnitInstance } from "./combat";
 import {
@@ -22,6 +23,30 @@ import UnitCard, { UnitDetail, type CardUnit } from "./UnitCard";
 import CombatReplay, { COMBAT_CSS, sideOfSeat } from "./CombatReplay";
 import RulebookModal from "./RulebookModal";
 import { getTavernBrawlSound } from "./tavernBrawlBgm";
+import type { ArenaApi } from "./three/Arena3D";
+import { webglAvailable } from "./three/webgl";
+
+// three.js는 무거워서 3D 화면이 처음 필요할 때만 받는다
+const Loading3D = () => <div className="flex h-72 items-center justify-center rounded-2xl bg-stone-950 text-xs text-amber-200/60">🍺 3D 여관 준비 중…</div>;
+const Arena3D = dynamic(() => import("./three/Arena3D"), { ssr: false, loading: Loading3D });
+const Combat3D = dynamic(() => import("./three/Combat3D"), { ssr: false, loading: Loading3D });
+
+type View = "3d" | "2d";
+const VIEW_KEY = "tavern-brawl-view";
+
+function initialView(): View {
+  if (!webglAvailable()) return "2d";
+  try {
+    return window.localStorage.getItem(VIEW_KEY) === "2d" ? "2d" : "3d";
+  } catch {
+    return "3d";
+  }
+}
+
+function initialQuality(): "high" | "low" {
+  if (typeof window === "undefined") return "low";
+  return window.innerWidth >= 768 && (navigator.hardwareConcurrency ?? 4) >= 4 ? "high" : "low";
+}
 
 type Props = {
   state: GameState;
@@ -181,6 +206,18 @@ function Timer({ deadlineMs, nowMs }: { deadlineMs: number | null; nowMs: number
 export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSeats, deadlineMs, nowMs, onAction, onGameEnd }: Props) {
   const me = state.seats[viewerSeat];
   const [rules, setRules] = useState(false);
+  const [view, setView] = useState<View>(initialView);
+  const [quality] = useState(initialQuality);
+  const [canWebgl] = useState(webglAvailable);
+  const toggleView = () => {
+    const next: View = view === "3d" ? "2d" : "3d";
+    setView(next);
+    try {
+      window.localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      // 저장 못 해도 이번 화면만 바뀌면 된다
+    }
+  };
   const [inspect, setInspect] = useState<Seat | null>(null);
   useSuiteBgm(getTavernBrawlSound, state.phase !== "ended", state.phase === "combat" ? 1 : 0);
 
@@ -210,6 +247,11 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
       </span>
       <span className="ml-auto flex items-center gap-2">
         <Timer deadlineMs={deadlineMs} nowMs={nowMs} />
+        {canWebgl && (
+          <button onClick={toggleView} className="rounded-full border border-white/15 px-2.5 py-1 text-xs text-white/70 light:border-amber-300 light:text-amber-800" title="3D 탁자 / 2D 카드 화면 전환">
+            {view === "3d" ? "🖼️ 2D로" : "🧊 3D로"}
+          </button>
+        )}
         <button onClick={() => setRules(true)} className="rounded-full border border-white/15 px-2.5 py-1 text-xs text-white/70 light:border-amber-300 light:text-amber-800">
           📖 룰북
         </button>
@@ -219,9 +261,9 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
 
   let body: React.ReactNode;
   if (state.phase === "heroPick") body = <HeroPick state={state} viewerSeat={viewerSeat} names={names} onAction={onAction} />;
-  else if (state.phase === "shop" && me.alive) body = <ShopView state={state} viewerSeat={viewerSeat} onAction={onAction} />;
+  else if (state.phase === "shop" && me.alive) body = <ShopView state={state} viewerSeat={viewerSeat} onAction={onAction} view={view} quality={quality} />;
   else if (state.phase === "shop") body = <Spectator state={state} viewerSeat={viewerSeat} />;
-  else if (state.phase === "combat") body = <CombatView key={state.round} state={state} viewerSeat={viewerSeat} names={names} onAction={onAction} />;
+  else if (state.phase === "combat") body = <CombatView key={state.round} state={state} viewerSeat={viewerSeat} names={names} onAction={onAction} view={view} quality={quality} />;
   else body = <Standings state={state} viewerSeat={viewerSeat} names={names} onGameEnd={onGameEnd} />;
 
   return (
@@ -281,7 +323,20 @@ function HeroPick({ state, viewerSeat, names, onAction }: { state: GameState; vi
 
 /* ── 상점 ─────────────────────────────────────────────────── */
 
-function ShopView({ state, viewerSeat, onAction }: { state: GameState; viewerSeat: Seat; onAction: (a: EngineAction) => void }) {
+function ShopView({
+  state,
+  viewerSeat,
+  onAction,
+  view,
+  quality,
+}: {
+  state: GameState;
+  viewerSeat: Seat;
+  onAction: (a: EngineAction) => void;
+  view: View;
+  quality: "high" | "low";
+}) {
+  const arenaApi = useRef<ArenaApi | null>(null);
   const me = state.seats[viewerSeat];
   const round = state.round;
   const [sel, setSel] = useState<Selection>(null);
@@ -443,6 +498,31 @@ function ShopView({ state, viewerSeat, onAction }: { state: GameState; viewerSea
         <p className={LABEL}>
           ⚔️ 내 보드 {me.board.length}/{BOARD_MAX} · 왼쪽부터 공격해요
         </p>
+        {view === "3d" ? (
+          <div className="relative overflow-hidden rounded-xl">
+            <Arena3D
+              units={me.board.map((u) => ({ ...u, side: 0 as const }))}
+              mode="shop"
+              apiRef={arenaApi}
+              quality={quality}
+              className="h-64 w-full sm:h-72"
+              selected={selection?.kind === "board" ? selection.uid : null}
+              onPick={(uid) => {
+                if (targeting) return activatePower(uid);
+                setSel(selection?.kind === "board" && selection.uid === uid ? null : { kind: "board", uid });
+              }}
+              insert={
+                insertMode && (selection!.kind === "board" || me.board.length < BOARD_MAX)
+                  ? { onInsert: (i) => (selection!.kind === "hand" ? play(selection!.uid, i) : move(selection!.uid, i)) }
+                  : null
+              }
+            />
+            {me.board.length === 0 && !insertMode && (
+              <p className="pointer-events-none absolute inset-x-0 bottom-3 text-center text-xs text-amber-100/70">손패의 유닛을 골라 탁자에 세우세요.</p>
+            )}
+            {insertMode && <p className="pointer-events-none absolute inset-x-0 top-2 text-center text-xs font-semibold text-yellow-200">✨ 빛나는 자리를 눌러 세우세요</p>}
+          </div>
+        ) : (
         <div className="flex min-h-[6rem] flex-wrap items-center gap-x-3 gap-y-3 px-1 pt-2 sm:min-h-[7rem]">
           {me.board.map((u, i) => (
             <div key={u.uid} className="flex items-center gap-1.5" onDragOver={(e) => e.preventDefault()} onDrop={(e) => {
@@ -467,6 +547,7 @@ function ShopView({ state, viewerSeat, onAction }: { state: GameState; viewerSea
           )}
           {me.board.length === 0 && !insertMode && <span className="text-xs text-white/40 light:text-amber-800/50">손패의 유닛을 골라 보드에 내세요.</span>}
         </div>
+        )}
         <SynergyBar board={me.board} />
       </div>
 
@@ -583,7 +664,21 @@ function Spectator({ state, viewerSeat }: { state: GameState; viewerSeat: Seat }
 
 /* ── 전투 ─────────────────────────────────────────────────── */
 
-function CombatView({ state, viewerSeat, names, onAction }: { state: GameState; viewerSeat: Seat; names: Record<Seat, string>; onAction: (a: EngineAction) => void }) {
+function CombatView({
+  state,
+  viewerSeat,
+  names,
+  onAction,
+  view,
+  quality,
+}: {
+  state: GameState;
+  viewerSeat: Seat;
+  names: Record<Seat, string>;
+  onAction: (a: EngineAction) => void;
+  view: View;
+  quality: "high" | "low";
+}) {
   const me = state.seats[viewerSeat];
   const mine = combatFor(state, viewerSeat);
   const [watch, setWatch] = useState(() => (mine ? state.combats.indexOf(mine) : 0));
@@ -620,7 +715,11 @@ function CombatView({ state, viewerSeat, names, onAction }: { state: GameState; 
           ⏩ ×{speed}
         </button>
       </div>
-      <CombatReplay key={`${state.round}-${watch}`} combat={c} viewSide={viewSide} names={shownNames} speed={speed} sound={isMine} onFinished={isMine ? finishMine : undefined} />
+      {view === "3d" ? (
+        <Combat3D key={`${state.round}-${watch}`} combat={c} viewSide={viewSide} names={shownNames} speed={speed} sound={isMine} quality={quality} onFinished={isMine ? finishMine : undefined} />
+      ) : (
+        <CombatReplay key={`${state.round}-${watch}`} combat={c} viewSide={viewSide} names={shownNames} speed={speed} sound={isMine} onFinished={isMine ? finishMine : undefined} />
+      )}
       {state.eliminatedThisRound.length > 0 && (
         <p className="rounded-xl bg-rose-500/15 px-3 py-1.5 text-center text-xs text-rose-200 light:text-rose-700">
           💀 이번 라운드 탈락: {state.eliminatedThisRound.map((s) => `${names[s]}(${state.seats[s].place}위)`).join(", ")}

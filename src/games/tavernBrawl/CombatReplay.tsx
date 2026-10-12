@@ -19,9 +19,9 @@ import { getTavernBrawlSound } from "./tavernBrawlBgm";
  *   이후   제자리로 복귀. 죽음은 부풀었다가 회전하며 산산조각, 소환은 튀어 오르며 등장.
  */
 
-const STEP_MS: Record<Frame["ev"]["t"], number> = { start: 900, soc: 750, attack: 1050, deaths: 600, end: 1700 };
+export const STEP_MS: Record<Frame["ev"]["t"], number> = { start: 900, soc: 750, attack: 1050, deaths: 600, end: 1700 };
 /** 돌진이 대상에 닿는 시점(공격 프레임 길이 대비) */
-const IMPACT_AT = 0.42;
+export const IMPACT_AT = 0.42;
 
 export function replayDurationMs(c: CombatRecord): number {
   const frames = simulateCombat(c.sideA, c.sideB, c.seed, true).frames;
