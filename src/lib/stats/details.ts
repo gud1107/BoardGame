@@ -62,6 +62,13 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "방아쇠 없이 1위", value: (d) => n(d.flawlessWins) },
     { label: "해골 발동", value: (d) => n(d.skullTriggers) },
   ],
+  "tavern-brawl": [
+    { label: "1위 / 4위 안", value: (d) => `${n(d.firstPlaces)} / ${n(d.topFour)}` },
+    { label: "황금 유닛", value: (d) => n(d.triples) },
+    { label: "전투 승리", value: (d) => n(d.combatWins) },
+    { label: "여관 6등급 도달", value: (d) => n(d.tier6) },
+    { label: "준 피해 합계", value: (d) => n(d.damageDealt) },
+  ],
   "god-life-planner": [
     { label: "한 판 최고 점수", value: (d) => n(d.maxScore) },
     { label: "인생 목표 달성", value: (d) => n(d.goalsMet) },

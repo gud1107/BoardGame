@@ -60,8 +60,10 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.57.0",
     releaseDate: "2026-10-12",
-    title: "🎭 라이어를 찾아라 — 설명 동시 공개, 아는/모르는 라이어 버전, 더 똑똑해진 AI",
+    title: "🍺 신규 게임 여관 난투, 🎭 라이어를 찾아라 — 설명 동시 공개, 아는/모르는 라이어 버전, 더 똑똑해진 AI",
     changes: [
+      { game: "tavern-brawl", type: "FEAT", desc: "신규 게임 🍺 여관 난투 — 하스스톤 전장·롤토체스 같은 2~8인 오토배틀러, 동시 상점 + 자동 전투, AI 봇과 혼자서도 바로" },
+      { game: "tavern-brawl", type: "FEAT", desc: "유닛 42종·영웅 8명·종족 시너지 6개, 3장 합성 황금 유닛과 발견, 여관 등급업, 유령 대전, 전투 재생·관전" },
       { game: "liar-game", type: "FEAT", desc: "🎭 아는 라이어 / 🤪 모르는 라이어 두 버전을 방 만들기 첫 화면에서 골라요 — 대기실·게임 화면에도 버전 표시" },
       { game: "liar-game", type: "IMPROVE", desc: "설명은 모두 동시에 몰래 쓰고 전원이 내면 한꺼번에 공개 — 남의 설명을 보고 따라 쓸 수 없어요" },
       { game: "liar-game", type: "IMPROVE", desc: "AI가 사람 말을 알아들어요 — 단어별 연상어 사전과 확률 추리로 Lv.10 라이어 적중 22%→81%, 정답 추리 35%→89%" },

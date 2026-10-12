@@ -91,6 +91,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "tavern-brawl",
+    name: "여관 난투",
+    nameEn: "Tavern Brawl",
+    description:
+      "하스스톤 전장·롤토체스 같은 오토배틀러! 2~8명이 동시에 여관 상점에서 유닛을 사고 7칸 보드에 세우면, 전투는 자동으로 벌어져요. 같은 유닛 3장은 황금 유닛, 같은 종족 2·4·6명은 시너지. 여관 등급을 언제 올릴지, 어떤 순서로 세울지가 승부를 가르고, 마지막까지 살아남은 한 명이 챔피언. 영웅 8명·유닛 42종, AI 봇과 혼자서도 바로 플레이.",
+    players: { min: 2, max: 8 },
+    playTime: { minMinutes: 15, maxMinutes: 30 },
+    category: "strategy",
+    thumbnail: { emoji: "🍺", gradient: ["#f59e0b", "#1c1917"] },
+    tags: ["오토배틀러", "오토체스", "하스스톤 전장", "롤토체스", "덱빌딩", "동시 진행", "AI봇"],
+    genres: ["strategy"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "god-life-planner",
     name: "갓생 플래너",
     nameEn: "God-Life Planner",

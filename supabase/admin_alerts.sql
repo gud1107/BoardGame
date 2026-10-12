@@ -45,6 +45,7 @@ insert into game_names (game_id, name) values
   ('doodle-phone', '그림 전화기: 낙서 릴레이'),
   ('liar-game', '라이어를 찾아라'),
   ('god-life-planner', '갓생 플래너'),
+  ('tavern-brawl', '여관 난투'),
   ('catan', '카탄의 개척자들'),
   ('ticket-to-ride', '티켓 투 라이드'),
   ('dominion', '도미니언'),

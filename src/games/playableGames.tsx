@@ -47,6 +47,7 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   "mine-of-oblivion-2": dynamic(() => import("./mineOfOblivion2/MineOfOblivion2Game"), { ssr: false }),
   "liar-game": dynamic(() => import("./liarGame/LiarGameGame"), { ssr: false }),
   "god-life-planner": dynamic(() => import("./godLifePlanner/GodLifePlannerGame"), { ssr: false }),
+  "tavern-brawl": dynamic(() => import("./tavernBrawl/TavernBrawlGame"), { ssr: false }),
   "hill-of-truth": dynamic(() => import("./hillOfTruth/HillOfTruthGame"), { ssr: false }),
   "great-legacy": dynamic(() => import("./greatLegacy/GreatLegacyGame"), { ssr: false }),
   "memory-feast": dynamic(() => import("./memoryFeast/MemoryFeastGame"), { ssr: false }),

@@ -93,6 +93,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "오답 없는 퍼펙트", key: "perfectGames", flag: true },
     { label: "Lv.10 봇 상대 승리", key: "lv10BotWins", flag: true },
   ],
+  "tavern-brawl": [
+    { label: "황금 유닛", key: "triples", unit: "개" },
+    { label: "전투 승리", key: "combatWins", unit: "번" },
+    { label: "최고 여관 등급", key: "maxTier", unit: "등급" },
+    { label: "여관 6등급", key: "tier6", flag: true },
+  ],
   "god-life-planner": [
     { label: "최종 점수", key: "maxScore", unit: "점" },
     { label: "인생 목표 달성", key: "goalsMet", flag: true },
@@ -222,6 +228,11 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "tp-5p", label: "5인 최고 점수", num: "maxScore5p", format: "count", unit: "점" },
     { id: "tp-6p", label: "6인 최고 점수", num: "maxScore6p", format: "count", unit: "점" },
     { id: "tp-perfect", label: "무실수 레벨", num: "perfectLevels", format: "count", unit: "개" },
+  ],
+  "tavern-brawl": [
+    { id: "tb-wins", label: "1위 횟수", num: "firstPlaces", format: "count", unit: "번" },
+    { id: "tb-top4", label: "4위 안 비율", num: "topFour", den: "played", minDen: 10, format: "percent" },
+    { id: "tb-golden", label: "황금 유닛", num: "triples", format: "count", unit: "개" },
   ],
   "god-life-planner": [
     { id: "glp-score", label: "한 판 최고 점수", num: "maxScore", format: "count", unit: "점" },

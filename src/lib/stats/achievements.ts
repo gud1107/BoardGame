@@ -166,6 +166,12 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["untouched", "😎", "손대지 않은 리볼버", "방아쇠 없이 1위", 1, k("flawlessWins")],
     ["skull", "💀", "해골의 주인", "해골 발동 성공", 1, k("skullTriggers")],
   ],
+  "tavern-brawl": [
+    ["champion-1", "🍺", "여관의 챔피언", "1위 달성", 1, k("firstPlaces")],
+    ["top4-10", "🍻", "단골 손님", "4위 안에 10번", 10, k("topFour")],
+    ["golden-10", "✨", "황금 수집가", "황금 유닛 10개 만들기", 10, k("triples")],
+    ["tier6-3", "🏰", "최고급 여관", "여관 6등급 3번", 3, k("tier6")],
+  ],
   "god-life-planner": [
     ["score-150", "📅", "갓생 장인", "한 판 150점 이상", 150, k("maxScore")],
     ["goals-5", "🎯", "인생 설계자", "인생 목표 달성 5번", 5, k("goalsMet")],
