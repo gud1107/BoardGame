@@ -5,7 +5,8 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber"
 import * as THREE from "three";
 import type { Snap } from "../combat";
 import { unitDef } from "../units";
-import { cardTexture, popupTexture, statTexture, woodTexture } from "./textures";
+import { popupTexture, statTexture, woodTexture } from "./textures";
+import Figure, { type FigureAct } from "./figures";
 
 /**
  * 여관 난투 3D 탁자. 표시 전용: 보이는 건 화면에 넘겨준 유닛뿐이고, 모든 움직임은 시작 시각 기준
@@ -103,16 +104,16 @@ interface Shared {
 
 const TIER_BASE = ["#334155", "#64748b", "#10b981", "#0ea5e9", "#8b5cf6", "#f59e0b", "#f43f5e"];
 
-function Token({ u, sharedRef, selected, onPick, size }: { u: ArenaUnit; sharedRef: MutableRefObject<Shared>; selected: boolean; onPick?: (uid: string) => void; size: number }) {
+function Token({ u, sharedRef, selected, onPick, size, facing }: { u: ArenaUnit; sharedRef: MutableRefObject<Shared>; selected: boolean; onPick?: (uid: string) => void; size: number; facing: number }) {
   const group = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
-  const card = useRef<THREE.SpriteMaterial>(null);
+  const act = useRef<FigureAct>({ swing: 0, hit: 0 });
+  const flashRef = useRef<THREE.PointLight>(null);
   const bubble = useRef<THREE.Mesh>(null);
   const halo = useRef<THREE.Mesh>(null);
   const sel = useRef<THREE.Mesh>(null);
   const d = unitDef(u.defId);
   const m = u.golden ? 2 : 1;
-  const cardTex = useMemo(() => cardTexture(u.defId, u.golden), [u.defId, u.golden]);
   const atkTex = useMemo(() => statTexture(u.atk, "atk", u.atk > d.atk * m), [u.atk, d.atk, m]);
   const hpTex = useMemo(() => statTexture(u.hp, "hp", u.hp > d.hp * m), [u.hp, d.hp, m]);
 
@@ -131,9 +132,11 @@ function Token({ u, sharedRef, selected, onPick, size }: { u: ArenaUnit; sharedR
     if (target) cur.lerp(target, 0.14);
     g.position.copy(cur);
     b.position.set(0, 0, 0);
-    b.rotation.set(0, 0, 0);
+    b.rotation.set(0, facing, 0);
     b.scale.setScalar(1);
     let bright = 1;
+    let swing = 0;
+    let hit = 0;
     const a = shared.anim.get(u.uid);
     if (a?.atk) {
       const p = (t0 - a.atk.start) / a.atk.dur;
@@ -143,23 +146,29 @@ function Token({ u, sharedRef, selected, onPick, size }: { u: ArenaUnit; sharedR
         const v = to.clone().sub(cur).setY(0);
         const dir = v.clone().normalize();
         const { impact, hold } = a.atk;
+        b.rotation.y = Math.atan2(v.x, v.z);
         if (p < 0.25) {
+          swing = -easeOut(p / 0.25);
           const e = easeOut(p / 0.25);
           b.position.addScaledVector(dir, -0.35 * e).setY(0.25 * e);
           b.rotation.x = -0.25 * e * Math.sign(v.z || 1);
           b.scale.setScalar(1 + 0.18 * e);
         } else if (p < impact) {
           const q = easeIn((p - 0.25) / (impact - 0.25));
+          swing = -1 + 2 * q;
           b.position.copy(dir.clone().multiplyScalar(-0.35).lerp(v.clone().multiplyScalar(0.7), q));
           b.position.y = 0.25 + Math.sin(Math.PI * q) * 0.9 - 0.25 * q;
           b.rotation.x = 0.45 * Math.sign(v.z || 1) * q;
           b.scale.setScalar(1.18 + 0.1 * q);
         } else if (p < impact + hold) {
+          swing = 1;
           b.position.copy(v.clone().multiplyScalar(0.66));
           b.rotation.x = 0.35 * Math.sign(v.z || 1);
           b.scale.setScalar(1.22);
         } else {
           const r = easeOut((p - impact - hold) / (1 - impact - hold));
+          swing = 1 - r;
+          b.rotation.y = facing + (Math.atan2(v.x, v.z) - facing) * (1 - r);
           b.position.copy(v.clone().multiplyScalar(0.66 * (1 - r)));
           b.position.y = Math.sin(Math.PI * r) * 0.35;
           b.rotation.x = 0.35 * Math.sign(v.z || 1) * (1 - r);
@@ -173,6 +182,7 @@ function Token({ u, sharedRef, selected, onPick, size }: { u: ArenaUnit; sharedR
       else if (t >= 0) {
         const k = t < 0.06 ? t / 0.06 : Math.exp(-(t - 0.06) * 8) * Math.cos((t - 0.06) * 26);
         const amp = Math.min(0.55, 0.12 + a.knock.power * 0.035);
+        hit = Math.max(hit, Math.abs(k) * Math.min(1, 0.35 + a.knock.power / 8));
         b.position.addScaledVector(a.knock.dir, amp * k);
         b.rotation.z += 0.35 * k * (a.knock.dir.x >= 0 ? -1 : 1);
         b.rotation.x += -0.3 * k * Math.sign(a.knock.dir.z || 1);
@@ -215,7 +225,10 @@ function Token({ u, sharedRef, selected, onPick, size }: { u: ArenaUnit; sharedR
         }
       }
     }
-    if (card.current) card.current.color.setScalar(bright);
+    act.current.swing = swing;
+    act.current.hit = hit;
+    // 번쩍임: 맞은 순간 몸 안쪽에서 흰 빛이 터진다
+    if (flashRef.current) flashRef.current.intensity = (bright - 1) * 2.2;
     if (bubble.current) {
       const s = 1 + Math.sin(t0 / 260) * 0.04;
       bubble.current.scale.setScalar(s);
@@ -255,21 +268,22 @@ function Token({ u, sharedRef, selected, onPick, size }: { u: ArenaUnit; sharedR
             <cylinderGeometry args={[0.38, 0.38, 0.02, 32]} />
             <meshStandardMaterial color="#1c1917" roughness={0.9} />
           </mesh>
-          {/* 카드 */}
-          <sprite position={[0, 0.8, 0]} scale={[0.82, 1.025, 1]}>
-            <spriteMaterial ref={card} map={cardTex} toneMapped={false} />
-          </sprite>
-          <sprite position={[-0.42, 0.2, 0.34]} scale={[0.36, 0.36, 1]} renderOrder={2}>
+          {/* 캐릭터 */}
+          <group position={[0, 0.155, 0]} scale={1.2}>
+            <Figure defId={u.defId} uid={u.uid} golden={u.golden} actRef={act} />
+          </group>
+          <pointLight ref={flashRef} position={[0, 0.7, 0.4]} color="#ffffff" intensity={0} distance={1.8} decay={1.5} />
+          <sprite position={[-0.34, 0.16, 0.38]} scale={[0.28, 0.28, 1]} renderOrder={2}>
             <spriteMaterial map={atkTex} toneMapped={false} depthTest={false} />
           </sprite>
-          <sprite position={[0.42, 0.2, 0.34]} scale={[0.36, 0.36, 1]} renderOrder={2}>
+          <sprite position={[0.34, 0.16, 0.38]} scale={[0.28, 0.28, 1]} renderOrder={2}>
             <spriteMaterial map={hpTex} toneMapped={false} depthTest={false} />
           </sprite>
           {/* 키워드 */}
           {u.kw.includes("shield") && (
             <mesh ref={bubble} position={[0, 0.7, 0]}>
-              <sphereGeometry args={[0.66, 24, 16]} />
-              <meshStandardMaterial color="#fde68a" emissive="#facc15" emissiveIntensity={0.9} transparent opacity={0.28} depthWrite={false} />
+              <sphereGeometry args={[0.7, 24, 16]} />
+              <meshStandardMaterial color="#fde68a" emissive="#facc15" emissiveIntensity={0.9} transparent opacity={0.16} depthWrite={false} />
             </mesh>
           )}
           {u.kw.includes("taunt") && (
@@ -595,7 +609,7 @@ function Scene({ units, mode, apiRef, selected, onPick, insert, quality }: Arena
       <CameraRig mode={mode} compact={compact} sharedRef={sharedRef} />
       <Table mode={mode} />
       {units.map((u) => (
-        <Token key={u.uid} u={u} sharedRef={sharedRef} selected={selected === u.uid} onPick={onPick} size={compact ? 0.9 : 1} />
+        <Token key={u.uid} u={u} sharedRef={sharedRef} selected={selected === u.uid} onPick={onPick} size={compact ? 0.95 : 1.05} facing={0} />
       ))}
       {insert &&
         Array.from({ length: mine + 1 }, (_, k) => {

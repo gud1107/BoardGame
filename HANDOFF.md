@@ -51,6 +51,7 @@
 - **연동**: registry(strategy, 난이도 3, 페이지 max-w-6xl)·playableGames·룸 룰북 요약·통계(details/presentation/achievements: firstPlaces, topFour, triples, combatWins, tier6…)·admin_alerts 이름·패치노트 v1.57.0·proceduralSuites 테스트 29개.
 - **검증**: `TavernBrawl.test.ts` 23건(전투 결정론·도발·보호막/독·부활/메아리·광역, 구매/판매/거부, 3장 합성→황금→발견, 좌석 간 순서 무관, getValidMoves 전부 수락, 라운드 진행, 유령, 풀, 2/3/5/8인 완주, BATCH 재생, Lv.10>Lv.1). 전체 vitest 통과, `next build` 통과. rolldown+Tailwind 임시 하네스로 상점·전투 화면을 375/1280px 스크린샷 확인(모바일 카드 겹침 수정). **실제 Supabase 방에서 사람 여러 명이 해 보지는 않았다.**
 - **후속(같은 날) — 타격감 + 3D**: "타격감이 어설프다" → 2D 재생에 예비동작·돌진·히트스톱·번쩍/흔들림·파편·큰 숫자·화면 흔들림·충돌 SFX(피해 비례)·진동(b08c011). 이어서 "3D로" → `three/Arena3D.tsx`(R3F, drei 없음, 블러프 룰렛처럼 닫힌 식 애니메이션) + `three/Combat3D.tsx`(2D와 같은 `STEP_MS`/`IMPACT_AT` 타이밍으로 arena API 호출) + `three/textures.ts`(이모지 카드·숫자 보석·나뭇결 캔버스 텍스처). 상점 보드와 전투가 3D, 상점·손패는 2D 패널(TFT/전장식). 640px 미만은 한 편을 4+3 두 줄로 접음. 헤더 🧊/🖼️ 토글(localStorage `tavern-brawl-view`), WebGL 없으면 2D. three는 next/dynamic으로 3D 화면에서만 로드. 헤드리스 Chromium(swiftshader)으로 375/1280px 상점·전투 충돌 순간 스크린샷 확인.
+- **3D 캐릭터**: 카드 스탠디 대신 `three/figures.tsx` — 외부 모델 없이 기본 도형 조립(사람/짐승/로봇/원소/망령/새/용 7형태 + 유닛별 색·장비 `FIGURES` 표 48개). 기하·재질 모듈 캐시 공유. Token이 `FigureAct{swing,hit}`을 채우면 형태별로 무기 휘두르기·들이받기·날갯짓·움찔. 모두 카메라를 보고 서 있다가 공격 때만 대상 쪽으로 돈다(내 편이 등을 보이면 알아보기 어려웠음). 리그는 ref 콜백(`rig("armR")`) — React Compiler lint가 객체에 담긴 ref를 렌더 중 접근으로 오판해서.
 - **남은 것**: 아이템·2열 배치·시즌 풀(설계서 v2), 라이트 모드 세부 색 점검, 3D 성능 실기기 측정(저사양 폰 FPS — 블러프 룰렛의 자동 품질 같은 장치 아직 없음).
 
 ## 📅 신규 게임 갓생 플래너 (`god-life-planner`, 1~6인 자기계발 계획 게임) — 2026-10-11 (커밋/푸시, 배포는 웹훅 자동)
