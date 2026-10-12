@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { simulateCombat, type AbilityNote, type Frame, type Snap } from "./combat";
 import { attackStyle, type AttackKind } from "./attackStyle";
 import AbilityFeed, { type FeedItem } from "./AbilityFeed";
+import { EmoteBubble, type EmoteSlot } from "./emotes";
 import type { CombatRecord } from "./engine";
 import { HERO_BY_ID } from "./units";
 import UnitCard from "./UnitCard";
@@ -60,6 +61,7 @@ export default function CombatReplay({
   speed,
   sound,
   hp,
+  emotes,
   onFinished,
 }: {
   combat: CombatRecord;
@@ -70,6 +72,8 @@ export default function CombatReplay({
   sound: boolean;
   /** 전투 뒤 체력 [아래(나), 위(상대)] — 유령은 null */
   hp?: [number | null, number | null];
+  /** 감정표현 [아래, 위] */
+  emotes?: [EmoteSlot | undefined, EmoteSlot | undefined];
   onFinished?: () => void;
 }) {
   const frames = useMemo(() => simulateCombat(combat.sideA, combat.sideB, combat.seed, true).frames, [combat]);
@@ -523,6 +527,7 @@ export default function CombatReplay({
             <span className="text-base">{heroB ? HERO_BY_ID[heroB].emoji : "👻"}</span> {names[1]}
             {shownHp[1] !== null && <b className="text-rose-300">❤{shownHp[1]}</b>}
           </span>
+          <EmoteBubble slot={emotes?.[1]} className="ml-1" />
         </span>
         <span className="text-white/40 light:text-amber-800/60">
           {Math.min(idx + 1, frames.length)} / {frames.length}
@@ -553,6 +558,7 @@ export default function CombatReplay({
             <span className="text-base">{heroA ? HERO_BY_ID[heroA].emoji : "👻"}</span> {names[0]}
             {shownHp[0] !== null && <b className="text-rose-300">❤{shownHp[0]}</b>}
           </span>
+          <EmoteBubble slot={emotes?.[0]} className="ml-1" />
         </span>
       </div>
       {result && (
@@ -747,6 +753,14 @@ export const COMBAT_CSS = `
 .tb-reticle { animation: tb-reticle var(--dur, .45s) ease-out forwards; }
 @keyframes tb-aim { 0% { opacity:0; } 15% { opacity:1; } 85% { opacity:1; } 100% { opacity:0; } }
 .tb-aim { animation: tb-aim var(--dur) linear forwards; }
+@keyframes tb-emote { 0% { opacity:0; transform:translateY(6px) scale(.5); } 12% { opacity:1; transform:translateY(-2px) scale(1.15); } 20% { transform:none; } 85% { opacity:1; } 100% { opacity:0; transform:translateY(-6px); } }
+.tb-emote { animation: tb-emote 2.8s ease-out forwards; }
+@keyframes tb-goldpulse { 0% { transform:scale(1); box-shadow:0 0 0 rgba(250,204,21,0); } 30% { transform:scale(1.18); box-shadow:0 0 22px 6px rgba(250,204,21,.75); } 100% { transform:scale(1); box-shadow:0 0 0 rgba(250,204,21,0); } }
+.tb-goldpulse { animation: tb-goldpulse .6s ease-out; }
+@keyframes tb-upglow { 0%,100% { box-shadow:0 0 6px 1px rgba(250,204,21,.45); } 50% { box-shadow:0 0 18px 5px rgba(250,204,21,.9); } }
+.tb-upglow { animation: tb-upglow 1.4s ease-in-out infinite; }
+@keyframes tb-coinfloat { 0% { opacity:0; transform:translate(-50%,4px) scale(.7); } 20% { opacity:1; transform:translate(-50%,-6px) scale(1.15); } 100% { opacity:0; transform:translate(-50%,-30px) scale(1); } }
+.tb-coinfloat { animation: tb-coinfloat 1.1s ease-out forwards; }
 @keyframes tb-feed { 0% { opacity:0; transform:translateX(-24px) scale(.9); } 60% { opacity:1; transform:translateX(3px) scale(1.03); } 100% { transform:none; } }
 .tb-feed { animation: tb-feed .35s cubic-bezier(.2,.9,.3,1.2); }
 @keyframes tb-glow { 0%,100% { box-shadow:0 0 0 rgba(253,224,71,0); } 30% { box-shadow:0 0 22px 6px rgba(253,224,71,.85); } }

@@ -29,6 +29,7 @@ import {
 import { chooseBotAction } from "./bot";
 import { replayDurationMs } from "./CombatReplay";
 import TavernBrawlBoard from "./TavernBrawlBoard";
+import { EMOTES, isEmoteKind, type EmoteKind, type EmoteSlot } from "./emotes";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, FillEmptySeatsButton, RemoveBotButton } from "@/components/lobby/BotSeatControls";
@@ -174,6 +175,9 @@ export default function TavernBrawlGame({ onComplete }: PlayableGameProps) {
   const botSeatSet = useMemo(() => new Set(botSeats), [botSeats]);
 
   const [botTakeover, setBotTakeover] = useState<BotTakeoverState>(INITIAL_BOT_TAKEOVER_STATE);
+  /** 감정표현 — 게임 상태와 별개의 `emote` 브로드캐스트 */
+  const [emotes, setEmotes] = useState<Record<Seat, EmoteSlot>>({});
+  const lastEmoteRef = useRef(0);
   const botTakeoverRef = useRef<BotTakeoverState>(INITIAL_BOT_TAKEOVER_STATE);
   function applyBotTakeoverEvent(event: BotTakeoverEvent) {
     const next = reduceBotTakeover(botTakeoverRef.current, event);
@@ -264,6 +268,13 @@ export default function TavernBrawlGame({ onComplete }: PlayableGameProps) {
     channel.on("broadcast", { event: "game-action" }, ({ payload }) => {
       const action = payload?.action as EngineAction;
       setGameState((prev) => (prev ? applyAction(prev, action) : prev));
+    });
+
+    channel.on("broadcast", { event: "emote" }, ({ payload }) => {
+      const seat = payload?.seat;
+      const kind = payload?.kind;
+      if (typeof seat !== "number" || !isEmoteKind(kind)) return;
+      setEmotes((cur) => ({ ...cur, [seat]: { kind, at: Date.now() } }));
     });
 
     channel.on("broadcast", { event: "bot-roster" }, ({ payload }) => {
@@ -531,6 +542,17 @@ export default function TavernBrawlGame({ onComplete }: PlayableGameProps) {
     }
   }
 
+  const sendEmote = useCallback(
+    (kind: EmoteKind) => {
+      if (mySeat === null) return;
+      const t = Date.now();
+      if (t - lastEmoteRef.current < 1200) return; // 도배 방지
+      lastEmoteRef.current = t;
+      channelRef.current?.send({ type: "broadcast", event: "emote", payload: { seat: mySeat, kind } });
+    },
+    [mySeat],
+  );
+
   const handleAction = useCallback((action: EngineAction) => {
     channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
   }, []);
@@ -559,6 +581,38 @@ export default function TavernBrawlGame({ onComplete }: PlayableGameProps) {
     const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
     return chooseBotAction(state, actor, level);
   }, []);
+
+  // 봇 감정표현: 전투가 끝날 무렵 가끔 반응(방장만 보냄)
+  const botEmoteStageRef = useRef(-1);
+  useEffect(() => {
+    if (!isHost || phase !== "playing" || !gameState || gameState.phase !== "combat") return;
+    if (botEmoteStageRef.current === gameState.stage) return;
+    botEmoteStageRef.current = gameState.stage;
+    const timers: number[] = [];
+    for (const c of gameState.combats) {
+      for (const [seat, side] of [
+        [c.a, 0],
+        [c.b, 1],
+      ] as const) {
+        if (seat < 0 || !allBotSeatSet.has(seat)) continue;
+        const won = c.winner === side;
+        const lost = c.winner !== null && !won;
+        const roll = Math.random();
+        const kind: EmoteKind | null = won ? (roll < 0.25 ? "party" : roll < 0.4 ? "taunt" : roll < 0.5 ? "laugh" : null) : lost ? (roll < 0.2 ? "cry" : roll < 0.32 ? "angry" : roll < 0.4 ? "gg" : null) : roll < 0.2 ? "think" : null;
+        if (!kind) continue;
+        timers.push(
+          window.setTimeout(() => channelRef.current?.send({ type: "broadcast", event: "emote", payload: { seat, kind } }), 2500 + Math.random() * 4000),
+        );
+      }
+    }
+    if (gameState.round === 1) {
+      // 첫 전투 전 인사
+      for (const seat of allBotSeatSet) {
+        if (Math.random() < 0.35) timers.push(window.setTimeout(() => channelRef.current?.send({ type: "broadcast", event: "emote", payload: { seat, kind: EMOTES[0].kind } }), 500 + Math.random() * 1500));
+      }
+    }
+    return () => timers.forEach((t) => window.clearTimeout(t));
+  }, [isHost, phase, gameState, allBotSeatSet]);
 
   useBotAutoplay<GameState, EngineAction, Seat>({
     active: isHost && phase === "playing",
@@ -974,6 +1028,8 @@ export default function TavernBrawlGame({ onComplete }: PlayableGameProps) {
           nowMs={nowMs}
           onAction={handleAction}
           onGameEnd={handleGameEnd}
+          emotes={emotes}
+          onEmote={sendEmote}
         />
       </>,
     );

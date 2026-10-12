@@ -158,8 +158,8 @@ function Token({
   const tagTex = useMemo(() => {
     const tribe = d.tribe ? TRIBES[d.tribe] : null;
     const cls = d.cls ? CLASSES[d.cls] : null;
-    return tagTexture(`${tribe?.emoji ?? "⚪"}${cls?.emoji ?? ""}`, [tribe?.color ?? "#94a3b8", cls?.color ?? tribe?.color ?? "#94a3b8"]);
-  }, [d.tribe, d.cls]);
+    return tagTexture(`${tribe?.emoji ?? "⚪"}${cls?.emoji ?? ""}`, [tribe?.color ?? "#94a3b8", cls?.color ?? tribe?.color ?? "#94a3b8"], d.token ? 1 : d.tier, u.golden);
+  }, [d.tribe, d.cls, d.tier, d.token, u.golden]);
   const hpTex = useMemo(() => statTexture(Math.max(0, u.hp), "hp", u.hp > d.hp * m), [u.hp, d.hp, m]);
 
   useFrame(() => {
@@ -369,8 +369,8 @@ function Token({
             <Figure defId={u.defId} uid={u.uid} golden={u.golden} actRef={act} />
           </group>
           <pointLight ref={flashRef} position={[0, 0.7, 0.4]} color="#ffffff" intensity={0} distance={1.8} decay={1.5} />
-          {/* 종족·직업 꼬리표(전투·상점 모두) — 마우스를 올리면 전체 설명 */}
-          <sprite position={[0, 1.72, 0]} scale={[0.46, 0.23, 1]} renderOrder={3}>
+          {/* 등급 별 + 종족·직업 꼬리표(전투·상점 항상 표시) — 마우스를 올리면 전체 설명 */}
+          <sprite position={[0, 1.8, 0]} scale={[0.56, 0.39, 1]} renderOrder={3}>
             <spriteMaterial map={tagTex} toneMapped={false} depthTest={false} transparent />
           </sprite>
           <sprite position={[-0.34, 0.16, 0.38]} scale={[0.28, 0.28, 1]} renderOrder={2}>

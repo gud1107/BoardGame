@@ -200,17 +200,34 @@ export function woodTexture(): THREE.CanvasTexture {
 }
 
 const tagCache = new Map<string, THREE.CanvasTexture>();
-/** 3D 말 머리 위 종족·직업 아이콘 꼬리표 */
-export function tagTexture(icons: string, colors: [string, string]): THREE.CanvasTexture {
-  const key = `${icons}|${colors.join()}`;
+/** 3D 말 머리 위 꼬리표: 위줄 등급 별(★ × 등급, 황금은 금빛으로 빛남), 아래줄 종족·직업 아이콘 */
+export function tagTexture(icons: string, colors: [string, string], tier: number, golden: boolean): THREE.CanvasTexture {
+  const key = `${icons}|${colors.join()}|${tier}|${golden}`;
   const hit = tagCache.get(key);
   if (hit) return hit;
   const c = document.createElement("canvas");
-  c.width = 160;
-  c.height = 80;
+  c.width = 200;
+  c.height = 140;
   const g = c.getContext("2d")!;
-  roundRect(g, 4, 6, 152, 68, 32);
-  const grad = g.createLinearGradient(0, 0, 160, 0);
+  // 별 줄
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  const stars = "★".repeat(Math.max(1, tier));
+  g.font = `900 ${tier >= 5 ? 34 : 40}px sans-serif`;
+  g.lineJoin = "round";
+  g.lineWidth = 9;
+  g.strokeStyle = "#1c1917";
+  g.strokeText(stars, 100, 30);
+  if (golden) {
+    g.shadowColor = "#fde047";
+    g.shadowBlur = 18;
+  }
+  g.fillStyle = golden ? "#fef08a" : "#facc15";
+  g.fillText(stars, 100, 30);
+  g.shadowBlur = 0;
+  // 종족·직업 꼬리표
+  roundRect(g, 24, 62, 152, 70, 32);
+  const grad = g.createLinearGradient(0, 0, 200, 0);
   grad.addColorStop(0, colors[0]);
   grad.addColorStop(1, colors[1]);
   g.fillStyle = "rgba(12,10,9,0.82)";
@@ -218,10 +235,8 @@ export function tagTexture(icons: string, colors: [string, string]): THREE.Canva
   g.lineWidth = 5;
   g.strokeStyle = grad;
   g.stroke();
-  g.textAlign = "center";
-  g.textBaseline = "middle";
   g.font = `44px ${EMOJI_FONT}`;
-  g.fillText(icons, 80, 42);
+  g.fillText(icons, 100, 99);
   const t = finish(c);
   tagCache.set(key, t);
   return t;
@@ -257,5 +272,40 @@ export function plateTexture(name: string, hp: number | null, mine: boolean): TH
   }
   const t = finish(c);
   plateCache.set(key, t);
+  return t;
+}
+
+const bubbleCache = new Map<string, THREE.CanvasTexture>();
+/** 감정표현 말풍선 */
+export function bubbleTexture(emoji: string, text: string): THREE.CanvasTexture {
+  const key = `${emoji}|${text}`;
+  const hit = bubbleCache.get(key);
+  if (hit) return hit;
+  const c = document.createElement("canvas");
+  c.width = 320;
+  c.height = 150;
+  const g = c.getContext("2d")!;
+  roundRect(g, 6, 6, 308, 110, 40);
+  g.fillStyle = "#ffffff";
+  g.fill();
+  g.beginPath();
+  g.moveTo(140, 114);
+  g.lineTo(160, 144);
+  g.lineTo(180, 114);
+  g.closePath();
+  g.fill();
+  g.lineWidth = 6;
+  g.strokeStyle = "#1c1917";
+  roundRect(g, 6, 6, 308, 110, 40);
+  g.stroke();
+  g.textBaseline = "middle";
+  g.textAlign = "left";
+  g.font = `64px ${EMOJI_FONT}`;
+  g.fillText(emoji, 26, 64);
+  g.font = "900 46px 'Pretendard','Malgun Gothic',sans-serif";
+  g.fillStyle = "#1c1917";
+  g.fillText(text, 110, 64);
+  const t = finish(c);
+  bubbleCache.set(key, t);
   return t;
 }

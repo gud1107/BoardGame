@@ -18,12 +18,13 @@ import {
   type GameState,
   type Seat,
 } from "./engine";
-import { CLASSES, CLASS_ORDER, HERO_BY_ID, TRIBES, TRIBE_ORDER, unitDef } from "./units";
+import { CLASSES, CLASS_ORDER, HERO_BY_ID, SHOP_SLOTS, TRIBES, TRIBE_ORDER, UPGRADE_BASE, unitDef } from "./units";
 import UnitCard, { UnitDetail, type CardUnit } from "./UnitCard";
 import CombatReplay, { COMBAT_CSS, sideOfSeat } from "./CombatReplay";
 import RulebookModal from "./RulebookModal";
 import { AbilityText } from "./AbilityFeed";
 import { UnitTooltipHost, unitTip } from "./UnitTooltip";
+import { EmoteBubble, EmotePicker, type EmoteKind, type EmoteSlot } from "./emotes";
 import { getTavernBrawlSound } from "./tavernBrawlBgm";
 import type { ArenaApi } from "./three/Arena3D";
 import { webglAvailable } from "./three/webgl";
@@ -59,6 +60,9 @@ type Props = {
   nowMs: number;
   onAction: (action: EngineAction) => void;
   onGameEnd: () => void;
+  /** 좌석별 마지막 감정표현 */
+  emotes?: Record<Seat, EmoteSlot>;
+  onEmote?: (kind: EmoteKind) => void;
 };
 
 type Selection = { kind: "shop"; slot: number } | { kind: "hand"; uid: string } | { kind: "board"; uid: string } | null;
@@ -127,7 +131,21 @@ function SynergyBar({ board, compact }: { board: CardUnit[]; compact?: boolean }
   );
 }
 
-function PlayersPanel({ state, viewerSeat, names, connectedSeats, onInspect }: { state: GameState; viewerSeat: Seat; names: Record<Seat, string>; connectedSeats: Set<Seat>; onInspect: (seat: Seat) => void }) {
+function PlayersPanel({
+  state,
+  viewerSeat,
+  names,
+  connectedSeats,
+  onInspect,
+  emotes,
+}: {
+  state: GameState;
+  viewerSeat: Seat;
+  names: Record<Seat, string>;
+  connectedSeats: Set<Seat>;
+  onInspect: (seat: Seat) => void;
+  emotes: Record<Seat, EmoteSlot>;
+}) {
   const order = state.seats.map((s, i) => ({ s, i })).sort((a, b) => Number(b.s.alive) - Number(a.s.alive) || b.s.hp - a.s.hp || (a.s.place ?? 0) - (b.s.place ?? 0));
   const max = state.options.startHp;
   return (
@@ -147,6 +165,7 @@ function PlayersPanel({ state, viewerSeat, names, connectedSeats, onInspect }: {
             <span className="min-w-0 flex-1">
               <span className="flex items-center gap-1">
                 <span className="truncate font-semibold text-white/90 light:text-slate-800">{names[i] ?? `${i + 1}번`}</span>
+                <EmoteBubble slot={emotes[i]} className="!px-1.5 !text-[10px]" />
                 {!connectedSeats.has(i) && <span title="연결 끊김">📡</span>}
                 <span className="ml-auto shrink-0 text-white/50 light:text-slate-500">
                   🏠{s.tier} {s.lastResult === "win" ? "🟢" : s.lastResult === "loss" ? "🔴" : s.lastResult === "draw" ? "⚪" : ""}
@@ -203,7 +222,7 @@ function Timer({ deadlineMs, nowMs }: { deadlineMs: number | null; nowMs: number
   return <span className={`rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${left <= 5 ? "bg-rose-500 text-white" : "bg-black/40 text-amber-100 light:bg-white light:text-amber-900"}`}>⏱ {left}</span>;
 }
 
-export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSeats, deadlineMs, nowMs, onAction, onGameEnd }: Props) {
+export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSeats, deadlineMs, nowMs, onAction, onGameEnd, emotes = {}, onEmote }: Props) {
   const me = state.seats[viewerSeat];
   const [rules, setRules] = useState(false);
   const [view, setView] = useState<View>(initialView);
@@ -252,6 +271,7 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
       </span>
       <span className="ml-auto flex items-center gap-2">
         <Timer deadlineMs={deadlineMs} nowMs={nowMs} />
+        {onEmote && state.phase !== "ended" && <EmotePicker onEmote={onEmote} />}
         {canWebgl && (
           <button onClick={toggleView} className="rounded-full border border-white/15 px-2.5 py-1 text-xs text-white/70 light:border-amber-300 light:text-amber-800" title="3D 탁자 / 2D 카드 화면 전환">
             {view === "3d" ? "🖼️ 2D로" : "🧊 3D로"}
@@ -266,9 +286,9 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
 
   let body: React.ReactNode;
   if (state.phase === "heroPick") body = <HeroPick state={state} viewerSeat={viewerSeat} names={names} onAction={onAction} />;
-  else if (state.phase === "shop" && me.alive) body = <ShopView state={state} viewerSeat={viewerSeat} onAction={onAction} view={view} quality={quality} />;
+  else if (state.phase === "shop" && me.alive) body = <ShopView state={state} viewerSeat={viewerSeat} onAction={onAction} view={view} quality={quality} myEmote={emotes[viewerSeat]} />;
   else if (state.phase === "shop") body = <Spectator state={state} viewerSeat={viewerSeat} />;
-  else if (state.phase === "combat") body = <CombatView key={state.round} state={state} viewerSeat={viewerSeat} names={names} onAction={onAction} view={view} quality={quality} />;
+  else if (state.phase === "combat") body = <CombatView key={state.round} state={state} viewerSeat={viewerSeat} names={names} onAction={onAction} view={view} quality={quality} emotes={emotes} />;
   else body = <Standings state={state} viewerSeat={viewerSeat} names={names} onGameEnd={onGameEnd} />;
 
   return (
@@ -279,7 +299,7 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
       <div className="grid gap-3 lg:grid-cols-[1fr_17rem]">
         <div className="min-w-0">{body}</div>
         {state.phase !== "heroPick" && state.phase !== "ended" && (
-          <PlayersPanel state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} onInspect={setInspect} />
+          <PlayersPanel state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} onInspect={setInspect} emotes={emotes} />
         )}
       </div>
       {rules && <RulebookModal onClose={() => setRules(false)} />}
@@ -331,18 +351,94 @@ function HeroPick({ state, viewerSeat, names, onAction }: { state: GameState; vi
 
 /* ── 상점 ─────────────────────────────────────────────────── */
 
+/* ── 골드·등급업 HUD ─────────────────────────────────────── */
+
+/** 큰 골드 표시 — 바뀔 때마다 번쩍이며 +N/−N이 떠오른다 */
+function GoldCounter({ gold, max }: { gold: number; max: number }) {
+  const prev = useRef(gold);
+  const [fx, setFx] = useState<{ id: number; delta: number } | null>(null);
+  const seq = useRef(0);
+  useEffect(() => {
+    const delta = gold - prev.current;
+    prev.current = gold;
+    if (!delta) return;
+    const id = ++seq.current;
+    const t0 = window.setTimeout(() => setFx({ id, delta }), 0);
+    const t1 = window.setTimeout(() => setFx((f) => (f && f.id === id ? null : f)), 1100);
+    return () => {
+      window.clearTimeout(t0);
+      window.clearTimeout(t1);
+    };
+  }, [gold]);
+  return (
+    <span className="relative inline-flex">
+      <span
+        key={fx?.id ?? 0}
+        className={`inline-flex items-center gap-1.5 rounded-2xl bg-gradient-to-b from-yellow-200 via-yellow-400 to-amber-600 px-3 py-1 text-black shadow-[0_0_14px_rgba(250,204,21,0.45)] ${fx ? "tb-goldpulse" : ""}`}
+        title="골드 — 유닛 구매 3, 새로고침 1, 여관 등급업"
+      >
+        <span className="text-2xl leading-none drop-shadow">🪙</span>
+        <span className="text-2xl font-black leading-none tabular-nums">{gold}</span>
+        <span className="text-xs font-bold text-black/55">/{max}</span>
+      </span>
+      {fx && (
+        <span key={fx.id} className={`tb-coinfloat pointer-events-none absolute left-1/2 -top-3 text-lg font-black drop-shadow-[0_2px_2px_rgba(0,0,0,0.9)] ${fx.delta > 0 ? "text-lime-300" : "text-rose-300"}`}>
+          {fx.delta > 0 ? `+${fx.delta}` : fx.delta}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** 여관 등급 + 등급업 버튼 — 살 수 있으면 금빛으로 빛나고, 모자라면 몇 골드 부족한지 */
+function UpgradePanel({ tier, cost, base, gold, onUpgrade }: { tier: number; cost: number; base: number; gold: number; onUpgrade: () => void }) {
+  const can = tier < 6 && gold >= cost;
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="inline-flex flex-col items-center rounded-xl border border-sky-300/40 bg-sky-900/40 px-2 py-0.5 leading-tight" title="여관 등급이 높을수록 높은 등급 유닛과 상점 칸이 늘어나요">
+        <span className="text-[10px] font-semibold text-sky-200/80">🏠 여관</span>
+        <span className="text-sm font-black text-sky-100">
+          {tier}등급 <span className="text-[10px] text-yellow-300">{"★".repeat(tier)}</span>
+        </span>
+      </span>
+      {tier < 6 ? (
+        <button
+          type="button"
+          disabled={!can}
+          onClick={onUpgrade}
+          className={`relative inline-flex flex-col items-start rounded-xl px-3 py-1 text-left leading-tight transition ${
+            can ? "tb-upglow bg-gradient-to-b from-amber-300 to-amber-600 text-black hover:scale-105" : "cursor-not-allowed border border-white/15 bg-black/30 text-white/55"
+          }`}
+          title="여관 등급업: 매 라운드 비용이 1씩 싸져요"
+        >
+          <span className="text-sm font-black">⬆ {tier + 1}등급으로</span>
+          <span className={`text-[11px] font-bold ${can ? "text-black/70" : ""}`}>
+            🪙{cost}
+            {cost < base && <span className={`ml-1 rounded px-1 ${can ? "bg-black/20" : "bg-lime-400/20 text-lime-300"}`}>할인 −{base - cost}</span>}
+            {!can && <span className="ml-1 text-rose-300">{cost - gold}골드 부족</span>}
+          </span>
+        </button>
+      ) : (
+        <span className="rounded-xl bg-gradient-to-b from-amber-300 to-amber-600 px-3 py-1.5 text-sm font-black text-black">👑 최고 등급</span>
+      )}
+    </span>
+  );
+}
+
 function ShopView({
   state,
   viewerSeat,
   onAction,
   view,
   quality,
+  myEmote,
 }: {
   state: GameState;
   viewerSeat: Seat;
   onAction: (a: EngineAction) => void;
   view: View;
   quality: "high" | "low";
+  myEmote?: EmoteSlot;
 }) {
   const arenaApi = useRef<ArenaApi | null>(null);
   /** 방금 발동한 능력 안내(전투의 함성·영웅 능력) */
@@ -544,16 +640,17 @@ function ShopView({
       {/* HUD */}
       <div className={`${PANEL} flex flex-wrap items-center gap-2`}>
         <span className="text-sm font-bold text-rose-300 light:text-rose-600">❤️ {me.hp}</span>
-        <span className="text-sm font-bold text-yellow-300 light:text-amber-600">
-          🪙 {me.gold}
-          <span className="text-xs font-normal text-white/40 light:text-slate-400">/{roundGold(round) + (me.winStreak >= 3 || me.lossStreak >= 3 ? 1 : 0)}</span>
-        </span>
-        <span className="text-sm font-bold text-sky-200 light:text-sky-700">🏠 {me.tier}등급</span>
-        {me.tier < 6 && (
-          <button disabled={me.gold < cost} onClick={() => send({ type: "UPGRADE", seat: viewerSeat, round }, "upgrade")} className={BTN_DARK} title="여관 등급을 올리면 상점에 더 높은 등급 유닛과 칸이 늘어나요">
-            ⬆ 등급업 🪙{cost}
-          </button>
-        )}
+        <GoldCounter gold={me.gold} max={roundGold(round) + (me.winStreak >= 3 || me.lossStreak >= 3 ? 1 : 0)} />
+        <UpgradePanel
+          tier={me.tier}
+          cost={cost}
+          base={me.tier < 6 ? UPGRADE_BASE[me.tier + 1] - (me.hero === "architect" ? 2 : 0) : 0}
+          gold={me.gold}
+          onUpgrade={() => {
+            send({ type: "UPGRADE", seat: viewerSeat, round }, "upgrade");
+            showToast(`🏠 ${me.tier + 1}등급 여관!`, `상점에 ${me.tier + 1}등급 유닛까지 나와요 · 다음 새로고침부터 상점 칸 ${SHOP_SLOTS[me.tier + 1]}칸`);
+          }}
+        />
         {hero && (
           <button
             disabled={hero.cost === null || !powerReady}
@@ -657,7 +754,7 @@ function ShopView({
               units={me.board.map((u) => ({ ...u, side: 0 as const }))}
               mode="shop"
               apiRef={arenaApi}
-              avatars={me.hero ? [{ key: "me", hero: me.hero, name: "나", side: 0, hp: me.hp, controllable: true }] : undefined}
+              avatars={me.hero ? [{ key: "me", hero: me.hero, name: "나", side: 0, hp: me.hp, controllable: true, emote: myEmote }] : undefined}
               quality={quality}
               className="h-64 w-full sm:h-72"
               selected={selection?.kind === "board" ? selection.uid : null}
@@ -854,6 +951,7 @@ function CombatView({
   onAction,
   view,
   quality,
+  emotes,
 }: {
   state: GameState;
   viewerSeat: Seat;
@@ -861,6 +959,7 @@ function CombatView({
   onAction: (a: EngineAction) => void;
   view: View;
   quality: "high" | "low";
+  emotes: Record<Seat, EmoteSlot>;
 }) {
   const me = state.seats[viewerSeat];
   const mine = combatFor(state, viewerSeat);
@@ -880,6 +979,8 @@ function CombatView({
   const pair = combatNames(c, names);
   const hpOf = (seat: number) => (seat < 0 ? null : state.seats[seat].hp);
   const hpPair: [number | null, number | null] = viewSide === 0 ? [hpOf(c.a), hpOf(c.b)] : [hpOf(c.b), hpOf(c.a)];
+  const emoteOf = (seat: number) => (seat < 0 ? undefined : emotes[seat]);
+  const emotePair: [EmoteSlot | undefined, EmoteSlot | undefined] = viewSide === 0 ? [emoteOf(c.a), emoteOf(c.b)] : [emoteOf(c.b), emoteOf(c.a)];
   const shownNames: [string, string] = viewSide === 0 ? pair : [pair[1], pair[0]];
   return (
     <div className="flex flex-col gap-2">
@@ -901,9 +1002,9 @@ function CombatView({
         </button>
       </div>
       {view === "3d" ? (
-        <Combat3D key={`${state.round}-${watch}`} combat={c} viewSide={viewSide} names={shownNames} speed={speed} sound={isMine} quality={quality} hp={hpPair} controllable={isMine} onFinished={isMine ? finishMine : undefined} />
+        <Combat3D key={`${state.round}-${watch}`} combat={c} viewSide={viewSide} names={shownNames} speed={speed} sound={isMine} quality={quality} hp={hpPair} emotes={emotePair} controllable={isMine} onFinished={isMine ? finishMine : undefined} />
       ) : (
-        <CombatReplay key={`${state.round}-${watch}`} combat={c} viewSide={viewSide} names={shownNames} speed={speed} sound={isMine} hp={hpPair} onFinished={isMine ? finishMine : undefined} />
+        <CombatReplay key={`${state.round}-${watch}`} combat={c} viewSide={viewSide} names={shownNames} speed={speed} sound={isMine} hp={hpPair} emotes={emotePair} onFinished={isMine ? finishMine : undefined} />
       )}
       {state.eliminatedThisRound.length > 0 && (
         <p className="rounded-xl bg-rose-500/15 px-3 py-1.5 text-center text-xs text-rose-200 light:text-rose-700">

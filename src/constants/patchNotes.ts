@@ -64,6 +64,8 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     changes: [
       { game: "tavern-brawl", type: "FEAT", desc: "직업 시너지 9개 — 전사·수호자·암살자·마법사·궁수·성직자·광전사·소환사·약탈자, 모든 유닛이 종족+직업 두 가지 시너지" },
       { game: "tavern-brawl", type: "FEAT", desc: "새 종족 🌊 해양 · 😈 악마 · 🌿 숲 · 🧚 요정과 새 유닛 33종(총 75종), 새 키워드 ⚡ 연타" },
+      { game: "tavern-brawl", type: "FEAT", desc: "😀 감정표현 8가지 — 아바타 머리 위 말풍선과 동작, 방 모두에게 보임(단축키 1~8), AI 봇도 반응" },
+      { game: "tavern-brawl", type: "IMPROVE", desc: "골드·등급업이 한눈에 — 큰 금화와 +/− 표시, 살 수 있을 때 빛나는 등급업 버튼(할인·부족 골드), 3D 유닛 머리 위 등급 별" },
       { game: "tavern-brawl", type: "FEAT", desc: "🧙 내 영웅 아바타 — 탁자를 눌러(또는 WASD) 자유롭게 걷고 점프·춤, 전투에서 이기면 상대 아바타에게 빛 구슬 공격" },
       { game: "tavern-brawl", type: "IMPROVE", desc: "유닛 설명창 — 카드·3D 캐릭터에 마우스를 올리거나 탭하면 능력·종족·직업·시너지, 전투 중 상대 유닛도" },
       { game: "tavern-brawl", type: "IMPROVE", desc: "끌어다 놓아 판매 — 손패·보드 유닛(3D 말 포함)을 화면 아래 💰 막대나 상점으로, 터치는 꾹 눌러 끌기" },

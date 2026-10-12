@@ -5,7 +5,8 @@ import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import Figure, { type FigureAct } from "./figures";
 import { HERO_FIGURES } from "./figureSpecs";
-import { plateTexture } from "./textures";
+import { bubbleTexture, plateTexture } from "./textures";
+import { EMOTE_BY_KIND, EMOTE_MS, type EmoteSlot } from "../emotes";
 
 /**
  * 플레이어 아바타 — 롤토체스 "꼬마 전설이"처럼 탁자 위를 자유롭게 돌아다니는 대표 캐릭터(고른 영웅의 모습).
@@ -21,6 +22,8 @@ export interface AvatarInfo {
   side: 0 | 1;
   hp: number | null;
   controllable?: boolean;
+  /** 감정표현(머리 위 말풍선 + 동작) */
+  emote?: EmoteSlot;
 }
 
 export interface AvatarState {
@@ -33,6 +36,8 @@ export interface AvatarState {
   hitAt?: number;
   danceAt?: number;
   jumpAt?: number;
+  emoteAt?: number;
+  waveAt?: number;
 }
 
 /** 모드별 마지막 위치(페이지가 살아 있는 동안) */
@@ -64,6 +69,8 @@ export function Avatar({
   /** 원근 보정: 위에서 내려다보는 카메라라 화면 가장자리의 키 큰 캐릭터가 바깥으로 누워 보이는 것을 되돌린다 */
   const tilt = useRef<THREE.Group>(null);
   const spec = HERO_FIGURES[info.hero ?? "mage"] ?? HERO_FIGURES.mage;
+  const bubble = useRef<THREE.Sprite>(null);
+  const bubbleTex = useMemo(() => (info.emote ? bubbleTexture(EMOTE_BY_KIND[info.emote.kind].emoji, EMOTE_BY_KIND[info.emote.kind].text) : null), [info.emote]);
   const plate = useMemo(() => plateTexture(info.name, info.hp, info.side === 0), [info.name, info.hp, info.side]);
 
   // 상태 등록(처음 한 번)
@@ -78,6 +85,23 @@ export function Avatar({
     // home은 처음 위치로만 쓴다
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [info.key, memKey, registry]);
+
+  // 감정표현: 말풍선 + 종류별 동작
+  useEffect(() => {
+    const e = info.emote;
+    if (!e || Date.now() - e.at > EMOTE_MS) return;
+    const st = registry.current.get(info.key);
+    if (!st) return;
+    const t = now();
+    st.emoteAt = t;
+    if (e.kind === "laugh" || e.kind === "party") st.danceAt = t;
+    else if (e.kind === "angry" || e.kind === "cry") st.hitAt = t;
+    else if (e.kind === "think") st.waveAt = undefined;
+    else {
+      st.jumpAt = t;
+      st.waveAt = t;
+    }
+  }, [info.emote, info.key, registry]);
 
   // 키보드(PC): WASD·방향키 걷기, 스페이스 점프
   useEffect(() => {
@@ -194,6 +218,20 @@ export function Avatar({
       const aspect = stt.size.width / Math.max(1, stt.size.height);
       tilt.current.rotation.z = THREE.MathUtils.clamp(ndc.x, -1.2, 1.2) * 0.32 * Math.min(2.4, Math.max(1, aspect / 1.3));
     }
+    // 손 흔들기·도발: 무기 팔을 몇 번 휘두름
+    if (st.waveAt !== undefined) {
+      const t = (t0 - st.waveAt) / 1200;
+      if (t >= 1) st.waveAt = undefined;
+      else if (t >= 0) swing = -Math.abs(Math.sin(t * Math.PI * 5));
+    }
+    if (st.hitAt !== undefined && (t0 - st.hitAt) / 1000 < 1.2) hit = Math.max(hit, 0.35 * Math.abs(Math.sin((t0 - st.hitAt) / 90)));
+    if (bubble.current) {
+      const t = st.emoteAt === undefined ? 99 : (t0 - st.emoteAt) / EMOTE_MS;
+      bubble.current.visible = t >= 0 && t < 1;
+      const pop = t < 0.08 ? 0.3 + (t / 0.08) * 0.85 : t < 0.14 ? 1.15 - ((t - 0.08) / 0.06) * 0.15 : 1;
+      bubble.current.scale.set(1.15 * pop, 0.54 * pop, 1);
+      bubble.current.position.y = 2.55 + Math.sin(t0 / 220) * 0.04;
+    }
     act.current.swing = swing;
     act.current.hit = hit;
     act.current.walk = st.walk;
@@ -224,6 +262,11 @@ export function Avatar({
         </group>
       </group>
       </group>
+      {bubbleTex && (
+        <sprite ref={bubble} position={[0, 2.55, 0]} scale={[1.15, 0.54, 1]} renderOrder={5} visible={false}>
+          <spriteMaterial map={bubbleTex} toneMapped={false} depthTest={false} transparent />
+        </sprite>
+      )}
       <sprite position={[0, 1.95, 0]} scale={[0.95, 0.29, 1]} renderOrder={4}>
         <spriteMaterial map={plate} toneMapped={false} depthTest={false} transparent />
       </sprite>

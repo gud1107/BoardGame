@@ -9,6 +9,7 @@ import { attackStyle } from "../attackStyle";
 import { getTavernBrawlSound } from "../tavernBrawlBgm";
 import Arena3D, { type ArenaApi, type ArenaUnit } from "./Arena3D";
 import AbilityFeed, { type FeedItem } from "../AbilityFeed";
+import type { EmoteSlot } from "../emotes";
 
 /**
  * 3D 전투 재생 — 2D `CombatReplay`와 같은 프레임 타이밍(STEP_MS)으로 진행하고, 연출은 Arena3D에 명령으로 보낸다.
@@ -24,6 +25,7 @@ export default function Combat3D({
   sound,
   quality,
   hp,
+  emotes,
   controllable,
   onFinished,
 }: {
@@ -35,6 +37,8 @@ export default function Combat3D({
   quality: "high" | "low";
   /** 전투 뒤 체력 [아래(나), 위(상대)] — 유령은 null */
   hp?: [number | null, number | null];
+  /** 감정표현 [아래, 위] */
+  emotes?: [EmoteSlot | undefined, EmoteSlot | undefined];
   /** 내 아바타를 움직일 수 있는지(내 전투) */
   controllable?: boolean;
   onFinished?: () => void;
@@ -287,8 +291,8 @@ export default function Combat3D({
     hp?.[1] == null ? null : hp[1] + (!struck && !loserBottom && combat.winner !== null ? combat.damage : 0),
   ];
   const avatars = [
-    { key: "bottom", hero: heroA, name: names[0], side: 0 as const, hp: shownHp[0], controllable: !!controllable },
-    { key: "top", hero: heroB, name: names[1], side: 1 as const, hp: shownHp[1] },
+    { key: "bottom", hero: heroA, name: names[0], side: 0 as const, hp: shownHp[0], controllable: !!controllable, emote: emotes?.[0] },
+    { key: "top", hero: heroB, name: names[1], side: 1 as const, hp: shownHp[1], emote: emotes?.[1] },
   ];
   const attackerName =
     ev.t === "attack" ? (() => {
