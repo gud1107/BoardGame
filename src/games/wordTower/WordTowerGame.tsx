@@ -688,7 +688,7 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
           words: mine.filter((e) => !e.bonus && (e.status === "ok" || e.status === "approved")).length,
           approvedWords: mine.filter((e) => e.status === "approved").length,
           rejectedWords: mine.filter((e) => e.status === "rejected").length,
-          completedTopics: closedRounds.filter((h) => h.entries.some((e) => e.seat === seat && e.bonus && e.word.startsWith("🏁"))).length,
+          completedTopics: closedRounds.filter((h) => h.entries.some((e) => e.seat === seat && e.bonus === true)).length,
         };
       }),
       finishedAt: new Date().toISOString(),

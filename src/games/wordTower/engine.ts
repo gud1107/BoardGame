@@ -27,9 +27,8 @@ export const BUILD_SECONDS_OPTIONS = [30, 45, 60, 90] as const;
 /** open = 🏗️ 자유 쌓기(주제 사전 + 심사), closed = 🎯 정답 모으기(정답 4~10개 고정, §15). */
 export type Mode = "open" | "closed";
 
-/** 🎯 정답 모으기 점수(§15): 정답 2층, 오답 −1층, 나만 찾은 정답 +1층, 전부 찾으면 +3층. */
+/** 🎯 정답 모으기 점수(§15): 정답은 먼저 낸 사람이 차지(선착순) 2층, 오답 −1층, 혼자 전부 차지하면 +3층. */
 export const CLOSED_BLOCKS = 2;
-export const UNIQUE_BONUS = 1;
 export const COMPLETE_BONUS = 3;
 
 export const MODE_INFO: Record<Mode, { emoji: string; name: string; short: string; desc: string }> = {
@@ -42,8 +41,8 @@ export const MODE_INFO: Record<Mode, { emoji: string; name: string; short: strin
   closed: {
     emoji: "🎯",
     name: "정답 모으기",
-    short: "정답이 4~10개뿐인 주제에서 전부 찾기",
-    desc: "계절(봄·여름·가을·겨울)처럼 정답이 정해진 주제. 정답 2층, 오답 −1층, 나만 찾은 정답 +1층, 전부 찾으면 +3층.",
+    short: "정답이 4~10개뿐인 주제 — 먼저 말한 사람이 차지",
+    desc: "계절(봄·여름·가을·겨울)처럼 정답이 정해진 주제. 모두의 답이 실시간으로 보이고, 정답은 선착순(먼저 낸 사람만 2층). 오답 −1층.",
   },
 };
 
@@ -71,8 +70,11 @@ export function phaseDurationMs(state: Pick<GameState, "phase" | "options">): nu
   }
 }
 
-/** ok = 사전 단어·정답(확정), pending = 심사 대기, approved/rejected = 심사 결과(정답 모으기에선 rejected = 오답). */
-export type EntryStatus = "ok" | "pending" | "approved" | "rejected";
+/**
+ * ok = 사전 단어·정답(확정), pending = 심사 대기, approved/rejected = 심사 결과(정답 모으기에선 rejected = 오답).
+ * late = 정답 모으기에서 거의 동시에 냈지만 다른 사람이 먼저 차지한 정답(0층, 벌점 없음 — 기록만).
+ */
+export type EntryStatus = "ok" | "pending" | "approved" | "rejected" | "late";
 
 export interface Entry {
   readonly id: number;
@@ -162,7 +164,12 @@ export function foundAnswers(entries: readonly Entry[], seat: Seat): string[] {
 }
 
 /** inDict: 자유 쌓기 = 사전 단어, 정답 모으기 = 정답. 정답 모으기에서 word는 정답의 대표 표기. */
-export type WordCheck = { ok: true; word: string; inDict: boolean; blocks: number } | { ok: false; reason: string };
+export type WordCheck = { ok: true; word: string; inDict: boolean; blocks: number } | { ok: false; reason: string; taken?: { word: string; by: Seat } };
+
+/** 정답 모으기: 이 정답을 이미 차지한 좌석. */
+export function claimedBy(entries: readonly Entry[], answer: string): Seat | null {
+  return entries.find((e) => e.status === "ok" && !e.bonus && e.word === answer)?.seat ?? null;
+}
 
 export function checkWord(state: GameState, seat: Seat, text: string): WordCheck {
   if (state.phase !== "build") return { ok: false, reason: "지금은 쌓을 수 없어요" };
@@ -178,7 +185,11 @@ export function checkWord(state: GameState, seat: Seat, text: string): WordCheck
   if (closed) {
     // 정답 모으기: 라운드 안에서만 중복 검사(다른 주제에 같은 정답이 있을 수 있음, 예: 계이름·윷놀이의 "도").
     const answer = closedAnswerFor(closed.id, word);
-    if (answer && mine.some((e) => e.word === answer)) return { ok: false, reason: `"${answer}"은(는) 이미 찾은 정답이에요` };
+    if (answer && mine.some((e) => e.word === answer && e.status === "ok")) return { ok: false, reason: `"${answer}"은(는) 이미 찾은 정답이에요` };
+    if (answer) {
+      const by = claimedBy(state.entries, answer);
+      if (by !== null && by !== seat) return { ok: false, reason: `"${answer}"은(는) 이미 다른 사람이 먼저 차지했어요`, taken: { word: answer, by } };
+    }
     if (!answer && mine.some((e) => e.word === word)) return { ok: false, reason: `"${word}"은(는) 이미 틀린 답이에요` };
     return answer ? { ok: true, word: answer, inDict: true, blocks: CLOSED_BLOCKS } : { ok: true, word, inDict: false, blocks: 0 };
   }
@@ -319,17 +330,14 @@ export function startGame(seatCount: number, seed: number, options?: Partial<Gam
   };
 }
 
-/** 정답 모으기 라운드 끝 보너스 층 — 나만 찾은 정답 +1씩, 전부 찾으면 +3 (§15). */
+/** 정답 모으기 라운드 끝 보너스 층 — 혼자 정답을 전부 차지하면 +3 (§15). */
 function closedBonuses(state: GameState): Entry[] {
   const closed = closedTopicOf(state.topics[state.roundIndex]);
   if (!closed) return [];
-  const found = Array.from({ length: state.seatCount }, (_, seat) => foundAnswers(state.entries, seat));
   const out: Entry[] = [];
   let id = state.nextId;
   for (let seat = 0; seat < state.seatCount; seat++) {
-    const unique = found[seat].filter((w) => found.every((other, o) => o === seat || !other.includes(w))).length;
-    if (unique > 0 && state.seatCount > 1) out.push({ id: id++, seat, word: `⭐ 나만 찾음 ×${unique}`, blocks: unique * UNIQUE_BONUS, status: "ok", bonus: true });
-    if (found[seat].length >= closed.answers.length) out.push({ id: id++, seat, word: "🏁 전부 찾음", blocks: COMPLETE_BONUS, status: "ok", bonus: true });
+    if (foundAnswers(state.entries, seat).length >= closed.answers.length) out.push({ id: id++, seat, word: "🧹 싹쓸이", blocks: COMPLETE_BONUS, status: "ok", bonus: true });
   }
   return out;
 }
@@ -385,15 +393,23 @@ export function applyAction(state: GameState, action: EngineAction): GameState {
   switch (action.type) {
     case "SUBMIT": {
       const check = checkWord(state, action.seat, action.text);
-      if (!check.ok) return state;
-      const closed = closedTopicOf(state.topics[state.roundIndex]) !== null;
-      const entry: Entry = { id: state.nextId, seat: action.seat, word: check.word, blocks: check.blocks, status: check.inDict ? "ok" : closed ? "rejected" : "pending" };
-      return {
+      const closedTopic = closedTopicOf(state.topics[state.roundIndex]);
+      if (!check.ok) {
+        // 정답 모으기 선착순: 거의 동시에 낸 같은 정답 — 늦게 도착한 쪽은 "한발 늦음"으로 기록만(0층).
+        if (!check.taken || state.entries.some((e) => e.seat === action.seat && e.status === "late" && e.word === check.taken!.word)) return state;
+        const late: Entry = { id: state.nextId, seat: action.seat, word: check.taken.word, blocks: 0, status: "late" };
+        return { ...state, entries: [...state.entries, late], nextId: state.nextId + 1 };
+      }
+      const entry: Entry = { id: state.nextId, seat: action.seat, word: check.word, blocks: check.blocks, status: check.inDict ? "ok" : closedTopic ? "rejected" : "pending" };
+      const next: GameState = {
         ...state,
         entries: [...state.entries, entry],
         nextId: state.nextId + 1,
         used: state.used.map((u, seat) => (seat === action.seat ? [...u, check.word] : u)),
       };
+      // 정답 모으기: 정답이 모두 차지되면 시간이 남아도 라운드를 끝낸다.
+      if (closedTopic && closedTopic.answers.every((a) => claimedBy(next.entries, a.word) !== null)) return endBuild(next);
+      return next;
     }
     case "VOTE": {
       if (state.phase !== "review") return state;
@@ -472,7 +488,7 @@ export function chooseBotWord(state: GameState, seat: Seat, level: BotLevel, rng
       if (!closedAnswerFor(topicId, guess) && !mineWords.has(guess)) return guess;
     }
     const knowClosed = 0.3 + (0.7 * (l - 1)) / 9;
-    const left = closed.answers.map((x) => x.word).filter((x) => !mineWords.has(x) && hash01(`${seat}:${topicId}:${x}`) < knowClosed);
+    const left = closed.answers.map((x) => x.word).filter((x) => claimedBy(state.entries, x) === null && hash01(`${seat}:${topicId}:${x}`) < knowClosed);
     return left.length > 0 ? left[Math.floor(rng() * left.length)] : null;
   }
 

@@ -3,7 +3,6 @@ import { seededRng } from "@/lib/rng";
 import {
   CLOSED_BLOCKS,
   COMPLETE_BONUS,
-  UNIQUE_BONUS,
   applyAction,
   blocksFor,
   checkWord,
@@ -257,19 +256,42 @@ describe("🎯 정답 모으기 mode", () => {
     expect(s.phase).toBe("result"); // 심사 없음
   });
 
-  it("unique and completion bonuses land as bonus floors", () => {
+  it("answers are first come, first served; a simultaneous loser is logged as late with no penalty", () => {
+    let s = closedBuilding(3);
+    const t = topicOf(s);
+    const first = t.answers[0].word;
+    s = act(s, { type: "SUBMIT", seat: 0, text: first });
+    // 이미 차지된 정답은 다른 사람이 낼 수 없다(입력 단계에서 막힘)
+    const c = checkWord(s, 1, first);
+    expect(c.ok).toBe(false);
+    // 거의 동시에 보내 엔진에 도착한 경우: 한발 늦음 기록, 0층
+    s = act(s, { type: "SUBMIT", seat: 1, text: first });
+    expect(s.entries[1]).toMatchObject({ seat: 1, word: first, status: "late", blocks: 0 });
+    expect(towerHeight(s.entries, 1)).toBe(0);
+    // 같은 늦음은 한 번만 기록
+    expect(act(s, { type: "SUBMIT", seat: 1, text: first }).entries.length).toBe(2);
+  });
+
+  it("the round ends as soon as every answer is claimed; one player taking all gets the sweep bonus", () => {
     let s = closedBuilding(2);
     const t = topicOf(s);
     for (const ans of t.answers) s = act(s, { type: "SUBMIT", seat: 0, text: ans.word });
-    s = act(s, { type: "SUBMIT", seat: 1, text: t.answers[0].word });
-    s = timeout(s);
-    const n = t.answers.length;
+    expect(s.phase).toBe("result");
     const rec = s.history[0];
-    expect(rec.heights[0]).toBe(n * CLOSED_BLOCKS + (n - 1) * UNIQUE_BONUS + COMPLETE_BONUS);
-    expect(rec.heights[1]).toBe(CLOSED_BLOCKS);
-    expect(rec.accepted[0]).toBe(n); // 보너스 층은 단어 수에 안 셈
-    expect(rec.entries.filter((e) => e.bonus).length).toBe(2);
+    expect(rec.heights[0]).toBe(t.answers.length * CLOSED_BLOCKS + COMPLETE_BONUS);
+    expect(rec.accepted[0]).toBe(t.answers.length);
+    expect(rec.entries.filter((e) => e.bonus).length).toBe(1);
     expect(rec.winners).toEqual([0]);
+  });
+
+  it("split answers end the round too, without a sweep bonus", () => {
+    let s = closedBuilding(2);
+    const t = topicOf(s);
+    t.answers.forEach((ans, i) => {
+      s = act(s, { type: "SUBMIT", seat: i % 2, text: ans.word });
+    });
+    expect(s.phase).toBe("result");
+    expect(s.history[0].entries.some((e) => e.bonus)).toBe(false);
   });
 
   it("the same answer is allowed again in a later round (e.g. 도 in 계이름 and 윷놀이)", () => {

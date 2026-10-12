@@ -62,9 +62,10 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <h3 className="mb-1.5 text-xs font-semibold tracking-wide text-amber-200/90 uppercase light:text-amber-800">🎯 정답 모으기 버전 (방 만들 때 선택)</h3>
           <ul className="list-disc space-y-1.5 pl-4 text-xs text-white/70 light:text-slate-700">
             <li>정답이 <b>4~10개로 정해진 주제</b> — 계절(봄·여름·가을·겨울), 요일, 태양계 행성, 무지개 색…</li>
-            <li>정답 <b>2층</b>, 오답 <b>−1층</b>(심사 없음). 다른 표기도 정답(월=월요일, 녹색=초록).</li>
-            <li>라운드 끝: <b>나만 찾은 정답 +1층씩</b>, <b>전부 찾으면 +3층</b> — 금색 블록으로 올라가요.</li>
-            <li>화면에 &quot;정답 N개 중 몇 개&quot;가 보여서 남은 개수를 알 수 있어요. 결과 때 정답 전부 공개.</li>
+            <li><b>모두의 답이 실시간 공개</b> — 아래 &quot;📢 실시간 기록&quot;에 누가 무엇을 냈는지 다 보여요.</li>
+            <li>정답은 <b>선착순</b> — 먼저 낸 한 사람만 차지(<b>2층</b>). 이미 차지된 정답은 못 내요. 오답은 <b>−1층</b>(심사 없음).</li>
+            <li>다른 표기도 정답(월=월요일, 녹색=초록). 정답이 모두 차지되면 시간이 남아도 라운드 끝.</li>
+            <li>혼자 정답을 전부 차지하면 <b>🧹 싹쓸이 +3층</b>.</li>
           </ul>
         </section>
 

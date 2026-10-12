@@ -9,6 +9,7 @@ import {
   MAX_WORDS_PER_ROUND,
   MODE_INFO,
   checkWord,
+  claimedBy,
   closedTopicOf,
   computeRankings,
   currentLeaders,
@@ -65,6 +66,7 @@ interface Props {
 }
 
 function statusChip(e: Entry, mine: boolean): string {
+  if (e.status === "late") return "border-white/10 bg-white/[0.03] text-white/40 light:text-slate-400";
   if (e.bonus) return "border-yellow-300/80 bg-yellow-400/20 text-yellow-100 light:bg-yellow-50 light:text-yellow-800";
   switch (e.status) {
     case "pending":
@@ -84,7 +86,7 @@ function WordChip({ e, mine }: { e: Entry; mine: boolean }) {
   return (
     <span className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-xs font-semibold ${statusChip(e, mine)}`}>
       {e.word}
-      <span className="text-[10px] opacity-70">{e.status === "rejected" ? "−1" : `+${e.blocks}`}</span>
+      <span className="text-[10px] opacity-70">{e.status === "rejected" ? "−1" : e.status === "late" ? "늦음" : `+${e.blocks}`}</span>
     </span>
   );
 }
@@ -191,7 +193,7 @@ function WordInput({ state, viewerSeat, onAction }: { state: GameState; viewerSe
         </button>
       </form>
       <div className="flex min-h-5 items-center justify-between gap-2 text-xs">
-        <span className={`break-keep ${feedback?.ok === false ? "text-rose-300 light:text-rose-600" : "text-white/60 light:text-slate-500"}`}>{feedback?.text ?? (closedTopicOf(state.topics[state.roundIndex]) ? "정답 2층 · 오답 −1층 · 나만 찾으면 +1 · 전부 찾으면 +3" : "띄어쓰기는 무시돼요 · 사전에 없는 단어는 심사를 받아요")}</span>
+        <span className={`break-keep ${feedback?.ok === false ? "text-rose-300 light:text-rose-600" : "text-white/60 light:text-slate-500"}`}>{feedback?.text ?? (closedTopicOf(state.topics[state.roundIndex]) ? "정답은 먼저 낸 사람이 차지(2층) · 오답 −1층 · 혼자 전부 차지하면 +3" : "띄어쓰기는 무시돼요 · 사전에 없는 단어는 심사를 받아요")}</span>
         <span className="shrink-0 text-white/40 light:text-slate-400">
           {mineCount}/{MAX_WORDS_PER_ROUND}
         </span>
@@ -268,23 +270,54 @@ function ReviewPanel({ state, viewerSeat, names, voterSeats, onAction }: { state
 /* ── 정답 모으기 ──────────────────────────────────────────── */
 
 /** 쌓기 중: 정답 N개 중 내가 찾은 것(찾은 칸엔 단어, 못 찾은 칸은 ?). */
-function AnswerSlots({ state, viewerSeat }: { state: GameState; viewerSeat: Seat }) {
+function AnswerSlots({ state, viewerSeat, names }: { state: GameState; viewerSeat: Seat; names: Record<Seat, string> }) {
   const closed = closedTopicOf(state.topics[state.roundIndex]);
   if (!closed) return null;
-  const found = new Set(foundAnswers(state.entries, viewerSeat));
+  const claims = closed.answers.map((a) => ({ word: a.word, by: claimedBy(state.entries, a.word) }));
+  const taken = claims.filter((c) => c.by !== null).length;
+  const mine = claims.filter((c) => c.by === viewerSeat).length;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="text-xs font-bold text-amber-200 light:text-amber-700">
-        🎯 정답 {closed.answers.length}개 중 {found.size}개
+        🎯 정답 {closed.answers.length}개 중 {taken}개 차지됨 · 나 {mine}개
       </span>
-      {closed.answers.map((a, i) => (
+      {claims.map((c, i) => (
         <span
-          key={a.word}
-          className={`min-w-8 rounded-lg border px-2 py-0.5 text-center text-xs font-bold ${found.has(a.word) ? "border-emerald-400/60 bg-emerald-500/20 text-emerald-100 light:bg-emerald-50 light:text-emerald-800" : "border-dashed border-white/20 text-white/30 light:border-slate-300 light:text-slate-400"}`}
+          key={c.word}
+          title={c.by === null ? "아직 아무도 못 찾음" : `${c.by === viewerSeat ? "나" : names[c.by]}님이 차지`}
+          className={`flex min-w-8 items-center justify-center gap-1 rounded-lg border px-2 py-0.5 text-xs font-bold ${c.by === null ? "border-dashed border-white/20 text-white/30 light:border-slate-300 light:text-slate-400" : c.by === viewerSeat ? "border-amber-300/80 bg-amber-400/20 text-amber-50 light:bg-amber-50 light:text-amber-800" : "border-white/15 bg-white/5 text-white/80 light:border-slate-200 light:bg-slate-50 light:text-slate-700"}`}
         >
-          {found.has(a.word) ? a.word : i + 1}
+          {c.by !== null && <span className="h-2 w-2 rounded-full" style={{ background: SEAT_COLORS[c.by % SEAT_COLORS.length] }} />}
+          {c.by === null ? i + 1 : c.word}
         </span>
       ))}
+    </div>
+  );
+}
+
+/** 정답 모으기: 모두가 낸 답을 실시간으로 — 최신이 위. */
+function LiveFeed({ state, viewerSeat, names }: { state: GameState; viewerSeat: Seat; names: Record<Seat, string> }) {
+  if (!closedTopicOf(state.topics[state.roundIndex])) return null;
+  const items = state.entries.filter((e) => !e.bonus).slice().reverse();
+  return (
+    <div className={`${PANEL} flex flex-col gap-1.5`}>
+      <h3 className="text-xs font-bold tracking-wide text-white/60 light:text-slate-500">📢 실시간 기록 — 모두에게 보여요</h3>
+      {items.length === 0 ? (
+        <p className="text-xs text-white/40 light:text-slate-400">아직 아무도 답하지 않았어요. 먼저 말하는 사람이 정답을 차지해요!</p>
+      ) : (
+        <ul className="flex max-h-56 flex-col gap-1 overflow-y-auto pr-1">
+          {items.map((e) => (
+            <li key={e.id} className={`flex items-center gap-2 rounded-lg px-2 py-1 text-sm ${e.seat === viewerSeat ? "bg-amber-400/10" : "bg-white/[0.03] light:bg-slate-50"}`}>
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: SEAT_COLORS[e.seat % SEAT_COLORS.length] }} />
+              <span className="w-20 shrink-0 truncate text-xs text-white/60 light:text-slate-500">{e.seat === viewerSeat ? "나" : names[e.seat]}</span>
+              <span className={`min-w-0 flex-1 truncate font-bold ${e.status === "rejected" ? "text-rose-300 line-through light:text-rose-600" : e.status === "late" ? "text-white/40 light:text-slate-400" : "text-white light:text-slate-900"}`}>{e.word}</span>
+              <span className={`shrink-0 text-xs font-bold ${e.status === "ok" ? "text-emerald-300 light:text-emerald-700" : e.status === "late" ? "text-white/40 light:text-slate-400" : "text-rose-300 light:text-rose-600"}`}>
+                {e.status === "ok" ? `✅ 차지 +${e.blocks}` : e.status === "late" ? "⏱ 한발 늦음" : "❌ 오답 −1"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -302,7 +335,7 @@ function AnswerReveal({ state, viewerSeat, names, entries, topicId }: { state: G
           <span
             key={a.word}
             title={who.map((s) => (s === viewerSeat ? "나" : names[s])).join(", ") || "아무도 못 찾음"}
-            className={`flex items-center gap-1 rounded-xl border px-2.5 py-1 text-sm font-bold ${who.length === 0 ? "border-dashed border-white/20 text-white/40 light:border-slate-300 light:text-slate-400" : who.length === 1 ? "border-yellow-300/70 bg-yellow-400/15 text-yellow-100 light:bg-yellow-50 light:text-yellow-800" : "border-white/15 bg-white/5 text-white light:border-slate-200 light:bg-slate-50 light:text-slate-800"}`}
+            className={`flex items-center gap-1 rounded-xl border px-2.5 py-1 text-sm font-bold ${who.length === 0 ? "border-dashed border-white/20 text-white/40 light:border-slate-300 light:text-slate-400" : who.includes(viewerSeat) ? "border-amber-300/70 bg-amber-400/15 text-amber-100 light:bg-amber-50 light:text-amber-800" : "border-white/15 bg-white/5 text-white light:border-slate-200 light:bg-slate-50 light:text-slate-800"}`}
           >
             {a.word}
             <span className="flex gap-0.5">
@@ -313,7 +346,7 @@ function AnswerReveal({ state, viewerSeat, names, entries, topicId }: { state: G
           </span>
         );
       })}
-      <p className="w-full text-center text-[11px] text-white/45 light:text-slate-500">노란 칸 = 혼자 찾은 정답(+1층) · 점선 = 아무도 못 찾음</p>
+      <p className="w-full text-center text-[11px] text-white/45 light:text-slate-500">색 점 = 차지한 사람 · 노란 칸 = 내가 차지 · 점선 = 아무도 못 찾음</p>
     </div>
   );
 }
@@ -414,6 +447,8 @@ export default function WordTowerBoard({ state, viewerSeat, names, connectedSeat
   }, [hurry, remaining]);
 
   const showResult = state.phase === "result" || state.phase === "ended";
+  // 정답 모으기는 모두의 답이 공개 — 탑 블록에도 단어가 보인다.
+  const closedMode = closedTopicOf(state.topics[state.roundIndex]) !== null;
   const leaders = useMemo(() => (showResult ? (state.history[state.history.length - 1]?.winners ?? []) : currentLeaders(state)), [showResult, state]);
 
   const towers: TowerView[] = useMemo(
@@ -429,17 +464,17 @@ export default function WordTowerBoard({ state, viewerSeat, names, connectedSeat
           streak: state.streak[seat] ?? 0,
           crowned: leaders.includes(seat),
           slabs: state.entries
-            .filter((e) => e.seat === seat)
+            .filter((e) => e.seat === seat && e.status !== "late")
             .map((e) => ({
               id: e.id,
               blocks: e.blocks,
               status: e.status,
-              label: isMe || showResult || e.bonus || (state.phase === "review" && e.status === "pending") ? e.word : null,
+              label: isMe || showResult || e.bonus || closedMode || (state.phase === "review" && e.status === "pending") ? e.word : null,
               bonus: e.bonus === true,
             })),
         };
       }),
-    [state.seatCount, state.entries, state.streak, state.phase, viewerSeat, names, showResult, leaders],
+    [state.seatCount, state.entries, state.streak, state.phase, viewerSeat, names, showResult, leaders, closedMode],
   );
 
   const scoreboard = [...towers].sort((a, b) => b.height - a.height);
@@ -518,19 +553,22 @@ export default function WordTowerBoard({ state, viewerSeat, names, connectedSeat
       {state.phase === "build" && (
         <div className={`${PANEL} flex flex-col gap-2`}>
           <WordInput key={state.roundIndex} state={state} viewerSeat={viewerSeat} onAction={onAction} />
-          <AnswerSlots state={state} viewerSeat={viewerSeat} />
-          <div className="flex flex-wrap gap-1">
-            {state.entries
-              .filter((e) => e.seat === viewerSeat)
-              .slice()
-              .reverse()
-              .map((e) => (
-                <WordChip key={e.id} e={e} mine />
-              ))}
-          </div>
+          <AnswerSlots state={state} viewerSeat={viewerSeat} names={names} />
+          {!closedMode && (
+            <div className="flex flex-wrap gap-1">
+              {state.entries
+                .filter((e) => e.seat === viewerSeat)
+                .slice()
+                .reverse()
+                .map((e) => (
+                  <WordChip key={e.id} e={e} mine />
+                ))}
+            </div>
+          )}
         </div>
       )}
-      {state.phase === "intro" && <div className={`${PANEL} text-center text-sm text-white/70 light:text-slate-600`}>주제를 보고 떠오르는 단어를 준비하세요! 남의 단어는 라운드 결과 때 공개돼요.</div>}
+      {state.phase === "build" && <LiveFeed state={state} viewerSeat={viewerSeat} names={names} />}
+      {state.phase === "intro" && <div className={`${PANEL} text-center text-sm text-white/70 light:text-slate-600`}>{closedMode ? "정답은 선착순! 먼저 낸 사람이 차지하고, 모두의 답이 실시간으로 보여요." : "주제를 보고 떠오르는 단어를 준비하세요! 남의 단어는 라운드 결과 때 공개돼요."}</div>}
       {state.phase === "review" && <ReviewPanel state={state} viewerSeat={viewerSeat} names={names} voterSeats={voterSeats} onAction={onAction} />}
       {state.phase === "result" && <ResultPanel state={state} viewerSeat={viewerSeat} names={names} isHost={isHost} onAction={onAction} />}
       {state.phase === "ended" && <FinalPanel state={state} viewerSeat={viewerSeat} names={names} onGameEnd={onGameEnd} />}
