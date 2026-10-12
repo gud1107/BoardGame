@@ -17,6 +17,11 @@ import type { EmoteSlot } from "../emotes";
  * 원거리는 제자리에서 화살·마법탄·불덩이·물대포·번개를 날린다. 맞은 쪽은 몸 재질(금속·뼈·식물·정령·살)에 맞는 파편.
  * 능력 발동(죽음의 메아리·부활·전투 시작…)은 그 유닛을 빛내고 화면 위 피드에 이름·효과를 띄운다.
  */
+/** 같은 프레임이면 같은 배열(→ 3D 토큰·캐릭터가 다시 그려지지 않음) */
+function buildUnits(sides: Frame["sides"], viewSide: 0 | 1): ArenaUnit[] {
+  return [...sides[viewSide].map((u) => ({ ...u, side: 0 as const })), ...sides[1 - viewSide].map((u) => ({ ...u, side: 1 as const }))];
+}
+
 export default function Combat3D({
   combat,
   viewSide,
@@ -49,6 +54,12 @@ export default function Combat3D({
   const [feed, setFeed] = useState<FeedItem[]>([]);
   /** 승리 연출이 끝났는지 — 끝나기 전엔 진 쪽 체력을 피해 전 값으로 보여 준다 */
   const [struck, setStruck] = useState(false);
+  /** 3D 캔버스 준비(셰이더 컴파일) 뒤에 재생을 시작 — 첫 장면이 멈칫하지 않게 */
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setReady(true), 2000); // 준비 신호가 안 오면 2초 뒤 그냥 시작
+    return () => window.clearTimeout(t);
+  }, []);
   const api = useRef<ArenaApi | null>(null);
   const finishedRef = useRef(false);
   const feedSeq = useRef(0);
@@ -58,6 +69,7 @@ export default function Combat3D({
   }, [onFinished]);
 
   useEffect(() => {
+    if (!ready) return;
     if (idx >= frames.length - 1) {
       if (!finishedRef.current) {
         finishedRef.current = true;
@@ -71,13 +83,13 @@ export default function Combat3D({
       setIdx((i) => Math.min(frames.length - 1, i + 1));
     }, STEP_MS[frames[idx].ev.t] / speed);
     return () => window.clearTimeout(t);
-  }, [idx, frames, speed]);
+  }, [idx, frames, speed, ready]);
 
   const frame = frames[idx];
   const prev = idx > 0 ? frames[idx - 1] : null;
 
   useLayoutEffect(() => {
-    if (!frame) return;
+    if (!frame || !ready) return;
     const ev = frame.ev;
     const s = sound ? getTavernBrawlSound() : null;
     const timers: number[] = [];
@@ -274,13 +286,15 @@ export default function Combat3D({
     return () => timers.forEach((t) => window.clearTimeout(t));
     // 프레임이 바뀔 때만 연출한다
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idx, frames]);
+  }, [idx, frames, ready]);
 
+  // 훅은 조기 반환보다 먼저(같은 프레임이면 같은 배열)
+  const evNow = frame?.ev;
+  const usePrev = !!frame && prev !== null && ((evNow?.t === "attack" && !impacted) || (evNow?.t === "deaths" && evNow.uids.length > 0));
+  const sides = frame ? (usePrev && prev ? prev.sides : frame.sides) : null;
+  const units = useMemo(() => (sides ? buildUnits(sides, viewSide) : []), [sides, viewSide]);
   if (!frame) return null;
   const ev = frame.ev;
-  const usePrev = prev !== null && ((ev.t === "attack" && !impacted) || (ev.t === "deaths" && ev.uids.length > 0));
-  const sides = usePrev && prev ? prev.sides : frame.sides;
-  const units: ArenaUnit[] = [...sides[viewSide].map((u) => ({ ...u, side: 0 as const })), ...sides[1 - viewSide].map((u) => ({ ...u, side: 1 as const }))];
   const heroA = viewSide === 0 ? combat.sideA.hero : combat.sideB.hero;
   const heroB = viewSide === 0 ? combat.sideB.hero : combat.sideA.hero;
   const result = ev.t === "end" ? (ev.winner === null ? "draw" : ev.winner === viewSide ? "win" : "loss") : null;
@@ -303,7 +317,7 @@ export default function Combat3D({
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-amber-900/50 bg-stone-950">
-      <Arena3D units={units} mode="combat" apiRef={api} quality={quality} avatars={avatars} className="h-[30rem] w-full sm:h-[32rem]" />
+      <Arena3D units={units} mode="combat" apiRef={api} quality={quality} avatars={avatars} onReady={() => setReady(true)} className="h-[30rem] w-full sm:h-[32rem]" />
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent px-3 py-2 text-xs text-amber-100">
         <span>
           {heroB ? HERO_BY_ID[heroB].emoji : "👻"} {names[1]}

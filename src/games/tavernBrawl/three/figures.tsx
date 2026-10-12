@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, type MutableRefObject, type ReactNode } from "react";
+import { memo, useMemo, useRef, type MutableRefObject, type ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { FIGURES, type FigureSpec, type Head, type Weapon } from "./figureSpecs";
@@ -50,7 +50,7 @@ function mat(color: string, o: { glow?: number; metal?: number; rough?: number; 
 
 type V3 = [number, number, number];
 function P({ g, c, p = [0, 0, 0], s = [1, 1, 1], r = [0, 0, 0], o }: { g: GeoKind; c: string; p?: V3; s?: V3 | number; r?: V3; o?: Parameters<typeof mat>[1] }) {
-  return <mesh geometry={GEO[g]} material={mat(c, o)} position={p} scale={typeof s === "number" ? [s, s, s] : s} rotation={r} castShadow />;
+  return <mesh geometry={GEO[g]} material={mat(c, o)} position={p} scale={typeof s === "number" ? [s, s, s] : s} rotation={r} />;
 }
 
 const EYE = "#111111";
@@ -867,7 +867,7 @@ function hash(s: string) {
   return (Math.abs(h) % 1000) / 1000;
 }
 
-export default function Figure({ defId, uid, golden, actRef, spec: specOverride }: { defId: string; uid: string; golden: boolean; actRef: MutableRefObject<FigureAct>; spec?: FigureSpec }) {
+function FigureImpl({ defId, uid, golden, actRef, spec: specOverride }: { defId: string; uid: string; golden: boolean; actRef: MutableRefObject<FigureAct>; spec?: FigureSpec }) {
   const spec = specOverride ?? FIGURES[defId] ?? FIGURES.n_kid;
   const nodes = useRef<Partial<Record<Part, THREE.Group | null>>>({});
   const rig = useMemo<Rig>(() => (part) => (node) => void (nodes.current[part] = node), []);
@@ -947,3 +947,7 @@ export default function Figure({ defId, uid, golden, actRef, spec: specOverride 
     </group>
   );
 }
+
+/** 캐릭터 조립 트리는 크다 — 프롭(종류·uid·황금·스펙)이 그대로면 다시 그리지 않는다 */
+const Figure = memo(FigureImpl);
+export default Figure;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Snap } from "../combat";
@@ -11,6 +11,7 @@ import Figure, { type FigureAct } from "./figures";
 import { StyleFxLayer, fxLife, type StyleFxInput, type StyleFxItem } from "./StyleFx";
 import type { AttackKind } from "../attackStyle";
 import { unitTip } from "../UnitTooltip";
+import { activeFlashes } from "./flashPool";
 import { Avatar, type AvatarInfo, type AvatarState } from "./Avatar";
 
 export type { AvatarInfo };
@@ -128,7 +129,9 @@ interface Shared {
 
 const TIER_BASE = ["#334155", "#64748b", "#10b981", "#0ea5e9", "#8b5cf6", "#f59e0b", "#f43f5e"];
 
-function Token({
+const Token = memo(TokenImpl);
+
+function TokenImpl({
   u,
   sharedRef,
   selected,
@@ -148,7 +151,7 @@ function Token({
   const group = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
   const act = useRef<FigureAct>({ swing: 0, hit: 0 });
-  const flashRef = useRef<THREE.PointLight>(null);
+  const flashRef = useRef<THREE.Mesh>(null);
   const bubble = useRef<THREE.Mesh>(null);
   const halo = useRef<THREE.Mesh>(null);
   const sel = useRef<THREE.Mesh>(null);
@@ -302,7 +305,12 @@ function Token({
     act.current.swing = swing;
     act.current.hit = hit;
     // 번쩍임: 맞은 순간 몸 안쪽에서 흰 빛이 터진다
-    if (flashRef.current) flashRef.current.intensity = (bright - 1) * 2.2;
+    if (flashRef.current) {
+      const k = Math.min(1, Math.max(0, (bright - 1) / 4));
+      flashRef.current.visible = k > 0.02;
+      flashRef.current.scale.setScalar(0.5 + k * 0.35);
+      (flashRef.current.material as THREE.MeshBasicMaterial).opacity = k * 0.85;
+    }
     if (bubble.current) {
       const s = 1 + Math.sin(t0 / 260) * 0.04;
       bubble.current.scale.setScalar(s);
@@ -368,7 +376,11 @@ function Token({
           <group position={[0, 0.155, 0]} scale={1.2}>
             <Figure defId={u.defId} uid={u.uid} golden={u.golden} actRef={act} />
           </group>
-          <pointLight ref={flashRef} position={[0, 0.7, 0.4]} color="#ffffff" intensity={0} distance={1.8} decay={1.5} />
+          {/* 맞았을 때 번쩍임: 조명 대신 가산 합성 빛망울(조명 수를 바꾸지 않음) */}
+          <mesh ref={flashRef} position={[0, 0.7, 0.2]} visible={false}>
+            <sphereGeometry args={[1, 12, 10]} />
+            <meshBasicMaterial color="#ffffff" transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+          </mesh>
           {/* 등급 별 + 종족·직업 꼬리표(전투·상점 항상 표시) — 마우스를 올리면 전체 설명 */}
           <sprite position={[0, 1.8, 0]} scale={[0.56, 0.39, 1]} renderOrder={3}>
             <spriteMaterial map={tagTex} toneMapped={false} depthTest={false} transparent />
@@ -462,6 +474,9 @@ function Effects({
   );
   const nextPop = useRef(0);
   const dummy = useMemo(() => new THREE.Object3D(), []);
+  /** 파편이 하나도 없으면 매 프레임 700개 갱신·업로드를 건너뛴다 */
+  const partsDirty = useRef(true);
+  const flashLights = useRef<(THREE.PointLight | null)[]>([]);
 
   useEffect(() => {
     const shared = sharedRef.current;
@@ -568,6 +583,7 @@ function Effects({
         const from = nextPart.current;
         nextPart.current = (nextPart.current + n) % MAX_PARTS;
         bursts.current = bursts.current.filter((b) => now() - b.start < 1400);
+        partsDirty.current = true;
         bursts.current.push({ start: now(), origin: posOf(uid).add(new THREE.Vector3(0, 0.7, 0)), from, n, vel, size, color: new THREE.Color(color) });
       },
       ring(uid, color, size = 1) {
@@ -601,7 +617,9 @@ function Effects({
   useFrame(() => {
     const t0 = now();
     const im = parts.current;
-    if (im) {
+    const liveBursts = bursts.current.some((b) => t0 - b.start <= 1250);
+    if (im && (liveBursts || partsDirty.current)) {
+      partsDirty.current = liveBursts;
       for (let i = 0; i < MAX_PARTS; i++) {
         dummy.position.set(0, -50, 0);
         dummy.scale.setScalar(0.0001);
@@ -626,6 +644,20 @@ function Effects({
       im.instanceMatrix.needsUpdate = true;
       if (im.instanceColor) im.instanceColor.needsUpdate = true;
     }
+    // 고정 조명 풀(3개): 이펙트가 요청한 번쩍임만 밝기를 준다
+    const fl = activeFlashes(t0);
+    flashLights.current.forEach((l, i) => {
+      if (!l) return;
+      const f = fl[i];
+      if (!f) {
+        l.intensity = 0;
+        return;
+      }
+      const t = (t0 - f.start) / f.dur;
+      l.position.copy(f.pos);
+      l.color.set(f.color);
+      l.intensity = f.intensity * Math.exp(-t * 5);
+    });
     ringState.current.forEach((r, i) => {
       const m = rings.current[i];
       if (!m) return;
@@ -657,6 +689,9 @@ function Effects({
 
   return (
     <>
+      {[0, 1, 2].map((i) => (
+        <pointLight key={i} ref={(l) => void (flashLights.current[i] = l)} intensity={0} distance={4} decay={1.4} />
+      ))}
       <instancedMesh ref={parts} args={[undefined, undefined, MAX_PARTS]} frustumCulled={false}>
         <boxGeometry args={[0.09, 0.09, 0.09]} />
         <meshBasicMaterial toneMapped={false} />
@@ -754,6 +789,8 @@ function Table({ mode }: { mode: "shop" | "combat" }) {
 /* ── 공개 컴포넌트 ───────────────────────────────────────── */
 
 export interface Arena3DProps {
+  /** 캔버스·셰이더 준비가 끝났을 때(첫 프레임 뒤) */
+  onReady?: () => void;
   /** 플레이어 아바타(내 것은 controllable) */
   avatars?: AvatarInfo[];
   /** 상점 탁자: 유닛을 꾹 눌러/끌기 시작 */
@@ -782,6 +819,15 @@ function Scene({ units, mode, apiRef, selected, onPick, onGrab, insert, quality,
   const [styleFx, setStyleFx] = useState<StyleFxItem[]>([]);
   const avatarsRef = useRef<Map<string, AvatarState>>(new Map());
   const myAvatar = avatars?.find((a) => a.controllable);
+  // 토큰에 넘기는 콜백은 항상 같은 함수(최신 핸들러는 ref로) → 토큰·캐릭터가 불필요하게 다시 그려지지 않음
+  const pickRef = useRef(onPick);
+  const grabRef = useRef(onGrab);
+  useLayoutEffect(() => {
+    pickRef.current = onPick;
+    grabRef.current = onGrab;
+  });
+  const stablePick = useCallback((uid: string) => pickRef.current?.(uid), []);
+  const stableGrab = useCallback((uid: string, e: PointerEvent) => grabRef.current?.(uid, e), []);
   const bounds = useMemo(
     () =>
       mode === "shop"
@@ -837,7 +883,7 @@ function Scene({ units, mode, apiRef, selected, onPick, onGrab, insert, quality,
       ))}
       <Table mode={mode} />
       {units.map((u) => (
-        <Token key={u.uid} u={u} sharedRef={sharedRef} selected={selected === u.uid} onPick={onPick} onGrab={onGrab} size={compact ? 0.95 : 1.05} facing={0} />
+        <Token key={u.uid} u={u} sharedRef={sharedRef} selected={selected === u.uid} onPick={onPick ? stablePick : undefined} onGrab={onGrab ? stableGrab : undefined} size={compact ? 0.95 : 1.05} facing={0} />
       ))}
       {insert &&
         Array.from({ length: mine + 1 }, (_, k) => {
@@ -870,7 +916,12 @@ export default function Arena3D(props: Arena3DProps) {
     <div className={props.className ?? "h-72 w-full"}>
       <Canvas
         shadows={props.quality === "high"}
-        dpr={props.quality === "high" ? [1, 2] : [1, 1.25]}
+        dpr={props.quality === "high" ? [1, 1.6] : [1, 1.25]}
+        onCreated={({ gl, scene, camera }) => {
+          // 셰이더를 처음에 한꺼번에 컴파일하고, 준비됐음을 알린다(전투 재생은 그 뒤에 시작)
+          gl.compile(scene, camera);
+          window.requestAnimationFrame(() => window.requestAnimationFrame(() => props.onReady?.()));
+        }}
         camera={{ fov: 40, near: 0.1, far: 80, position: [0, 8, 6] }}
         gl={{ antialias: props.quality === "high", powerPreference: "high-performance" }}
         onPointerMissed={() => (document.body.style.cursor = "")}

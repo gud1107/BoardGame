@@ -475,6 +475,14 @@ function ShopView({
   myEmote?: EmoteSlot;
 }) {
   const arenaApi = useRef<ArenaApi | null>(null);
+  // 3D 탁자에 넘기는 배열은 보드가 바뀔 때만 새로 만든다(타이머로 다시 그려질 때 3D가 통째로 다시 그려지지 않게)
+  const boardUnits = useMemo(() => state.seats[viewerSeat].board.map((u) => ({ ...u, side: 0 as const })), [state.seats, viewerSeat]);
+  const meHero = state.seats[viewerSeat].hero;
+  const meHp = state.seats[viewerSeat].hp;
+  const shopAvatars = useMemo(
+    () => (meHero ? [{ key: "me", hero: meHero, name: "나", side: 0 as const, hp: meHp, controllable: true, emote: myEmote }] : undefined),
+    [meHero, meHp, myEmote],
+  );
   /** 방금 발동한 능력 안내(전투의 함성·영웅 능력) */
   const [toast, setToast] = useState<{ id: number; label: string; text: string } | null>(null);
   const toastSeq = useRef(0);
@@ -830,10 +838,10 @@ function ShopView({
         {view === "3d" ? (
           <div data-drop="board3d" className="relative overflow-hidden rounded-xl">
             <Arena3D
-              units={me.board.map((u) => ({ ...u, side: 0 as const }))}
+              units={boardUnits}
               mode="shop"
               apiRef={arenaApi}
-              avatars={me.hero ? [{ key: "me", hero: me.hero, name: "나", side: 0, hp: me.hp, controllable: true, emote: myEmote }] : undefined}
+              avatars={shopAvatars}
               quality={quality}
               className="h-64 w-full sm:h-72"
               selected={selection?.kind === "board" ? selection.uid : null}

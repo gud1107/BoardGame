@@ -64,6 +64,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     changes: [
       { game: "tavern-brawl", type: "FEAT", desc: "직업 시너지 9개 — 전사·수호자·암살자·마법사·궁수·성직자·광전사·소환사·약탈자, 모든 유닛이 종족+직업 두 가지 시너지" },
       { game: "tavern-brawl", type: "FEAT", desc: "새 종족 🌊 해양 · 😈 악마 · 🌿 숲 · 🧚 요정과 새 유닛 33종(총 75종), 새 키워드 ⚡ 연타" },
+      { game: "tavern-brawl", type: "FIX", desc: "전투 중 멈칫하던 렉 개선 — 이펙트가 생길 때마다 하던 셰이더 재컴파일 제거(전투당 35회→0), 화면 그리기 호출 43% 감소" },
       { game: "tavern-brawl", type: "FEAT", desc: "⚡ 롤토체스식 시너지 표 — 항상 떠 있는 종족·직업 표(짧은 설명), 마우스오버로 단계별 효과·보유 유닛·이번 판 유닛 목록" },
       { game: "tavern-brawl", type: "IMPROVE", desc: "여관 등급·새로고침(R)·상점 잠금(F) 버튼을 크게, 보드 7칸·손패 10칸 '꽉 참' 표시" },
       { game: "tavern-brawl", type: "FEAT", desc: "😀 감정표현 8가지 — 아바타 머리 위 말풍선과 동작, 방 모두에게 보임(단축키 1~8), AI 봇도 반응" },

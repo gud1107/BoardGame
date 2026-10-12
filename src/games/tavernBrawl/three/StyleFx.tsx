@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { AttackKind } from "../attackStyle";
+import { requestFlash } from "./flashPool";
 
 /**
  * 캐릭터별 3D 타격 이펙트 — 투사체(원거리)와 충돌 순간 그림(근접·원소별).
@@ -106,7 +107,6 @@ function Projectile({ f }: { f: Extract<StyleFxItem, { type: "proj" }> }) {
             <sphereGeometry args={[f.kind === "fire" ? 0.26 : 0.19, 14, 10]} />
             <meshBasicMaterial color={c} toneMapped={false} transparent opacity={0.55} depthWrite={false} />
           </mesh>
-          <pointLight color={c} intensity={3} distance={2.2} decay={1.6} />
         </>
       );
   }
@@ -157,14 +157,12 @@ function fade(g: THREE.Object3D, o: number) {
 function Impact({ f }: { f: Extract<StyleFxItem, { type: "impact" }> }) {
   const c = f.color;
   const s = f.big ? 1.35 : 1;
-  const light = useRef<THREE.PointLight>(null);
   const ground = useRef<THREE.Group>(null);
   const sky = useRef<THREE.Group>(null);
   const lightColor = f.kind === "fire" ? "#fb923c" : f.kind === "lightning" ? "#bfdbfe" : f.kind === "holy" ? "#fde68a" : f.kind === "shadow" ? "#7c3aed" : c;
   const hasLight = ["fire", "lightning", "holy", "bolt", "fairy", "shadow", "water", "cannon"].includes(f.kind);
   useFrame(() => {
     const t = (now() - f.start) / 900;
-    if (light.current) light.current.intensity = t >= 0 && t < 0.5 ? (f.kind === "lightning" ? 14 : 8) * Math.exp(-t * 9) * (f.kind === "lightning" && Math.sin(t * 90) > 0 ? 1 : 0.6) : 0;
     if (ground.current) {
       const k = Math.max(0, Math.min(1, t * 2.2));
       ground.current.scale.setScalar(0.3 + ease(k) * 2.2 * s);
@@ -177,7 +175,10 @@ function Impact({ f }: { f: Extract<StyleFxItem, { type: "impact" }> }) {
   });
 
   const parts: React.ReactNode[] = [];
-  if (hasLight) parts.push(<pointLight key="l" ref={light} position={[f.at[0], 1, f.at[2]]} color={lightColor} intensity={0} distance={4} decay={1.4} />);
+  // 조명은 Arena의 고정 조명 풀에 요청(조명 개수가 바뀌면 셰이더가 재컴파일돼 멈칫함)
+  useEffect(() => {
+    if (hasLight) requestFlash([f.at[0], 1, f.at[2]], lightColor, f.kind === "lightning" ? 14 : 8, 450);
+  }, [hasLight, lightColor, f.at, f.kind]);
 
   const angle = Math.atan2(f.dir[0], -f.dir[2]);
   switch (f.kind) {
