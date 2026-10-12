@@ -64,7 +64,18 @@ export interface TakeoverInfo {
 export interface BotTakeoverState {
   readonly votes: Readonly<Record<string, TakeoverVote>>;
   readonly takeovers: Readonly<Record<string, TakeoverInfo>>;
+  /**
+   * When each seat last proved presence ("저 여기 있어요" → `vote-cancel`).
+   * An `idle` vote-start within `PRESENCE_PROOF_COOLDOWN_MS` of this is
+   * dropped, so the banner doesn't pop right back up while the player is
+   * still thinking on the same turn (every game's idle trigger keeps firing
+   * every few seconds once the actor has been stuck past its threshold).
+   */
+  readonly presenceProvedAt?: Readonly<Record<string, number>>;
 }
+
+/** Minimum quiet period after "저 여기 있어요" before another idle vote can start for that seat. */
+export const PRESENCE_PROOF_COOLDOWN_MS = 60_000;
 
 export const INITIAL_BOT_TAKEOVER_STATE: BotTakeoverState = { votes: {}, takeovers: {} };
 
@@ -72,7 +83,7 @@ export type BotTakeoverEvent =
   | { type: "vote-start"; seatKey: string; reason: TakeoverReason; startedAt: number; originalUserId: string; originalName: string }
   | { type: "vote-cast"; seatKey: string; voterDeviceId: string }
   /** The vote target proving presence ("저 있어요") cancels the vote outright — same unified affordance as `reclaim` below, just before vs after conversion actually lands. */
-  | { type: "vote-cancel"; seatKey: string }
+  | { type: "vote-cancel"; seatKey: string; at?: number }
   /** `originalUserId`/`originalName` are NOT repeated here — pulled from the matching in-progress vote (see `reduceBotTakeover`'s "convert" branch) so there's exactly one place a client resolves them. */
   | { type: "convert"; seatKey: string; at: number }
   /** The original player returning and reclaiming manual control — same unified "yes" button as `vote-cancel`, used once a seat has already converted. */
@@ -101,6 +112,13 @@ export function reduceBotTakeover(state: BotTakeoverState, event: BotTakeoverEve
       // (a second client noticing the same disconnect shouldn't restart the
       // clock or wipe existing yes-votes).
       if (state.takeovers[event.seatKey] || state.votes[event.seatKey]) return state;
+      // The target just said "저 여기 있어요" — hold off on re-asking for a
+      // minute. Only idle: a real disconnect fires its vote-start once (from
+      // the presence leave), so suppressing it could strand the seat.
+      const provedAt = state.presenceProvedAt?.[event.seatKey];
+      if (event.reason === "idle" && provedAt !== undefined && event.startedAt < provedAt + PRESENCE_PROOF_COOLDOWN_MS) {
+        return state;
+      }
       return {
         ...state,
         votes: {
@@ -130,7 +148,11 @@ export function reduceBotTakeover(state: BotTakeoverState, event: BotTakeoverEve
     }
     case "vote-cancel": {
       if (!state.votes[event.seatKey]) return state;
-      return { ...state, votes: withoutKey(state.votes, event.seatKey) };
+      return {
+        ...state,
+        votes: withoutKey(state.votes, event.seatKey),
+        presenceProvedAt: { ...state.presenceProvedAt, [event.seatKey]: event.at ?? Date.now() },
+      };
     }
     case "convert": {
       // No matching in-progress vote (e.g. a stale/duplicate broadcast after
@@ -138,6 +160,7 @@ export function reduceBotTakeover(state: BotTakeoverState, event: BotTakeoverEve
       const vote = state.votes[event.seatKey];
       if (!vote) return state;
       return {
+        ...state,
         votes: withoutKey(state.votes, event.seatKey),
         takeovers: {
           ...state.takeovers,
@@ -152,6 +175,7 @@ export function reduceBotTakeover(state: BotTakeoverState, event: BotTakeoverEve
     case "reclaim": {
       if (!state.takeovers[event.seatKey]) return state;
       return {
+        ...state,
         votes: withoutKey(state.votes, event.seatKey),
         takeovers: withoutKey(state.takeovers, event.seatKey),
       };

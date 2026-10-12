@@ -106,6 +106,19 @@ describe("reduceBotTakeover", () => {
     expect(isSeatTakenOver(s, "1")).toBe(false);
   });
 
+  it("after '저 여기 있어요', idle votes for that seat are ignored for 1 minute (disconnect votes are not)", () => {
+    const s = run(INITIAL_BOT_TAKEOVER_STATE, [
+      { type: "vote-start", seatKey: "1", reason: "idle", startedAt: 0, originalUserId: "user-1", originalName: "민준" },
+      { type: "vote-cancel", seatKey: "1", at: 10_000 },
+      { type: "vote-start", seatKey: "1", reason: "idle", startedAt: 69_999, originalUserId: "user-1", originalName: "민준" },
+    ]);
+    expect(activeVoteFor(s, "1")).toBeNull();
+    const later = reduceBotTakeover(s, { type: "vote-start", seatKey: "1", reason: "idle", startedAt: 70_000, originalUserId: "user-1", originalName: "민준" });
+    expect(activeVoteFor(later, "1")).not.toBeNull();
+    const dc = reduceBotTakeover(s, { type: "vote-start", seatKey: "1", reason: "disconnected", startedAt: 20_000, originalUserId: "user-1", originalName: "민준" });
+    expect(activeVoteFor(dc, "1")).not.toBeNull();
+  });
+
   it("convert clears the vote and records takeover info (pulled from the vote itself) for reward/ranking mapping", () => {
     const s = run(INITIAL_BOT_TAKEOVER_STATE, [
       { type: "vote-start", seatKey: "2", reason: "disconnected", startedAt: 0, originalUserId: "user-42", originalName: "지수" },
