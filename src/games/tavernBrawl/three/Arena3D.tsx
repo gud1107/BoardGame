@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, type MutableRefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Snap } from "../combat";
 import { unitDef } from "../units";
 import { popupTexture, statTexture, woodTexture } from "./textures";
 import Figure, { type FigureAct } from "./figures";
+import { StyleFxLayer, fxLife, type StyleFxInput, type StyleFxItem } from "./StyleFx";
+import type { AttackKind } from "../attackStyle";
 
 /**
  * 여관 난투 3D 탁자. 표시 전용: 보이는 건 화면에 넘겨준 유닛뿐이고, 모든 움직임은 시작 시각 기준
@@ -22,7 +24,11 @@ export interface ArenaUnit extends Snap {
 }
 
 export interface ArenaApi {
-  attack(from: string, to: string, durMs: number, impactFrac: number, holdFrac: number): void;
+  attack(from: string, to: string, durMs: number, impactFrac: number, holdFrac: number, ranged?: boolean): void;
+  /** 원거리 투사체: from → to, durMs 동안 날아감 */
+  projectile(kind: AttackKind, color: string, from: string, to: string, durMs: number): void;
+  /** 충돌 순간의 스타일 이펙트(베기 궤적·할퀸 자국·번개…) */
+  impactFx(kind: AttackKind, color: string, uid: string, from: string | null, big: boolean): void;
   hit(uid: string, power: number, from?: string): void;
   die(uid: string, durMs: number): void;
   spawn(uid: string): void;
@@ -34,7 +40,7 @@ export interface ArenaApi {
 }
 
 type Anim = {
-  atk?: { start: number; dur: number; impact: number; hold: number; to: string };
+  atk?: { start: number; dur: number; impact: number; hold: number; to: string; ranged?: boolean };
   knock?: { start: number; dir: THREE.Vector3; power: number };
   flash?: number;
   die?: { start: number; dur: number };
@@ -115,7 +121,7 @@ function Token({ u, sharedRef, selected, onPick, size, facing }: { u: ArenaUnit;
   const d = unitDef(u.defId);
   const m = u.golden ? 2 : 1;
   const atkTex = useMemo(() => statTexture(u.atk, "atk", u.atk > d.atk * m), [u.atk, d.atk, m]);
-  const hpTex = useMemo(() => statTexture(u.hp, "hp", u.hp > d.hp * m), [u.hp, d.hp, m]);
+  const hpTex = useMemo(() => statTexture(Math.max(0, u.hp), "hp", u.hp > d.hp * m), [u.hp, d.hp, m]);
 
   useFrame(() => {
     const g = group.current;
@@ -147,7 +153,24 @@ function Token({ u, sharedRef, selected, onPick, size, facing }: { u: ArenaUnit;
         const dir = v.clone().normalize();
         const { impact, hold } = a.atk;
         b.rotation.y = Math.atan2(v.x, v.z);
-        if (p < 0.25) {
+        if (a.atk.ranged) {
+          // 원거리: 제자리에서 겨누고(치켜듦) 발사 순간 반동으로 뒤로 밀림
+          if (p < 0.25) {
+            const e = easeOut(p / 0.25);
+            swing = -e;
+            b.position.addScaledVector(dir, -0.12 * e).setY(0.08 * e);
+            b.scale.setScalar(1 + 0.08 * e);
+          } else if (p < 0.4) {
+            const e = (p - 0.25) / 0.15;
+            swing = -1 + 2 * Math.min(1, e * 2);
+            b.position.addScaledVector(dir, -0.12 - 0.18 * Math.sin(Math.PI * e)).setY(0.08);
+          } else {
+            const r = easeOut((p - 0.4) / 0.6);
+            swing = 1 - r;
+            b.position.addScaledVector(dir, -0.12 * (1 - r));
+            b.rotation.y = facing + (Math.atan2(v.x, v.z) - facing) * (1 - r);
+          }
+        } else if (p < 0.25) {
           swing = -easeOut(p / 0.25);
           const e = easeOut(p / 0.25);
           b.position.addScaledVector(dir, -0.35 * e).setY(0.25 * e);
@@ -337,7 +360,7 @@ interface Burst {
 const RING_N = 12;
 const POP_N = 24;
 
-function Effects({ apiRef, sharedRef }: { apiRef: MutableRefObject<ArenaApi | null>; sharedRef: MutableRefObject<Shared> }) {
+function Effects({ apiRef, sharedRef, addStyleFx }: { apiRef: MutableRefObject<ArenaApi | null>; sharedRef: MutableRefObject<Shared>; addStyleFx: (f: StyleFxInput) => void }) {
   const parts = useRef<THREE.InstancedMesh>(null);
   const bursts = useRef<Burst[]>([]);
   const nextPart = useRef(0);
@@ -363,8 +386,18 @@ function Effects({ apiRef, sharedRef }: { apiRef: MutableRefObject<ArenaApi | nu
       return a;
     };
     apiRef.current = {
-      attack(from, to, durMs, impactFrac, holdFrac) {
-        anim(from).atk = { start: now(), dur: durMs, impact: impactFrac, hold: holdFrac, to };
+      attack(from, to, durMs, impactFrac, holdFrac, ranged) {
+        anim(from).atk = { start: now(), dur: durMs, impact: impactFrac, hold: holdFrac, to, ranged };
+      },
+      projectile(kind, color, from, to, durMs) {
+        const a = posOf(from).add(new THREE.Vector3(0, 0.85, 0));
+        const b = posOf(to).add(new THREE.Vector3(0, 0.7, 0));
+        addStyleFx({ type: "proj", kind, color, from: [a.x, a.y, a.z], to: [b.x, b.y, b.z], start: now(), dur: durMs });
+      },
+      impactFx(kind, color, uid, from, big) {
+        const at = posOf(uid);
+        const dir = from ? at.clone().sub(posOf(from)).setY(0).normalize() : new THREE.Vector3(0, 0, -1);
+        addStyleFx({ type: "impact", kind, color, at: [at.x, at.y, at.z], dir: [dir.x, dir.y, dir.z], start: now(), big });
       },
       hit(uid, power, from) {
         const a = anim(uid);
@@ -420,7 +453,7 @@ function Effects({ apiRef, sharedRef }: { apiRef: MutableRefObject<ArenaApi | nu
     return () => {
       apiRef.current = null;
     };
-  }, [apiRef, sharedRef]);
+  }, [apiRef, sharedRef, addStyleFx]);
 
   useFrame(() => {
     const t0 = now();
@@ -593,6 +626,13 @@ function Scene({ units, mode, apiRef, selected, onPick, insert, quality }: Arena
   const { size } = useThree();
   const compact = size.width < 640 || size.width / Math.max(1, size.height) < 1.15;
   const sharedRef = useRef<Shared>({ target: new Map(), cur: new Map(), anim: new Map(), shake: { start: -1e9, power: 0 } });
+  const [styleFx, setStyleFx] = useState<StyleFxItem[]>([]);
+  const fxSeq = useRef(0);
+  const addStyleFx = useCallback((f: StyleFxInput) => {
+    const item = { ...f, id: ++fxSeq.current } as StyleFxItem;
+    setStyleFx((cur) => [...cur, item]);
+    window.setTimeout(() => setStyleFx((cur) => cur.filter((x) => x.id !== item.id)), fxLife(item));
+  }, []);
   const pos = useMemo(() => layout(units, mode, compact), [units, mode, compact]);
   // 목표 위치 갱신(현재 위치는 각 토큰이 부드럽게 따라감) — 그리기 전에 반영
   useLayoutEffect(() => {
@@ -631,7 +671,8 @@ function Scene({ units, mode, apiRef, selected, onPick, insert, quality }: Arena
             </mesh>
           );
         })}
-      <Effects apiRef={apiRef} sharedRef={sharedRef} />
+      <Effects apiRef={apiRef} sharedRef={sharedRef} addStyleFx={addStyleFx} />
+      <StyleFxLayer items={styleFx} />
     </>
   );
 }

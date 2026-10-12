@@ -1,16 +1,20 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { simulateCombat, type Frame } from "../combat";
+import { simulateCombat, type AbilityNote, type Frame } from "../combat";
 import type { CombatRecord } from "../engine";
-import { HERO_BY_ID } from "../units";
+import { HERO_BY_ID, unitDef } from "../units";
 import { IMPACT_AT, STEP_MS } from "../CombatReplay";
+import { attackStyle } from "../attackStyle";
 import { getTavernBrawlSound } from "../tavernBrawlBgm";
 import Arena3D, { type ArenaApi, type ArenaUnit } from "./Arena3D";
+import AbilityFeed, { type FeedItem } from "../AbilityFeed";
 
 /**
  * 3D 전투 재생 — 2D `CombatReplay`와 같은 프레임 타이밍(STEP_MS)으로 진행하고, 연출은 Arena3D에 명령으로 보낸다.
- * 공격 = 뒤로 젖힘 → 포물선 도약 → 충돌(히트스톱, 번쩍, 넉백, 파편, 큰 숫자, 화면 흔들림) → 복귀.
+ * 캐릭터마다 attackStyle(무기·몸)에 맞춰: 근접은 도약해서 베기/할퀴기/물기/찌르기/내려찍기,
+ * 원거리는 제자리에서 화살·마법탄·불덩이·물대포·번개를 날린다. 맞은 쪽은 몸 재질(금속·뼈·식물·정령·살)에 맞는 파편.
+ * 능력 발동(죽음의 메아리·부활·전투 시작…)은 그 유닛을 빛내고 화면 위 피드에 이름·효과를 띄운다.
  */
 export default function Combat3D({
   combat,
@@ -32,8 +36,10 @@ export default function Combat3D({
   const frames = useMemo(() => simulateCombat(combat.sideA, combat.sideB, combat.seed, true).frames, [combat]);
   const [idx, setIdx] = useState(0);
   const [impacted, setImpacted] = useState(false);
+  const [feed, setFeed] = useState<FeedItem[]>([]);
   const api = useRef<ArenaApi | null>(null);
   const finishedRef = useRef(false);
+  const feedSeq = useRef(0);
   const onFinishedRef = useRef(onFinished);
   useEffect(() => {
     onFinishedRef.current = onFinished;
@@ -63,9 +69,25 @@ export default function Combat3D({
     const ev = frame.ev;
     const s = sound ? getTavernBrawlSound() : null;
     const timers: number[] = [];
+    const later = (ms: number, fn: () => void) => timers.push(window.setTimeout(fn, ms));
     const a = () => api.current;
     const hpBefore = new Map<string, number>((prev?.sides.flat() ?? []).map((u) => [u.uid, u.hp]));
-    /** 맞은 유닛 연출. from = 때린 쪽(넉백 방향) */
+    const pushFeed = (items: AbilityNote[]) => {
+      if (!items.length) return;
+      const add = items.map((it) => ({ ...it, id: ++feedSeq.current, mine: it.side === viewSide }));
+      setFeed((cur) => [...cur, ...add].slice(-4));
+      later(2600 / Math.max(1, speed / 1.5), () => setFeed((cur) => cur.filter((x) => !add.includes(x))));
+    };
+    const highlight = (items: AbilityNote[]) => {
+      for (const it of items) {
+        if (!it.uid) continue;
+        a()?.glow(it.uid);
+        a()?.ring(it.uid, "#fde047", 1.3);
+        a()?.popup(it.uid, it.label.replace(/^\S+\s/, ""), "#fde047", 0.65);
+      }
+      if (items.length) s?.play("ability");
+    };
+    /** 맞은 유닛: 피해 숫자 + 몸 재질에 맞는 파편 */
     const hits = (f: Frame, from: (uid: string) => string | undefined) => {
       let max = 0;
       for (const u of f.sides.flat()) {
@@ -81,9 +103,13 @@ export default function Combat3D({
         if (dmg > 0) {
           max = Math.max(max, dmg);
           const lethal = u.hp <= 0;
+          const mat = attackStyle(u.defId);
           a()?.hit(u.uid, dmg, from(u.uid));
           a()?.popup(u.uid, `-${dmg}`, "#ef4444", Math.min(2.1, 0.95 + dmg * 0.09) * (lethal ? 1.15 : 1));
-          a()?.burst(u.uid, lethal ? "#fb923c" : "#fca5a5", 10 + dmg * 2, 1.4 + dmg * 0.12, lethal ? 1.3 : 1);
+          const size = mat.material === "bone" ? 1.5 : mat.material === "metal" ? 0.6 : mat.material === "plant" ? 1.1 : 1;
+          const spread = mat.material === "metal" ? 2.4 : mat.material === "spirit" ? 0.9 : 1.4 + dmg * 0.12;
+          a()?.burst(u.uid, mat.hitColor, 10 + dmg * 2, spread, size * (lethal ? 1.3 : 1));
+          if (mat.material === "metal") a()?.burst(u.uid, "#fff7ed", 8, 3, 0.4);
           if (dmg >= 6 || lethal) a()?.ring(u.uid, lethal ? "#f97316" : "#fecaca", 1 + dmg * 0.05);
         }
       }
@@ -92,24 +118,52 @@ export default function Combat3D({
 
     if (ev.t === "attack") {
       const D = STEP_MS.attack / speed;
+      const attacker = [...(prev?.sides.flat() ?? []), ...frame.sides.flat()].find((u) => u.uid === ev.from);
+      const style = attackStyle(attacker?.defId ?? "n_kid");
       const dmgOf = frame.sides.flat().reduce((m, u) => Math.max(m, (hpBefore.get(u.uid) ?? u.hp) - u.hp), 0);
       const lethal = frame.sides.flat().some((u) => (u.uid === ev.to || ev.splash.includes(u.uid)) && u.hp <= 0);
       const hold = Math.min(0.16, 0.05 + dmgOf * 0.009) + (lethal ? 0.05 : 0);
-      a()?.attack(ev.from, ev.to, D * 0.92, IMPACT_AT, hold);
-      timers.push(window.setTimeout(() => s?.play("swing"), D * 0.22));
-      timers.push(
-        window.setTimeout(() => {
-          setImpacted(true);
-          hits(frame, (uid) => (uid === ev.from ? ev.to : ev.from));
-          a()?.shake(3 + dmgOf * 1.2 + (lethal ? 5 : 0));
-          if (frame.popped.length) s?.play("shieldPop");
-          if (dmgOf > 0) s?.play(lethal ? "impactHeavy" : "impact", dmgOf);
-          if (sound && (dmgOf >= 6 || lethal)) navigator.vibrate?.(lethal ? [30, 20, 40] : 25);
-        }, D * IMPACT_AT),
-      );
+      a()?.attack(ev.from, ev.to, D * 0.92, IMPACT_AT, hold, style.ranged);
+      if (style.ranged) {
+        const launchAt = D * 0.25;
+        later(launchAt, () => {
+          s?.play(style.kind === "arrow" ? "launch_arrow" : style.kind === "cannon" ? "launch_cannon" : style.kind === "fire" ? "launch_fire" : "launch_magic");
+          if (style.kind !== "lightning") a()?.projectile(style.kind, style.color, ev.from, ev.to, D * IMPACT_AT - launchAt);
+        });
+      } else {
+        later(D * 0.22, () => s?.play("swing"));
+      }
+      later(D * IMPACT_AT, () => {
+        setImpacted(true);
+        const big = dmgOf >= 6 || lethal;
+        a()?.impactFx(style.kind, style.color, ev.to, ev.from, big);
+        for (const sp of ev.splash) a()?.impactFx(style.kind, style.color, sp, ev.from, false);
+        hits(frame, (uid) => (uid === ev.from ? ev.to : ev.from));
+        const heavy = style.kind === "smash" || style.kind === "cannon" || style.kind === "lightning";
+        a()?.shake(3 + dmgOf * 1.2 + (lethal ? 5 : 0) + (heavy ? 4 : 0));
+        s?.play(`atk_${style.kind}`);
+        if (frame.popped.length) s?.play("shieldPop");
+        if (dmgOf > 0) s?.play(lethal ? "impactHeavy" : "impact", dmgOf);
+        if (sound && (dmgOf >= 6 || lethal)) navigator.vibrate?.(lethal ? [30, 20, 40] : 25);
+      });
     } else if (ev.t === "soc") {
       s?.play("soc");
-      if (ev.uid) a()?.glow(ev.uid);
+      if (ev.uid) {
+        a()?.glow(ev.uid);
+        a()?.ring(ev.uid, "#fde047", 1.3);
+        const src = frame.sides.flat().find((u) => u.uid === ev.uid);
+        if (src) {
+          const st = attackStyle(src.defId);
+          // 전투 시작 피해 능력은 그 캐릭터의 공격 스타일로 날아간다
+          for (const u of frame.sides[1 - ev.side]) {
+            const was = hpBefore.get(u.uid);
+            if (was !== undefined && was > u.hp) a()?.impactFx(st.kind, st.color, u.uid, ev.uid, false);
+          }
+        }
+        later(0, () => pushFeed([{ side: ev.side, uid: ev.uid, label: `✦ ${ev.label}`, text: ev.text ?? "" }]));
+      } else {
+        later(0, () => pushFeed([{ side: ev.side, uid: null, label: `✦ ${ev.label}`, text: "시너지 발동" }]));
+      }
       const max = hits(frame, () => ev.uid ?? undefined);
       if (max > 0) {
         a()?.shake(3 + max);
@@ -123,39 +177,48 @@ export default function Combat3D({
         const dh = u.hp - b.hp;
         if (da > 0 || (dh > 0 && da >= 0)) a()?.popup(u.uid, `+${da}/+${Math.max(0, dh)}`, "#4ade80", 0.75);
       }
+    } else if (ev.t === "ability") {
+      highlight(ev.items);
+      later(0, () => pushFeed(ev.items));
+      const before = new Map((prev?.sides.flat() ?? []).map((u) => [u.uid, u]));
+      for (const u of frame.sides.flat()) {
+        const b = before.get(u.uid);
+        if (!b) continue;
+        const da = u.atk - b.atk;
+        const dh = u.hp - b.hp;
+        if (da > 0 || dh > 0) a()?.popup(u.uid, `+${Math.max(0, da)}/+${Math.max(0, dh)}`, "#4ade80", 0.75);
+      }
     } else if (ev.t === "deaths") {
       if (ev.uids.length) {
         s?.play("death");
         for (const uid of ev.uids) {
           a()?.die(uid, (STEP_MS.deaths / speed) * 0.9);
-          timers.push(
-            window.setTimeout(() => {
-              a()?.burst(uid, "#a8a29e", 30, 2.6, 1.9);
-              a()?.burst(uid, "#ef4444", 14, 2, 1.2);
-              a()?.ring(uid, "#f87171", 1.4);
-            }, (STEP_MS.deaths / speed) * 0.25),
-          );
+          const dead = prev?.sides.flat().find((u) => u.uid === uid);
+          const mat = attackStyle(dead?.defId ?? "n_kid");
+          later((STEP_MS.deaths / speed) * 0.25, () => {
+            a()?.burst(uid, mat.material === "flesh" ? "#a8a29e" : mat.hitColor, 30, 2.6, 1.9);
+            a()?.burst(uid, mat.material === "metal" ? "#fde047" : "#ef4444", 14, 2, 1.2);
+            a()?.ring(uid, "#f87171", 1.4);
+          });
         }
-        timers.push(window.setTimeout(() => a()?.shake(5 + ev.uids.length * 2), (STEP_MS.deaths / speed) * 0.25));
+        later((STEP_MS.deaths / speed) * 0.25, () => a()?.shake(5 + ev.uids.length * 2));
       } else if (prev) {
         const old = new Set(prev.sides.flat().map((u) => u.uid));
         const born = frame.sides.flat().filter((u) => !old.has(u.uid));
         if (born.length) s?.play("summon");
         for (const u of born) {
           a()?.spawn(u.uid);
-          timers.push(
-            window.setTimeout(() => {
-              a()?.ring(u.uid, "#a7f3d0", 1);
-              a()?.burst(u.uid, "#d6d3d1", 12, 1.2, 0.8);
-            }, 300),
-          );
+          later(300, () => {
+            a()?.ring(u.uid, "#a7f3d0", 1);
+            a()?.burst(u.uid, "#d6d3d1", 12, 1.2, 0.8);
+          });
         }
       }
     } else if (ev.t === "end") {
       s?.play(ev.winner === null ? "draw" : ev.winner === viewSide ? "win" : "lose");
     } else if (ev.t === "start") {
       s?.play("clash");
-      timers.push(window.setTimeout(() => a()?.shake(6), 120));
+      later(120, () => a()?.shake(6));
     }
     return () => timers.forEach((t) => window.clearTimeout(t));
     // 프레임이 바뀔 때만 연출한다
@@ -170,6 +233,11 @@ export default function Combat3D({
   const heroA = viewSide === 0 ? combat.sideA.hero : combat.sideB.hero;
   const heroB = viewSide === 0 ? combat.sideB.hero : combat.sideA.hero;
   const result = ev.t === "end" ? (ev.winner === null ? "draw" : ev.winner === viewSide ? "win" : "loss") : null;
+  const attackerName =
+    ev.t === "attack" ? (() => {
+      const u = [...(prev?.sides.flat() ?? []), ...frame.sides.flat()].find((x) => x.uid === ev.from);
+      return u ? `${unitDef(u.defId).emoji} ${unitDef(u.defId).name} — ${attackStyle(u.defId).verb}` : null;
+    })() : null;
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-amber-900/50 bg-stone-950">
@@ -182,13 +250,21 @@ export default function Combat3D({
           {Math.min(idx + 1, frames.length)} / {frames.length}
         </span>
       </div>
+      <AbilityFeed items={feed} />
+      {attackerName && (
+        <div className="pointer-events-none absolute bottom-9 left-1/2 -translate-x-1/2">
+          <span key={idx} className="tb-banner rounded-full bg-black/60 px-3 py-0.5 text-[11px] font-semibold text-white/85">
+            {attackerName}
+          </span>
+        </div>
+      )}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 py-2 text-xs text-amber-100">
         {heroA ? HERO_BY_ID[heroA].emoji : "👻"} {names[0]}
       </div>
-      {(ev.t === "soc" || ev.t === "start") && (
+      {ev.t === "start" && (
         <div className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center">
           <span key={idx} className="tb-banner rounded-full bg-black/75 px-4 py-1 text-sm font-black tracking-wide text-amber-200 shadow-lg">
-            {ev.t === "start" ? "⚔️ 전투 시작!" : `✦ ${ev.label}`}
+            ⚔️ 전투 시작!
           </span>
         </div>
       )}

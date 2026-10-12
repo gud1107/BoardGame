@@ -2,6 +2,7 @@
 
 import type { Keyword } from "./units";
 import { CLASSES, KEYWORDS, TRIBES, unitDef } from "./units";
+import { AbilityText } from "./AbilityFeed";
 
 export interface CardUnit {
   defId: string;
@@ -25,6 +26,7 @@ export default function UnitCard({
   onClick,
   draggable,
   onDragStart,
+  glow,
 }: {
   unit: CardUnit;
   size?: "sm" | "md" | "lg";
@@ -39,6 +41,8 @@ export default function UnitCard({
   onClick?: () => void;
   draggable?: boolean;
   onDragStart?: (e: React.DragEvent) => void;
+  /** 능력 하이라이트(방금 강화됨) */
+  glow?: boolean;
 }) {
   const d = unitDef(unit.defId);
   const w = size === "sm" ? "w-[3.6rem] h-[4.9rem]" : size === "lg" ? "w-28 h-36" : "w-[3.9rem] h-[5.4rem] sm:w-20 sm:h-[6.8rem]";
@@ -56,7 +60,7 @@ export default function UnitCard({
       onClick={onClick}
       draggable={draggable}
       onDragStart={onDragStart}
-      className={`relative shrink-0 select-none rounded-xl transition-all duration-200 ${w} ${liftCls} ${flashCls} ${dim ? "opacity-50" : ""} ${
+      className={`relative shrink-0 select-none rounded-xl transition-all duration-200 ${w} ${liftCls} ${flashCls} ${dim ? "opacity-50" : ""} ${glow ? "tb-glow" : ""} ${
         selected ? "ring-2 ring-yellow-300 ring-offset-2 ring-offset-transparent -translate-y-1" : ""
       } ${onClick ? "cursor-pointer" : "cursor-default"}`}
       title={`${d.name} (${d.tier}등급${tribe ? ` · ${tribe.name}` : ""}) ${d.text}`}
@@ -97,9 +101,9 @@ export default function UnitCard({
         {unit.atk}
       </span>
       <span className={`absolute -bottom-1.5 -right-1.5 flex items-center justify-center rounded-full border border-black/40 bg-rose-600 font-bold text-white ${stat} ${buffedHp ? "text-lime-200" : ""}`}>
-        {unit.hp}
+        {Math.max(0, unit.hp)}
       </span>
-      {float && <span className="tb-float pointer-events-none absolute left-1/2 top-1/3 -translate-x-1/2 text-lg font-black text-red-400 drop-shadow-[0_2px_2px_rgba(0,0,0,0.9)]">{float}</span>}
+      {float && <span className={`tb-float pointer-events-none absolute left-1/2 top-1/3 -translate-x-1/2 text-lg font-black drop-shadow-[0_2px_2px_rgba(0,0,0,0.9)] ${float.startsWith("+") ? "text-lime-300" : "text-red-400"}`}>{float}</span>}
       {flash === "pop" && <span className="tb-pop pointer-events-none absolute inset-0 flex items-center justify-center text-2xl">✨</span>}
       {flash === "dead" && <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-3xl">💥</span>}
     </button>
@@ -122,7 +126,7 @@ export function UnitDetail({ unit }: { unit: CardUnit }) {
       </p>
       {d.text && (
         <p className="break-keep">
-          {d.text}
+          <AbilityText text={d.text} />
           {unit.golden && (d.battlecry || d.deathrattle || d.startOfCombat || d.onAttack || d.onAllyDeath || d.shopEnd || d.shopStart || d.onSell) ? " (황금: 효과 2배)" : ""}
         </p>
       )}

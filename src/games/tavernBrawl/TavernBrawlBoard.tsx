@@ -22,6 +22,7 @@ import { CLASSES, CLASS_ORDER, HERO_BY_ID, TRIBES, TRIBE_ORDER, unitDef } from "
 import UnitCard, { UnitDetail, type CardUnit } from "./UnitCard";
 import CombatReplay, { COMBAT_CSS, sideOfSeat } from "./CombatReplay";
 import RulebookModal from "./RulebookModal";
+import { AbilityText } from "./AbilityFeed";
 import { getTavernBrawlSound } from "./tavernBrawlBgm";
 import type { ArenaApi } from "./three/Arena3D";
 import { webglAvailable } from "./three/webgl";
@@ -299,8 +300,8 @@ function HeroPick({ state, viewerSeat, names, onAction }: { state: GameState; vi
   const waiting = state.seats.map((s, i) => (s.hero ? null : names[i])).filter(Boolean);
   return (
     <div className={`${PANEL} flex flex-col items-center gap-4 p-5`}>
-      <p className="text-center text-sm text-amber-100/80 light:text-amber-900">영웅을 한 명 고르세요. 영웅마다 고유 능력이 있어요.</p>
-      <div className="grid w-full max-w-xl gap-3 sm:grid-cols-2">
+      <p className="text-center text-sm text-amber-100/80 light:text-amber-900">영웅 3명 중 한 명을 고르세요. 영웅마다 고유 능력이 있어요.</p>
+      <div className="grid w-full max-w-3xl gap-3 sm:grid-cols-3">
         {me.heroOptions.map((id) => {
           const h = HERO_BY_ID[id];
           const picked = me.hero === id;
@@ -321,7 +322,9 @@ function HeroPick({ state, viewerSeat, names, onAction }: { state: GameState; vi
               <span className="text-xs font-semibold text-amber-300 light:text-amber-700">
                 {h.power} {h.cost === null ? "· 지속" : `· 🪙${h.cost}`}
               </span>
-              <span className="break-keep text-xs text-white/60 light:text-slate-600">{h.text}</span>
+              <span className="break-keep rounded-lg bg-black/30 px-2 py-1.5 text-xs text-white/75 light:bg-amber-100 light:text-slate-700">
+                <AbilityText text={h.text} />
+              </span>
             </button>
           );
         })}
@@ -347,6 +350,17 @@ function ShopView({
   quality: "high" | "low";
 }) {
   const arenaApi = useRef<ArenaApi | null>(null);
+  /** 방금 발동한 능력 안내(전투의 함성·영웅 능력) */
+  const [toast, setToast] = useState<{ id: number; label: string; text: string } | null>(null);
+  const toastSeq = useRef(0);
+  const showToast = (label: string, text: string) => {
+    const id = ++toastSeq.current;
+    setToast({ id, label, text });
+    window.setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 2800);
+  };
+  /** 방금 강화된 보드 유닛 → "+a/+h" */
+  const [boosts, setBoosts] = useState<Record<string, string>>({});
+  const prevBoardRef = useRef<Map<string, { atk: number; hp: number }> | null>(null);
   const me = state.seats[viewerSeat];
   const round = state.round;
   const [sel, setSel] = useState<Selection>(null);
@@ -361,6 +375,36 @@ function ShopView({
     (sel.kind === "board" && me.board.some((u) => u.uid === sel.uid));
   const selection = selValid ? sel : null;
 
+  // 보드 스탯이 오른 유닛을 찾아 하이라이트(전투의 함성·영웅 능력·발견 등 모든 상점 강화)
+  const boardKey = state.seats[viewerSeat].board.map((u) => `${u.uid}:${u.atk}:${u.hp}`).join("|");
+  useEffect(() => {
+    const board = state.seats[viewerSeat].board;
+    const prevMap = prevBoardRef.current;
+    prevBoardRef.current = new Map(board.map((u) => [u.uid, { atk: u.atk, hp: u.hp }]));
+    if (!prevMap) return;
+    const changed: Record<string, string> = {};
+    for (const u of board) {
+      const p = prevMap.get(u.uid);
+      if (p && (u.atk > p.atk || u.hp > p.hp)) changed[u.uid] = `+${Math.max(0, u.atk - p.atk)}/+${Math.max(0, u.hp - p.hp)}`;
+    }
+    if (!Object.keys(changed).length) return;
+    const t0 = window.setTimeout(() => {
+      setBoosts(changed);
+      for (const [uid, text] of Object.entries(changed)) {
+        arenaApi.current?.glow(uid);
+        arenaApi.current?.ring(uid, "#fde047", 1.2);
+        arenaApi.current?.popup(uid, text, "#4ade80", 0.8);
+      }
+    }, 0);
+    const t1 = window.setTimeout(() => setBoosts({}), 1400);
+    return () => {
+      window.clearTimeout(t0);
+      window.clearTimeout(t1);
+    };
+    // boardKey가 바뀔 때만
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boardKey]);
+
   const send = (a: EngineAction, sound?: string) => {
     if (sound) sfx(sound);
     onAction(a);
@@ -372,6 +416,14 @@ function ShopView({
   };
   const play = (uid: string, index: number) => {
     if (me.board.length >= BOARD_MAX) return;
+    const u = me.hand.find((x) => x.uid === uid);
+    if (u) {
+      const d = unitDef(u.defId);
+      if (d.battlecry) {
+        showToast(`📣 ${d.name}`, d.text);
+        window.setTimeout(() => sfx("ability"), 120);
+      } else if (u.golden) showToast(`✨ 황금 ${d.name}`, `발견: ${Math.min(6, me.tier + 1)}등급 유닛 3장 중 1장을 골라요`);
+    }
     send({ type: "PLAY", seat: viewerSeat, round, uid, index }, "play");
     setSel(null);
   };
@@ -383,6 +435,7 @@ function ShopView({
     setSel(null);
   };
   const activatePower = (target?: string) => {
+    if (hero) showToast(`${hero.emoji} ${hero.power}`, hero.text);
     send({ type: "HERO_POWER", seat: viewerSeat, round, target }, "power");
     setTargeting(false);
   };
@@ -503,6 +556,15 @@ function ShopView({
         </div>
       </div>
 
+      {toast && (
+        <div key={toast.id} className="tb-feed flex items-start gap-2 rounded-xl border border-yellow-300/50 bg-yellow-300/10 px-3 py-2 text-xs text-yellow-50 shadow-[0_0_18px_rgba(253,224,71,0.25)] light:text-amber-900">
+          <span className="shrink-0 font-black text-yellow-300 light:text-amber-700">{toast.label}</span>
+          <span className="break-keep">
+            <AbilityText text={toast.text} />
+          </span>
+        </div>
+      )}
+
       {/* 보드 */}
       <div className={`${PANEL} flex flex-col gap-2`} onDragOver={(e) => e.preventDefault()} onDrop={(e) => onDropBoard(e, me.board.length)}>
         <p className={LABEL}>
@@ -542,6 +604,8 @@ function ShopView({
               {insertMode && <InsertMark onClick={() => (selection!.kind === "hand" ? play(selection!.uid, i) : move(selection!.uid, i))} />}
               <UnitCard
                 unit={u}
+                glow={!!boosts[u.uid]}
+                float={boosts[u.uid] ?? null}
                 selected={selection?.kind === "board" && selection.uid === u.uid}
                 onClick={() => {
                   if (targeting) return activatePower(u.uid);

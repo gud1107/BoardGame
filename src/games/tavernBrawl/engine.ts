@@ -358,7 +358,7 @@ export function startGame(playerCount: number, seed: number, options: GameOption
     heroRng,
   );
   const seats: SeatState[] = Array.from({ length: n }, (_, i) => ({
-    heroOptions: [deck[(i * 2) % deck.length], deck[(i * 2 + 1) % deck.length]],
+    heroOptions: [deck[(i * 3) % deck.length], deck[(i * 3 + 1) % deck.length], deck[(i * 3 + 2) % deck.length]],
     hero: null,
     hp: options.startHp,
     alive: true,

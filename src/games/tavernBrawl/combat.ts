@@ -34,9 +34,18 @@ export interface Snap {
   kw: Keyword[];
 }
 
+/** 능력 발동 알림(재생 화면 하이라이트용). label = 짧은 이름, text = 효과 설명 */
+export interface AbilityNote {
+  side: 0 | 1;
+  uid: string | null;
+  label: string;
+  text: string;
+}
+
 export type FrameEvent =
   | { t: "start" }
-  | { t: "soc"; side: 0 | 1; uid: string | null; label: string }
+  | { t: "soc"; side: 0 | 1; uid: string | null; label: string; text?: string }
+  | { t: "ability"; items: AbilityNote[] }
   | { t: "attack"; side: 0 | 1; from: string; to: string; splash: string[] }
   | { t: "deaths"; uids: string[] }
   | { t: "end"; winner: 0 | 1 | null };
@@ -146,6 +155,18 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
     if (record) frames.push({ sides: [snap(sides[0]), snap(sides[1])], ev, popped });
     popped = [];
   };
+  /** 이번 처리 단계에서 발동한 능력들 — flushNotes()로 한 프레임에 모아 낸다 */
+  let notes: AbilityNote[] = [];
+  const note = (side: 0 | 1, uid: string | null, label: string, text: string) => {
+    if (record) notes.push({ side, uid, label, text });
+  };
+  const flushNotes = () => {
+    if (notes.length) {
+      const items = notes;
+      notes = [];
+      push({ t: "ability", items });
+    }
+  };
 
   function damage(u: CU, amount: number, poison: boolean) {
     if (amount <= 0 || u.hp <= 0) return;
@@ -239,13 +260,17 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
       if (isDead(u) || classOf(u.defId) !== "berserker") continue;
       const side = sides[0].includes(u) ? 0 : sides[1].includes(u) ? 1 : -1;
       if (side < 0) continue;
-      u.atk += byLevel(clv(side as 0 | 1, "berserker"), 1, 2, 4);
+      const gain = byLevel(clv(side as 0 | 1, "berserker"), 1, 2, 4);
+      if (!gain) continue;
+      u.atk += gain;
+      note(side as 0 | 1, u.uid, "🪓 분노", `피해를 견뎌 공격력 +${gain}`);
     }
     hurt.clear();
   }
 
   function processDeaths(order: [0 | 1, 0 | 1]) {
     berserkerRage();
+    flushNotes();
     for (let guard = 0; guard < 50; guard++) {
       const dead: { side: 0 | 1; u: CU; idx: number }[] = [];
       for (const side of order) {
@@ -269,12 +294,14 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
         const def = unitDef(d.u.defId);
         const at = d.at + shift[d.side];
         const before = sides[d.side].length;
+        if (def.deathrattle) note(d.side, d.u.uid, `🪦 ${def.name}`, def.text.replace(/^.*?죽음의 메아리: /, "죽음의 메아리: "));
         runEffects(d.side, d.u, def.deathrattle, d.u.golden, at);
         if (hasKw(d.u, "reborn")) {
           const r = summon(d.side, d.u.defId, d.u.golden, at + (sides[d.side].length - before));
           if (r) {
             r.hp = 1;
             removeKw(r, "reborn");
+            note(d.side, r.uid, "🔁 부활", `${def.name}이(가) 체력 1로 되살아남`);
           }
         } else if (heroes[d.side] === "necro" && !necroUsed[d.side] && !d.u.defId.startsWith("t_")) {
           necroUsed[d.side] = true;
@@ -282,6 +309,7 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
           if (r) {
             r.hp = 1;
             removeKw(r, "reborn");
+            note(d.side, r.uid, "🪦 되살림", `강령술사: ${def.name}이(가) 체력 1로 되살아남`);
           }
         }
         // 소환사: 죽으면 정령
@@ -292,6 +320,7 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
             if (sp) {
               sp.atk = v;
               sp.hp = v;
+              note(d.side, sp.uid, "📜 소환사", `${def.name}의 자리에 ${v}/${v} 소환 정령`);
             }
           }
         }
@@ -304,19 +333,24 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
             const t = pick(alive);
             t.atk += v;
             t.hp += v;
+            note(d.side, t.uid, "🧚 요정의 축복", `${def.name}이(가) 쓰러지며 +${v}/+${v}`);
           }
         }
         // 아군 사망 반응
         for (const ally of sides[d.side]) {
           if (ally.hp <= 0) continue;
           const ad = unitDef(ally.defId);
-          if (ad.onAllyDeath) runEffects(d.side, ally, ad.onAllyDeath, ally.golden, 0);
+          if (ad.onAllyDeath) {
+            runEffects(d.side, ally, ad.onAllyDeath, ally.golden, 0);
+            note(d.side, ally.uid, `✦ ${ad.name}`, ad.text);
+          }
         }
         if (synergyLevel(counts[d.side].undead) >= 4) {
           for (const u of sides[d.side]) if (tribeOf(u.defId) === "undead") u.atk += 1;
         }
       }
       if (shift[0] + shift[1] > 0) push({ t: "deaths", uids: [] });
+      flushNotes();
     }
   }
 
@@ -460,7 +494,7 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
       const d = unitDef(u.defId);
       if (!d.startOfCombat || u.hp <= 0) continue;
       runEffects(side, u, d.startOfCombat, u.golden, sides[side].indexOf(u));
-      push({ t: "soc", side, uid: u.uid, label: d.name });
+      push({ t: "soc", side, uid: u.uid, label: d.name, text: d.text });
       processDeaths(order);
     }
   }
@@ -494,7 +528,11 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
         ? sides[enemy].reduce((hi, u) => (u.atk > hi.atk ? u : hi), sides[enemy][0])
         : pick(taunts.length ? taunts : sides[enemy]);
       const ad = unitDef(attacker.defId);
-      if (ad.onAttack) runEffects(turn, attacker, ad.onAttack, attacker.golden, idx);
+      if (ad.onAttack) {
+        runEffects(turn, attacker, ad.onAttack, attacker.golden, idx);
+        note(turn, attacker.uid, `⚔ ${ad.name}`, ad.text);
+        flushNotes();
+      }
       const dIdx = sides[enemy].indexOf(defender);
       const splash = hasKw(attacker, "cleave") ? [sides[enemy][dIdx - 1], sides[enemy][dIdx + 1]].filter((u): u is CU => !!u) : [];
       const atkPoison = hasKw(attacker, "poison");

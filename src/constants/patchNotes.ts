@@ -64,6 +64,8 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     changes: [
       { game: "tavern-brawl", type: "FEAT", desc: "직업 시너지 9개 — 전사·수호자·암살자·마법사·궁수·성직자·광전사·소환사·약탈자, 모든 유닛이 종족+직업 두 가지 시너지" },
       { game: "tavern-brawl", type: "FEAT", desc: "새 종족 🌊 해양 · 😈 악마 · 🌿 숲 · 🧚 요정과 새 유닛 33종(총 75종), 새 키워드 ⚡ 연타" },
+      { game: "tavern-brawl", type: "IMPROVE", desc: "캐릭터별 공격·피격 연출 — 베기·할퀴기·물기·화살·불꽃·번개 등 18가지, 원거리는 제자리에서 발사, 몸 재질별 파편과 효과음" },
+      { game: "tavern-brawl", type: "IMPROVE", desc: "능력 하이라이트 — 발동한 유닛이 빛나고 능력 피드에 이름·효과 표시, 상점 강화도 표시, 영웅은 3명 중 선택" },
       { game: "tavern-brawl", type: "FEAT", desc: "판마다 종족 10개 중 7개만 상점에 나와 매번 다른 판, 새 유닛 모두 전용 3D 캐릭터" },
       { game: "word-tower", type: "FEAT", desc: "신규 게임 🏙️ 단어 마천루 — 주제가 뜨면 모두 동시에 단어를 입력해 3D 탑을 쌓는 2~8인 실시간 단어 게임, AI 봇과 혼자서도 바로" },
       { game: "word-tower", type: "FEAT", desc: "25개 주제 사전, 단어 1개 = 글자 수만큼 층(최대 4층), 사전에 없는 단어는 다른 플레이어 투표로 심사, 라운드 1등·연승 기록" },

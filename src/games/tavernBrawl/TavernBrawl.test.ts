@@ -95,7 +95,7 @@ describe("shop", () => {
     expect(st.round).toBe(1);
     for (const s of st.seats) {
       expect(s.gold).toBe(3);
-      expect(s.shop.length).toBe(3);
+      expect(s.shop.length).toBe(s.hero === "mercenary" ? 4 : 3);
       expect(s.shop.every((id) => id && unitDef(id).tier === 1)).toBe(true);
     }
   });

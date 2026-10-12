@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { simulateCombat, type Frame, type Snap } from "./combat";
+import { simulateCombat, type AbilityNote, type Frame, type Snap } from "./combat";
+import { attackStyle, type AttackKind } from "./attackStyle";
+import AbilityFeed, { type FeedItem } from "./AbilityFeed";
 import type { CombatRecord } from "./engine";
 import { HERO_BY_ID } from "./units";
 import UnitCard from "./UnitCard";
@@ -19,7 +21,7 @@ import { getTavernBrawlSound } from "./tavernBrawlBgm";
  *   이후   제자리로 복귀. 죽음은 부풀었다가 회전하며 산산조각, 소환은 튀어 오르며 등장.
  */
 
-export const STEP_MS: Record<Frame["ev"]["t"], number> = { start: 900, soc: 750, attack: 1050, deaths: 600, end: 1700 };
+export const STEP_MS: Record<Frame["ev"]["t"], number> = { start: 900, soc: 750, ability: 700, attack: 1050, deaths: 600, end: 1700 };
 /** 돌진이 대상에 닿는 시점(공격 프레임 길이 대비) */
 export const IMPACT_AT = 0.42;
 
@@ -32,7 +34,9 @@ type Fx =
   | { id: number; kind: "dmg"; x: number; y: number; text: string; size: number; tone: "red" | "gold" | "green" }
   | { id: number; kind: "burst"; x: number; y: number; color: string; parts: { dx: number; dy: number; size: number }[] }
   | { id: number; kind: "ring"; x: number; y: number; color: string }
-  | { id: number; kind: "slash"; x: number; y: number; angle: number };
+  | { id: number; kind: "slash"; x: number; y: number; angle: number }
+  | { id: number; kind: "glyph"; x: number; y: number; style: AttackKind; color: string; angle: number }
+  | { id: number; kind: "proj"; x: number; y: number; tx: number; ty: number; style: AttackKind; color: string; dur: number };
 
 type NoId<T> = T extends unknown ? Omit<T, "id"> : never;
 type FxInput = Exclude<NoId<Fx>, { kind: "burst" }> | { kind: "burst"; x: number; y: number; color: string; count: number; spread: number };
@@ -69,6 +73,8 @@ export default function CombatReplay({
   /** 공격 프레임에서 충돌이 일어났는지 — 그 전엔 맞기 전 체력을 보여 준다 */
   const [impacted, setImpacted] = useState(false);
   const [fx, setFx] = useState<Fx[]>([]);
+  const [feed, setFeed] = useState<FeedItem[]>([]);
+  const feedSeq = useRef(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const arenaRef = useRef<HTMLDivElement>(null);
   const finishedRef = useRef(false);
@@ -159,8 +165,10 @@ export default function CombatReplay({
             maxDmg = Math.max(maxDmg, dmg);
             const lethal = u.hp <= 0;
             items.push({ kind: "dmg", x: c.x + (Math.random() - 0.5) * 16, y: c.y - 20, text: `-${dmg}`, size: Math.min(54, 26 + dmg * 2.2) * (lethal ? 1.15 : 1), tone: "red" });
-            items.push({ kind: "burst", x: c.x, y: c.y, color: lethal ? "#f97316" : "#fca5a5", count: Math.min(18, 7 + dmg), spread: 50 + dmg * 6 });
-            if (big) items.push({ kind: "slash", x: c.x, y: c.y, angle: -35 + Math.random() * 70 });
+            const mat = attackStyle(u.defId);
+            items.push({ kind: "burst", x: c.x, y: c.y, color: lethal ? "#f97316" : mat.hitColor, count: Math.min(18, 7 + dmg), spread: (mat.material === "metal" ? 80 : 50) + dmg * 6 });
+            if (mat.material === "metal") items.push({ kind: "burst", x: c.x, y: c.y, color: "#fff7ed", count: 8, spread: 95 });
+            if (big) items.push({ kind: "ring", x: c.x, y: c.y, color: "#fecaca" });
           }
           if (typeof node.animate === "function" && (dmg > 0 || popped)) {
             const a = Math.min(14, 5 + dmg);
@@ -194,6 +202,8 @@ export default function CombatReplay({
     if (ev.t === "attack") {
       const a = el(ev.from);
       const t = el(ev.to);
+      const attacker = [...(prev?.sides.flat() ?? []), ...frame.sides.flat()].find((u) => u.uid === ev.from);
+      const style = attackStyle(attacker?.defId ?? "n_kid");
       const willHurt = (() => {
         if (!prev) return 0;
         const hp = new Map(prev.sides.flat().map((u) => [u.uid, u.hp]));
@@ -209,6 +219,24 @@ export default function CombatReplay({
         const tilt = dx >= 0 ? 1 : -1;
         const wrap = a.parentElement as HTMLElement | null;
         if (wrap) wrap.style.zIndex = "30";
+        if (style.ranged) {
+          // 원거리: 제자리에서 겨누고 반동, 투사체가 날아간다
+          a.animate(
+            [
+              { transform: "translate(0,0) scale(1)", offset: 0 },
+              { transform: `translate(${-dx * 0.04}px,${-dy * 0.04}px) scale(1.12)`, offset: 0.25 },
+              { transform: `translate(${-dx * 0.1}px,${-dy * 0.1}px) scale(1.05)`, offset: 0.33 },
+              { transform: "translate(0,0) scale(1)", offset: 1 },
+            ],
+            { duration: D * 0.9, easing: "ease-out" },
+          );
+          timers.push(
+            window.setTimeout(() => {
+              s?.play(style.kind === "arrow" ? "launch_arrow" : style.kind === "cannon" ? "launch_cannon" : style.kind === "fire" ? "launch_fire" : "launch_magic");
+              if (style.kind !== "lightning") addFx([{ kind: "proj", x: ac.x, y: ac.y, tx: tc.x - ac.x, ty: tc.y - ac.y, style: style.kind, color: style.color, dur: D * (IMPACT_AT - 0.25) }], D);
+            }, D * 0.25),
+          );
+        } else
         a.animate(
           [
             { transform: "translate(0,0) scale(1) rotate(0)", offset: 0 },
@@ -225,11 +253,21 @@ export default function CombatReplay({
           }, D * 0.9),
         );
       }
-      timers.push(window.setTimeout(() => s?.play("swing"), D * 0.2));
+      if (!style.ranged) timers.push(window.setTimeout(() => s?.play("swing"), D * 0.2));
       timers.push(
         window.setTimeout(() => {
           setImpacted(true);
           const big = willHurt >= 6 || lethal;
+          const glyphs: FxInput[] = [];
+          for (const uid of [ev.to, ...ev.splash]) {
+            const node = el(uid);
+            if (!node) continue;
+            const c = center(node);
+            const ac = a ? center(a) : c;
+            glyphs.push({ kind: "glyph", x: c.x, y: c.y, style: style.kind, color: style.color, angle: (Math.atan2(c.y - ac.y, c.x - ac.x) * 180) / Math.PI });
+          }
+          if (glyphs.length) addFx(glyphs, 900);
+          s?.play(`atk_${style.kind}`);
           if (prev) hitUnits(prev, frame, [ev.to, ...ev.splash], big);
           shake(3 + willHurt * 1.1 + (lethal ? 4 : 0));
           if (frame.popped.length) s?.play("shieldPop");
@@ -241,9 +279,41 @@ export default function CombatReplay({
       // 비공격 프레임 연출은 렌더 직후 한 틱 뒤에(이펙트 안에서 바로 setState 하지 않도록)
       timers.push(window.setTimeout(() => runFrameFx(), 0));
     }
+    function feedIn(items: AbilityNote[]) {
+      if (!items.length) return;
+      const add = items.map((it) => ({ ...it, id: ++feedSeq.current, mine: it.side === viewSide }));
+      setFeed((cur) => [...cur, ...add].slice(-4));
+      timers.push(window.setTimeout(() => setFeed((cur) => cur.filter((x) => !add.includes(x))), 2600 / Math.max(1, speed / 1.5)));
+    }
     function runFrameFx() {
-    if (ev.t === "soc") {
+    if (ev.t === "ability") {
+      s?.play("ability");
+      feedIn(ev.items);
+      const pops: FxInput[] = [];
+      for (const it of ev.items) {
+        const node = it.uid ? el(it.uid) : null;
+        if (!node) continue;
+        const c = center(node);
+        node.classList.remove("tb-glow");
+        void node.offsetWidth;
+        node.classList.add("tb-glow");
+        pops.push({ kind: "ring", x: c.x, y: c.y, color: "#fde047" });
+        pops.push({ kind: "dmg", x: c.x, y: c.y - 44, text: it.label.replace(/^\S+\s/, ""), size: 15, tone: "gold" });
+      }
+      if (prev) {
+        const before = new Map(prev.sides.flat().map((u) => [u.uid, u]));
+        for (const u of frame.sides.flat()) {
+          const b = before.get(u.uid);
+          const node = b ? el(u.uid) : null;
+          if (!b || !node || (u.atk <= b.atk && u.hp <= b.hp)) continue;
+          const c = center(node);
+          pops.push({ kind: "dmg", x: c.x, y: c.y - 20, text: `+${Math.max(0, u.atk - b.atk)}/+${Math.max(0, u.hp - b.hp)}`, size: 18, tone: "green" });
+        }
+      }
+      if (pops.length) addFx(pops, 1100);
+    } else if (ev.t === "soc") {
       s?.play("soc");
+      feedIn([{ side: ev.side, uid: ev.uid, label: `✦ ${ev.label}`, text: ev.uid ? (ev.text ?? "") : "시너지 발동" }]);
       if (ev.uid) {
         const src = el(ev.uid);
         if (src && typeof src.animate === "function") {
@@ -374,6 +444,7 @@ export default function CombatReplay({
           {Math.min(idx + 1, frames.length)} / {frames.length}
         </span>
       </div>
+      <AbilityFeed items={feed} />
       <div ref={arenaRef} className="relative">
         {row(enemySide)}
         <div className="relative flex h-8 items-center justify-center">
@@ -431,6 +502,22 @@ function FxNode({ f }: { f: Fx }) {
   if (f.kind === "ring") {
     return <span className="tb-ring absolute rounded-full" style={{ left: f.x, top: f.y, borderColor: f.color, boxShadow: `0 0 18px ${f.color}` }} />;
   }
+  if (f.kind === "proj") {
+    const shape =
+      f.style === "arrow" ? (
+        <span className="block h-[3px] w-7 rounded bg-gradient-to-r from-amber-900 via-amber-700 to-stone-200" style={{ transform: `rotate(${(Math.atan2(f.ty, f.tx) * 180) / Math.PI}deg)` }} />
+      ) : f.style === "cannon" ? (
+        <span className="block h-4 w-4 rounded-full bg-stone-900 shadow-[0_0_6px_#000]" />
+      ) : (
+        <span className="block h-4 w-4 rounded-full" style={{ background: `radial-gradient(circle,#fff 0%,${f.color} 55%,transparent 75%)`, boxShadow: `0 0 16px 6px ${f.color}` }} />
+      );
+    return (
+      <span className="tb-proj absolute" style={{ left: f.x, top: f.y, ["--tx" as string]: `${f.tx}px`, ["--ty" as string]: `${f.ty}px`, ["--dur" as string]: `${f.dur}ms` }}>
+        {shape}
+      </span>
+    );
+  }
+  if (f.kind === "glyph") return <Glyph f={f} />;
   if (f.kind === "slash") {
     return <span className="tb-slash absolute" style={{ left: f.x, top: f.y, ["--a" as string]: `${f.angle}deg` }} />;
   }
@@ -454,6 +541,54 @@ function FxNode({ f }: { f: Fx }) {
       ))}
     </>
   );
+}
+
+
+/** 2D 타격 그림 — attackStyle의 kind마다 다른 모양 */
+function Glyph({ f }: { f: Extract<Fx, { kind: "glyph" }> }) {
+  const base = { left: f.x, top: f.y } as const;
+  const c = f.color;
+  switch (f.style) {
+    case "slash":
+      return <span className="tb-arc absolute h-24 w-24 rounded-full" style={{ ...base, borderTop: "5px solid #fff", borderRight: `3px solid ${c}`, ["--a" as string]: `${f.angle - 60}deg`, filter: `drop-shadow(0 0 8px ${c})` }} />;
+    case "claw":
+      return (
+        <span className="absolute" style={base}>
+          {[-1, 0, 1].map((i) => (
+            <span key={i} className="tb-claw absolute h-[4px] w-20 rounded-full bg-gradient-to-r from-transparent via-white to-rose-500" style={{ left: i * 12 - 40, top: i * 12, animationDelay: `${(i + 1) * 40}ms`, boxShadow: "0 0 8px #ef4444" }} />
+          ))}
+        </span>
+      );
+    case "bite":
+      return (
+        <span className="absolute" style={base}>
+          <span className="tb-jaw-top absolute -left-9 -top-9 h-16 w-[4.5rem] rounded-b-full border-b-[6px] border-white" />
+          <span className="tb-jaw-bot absolute -left-9 top-0 h-16 w-[4.5rem] rounded-t-full border-t-[6px] border-white" />
+        </span>
+      );
+    case "stab":
+      return <span className="tb-slash absolute" style={{ ...base, ["--a" as string]: `${f.angle}deg`, background: `linear-gradient(90deg,transparent,#fff 45%,${c} 55%,transparent)` }} />;
+    case "lightning":
+      return (
+        <svg className="tb-bolt pointer-events-none absolute" style={{ left: f.x - 30, top: 0, overflow: "visible" }} width="60" height={f.y}>
+          <polyline points={`30,0 14,${f.y * 0.25} 40,${f.y * 0.45} 18,${f.y * 0.7} 36,${f.y * 0.85} 30,${f.y}`} fill="none" stroke="#e0f2fe" strokeWidth="5" style={{ filter: `drop-shadow(0 0 10px ${c})` }} />
+        </svg>
+      );
+    case "wind":
+      return <span className="tb-spin absolute h-24 w-24 rounded-full border-4 border-dashed" style={{ ...base, borderColor: c }} />;
+    case "holy":
+      return (
+        <span className="tb-boom absolute flex h-24 w-24 items-center justify-center rounded-full text-5xl font-black text-amber-50" style={{ ...base, background: `radial-gradient(circle,${c}cc 0%,transparent 70%)`, textShadow: "0 0 12px #fde047" }}>
+          ✚
+        </span>
+      );
+    case "shadow":
+    case "poison":
+      return <span className="tb-smoke absolute h-24 w-24 rounded-full blur-md" style={{ ...base, background: `radial-gradient(circle,${f.style === "poison" ? "#4ade80" : c} 0%,${f.style === "poison" ? "#14532d" : "#1e1b4b"} 50%,transparent 72%)` }} />;
+    default:
+      // 내려찍기·주먹·포탄·불꽃·물·마법·나뭇잎·요정
+      return <span className="tb-boom absolute h-24 w-24 rounded-full" style={{ ...base, background: `radial-gradient(circle,#fff 0%,${c} 35%,transparent 70%)`, boxShadow: f.style === "smash" || f.style === "cannon" ? "0 0 0 6px #d6d3d1aa" : undefined }} />;
+  }
 }
 
 /** 전투에서 이 좌석이 어느 편인지 */
@@ -488,4 +623,26 @@ export const COMBAT_CSS = `
 .tb-banner { animation: tb-banner .4s cubic-bezier(.2,.9,.3,1.2); }
 @keyframes tb-slam { 0% { opacity:0; transform:scale(2.6) rotate(-4deg); } 55% { opacity:1; transform:scale(.92) rotate(1deg); } 75% { transform:scale(1.05); } 100% { transform:scale(1); } }
 .tb-slam { animation: tb-slam .45s cubic-bezier(.2,.9,.3,1.1); }
+@keyframes tb-arc { 0% { opacity:0; transform:translate(-50%,-50%) rotate(var(--a)) scale(.6); } 25% { opacity:1; } 100% { opacity:0; transform:translate(-50%,-50%) rotate(calc(var(--a) + 140deg)) scale(1.15); } }
+.tb-arc { animation: tb-arc .4s ease-out forwards; }
+@keyframes tb-claw { 0% { opacity:0; transform:rotate(-40deg) scaleX(0); transform-origin:left; } 30% { opacity:1; transform:rotate(-40deg) scaleX(1); } 100% { opacity:0; transform:rotate(-40deg) scaleX(1); } }
+.tb-claw { opacity:0; animation: tb-claw .5s ease-out forwards; }
+@keyframes tb-jaw-top { 0% { transform:translateY(-14px); opacity:1; } 40% { transform:translateY(6px); } 100% { transform:translateY(6px); opacity:0; } }
+@keyframes tb-jaw-bot { 0% { transform:translateY(14px); opacity:1; } 40% { transform:translateY(-6px); } 100% { transform:translateY(-6px); opacity:0; } }
+.tb-jaw-top { animation: tb-jaw-top .45s ease-in forwards; }
+.tb-jaw-bot { animation: tb-jaw-bot .45s ease-in forwards; }
+@keyframes tb-boom { 0% { opacity:1; transform:translate(-50%,-50%) scale(.2); } 100% { opacity:0; transform:translate(-50%,-50%) scale(1.5); } }
+.tb-boom { animation: tb-boom .5s ease-out forwards; }
+@keyframes tb-smoke { 0% { opacity:.9; transform:translate(-50%,-50%) scale(.3); } 100% { opacity:0; transform:translate(-50%,-70%) scale(1.6); } }
+.tb-smoke { animation: tb-smoke .8s ease-out forwards; }
+@keyframes tb-spin { 0% { opacity:1; transform:translate(-50%,-50%) rotate(0) scale(.4); } 100% { opacity:0; transform:translate(-50%,-50%) rotate(540deg) scale(1.2); } }
+.tb-spin { animation: tb-spin .6s ease-out forwards; }
+@keyframes tb-bolt { 0%,30%,60% { opacity:1; } 15%,45% { opacity:.2; } 100% { opacity:0; } }
+.tb-bolt { animation: tb-bolt .45s linear forwards; }
+@keyframes tb-feed { 0% { opacity:0; transform:translateX(-24px) scale(.9); } 60% { opacity:1; transform:translateX(3px) scale(1.03); } 100% { transform:none; } }
+.tb-feed { animation: tb-feed .35s cubic-bezier(.2,.9,.3,1.2); }
+@keyframes tb-glow { 0%,100% { box-shadow:0 0 0 rgba(253,224,71,0); } 30% { box-shadow:0 0 22px 6px rgba(253,224,71,.85); } }
+.tb-glow { animation: tb-glow .9s ease-out; border-radius:.75rem; }
+@keyframes tb-proj { from { transform:translate(-50%,-50%) translate(0,0) scale(.6); } to { transform:translate(-50%,-50%) translate(var(--tx),var(--ty)) scale(1.1); } }
+.tb-proj { animation: tb-proj var(--dur) cubic-bezier(.4,0,.8,.6) forwards; }
 `;
