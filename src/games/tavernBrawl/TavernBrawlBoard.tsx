@@ -616,13 +616,24 @@ function ShopView({
     (sel.kind === "board" && me.board.some((u) => u.uid === sel.uid));
   const selection = selValid ? sel : null;
 
-  // 손패+보드에 같은 일반 유닛이 2장 있는데 상점에 그 유닛이 나오면 → 사면 바로 황금(반짝이 표시)
+  // 손패+보드 + 상점의 같은 일반 유닛으로 3장을 채울 수 있으면 → 그 상점 카드에 반짝이(2장 보유면 "3장 완성!", 1장 보유+상점 2장이면 "2장 사면 완성!")
   const ownedCopies = useMemo(() => {
     const m = new Map<string, number>();
     for (const u of [...me.hand, ...me.board]) if (!u.golden) m.set(u.defId, (m.get(u.defId) ?? 0) + 1);
     return m;
   }, [me.hand, me.board]);
-  const tripleReady = (defId: string) => !unitDef(defId).token && (ownedCopies.get(defId) ?? 0) >= 2;
+  const shopCopies = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const id of me.shop) if (id) m.set(id, (m.get(id) ?? 0) + 1);
+    return m;
+  }, [me.shop]);
+  /** 몇 장 더 사면 3장이 되나 — 가진 것 + 상점에 나온 것으로 3장을 채울 수 있을 때만(아니면 0) */
+  const tripleNeed = (defId: string): number => {
+    if (unitDef(defId).token) return 0;
+    const need = 3 - Math.min(2, ownedCopies.get(defId) ?? 0);
+    return (shopCopies.get(defId) ?? 0) >= need ? need : 0;
+  };
+  const tripleReady = (defId: string) => tripleNeed(defId) > 0;
   // 그런 카드가 새로 상점에 나타나면 반짝 효과음 한 번
   const readyKey = me.shop.map((id, i) => (id && tripleReady(id) ? `${i}:${id}` : "")).filter(Boolean).join(",");
   const prevReadyRef = useRef(readyKey);
@@ -927,7 +938,7 @@ function ShopView({
         <div className={`flex min-h-[6rem] flex-wrap items-center gap-3 px-1 sm:min-h-[7rem] ${readyKey ? "pt-7" : "pt-2"} ${me.frozen ? "rounded-xl bg-sky-400/10 ring-2 ring-sky-300/50" : ""}`}>
           {me.shop.map((id, slot) =>
             id ? (
-              <TripleSparkle key={`${slot}-${id}`} on={tripleReady(id)}>
+              <TripleSparkle key={`${slot}-${id}`} need={tripleNeed(id)}>
                 <UnitCard
                   unit={protoCard(id)}
                   selected={selection?.kind === "shop" && selection.slot === slot}
@@ -1126,13 +1137,16 @@ const TWINKLES = [
   { l: "45%", t: "-8%", d: 0.6 },
 ];
 
-/** 사면 3장이 되는 상점 카드: 금빛 오라 + 테두리를 도는 빛 + 반짝이 + "3장 완성!" 배지 */
-function TripleSparkle({ on, children }: { on: boolean; children: React.ReactNode }) {
-  if (!on) return <>{children}</>;
+/**
+ * 사면 3장이 되는 상점 카드: 금빛 오라 + 테두리를 도는 빛 + 반짝이 + 배지.
+ * need 1 = 이 카드 하나로 완성, 2·3 = 상점의 같은 카드를 그만큼 사면 완성(오라만 조금 약하게).
+ */
+function TripleSparkle({ need, children }: { need: number; children: React.ReactNode }) {
+  if (!need) return <>{children}</>;
   return (
-    <span className="relative inline-flex" title="사면 바로 3장 합성 — 황금 유닛!">
+    <span className="relative inline-flex" title={need === 1 ? "사면 바로 3장 합성 — 황금 유닛!" : `상점의 같은 카드 ${need}장을 모두 사면 3장 합성 — 황금 유닛!`}>
       <style>{SPARKLE_CSS}</style>
-      <span className="tb-tr-aura pointer-events-none absolute -inset-2 rounded-2xl bg-yellow-300/35 blur-md" />
+      <span className={`tb-tr-aura pointer-events-none absolute -inset-2 rounded-2xl blur-md ${need === 1 ? "bg-yellow-300/35" : "bg-yellow-300/20"}`} />
       <span className="pointer-events-none absolute -inset-[3px] overflow-hidden rounded-[14px]">
         <span className="tb-tr-ring absolute -inset-1/2" />
       </span>
@@ -1142,8 +1156,8 @@ function TripleSparkle({ on, children }: { on: boolean; children: React.ReactNod
           ✦
         </span>
       ))}
-      <span className="tb-tr-badge pointer-events-none absolute -top-7 left-1/2 z-10 whitespace-nowrap rounded-full border border-yellow-100 bg-gradient-to-b from-yellow-200 to-amber-500 px-1.5 text-[10px] font-black text-amber-950 shadow-[0_0_10px_#facc15]">
-        ✨ 3장 완성!
+      <span className="tb-tr-badge pointer-events-none absolute -top-7 left-1/2 z-10 whitespace-nowrap rounded-full border border-yellow-100 bg-gradient-to-b from-yellow-200 to-amber-500 px-1 text-[9px] font-black tracking-tighter sm:px-1.5 sm:text-[10px] sm:tracking-normal text-amber-950 shadow-[0_0_10px_#facc15]">
+        {need === 1 ? "✨ 3장 완성!" : `✨ ${need}장 사면`}
       </span>
     </span>
   );
