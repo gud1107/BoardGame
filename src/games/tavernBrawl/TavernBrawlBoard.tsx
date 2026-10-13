@@ -616,6 +616,22 @@ function ShopView({
     (sel.kind === "board" && me.board.some((u) => u.uid === sel.uid));
   const selection = selValid ? sel : null;
 
+  // 손패+보드에 같은 일반 유닛이 2장 있는데 상점에 그 유닛이 나오면 → 사면 바로 황금(반짝이 표시)
+  const ownedCopies = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const u of [...me.hand, ...me.board]) if (!u.golden) m.set(u.defId, (m.get(u.defId) ?? 0) + 1);
+    return m;
+  }, [me.hand, me.board]);
+  const tripleReady = (defId: string) => !unitDef(defId).token && (ownedCopies.get(defId) ?? 0) >= 2;
+  // 그런 카드가 새로 상점에 나타나면 반짝 효과음 한 번
+  const readyKey = me.shop.map((id, i) => (id && tripleReady(id) ? `${i}:${id}` : "")).filter(Boolean).join(",");
+  const prevReadyRef = useRef(readyKey);
+  useEffect(() => {
+    const before = new Set(prevReadyRef.current.split(",").filter(Boolean));
+    prevReadyRef.current = readyKey;
+    if (readyKey.split(",").some((k) => k && !before.has(k))) sfx("discover");
+  }, [readyKey]);
+
   // 보드 스탯이 오른 유닛을 찾아 하이라이트(전투의 함성·영웅 능력·발견 등 모든 상점 강화)
   const boardKey = state.seats[viewerSeat].board.map((u) => `${u.uid}:${u.atk}:${u.hp}`).join("|");
   useEffect(() => {
@@ -908,19 +924,20 @@ function ShopView({
           </span>
         </div>
         {me.frozen && <p className="rounded-lg bg-sky-400/15 px-2 py-1 text-xs font-bold text-sky-100">🔒 상점 잠김 — 다음 라운드에도 이 유닛들이 그대로 남아요</p>}
-        <div className={`flex min-h-[6rem] flex-wrap items-center gap-3 px-1 pt-2 sm:min-h-[7rem] ${me.frozen ? "rounded-xl bg-sky-400/10 ring-2 ring-sky-300/50" : ""}`}>
+        <div className={`flex min-h-[6rem] flex-wrap items-center gap-3 px-1 sm:min-h-[7rem] ${readyKey ? "pt-7" : "pt-2"} ${me.frozen ? "rounded-xl bg-sky-400/10 ring-2 ring-sky-300/50" : ""}`}>
           {me.shop.map((id, slot) =>
             id ? (
-              <UnitCard
-                key={`${slot}-${id}`}
-                unit={protoCard(id)}
-                selected={selection?.kind === "shop" && selection.slot === slot}
-                dim={me.gold < BUY_COST}
-                onClick={() => {
-                  if (!suppressClickRef.current) setSel(selection?.kind === "shop" && selection.slot === slot ? null : { kind: "shop", slot });
-                }}
-                onPointerDown={(e) => startDrag({ from: "shop", slot }, protoCard(id), e)}
-              />
+              <TripleSparkle key={`${slot}-${id}`} on={tripleReady(id)}>
+                <UnitCard
+                  unit={protoCard(id)}
+                  selected={selection?.kind === "shop" && selection.slot === slot}
+                  dim={me.gold < BUY_COST}
+                  onClick={() => {
+                    if (!suppressClickRef.current) setSel(selection?.kind === "shop" && selection.slot === slot ? null : { kind: "shop", slot });
+                  }}
+                  onPointerDown={(e) => startDrag({ from: "shop", slot }, protoCard(id), e)}
+                />
+              </TripleSparkle>
             ) : (
               <div key={slot} className="h-[5.4rem] w-[3.9rem] rounded-xl border border-dashed border-white/10 sm:h-[6.8rem] sm:w-20 light:border-amber-300" />
             ),
@@ -1086,6 +1103,49 @@ function ShopView({
 
       {me.discover.length > 0 && <DiscoverModal options={me.discover[0]} onPick={(pick) => send({ type: "DISCOVER", seat: viewerSeat, round, pick }, "discover")} />}
     </div>
+  );
+}
+
+const SPARKLE_CSS = `
+@keyframes tb-tr-aura { 0%,100% { opacity:.55; transform:scale(1) } 50% { opacity:1; transform:scale(1.06) } }
+@keyframes tb-tr-spin { to { transform: rotate(360deg) } }
+@keyframes tb-tr-twinkle { 0%,100% { opacity:0; transform:scale(.3) rotate(0) } 50% { opacity:1; transform:scale(1.2) rotate(90deg) } }
+@keyframes tb-tr-bob { 0%,100% { transform:translate(-50%,0) } 50% { transform:translate(-50%,-3px) } }
+.tb-tr-aura { animation: tb-tr-aura 1.4s ease-in-out infinite; }
+.tb-tr-ring { animation: tb-tr-spin 2.6s linear infinite; background: conic-gradient(from 0deg, transparent 0 55%, rgba(253,224,71,.95) 70%, #fff 75%, rgba(253,224,71,.95) 80%, transparent 95%); }
+.tb-tr-star { animation: tb-tr-twinkle 1.6s ease-in-out infinite; }
+.tb-tr-badge { animation: tb-tr-bob 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .tb-tr-aura, .tb-tr-ring, .tb-tr-star, .tb-tr-badge { animation: none; } }
+`;
+
+const TWINKLES = [
+  { l: "-10%", t: "8%", d: 0 },
+  { l: "92%", t: "18%", d: 0.4 },
+  { l: "-6%", t: "70%", d: 0.8 },
+  { l: "95%", t: "78%", d: 1.2 },
+  { l: "45%", t: "-8%", d: 0.6 },
+];
+
+/** 사면 3장이 되는 상점 카드: 금빛 오라 + 테두리를 도는 빛 + 반짝이 + "3장 완성!" 배지 */
+function TripleSparkle({ on, children }: { on: boolean; children: React.ReactNode }) {
+  if (!on) return <>{children}</>;
+  return (
+    <span className="relative inline-flex" title="사면 바로 3장 합성 — 황금 유닛!">
+      <style>{SPARKLE_CSS}</style>
+      <span className="tb-tr-aura pointer-events-none absolute -inset-2 rounded-2xl bg-yellow-300/35 blur-md" />
+      <span className="pointer-events-none absolute -inset-[3px] overflow-hidden rounded-[14px]">
+        <span className="tb-tr-ring absolute -inset-1/2" />
+      </span>
+      <span className="relative">{children}</span>
+      {TWINKLES.map((p, i) => (
+        <span key={i} className="tb-tr-star pointer-events-none absolute z-10 text-sm text-yellow-200 drop-shadow-[0_0_4px_#fde047]" style={{ left: p.l, top: p.t, animationDelay: `${p.d}s` }}>
+          ✦
+        </span>
+      ))}
+      <span className="tb-tr-badge pointer-events-none absolute -top-7 left-1/2 z-10 whitespace-nowrap rounded-full border border-yellow-100 bg-gradient-to-b from-yellow-200 to-amber-500 px-1.5 text-[10px] font-black text-amber-950 shadow-[0_0_10px_#facc15]">
+        ✨ 3장 완성!
+      </span>
+    </span>
   );
 }
 
