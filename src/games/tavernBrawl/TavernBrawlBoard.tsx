@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
-import { classCounts, synergyLevel, tribeCounts, type UnitInstance } from "./combat";
+import { synergyLevel, type UnitInstance } from "./combat";
 import {
   BOARD_MAX,
   BUY_COST,
@@ -18,7 +18,7 @@ import {
   type GameState,
   type Seat,
 } from "./engine";
-import { CLASSES, CLASS_ORDER, HERO_BY_ID, SHOP_SLOTS, type HeroId, TRIBES, TRIBE_ORDER, UPGRADE_BASE, unitDef } from "./units";
+import { HERO_BY_ID, SHOP_SLOTS, type HeroId, TRIBES, UPGRADE_BASE, unitDef } from "./units";
 import UnitCard, { UnitDetail, type CardUnit } from "./UnitCard";
 import CombatReplay, { COMBAT_CSS, sideOfSeat } from "./CombatReplay";
 import RulebookModal from "./RulebookModal";
@@ -93,51 +93,6 @@ function combatNames(c: CombatRecord, names: Record<Seat, string>): [string, str
 }
 
 
-function SynergyBar({ board, compact }: { board: CardUnit[]; compact?: boolean }) {
-  const [open, setOpen] = useState<string | null>(null);
-  const tc = tribeCounts(board);
-  const cc = classCounts(board);
-  const items = [
-    ...TRIBE_ORDER.filter((t) => tc[t] > 0).map((t) => ({ key: t, n: tc[t], ...TRIBES[t] })),
-    ...CLASS_ORDER.filter((k) => cc[k] > 0).map((k) => ({ key: k, n: cc[k], ...CLASSES[k] })),
-  ].sort((x, y) => synergyLevel(y.n) - synergyLevel(x.n) || y.n - x.n);
-  if (items.length === 0) return compact ? null : <p className="text-[11px] text-white/35 light:text-amber-800/50">같은 종족·직업을 2·4·6명 모으면 시너지가 켜져요.</p>;
-  const sel = items.find((i) => i.key === open);
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex flex-wrap gap-1">
-        {items.map((it) => {
-          const lv = synergyLevel(it.n);
-          const next = [2, 4, 6].find((x) => x > it.n);
-          return (
-            <button
-              key={it.key}
-              type="button"
-              onClick={() => setOpen(open === it.key ? null : it.key)}
-              className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                lv ? "border-yellow-300/70 bg-yellow-300/15 text-yellow-100 light:text-amber-900" : "border-white/15 text-white/55 light:border-amber-300 light:text-amber-800/70"
-              }`}
-              style={lv ? { boxShadow: `0 0 8px ${it.color}66` } : undefined}
-            >
-              {it.emoji} {it.name} {it.n}
-              {next ? <span className="opacity-60">/{next}</span> : " ✓"}
-            </button>
-          );
-        })}
-      </div>
-      {sel && (
-        <ul className="rounded-lg bg-black/30 px-2 py-1 text-[11px] text-white/70 light:bg-white light:text-slate-600">
-          {sel.levels.map(([n, text]) => (
-            <li key={n} className={sel.n >= n ? "font-semibold text-yellow-200 light:text-amber-700" : ""}>
-              ({n}) {text}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 function PlayersPanel({
   state,
   viewerSeat,
@@ -157,7 +112,7 @@ function PlayersPanel({
   const max = state.options.startHp;
   return (
     <div className={`${PANEL} flex flex-col gap-1.5`}>
-      <p className={LABEL}>🍻 손님들 (누르면 지난 전투 보드)</p>
+      <p className={LABEL}>🍻 손님들 (누르면 그 사람 보드)</p>
       {order.map(({ s, i }) => {
         const hero = s.hero ? HERO_BY_ID[s.hero] : null;
         const status = !s.alive ? `💀 ${s.place}위` : state.phase === "shop" ? (s.ready ? "✅" : "🤔") : state.phase === "heroPick" ? (s.hero ? "✅" : "🤔") : "";
@@ -191,34 +146,118 @@ function PlayersPanel({
   );
 }
 
-function InspectModal({ state, seat, names, onClose }: { state: GameState; seat: Seat; names: Record<Seat, string>; onClose: () => void }) {
+/** 손님 보드 보기 — 나는 지금 보드, 다른 사람은 공개 정보(가장 최근 전투에 나온 보드)만. ◀ ▶로 다음 사람. */
+function InspectModal({
+  state,
+  seat,
+  viewerSeat,
+  names,
+  onClose,
+  onMove,
+}: {
+  state: GameState;
+  seat: Seat;
+  viewerSeat: Seat;
+  names: Record<Seat, string>;
+  onClose: () => void;
+  onMove: (seat: Seat) => void;
+}) {
   const s = state.seats[seat];
   const hero = s.hero ? HERO_BY_ID[s.hero] : null;
-  // 공개 정보만: 지난 전투에서 드러난 보드(자기 자신이면 현재 보드)
+  const isMe = seat === viewerSeat;
   const c = state.combats.find((x) => x.a === seat || x.b === seat);
-  const board: CardUnit[] = c ? (c.a === seat ? c.sideA.board : c.sideB.board) : [];
+  const board: CardUnit[] = isMe ? state.seats[seat].board : c ? (c.a === seat ? c.sideA.board : c.sideB.board) : [];
+  const opp = c ? (c.a === seat ? c.b : c.a) : null;
+  const oppName = c ? (c.a === seat ? combatNames(c, names)[1] : combatNames(c, names)[0]) : "";
+  const won = c && c.winner !== null ? c.winner === (c.a === seat ? 0 : 1) : null;
+  const seats = state.seats.map((_, i) => i as Seat);
+  const step = (d: number) => onMove(seats[(seats.indexOf(seat) + d + seats.length) % seats.length]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft") step(-1);
+      else if (e.key === "ArrowRight") step(1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+  const label = isMe
+    ? "지금 내 보드"
+    : !c
+      ? "아직 전투 기록이 없어요"
+      : state.phase === "combat"
+        ? "이번 전투에 나온 보드"
+        : "지난 전투 때 보드 (상점에서 바꾼 건 다음 전투에 보여요)";
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3 sm:items-center" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-2xl border border-amber-900/40 bg-stone-900 p-4 light:border-amber-300 light:bg-amber-50" onClick={(e) => e.stopPropagation()}>
-        <p className="font-bold text-white light:text-slate-900">
-          {hero?.emoji} {names[seat]} <span className="text-xs font-normal text-white/50 light:text-slate-500">❤️ {Math.max(0, s.hp)} · 🏠 {s.tier}등급 · {s.stats.wins}승 {s.stats.losses}패</span>
-        </p>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/65 p-3 sm:items-center" onClick={onClose}>
+      <div className="tb-pop w-full max-w-2xl rounded-2xl border border-amber-700/50 bg-stone-900 p-4 shadow-2xl light:border-amber-300 light:bg-amber-50" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => step(-1)} className={`${BTN_DARK} px-2.5`} aria-label="이전 손님">
+            ◀
+          </button>
+          <div className="min-w-0 flex-1 text-center">
+            <p className="truncate text-base font-black text-white light:text-slate-900">
+              <span className="mr-1 text-2xl">{hero?.emoji ?? "❔"}</span>
+              {names[seat] ?? `${seat + 1}번`} {isMe && <span className="text-xs text-amber-300">(나)</span>}
+            </p>
+            <p className="text-xs text-white/60 light:text-slate-600">
+              ❤️ {Math.max(0, s.hp)} · 🏠 {s.tier}등급 · {s.stats.wins}승 {s.stats.losses}패{s.stats.triples ? ` · ✨${s.stats.triples}` : ""}
+              {!s.alive && ` · 💀 ${s.place}위`}
+            </p>
+          </div>
+          <button type="button" onClick={() => step(1)} className={`${BTN_DARK} px-2.5`} aria-label="다음 손님">
+            ▶
+          </button>
+        </div>
         {hero && (
-          <p className="mt-1 text-xs text-white/60 light:text-slate-600">
-            {hero.name} — {hero.power}: {hero.text}
+          <p className="mt-2 rounded-lg bg-black/25 px-2 py-1 text-[11px] text-white/70 light:bg-white light:text-slate-600">
+            {hero.name} — <b>{hero.power}</b>: <AbilityText text={hero.text} />
           </p>
         )}
-        <p className="mt-3 text-xs text-white/50 light:text-slate-500">{c ? "지난 전투에서 드러난 보드" : "아직 전투 기록이 없어요"}</p>
-        <div className="mt-3 flex flex-wrap gap-2.5 pb-2">
+        <p className="mt-3 flex flex-wrap items-center gap-1.5 text-xs text-white/55 light:text-slate-500">
+          {label}
+          {!isMe && c && (
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${won === null ? "bg-white/10 text-white/70" : won ? "bg-emerald-500/25 text-emerald-200" : "bg-rose-500/25 text-rose-200"}`}>
+              vs {opp === viewerSeat ? "나" : oppName} · {won === null ? "무승부" : won ? "승리" : "패배"}
+            </span>
+          )}
+        </p>
+        <div className="mt-4 flex min-h-[7rem] flex-wrap justify-center gap-3 pb-2">
           {board.map((u, i) => (
-            <UnitCard key={i} unit={u} size="sm" />
+            <UnitCard key={i} unit={u} />
           ))}
+          {board.length === 0 && <p className="self-center text-xs text-white/40">보여 줄 유닛이 없어요</p>}
         </div>
-        <SynergyBar board={board} compact />
+        <FinalTraits board={board} />
         <button onClick={onClose} className={`${BTN_DARK} mt-3 w-full`}>
           닫기
         </button>
       </div>
+    </div>
+  );
+}
+
+/** 좁은 화면용 손님 띠 — 누르면 그 사람 보드(넓은 화면은 오른쪽 손님 목록) */
+function PlayerStrip({ state, viewerSeat, names, onInspect }: { state: GameState; viewerSeat: Seat; names: Record<Seat, string>; onInspect: (seat: Seat) => void }) {
+  const max = state.options.startHp;
+  return (
+    <div className="flex gap-1.5 overflow-x-auto pb-1 lg:hidden">
+      {state.seats.map((s, i) => {
+        const hero = s.hero ? HERO_BY_ID[s.hero] : null;
+        return (
+          <button
+            key={i}
+            type="button"
+            onClick={() => onInspect(i as Seat)}
+            className={`flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${i === viewerSeat ? "border-amber-400/70 bg-amber-400/15" : "border-white/15 bg-black/30"} ${s.alive ? "" : "opacity-45"}`}
+            title="누르면 보드 보기"
+          >
+            <span className="text-base leading-none">{hero?.emoji ?? "❔"}</span>
+            <span className="max-w-[4.5rem] truncate font-semibold text-white/90 light:text-slate-800">{names[i] ?? `${i + 1}번`}</span>
+            <span className={`font-black tabular-nums ${s.hp > max / 2 ? "text-emerald-300" : s.hp > max / 5 ? "text-amber-300" : "text-rose-300"}`}>{s.alive ? s.hp : "💀"}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -399,6 +438,7 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
       <div className={`grid gap-3 lg:grid-cols-[1fr_17rem] ${tracker ? "xl:grid-cols-[15rem_1fr_17rem]" : ""}`}>
         {tracker && <div className="relative z-40 hidden xl:block">{tracker("column")}</div>}
         <div className="min-w-0">
+          {(state.phase === "shop" || state.phase === "combat") && <PlayerStrip state={state} viewerSeat={viewerSeat} names={names} onInspect={setInspect} />}
           {tracker && <div className="mb-2 xl:hidden">{tracker("strip")}</div>}
           {body}
         </div>
@@ -407,7 +447,7 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
         )}
       </div>
       {rules && <RulebookModal onClose={() => setRules(false)} />}
-      {inspect !== null && <InspectModal state={state} seat={inspect} names={names} onClose={() => setInspect(null)} />}
+      {inspect !== null && <InspectModal state={state} seat={inspect} viewerSeat={viewerSeat} names={names} onClose={() => setInspect(null)} onMove={setInspect} />}
     </div>
   );
 }
