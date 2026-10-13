@@ -81,6 +81,28 @@ describe("combat", () => {
     expect(simulateCombat(side([]), side([unit("b_dog")]), 1).winner).toBe(1);
   });
 
+  it("전투 통계: 1:1 맞교환 피해가 정확하고, 기록해도 결과는 같다", () => {
+    const r = simulateCombat(side([unit("n_merc", { uid: "m" })]), side([unit("b_dog", { uid: "d" })]), 7, true);
+    const m = r.stats.find((s) => s.uid === "m")!;
+    const d = r.stats.find((s) => s.uid === "d")!;
+    expect(m.side).toBe(0);
+    expect(d.side).toBe(1);
+    expect(d.taken).toBe(m.dealt);
+    expect(m.taken).toBe(d.dealt);
+    expect(d.died).toBe(true);
+    for (let seed = 0; seed < 30; seed++) {
+      const a = side([unit("n_merc"), unit("n_sniper"), unit("n_rogue")]);
+      const b = side([unit("b_dog"), unit("u_skeleton"), unit("k_squire"), unit("n_priest")]);
+      const rec = simulateCombat(a, b, seed, true);
+      expect(simulateCombat(a, b, seed).winner).toBe(rec.winner);
+      const dealt = rec.stats.reduce((s, u) => s + u.dealt, 0);
+      const taken = rec.stats.reduce((s, u) => s + u.taken, 0);
+      // 용족 6 같은 주인 없는 시너지 피해가 없으면 넣은 피해 합 = 받은 피해 합
+      expect(dealt).toBe(taken);
+    }
+    expect(simulateCombat(side([unit("n_merc")]), side([unit("b_dog")]), 1).stats).toEqual([]);
+  });
+
   it("damage = winner tavern tier + surviving unit tiers", () => {
     const r = simulateCombat(side([unit("n_merc"), unit("n_merc")], null, 3), side([unit("t_bunny")]), 1);
     expect(r.winner).toBe(0);

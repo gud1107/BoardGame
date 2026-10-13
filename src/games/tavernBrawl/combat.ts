@@ -63,6 +63,21 @@ export interface CombatResult {
   survivorTiers: number;
   survivors: number;
   frames: Frame[];
+  /** 유닛별 넣은/받은 피해(record일 때만, 아니면 빈 배열) — 전투 통계 화면용 */
+  stats: UnitCombatStat[];
+}
+
+export interface UnitCombatStat {
+  uid: string;
+  side: 0 | 1;
+  defId: string;
+  golden: boolean;
+  /** 실제로 들어간 피해(보호막에 막힌 건 0) */
+  dealt: number;
+  taken: number;
+  /** 보호막으로 막아 낸 횟수 */
+  blocked: number;
+  died: boolean;
 }
 
 export const MAX_COMBAT_STEPS = 300;
@@ -168,13 +183,24 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
     }
   };
 
-  function damage(u: CU, amount: number, poison: boolean) {
+  // 통계(record일 때만): uid → 넣은/받은 피해, 보호막 막음. 난수는 건드리지 않는다.
+  const dealt = new Map<string, number>();
+  const taken = new Map<string, number>();
+  const blocked = new Map<string, number>();
+  const bump = (m: Map<string, number>, uid: string, v: number) => {
+    if (record) m.set(uid, (m.get(uid) ?? 0) + v);
+  };
+
+  function damage(u: CU, amount: number, poison: boolean, src: CU | null = null) {
     if (amount <= 0 || u.hp <= 0) return;
     if (hasKw(u, "shield")) {
       removeKw(u, "shield");
       popped.push(u.uid);
+      bump(blocked, u.uid, 1);
       return;
     }
+    bump(taken, u.uid, amount);
+    if (src) bump(dealt, src.uid, amount);
     u.hp -= amount;
     hurt.add(u);
     if (poison) u.poisoned = true;
@@ -241,9 +267,9 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
         const enemy = (1 - side) as 0 | 1;
         const alive = sides[enemy].filter((u) => u.hp > 0 && !u.poisoned);
         if (e.target === "randomEnemy") {
-          if (alive.length) damage(pick(alive), e.amount * m, false);
+          if (alive.length) damage(pick(alive), e.amount * m, false, source);
         } else {
-          for (const u of alive) damage(u, e.amount * m, false);
+          for (const u of alive) damage(u, e.amount * m, false, source);
         }
       }
       // gold / freeReroll은 상점 전용 — 전투에선 무시
@@ -457,7 +483,7 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
       // 선제 사격: 반격 없이 자기 공격력만큼
       for (const u of of("ranger")) {
         const foes = sides[1 - side].filter((x) => !isDead(x));
-        if (foes.length && u.atk > 0) damage(pick(foes), u.atk, hasKw(u, "poison"));
+        if (foes.length && u.atk > 0) damage(pick(foes), u.atk, hasKw(u, "poison"), u);
       }
       push({ t: "soc", side, uid: null, label: `🏹 궁수 ${ra} — 선제 사격` });
       processDeaths(order);
@@ -481,9 +507,10 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
     const mg = clv(side, "mage");
     if (mg) {
       const dmg = byLevel(mg, 2, 3, 5);
-      for (let i = of("mage").length; i > 0; i--) {
+      const mages = of("mage");
+      for (let i = mages.length; i > 0; i--) {
         const foes = sides[1 - side].filter((u) => !isDead(u));
-        if (foes.length) damage(pick(foes), dmg, false);
+        if (foes.length) damage(pick(foes), dmg, false, mages[i - 1]);
       }
       push({ t: "soc", side, uid: null, label: `🔮 마법사 ${mg}` });
       processDeaths(order);
@@ -536,9 +563,9 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
       const dIdx = sides[enemy].indexOf(defender);
       const splash = hasKw(attacker, "cleave") ? [sides[enemy][dIdx - 1], sides[enemy][dIdx + 1]].filter((u): u is CU => !!u) : [];
       const atkPoison = hasKw(attacker, "poison");
-      damage(defender, attacker.atk, atkPoison);
-      for (const s of splash) damage(s, attacker.atk, atkPoison);
-      if (!sneaky) damage(attacker, defender.atk, hasKw(defender, "poison"));
+      damage(defender, attacker.atk, atkPoison, attacker);
+      for (const s of splash) damage(s, attacker.atk, atkPoison, attacker);
+      if (!sneaky) damage(attacker, defender.atk, hasKw(defender, "poison"), defender);
       push({ t: "attack", side: turn, from: attacker.uid, to: defender.uid, splash: splash.map((s) => s.uid) });
       processDeaths(turn === 0 ? [0, 1] : [1, 0]);
     }
@@ -550,11 +577,27 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
   else if (sides[1].length > 0 && sides[0].length === 0) winner = 1;
   const survivorList = winner === null ? [] : sides[winner];
   push({ t: "end", winner });
+  const stats: UnitCombatStat[] = [];
+  if (record) {
+    // 한 번이라도 보드에 나온 유닛(소환·부활 포함)을 프레임 스냅샷에서 모은다
+    const seen = new Map<string, UnitCombatStat>();
+    for (const f of frames)
+      for (const side of [0, 1] as const)
+        for (const u of f.sides[side])
+          if (!seen.has(u.uid)) {
+            const st: UnitCombatStat = { uid: u.uid, side, defId: u.defId, golden: u.golden, dealt: dealt.get(u.uid) ?? 0, taken: taken.get(u.uid) ?? 0, blocked: blocked.get(u.uid) ?? 0, died: false };
+            seen.set(u.uid, st);
+            stats.push(st);
+          }
+    const alive = new Set([...sides[0], ...sides[1]].map((u) => u.uid));
+    for (const st of stats) st.died = !alive.has(st.uid);
+  }
   return {
     winner,
     survivorTiers: survivorList.reduce((s, u) => s + (unitDef(u.defId).token ? 1 : unitDef(u.defId).tier), 0),
     survivors: survivorList.length,
     frames,
+    stats,
   };
 }
 

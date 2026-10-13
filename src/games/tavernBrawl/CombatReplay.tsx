@@ -63,6 +63,7 @@ export default function CombatReplay({
   hp,
   emotes,
   onFinished,
+  onEnded,
 }: {
   combat: CombatRecord;
   /** 아래쪽(내 쪽)에 보일 편 */
@@ -75,6 +76,8 @@ export default function CombatReplay({
   /** 감정표현 [아래, 위] */
   emotes?: [EmoteSlot | undefined, EmoteSlot | undefined];
   onFinished?: () => void;
+  /** 마지막(결과) 프레임에 닿고 잠시 뒤 — 전투 통계를 띄우는 데 쓴다 */
+  onEnded?: () => void;
 }) {
   const frames = useMemo(() => simulateCombat(combat.sideA, combat.sideB, combat.seed, true).frames, [combat]);
   const [idx, setIdx] = useState(0);
@@ -93,6 +96,15 @@ export default function CombatReplay({
   useEffect(() => {
     onFinishedRef.current = onFinished;
   }, [onFinished]);
+  const onEndedRef = useRef(onEnded);
+  useEffect(() => {
+    onEndedRef.current = onEnded;
+  }, [onEnded]);
+  useEffect(() => {
+    if (idx < frames.length - 1) return;
+    const t = window.setTimeout(() => onEndedRef.current?.(), 1500 / speed);
+    return () => window.clearTimeout(t);
+  }, [idx, frames, speed]);
 
   const frame = frames[idx];
   const prev = idx > 0 ? frames[idx - 1] : null;

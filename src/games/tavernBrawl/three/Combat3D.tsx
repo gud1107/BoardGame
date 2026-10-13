@@ -33,6 +33,7 @@ export default function Combat3D({
   emotes,
   controllable,
   onFinished,
+  onEnded,
 }: {
   combat: CombatRecord;
   viewSide: 0 | 1;
@@ -47,6 +48,8 @@ export default function Combat3D({
   /** 내 아바타를 움직일 수 있는지(내 전투) */
   controllable?: boolean;
   onFinished?: () => void;
+  /** 마지막(결과) 프레임에 닿고 잠시 뒤 — 전투 통계를 띄우는 데 쓴다 */
+  onEnded?: () => void;
 }) {
   const frames = useMemo(() => simulateCombat(combat.sideA, combat.sideB, combat.seed, true).frames, [combat]);
   const [idx, setIdx] = useState(0);
@@ -67,6 +70,15 @@ export default function Combat3D({
   useEffect(() => {
     onFinishedRef.current = onFinished;
   }, [onFinished]);
+  const onEndedRef = useRef(onEnded);
+  useEffect(() => {
+    onEndedRef.current = onEnded;
+  }, [onEnded]);
+  useEffect(() => {
+    if (!ready || idx < frames.length - 1) return;
+    const t = window.setTimeout(() => onEndedRef.current?.(), 1500 / speed);
+    return () => window.clearTimeout(t);
+  }, [idx, frames, speed, ready]);
 
   useEffect(() => {
     if (!ready) return;

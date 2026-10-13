@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { classCounts, synergyLevel, tribeCounts, type UnitInstance } from "./combat";
@@ -27,6 +27,7 @@ import { UnitTooltipHost, unitTip } from "./UnitTooltip";
 import { EmoteBubble, EmotePicker, type EmoteKind, type EmoteSlot } from "./emotes";
 import SynergyTracker from "./SynergyTracker";
 import HeroPreview from "./HeroPreview";
+import CombatStats from "./CombatStats";
 import { getTavernBrawlSound } from "./tavernBrawlBgm";
 import type { ArenaApi } from "./three/Arena3D";
 import { webglAvailable } from "./three/webgl";
@@ -240,6 +241,16 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
     }
   };
   const [inspect, setInspect] = useState<Seat | null>(null);
+  // 전투 통계: 내 전투 재생이 끝나면 잠깐(auto) 뜨고, 헤더 📊로 열고 닫는다
+  const [statsView, setStatsView] = useState<{ round: number; auto: boolean } | null>(null);
+  const [endedRound, setEndedRound] = useState(0);
+  const statsCombat = state.phase === "shop" || state.phase === "combat" ? combatFor(state, viewerSeat) : null;
+  const statsReady = !!statsCombat && (state.phase === "shop" || endedRound === state.round || me.combatDone);
+  const closeStats = useCallback(() => setStatsView(null), []);
+  const onMyCombatEnded = useCallback(() => {
+    setEndedRound(state.round);
+    setStatsView({ round: state.round, auto: true });
+  }, [state.round]);
   useSuiteBgm(getTavernBrawlSound, state.phase !== "ended", state.phase === "combat" ? 1 : 0);
 
   // 황금 유닛·탈락·우승 효과음
@@ -273,6 +284,15 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
       </span>
       <span className="ml-auto flex items-center gap-2">
         <Timer deadlineMs={deadlineMs} nowMs={nowMs} />
+        {statsReady && (
+          <button
+            onClick={() => setStatsView((v) => (v ? null : { round: state.round, auto: false }))}
+            className={`rounded-full border px-2.5 py-1 text-xs ${statsView ? "border-amber-400 bg-amber-400/15 text-amber-100 light:text-amber-800" : "border-white/15 text-white/70 light:border-amber-300 light:text-amber-800"}`}
+            title="이번(지난) 전투에서 유닛별 넣은 피해·받은 피해"
+          >
+            📊 전투 통계
+          </button>
+        )}
         {onEmote && state.phase !== "ended" && <EmotePicker onEmote={onEmote} />}
         {canWebgl && (
           <button onClick={toggleView} className="rounded-full border border-white/15 px-2.5 py-1 text-xs text-white/70 light:border-amber-300 light:text-amber-800" title="3D 탁자 / 2D 카드 화면 전환">
@@ -302,13 +322,23 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
   if (state.phase === "heroPick") body = <HeroPick state={state} viewerSeat={viewerSeat} names={names} onAction={onAction} />;
   else if (state.phase === "shop" && me.alive) body = <ShopView state={state} viewerSeat={viewerSeat} onAction={onAction} view={view} quality={quality} myEmote={emotes[viewerSeat]} />;
   else if (state.phase === "shop") body = <Spectator state={state} viewerSeat={viewerSeat} />;
-  else if (state.phase === "combat") body = <CombatView key={state.round} state={state} viewerSeat={viewerSeat} names={names} onAction={onAction} view={view} quality={quality} emotes={emotes} />;
+  else if (state.phase === "combat") body = <CombatView key={state.round} onMyCombatEnded={onMyCombatEnded} state={state} viewerSeat={viewerSeat} names={names} onAction={onAction} view={view} quality={quality} emotes={emotes} />;
   else body = <Standings state={state} viewerSeat={viewerSeat} names={names} onGameEnd={onGameEnd} />;
 
   return (
     <div className="flex flex-col gap-3">
       <style>{COMBAT_CSS}</style>
       <UnitTooltipHost />
+      {statsView && statsReady && statsCombat && (
+        <CombatStats
+          key={`${statsView.round}-${statsView.auto}`}
+          combat={statsCombat}
+          viewSide={sideOfSeat(statsCombat, viewerSeat)}
+          names={sideOfSeat(statsCombat, viewerSeat) === 0 ? combatNames(statsCombat, names) : (combatNames(statsCombat, names).reverse() as [string, string])}
+          autoClose={statsView.auto}
+          onClose={closeStats}
+        />
+      )}
       {header}
       <div className={`grid gap-3 lg:grid-cols-[1fr_17rem] ${tracker ? "xl:grid-cols-[15rem_1fr_17rem]" : ""}`}>
         {tracker && <div className="relative z-40 hidden xl:block">{tracker("column")}</div>}
@@ -1053,6 +1083,7 @@ function Spectator({ state, viewerSeat }: { state: GameState; viewerSeat: Seat }
 /* ── 전투 ─────────────────────────────────────────────────── */
 
 function CombatView({
+  onMyCombatEnded,
   state,
   viewerSeat,
   names,
@@ -1061,6 +1092,7 @@ function CombatView({
   quality,
   emotes,
 }: {
+  onMyCombatEnded: () => void;
   state: GameState;
   viewerSeat: Seat;
   names: Record<Seat, string>;
@@ -1110,9 +1142,9 @@ function CombatView({
         </button>
       </div>
       {view === "3d" ? (
-        <Combat3D key={`${state.round}-${watch}`} combat={c} viewSide={viewSide} names={shownNames} speed={speed} sound={isMine} quality={quality} hp={hpPair} emotes={emotePair} controllable={isMine} onFinished={isMine ? finishMine : undefined} />
+        <Combat3D key={`${state.round}-${watch}`} combat={c} viewSide={viewSide} names={shownNames} speed={speed} sound={isMine} quality={quality} hp={hpPair} emotes={emotePair} controllable={isMine} onFinished={isMine ? finishMine : undefined} onEnded={isMine ? onMyCombatEnded : undefined} />
       ) : (
-        <CombatReplay key={`${state.round}-${watch}`} combat={c} viewSide={viewSide} names={shownNames} speed={speed} sound={isMine} hp={hpPair} emotes={emotePair} onFinished={isMine ? finishMine : undefined} />
+        <CombatReplay key={`${state.round}-${watch}`} combat={c} viewSide={viewSide} names={shownNames} speed={speed} sound={isMine} hp={hpPair} emotes={emotePair} onFinished={isMine ? finishMine : undefined} onEnded={isMine ? onMyCombatEnded : undefined} />
       )}
       {state.eliminatedThisRound.length > 0 && (
         <p className="rounded-xl bg-rose-500/15 px-3 py-1.5 text-center text-xs text-rose-200 light:text-rose-700">
