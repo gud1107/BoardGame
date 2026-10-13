@@ -1214,7 +1214,7 @@ export function chooseBotAction(state: InkDuelState, seat: SeatIndex, level: Bot
     const strokes = botDoodle("bomb", 2, Math.min(35, state.inkBudget - 30), rng);
     const ink = totalInk(strokes);
     if (ink >= MIN_INK && state.inkBudget - ink >= 25) {
-      const core = chooseBotActionCore({ ...state, inkBudget: Math.round((state.inkBudget - ink) * 100) / 100 }, seat, level, rng);
+      const core = chooseBotActionCore({ ...state, inkBudget: Math.floor((state.inkBudget - ink) * 100) / 100 }, seat, level, rng);
       if (core?.type === "fire") return { ...core, shield: { strokes, angle: near.x < me.x ? 150 : 30 } };
     }
   }
@@ -1249,7 +1249,11 @@ function chooseBotActionCore(state: InkDuelState, seat: SeatIndex, level: BotLev
     const bodyList = bodies(s);
     for (const t of kinds) {
       const strokes = botDoodle(t, botColor(s, seat, t, rng), s.inkBudget, rng);
-      if (totalInk(strokes) < MIN_INK) continue;
+      // botDoodle stops shrinking at 30% scale, so on a small budget (❄️ freeze, a walk,
+      // or ink left after a same-turn shield) the doodle can still overshoot — the
+      // reducer would reject that shot and the bot would stall until the turn timer.
+      const ink = totalInk(strokes);
+      if (ink < MIN_INK || ink > s.inkBudget + 0.5) continue;
       const stats = analyzeWeapon(strokes);
       const quick: { action: Extract<EngineAction, { type: "fire" }>; q: number }[] = [];
       for (let angle = 6; angle <= 174; angle += 6) {

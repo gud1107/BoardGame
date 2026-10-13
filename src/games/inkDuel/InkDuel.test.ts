@@ -614,6 +614,25 @@ describe("bot shield choice", () => {
       expect(chooseBotAction(s, me, 8, seededRng(seed))?.type).not.toBe("shield");
     }
   });
+  it("❄️ frozen (72 ink) or on 70-ink rules, every bot move still fits the budget — no rejected shot that stalls the turn", () => {
+    let fired = 0;
+    for (let seed = 1; seed <= 16; seed++) {
+      const { me, s } = hurt(seed, 40, 80);
+      const base = seed % 2 ? s : startGame(2, seed, { stopRules: sanitizeStopRules({ ink: 70 }) });
+      const frozen: InkDuelState = {
+        ...base,
+        inkBudget: seed % 2 ? FROZEN_INK : Math.round((70 * FROZEN_INK) / 100),
+        players: base.players.map((p) => (p.seat === me ? { ...p, hp: 40, status: { ...p.status, freeze: 1 } } : { ...p, hp: 80 })),
+      };
+      for (const level of [3, 6, 10] as const) {
+        const a = chooseBotAction(frozen, me, level, seededRng(seed * 31 + level));
+        expect(a).not.toBeNull();
+        expect(applyAction(frozen, a!)).not.toBe(frozen);
+        if (a!.type === "fire") fired++;
+      }
+    }
+    expect(fired).toBeGreaterThan(0);
+  }, 60_000);
 });
 
 describe("ink duel — continued lines (lift the mouse, keep drawing)", () => {
