@@ -29,6 +29,7 @@ import SynergyTracker, { traitsOf } from "./SynergyTracker";
 import { rpForRank, tierChange, tierOf, type RankResult, type RankTier } from "@/lib/stats/rankTier";
 import HeroPreview from "./HeroPreview";
 import CombatStats from "./CombatStats";
+import GoldenMergeFX from "./GoldenMergeFX";
 import { getTavernBrawlSound } from "./tavernBrawlBgm";
 import type { ArenaApi } from "./three/Arena3D";
 import { webglAvailable } from "./three/webgl";
@@ -257,11 +258,28 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
   useSuiteBgm(getTavernBrawlSound, state.phase !== "ended", state.phase === "combat" ? 1 : 0);
 
   // 황금 유닛·탈락·우승 효과음
+  // 3장 합성: 새로 생긴 황금 유닛을 찾아 합성 연출(빨려 들어옴 → 충돌 순간 효과음)
   const triplesRef = useRef(me.stats.triples);
+  const goldenUidsRef = useRef(new Set([...me.hand, ...me.board].filter((u) => u.golden).map((u) => u.uid)));
+  const [mergeFx, setMergeFx] = useState<{ id: string; unit: CardUnit }[]>([]);
   useEffect(() => {
-    if (me.stats.triples > triplesRef.current) sfx("golden");
+    const goldens = [...me.hand, ...me.board].filter((u) => u.golden);
+    const fresh = goldens.filter((u) => !goldenUidsRef.current.has(u.uid));
+    goldenUidsRef.current = new Set(goldens.map((u) => u.uid));
+    const merged = me.stats.triples > triplesRef.current;
     triplesRef.current = me.stats.triples;
-  }, [me.stats.triples]);
+    if (!merged || !fresh.length) return;
+    sfx("reroll");
+    const t0 = window.setTimeout(() => {
+      setMergeFx((q) => [...q, ...fresh.map((u) => ({ id: u.uid, unit: { defId: u.defId, atk: u.atk, hp: u.hp, golden: true, kw: u.kw } }))]);
+    }, 0);
+    const t1 = window.setTimeout(() => sfx("golden"), 700);
+    return () => {
+      window.clearTimeout(t0);
+      window.clearTimeout(t1);
+    };
+  }, [me.stats.triples, me.hand, me.board]);
+  const doneMerge = useCallback(() => setMergeFx((q) => q.slice(1)), []);
   const aliveRef = useRef(me.alive);
   useEffect(() => {
     if (aliveRef.current && !me.alive && state.phase !== "ended") sfx("eliminated");
@@ -332,6 +350,7 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
     <div className="flex flex-col gap-3">
       <style>{COMBAT_CSS}</style>
       <UnitTooltipHost />
+      {mergeFx[0] && <GoldenMergeFX key={mergeFx[0].id} unit={mergeFx[0].unit} onDone={doneMerge} />}
       {statsView && statsReady && statsCombat && (
         <CombatStats
           key={`${statsView.round}-${statsView.auto}`}
