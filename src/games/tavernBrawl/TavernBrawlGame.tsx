@@ -48,7 +48,7 @@ import {
 } from "@/games/shared/bot/botTakeover";
 import { selfResult } from "@/games/shared/selfResult";
 import { listPlayerStats } from "@/lib/stats/playerStats";
-import { applyRp, rpFromDetails } from "@/lib/stats/rankTier";
+import { applyRp, rpFromDetails, type RankResult } from "@/lib/stats/rankTier";
 
 /**
  * 여관 난투 온라인 대전 진입점 — 갓생 플래너와 같은 락스텝 패턴(docs/cloud-sync.md).
@@ -195,6 +195,9 @@ export default function TavernBrawlGame({ onComplete }: PlayableGameProps) {
   const channelRef = useRef<RealtimeChannel | null>(null);
   /** 결과 저장 중복 방지(랭크 점수를 읽느라 잠깐 비동기) — 다음 판이 시작되면 풀린다 */
   const endingRef = useRef(false);
+  const recordingRef = useRef<Promise<void> | null>(null);
+  /** seed = 어느 판의 결과인지(다음 판에 지난 결과가 안 보이게) */
+  const [rankResult, setRankResult] = useState<(RankResult & { seed: number }) | null>(null);
   function requestStateSync() {
     const channel = channelRef.current;
     if (!channel) return;
@@ -712,21 +715,31 @@ export default function TavernBrawlGame({ onComplete }: PlayableGameProps) {
 
   const connectedSeats = useMemo(() => new Set([...occupants.map((o) => o.seat), ...botSeats, ...takeoverSeats]), [occupants, botSeats, takeoverSeats]);
 
+  // 게임이 끝나는 순간 결과(전적·랭크 점수)를 자동으로 기록한다 — 버튼은 화면만 넘긴다
   useEffect(() => {
-    if (gameState?.phase !== "ended") endingRef.current = false;
+    if (gameState?.phase !== "ended") {
+      endingRef.current = false;
+      recordingRef.current = null;
+      return;
+    }
+    const t = window.setTimeout(() => void recordResult(), 0);
+    return () => window.clearTimeout(t);
+    // recordResult는 끝난 그 상태로 한 번만 돈다(endingRef)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState?.phase]);
 
-  async function handleGameEnd() {
-    if (!gameState || gameState.phase !== "ended" || endingRef.current) return;
+  function recordResult(): Promise<void> {
+    if (!gameState || gameState.phase !== "ended") return Promise.resolve();
+    if (endingRef.current) return recordingRef.current ?? Promise.resolve();
     endingRef.current = true;
-    const rankings = computeRankings(gameState);
-    // 누적 랭크 점수: 지금 RP(이 기기에 동기화된 전적)에서 이번 순위만큼 — 0 아래로는 안 내려감
-    const prevRp = rpFromDetails((await listPlayerStats()).find((t) => t.gameId === "tavern-brawl")?.details);
-    const myRank = rankings.find((r) => r.seat === mySeat)?.rank ?? gameState.seatCount;
-    const rp = applyRp(prevRp, myRank, gameState.seatCount);
-    onComplete({
-      rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }, (seat, rank): Record<string, number> => {
+    const st = gameState;
+    const p = (async () => {
+      const rankings = computeRankings(st);
+      // 누적 랭크 점수: 지금 RP(이 기기에 동기화된 전적)에서 이번 순위만큼 — 0 아래로는 안 내려감
+      const prevRp = rpFromDetails((await listPlayerStats()).find((t) => t.gameId === "tavern-brawl")?.details);
+      const myRank = rankings.find((r) => r.seat === mySeat)?.rank ?? st.seatCount;
+      const rp = applyRp(prevRp, myRank, st.seatCount);
+      const self = selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }, (seat, rank): Record<string, number> => {
         const st = gameState.seats[seat];
         return {
           firstPlaces: rank === 1 ? 1 : 0,
@@ -739,10 +752,20 @@ export default function TavernBrawlGame({ onComplete }: PlayableGameProps) {
           maxBoardPower: st.board.reduce((a, u) => a + u.atk + u.hp, 0),
           ...(seat === mySeat ? rp.details : {}),
         };
-      }),
-      finishedAt: new Date().toISOString(),
-    });
-    setFinalWinners(winnerSeats(gameState));
+      });
+      onComplete({ rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })), self, finishedAt: new Date().toISOString() });
+      // 봇이 대신 끝낸 자리는 전적에 안 들어간다 → 랭크 변화도 없음
+      setRankResult({ seed: st.seed, ...(self?.botPlayed ? { prev: prevRp, next: prevRp, delta: 0, counted: false } : { prev: prevRp, next: rp.next, delta: rp.delta, counted: true }) });
+    })();
+    recordingRef.current = p;
+    return p;
+  }
+
+  async function handleGameEnd() {
+    if (!gameState || gameState.phase !== "ended") return;
+    const st = gameState;
+    await recordResult();
+    setFinalWinners(winnerSeats(st));
     setPhase("post-game");
   }
 
@@ -1042,6 +1065,7 @@ export default function TavernBrawlGame({ onComplete }: PlayableGameProps) {
           nowMs={nowMs}
           onAction={handleAction}
           onGameEnd={handleGameEnd}
+          rankResult={rankResult && rankResult.seed === gameState.seed ? rankResult : null}
           emotes={emotes}
           onEmote={sendEmote}
         />

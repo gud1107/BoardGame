@@ -35,6 +35,14 @@ export function applyRp(prev: number, rank: number, players: number): { delta: n
   return { delta, next, details: delta >= 0 ? { [RP_GAIN_KEY]: delta, [RP_LOSS_KEY]: 0 } : { [RP_GAIN_KEY]: 0, [RP_LOSS_KEY]: -delta } };
 }
 
+/** 한 판이 기록된 결과(결과 화면 표시용). counted=false면 전적에 안 들어간 판(봇이 대신 끝냄). */
+export interface RankResult {
+  prev: number;
+  next: number;
+  delta: number;
+  counted: boolean;
+}
+
 export interface RankTier {
   id: string;
   name: string;

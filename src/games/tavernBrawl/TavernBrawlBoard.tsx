@@ -26,8 +26,7 @@ import { AbilityText } from "./AbilityFeed";
 import { UnitTooltipHost, unitTip } from "./UnitTooltip";
 import { EmoteBubble, EmotePicker, type EmoteKind, type EmoteSlot } from "./emotes";
 import SynergyTracker, { traitsOf } from "./SynergyTracker";
-import { listPlayerStats } from "@/lib/stats/playerStats";
-import { applyRp, rpForRank, rpFromDetails, tierChange, tierOf, type RankTier } from "@/lib/stats/rankTier";
+import { rpForRank, tierChange, tierOf, type RankResult, type RankTier } from "@/lib/stats/rankTier";
 import HeroPreview from "./HeroPreview";
 import CombatStats from "./CombatStats";
 import { getTavernBrawlSound } from "./tavernBrawlBgm";
@@ -65,6 +64,8 @@ type Props = {
   nowMs: number;
   onAction: (action: EngineAction) => void;
   onGameEnd: () => void;
+  /** 끝난 판의 랭크 점수 변화(자동 기록 뒤 채워짐) */
+  rankResult?: RankResult | null;
   /** 좌석별 마지막 감정표현 */
   emotes?: Record<Seat, EmoteSlot>;
   onEmote?: (kind: EmoteKind) => void;
@@ -227,7 +228,7 @@ function Timer({ deadlineMs, nowMs }: { deadlineMs: number | null; nowMs: number
   return <span className={`rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${left <= 5 ? "bg-rose-500 text-white" : "bg-black/40 text-amber-100 light:bg-white light:text-amber-900"}`}>⏱ {left}</span>;
 }
 
-export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSeats, deadlineMs, nowMs, onAction, onGameEnd, emotes = {}, onEmote }: Props) {
+export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSeats, deadlineMs, nowMs, onAction, onGameEnd, emotes = {}, onEmote, rankResult = null }: Props) {
   const me = state.seats[viewerSeat];
   const [rules, setRules] = useState(false);
   const [view, setView] = useState<View>(initialView);
@@ -325,7 +326,7 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
   else if (state.phase === "shop" && me.alive) body = <ShopView state={state} viewerSeat={viewerSeat} onAction={onAction} view={view} quality={quality} myEmote={emotes[viewerSeat]} />;
   else if (state.phase === "shop") body = <Spectator state={state} viewerSeat={viewerSeat} />;
   else if (state.phase === "combat") body = <CombatView key={state.round} onMyCombatEnded={onMyCombatEnded} state={state} viewerSeat={viewerSeat} names={names} onAction={onAction} view={view} quality={quality} emotes={emotes} />;
-  else body = <Standings state={state} viewerSeat={viewerSeat} names={names} onGameEnd={onGameEnd} />;
+  else body = <Standings state={state} viewerSeat={viewerSeat} names={names} onGameEnd={onGameEnd} rankResult={rankResult} />;
 
   return (
     <div className="flex flex-col gap-3">
@@ -1214,20 +1215,10 @@ function TierBadge({ tier, big }: { tier: RankTier; big?: boolean }) {
   );
 }
 
-/** 내 누적 랭크 점수: 지금 → 이번 판 반영 후, 승급/강등 표시. 실제 기록은 "결과 저장"에서. */
-function MyRankCard({ rank, players }: { rank: number; players: number }) {
-  const [prev, setPrev] = useState<number | null>(null);
-  useEffect(() => {
-    let alive = true;
-    void listPlayerStats().then((all) => {
-      if (alive) setPrev(rpFromDetails(all.find((t) => t.gameId === "tavern-brawl")?.details));
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
-  if (prev === null) return null;
-  const { delta, next } = applyRp(prev, rank, players);
+/** 내 누적 랭크 점수: 이전 → 이번 판 반영 후, 승급/강등 표시. 게임이 끝나면 자동으로 기록된다. */
+function MyRankCard({ result }: { result: RankResult | null }) {
+  if (!result) return <p className="text-center text-[11px] text-white/40">🏆 랭크 점수 반영 중…</p>;
+  const { prev, next, delta } = result;
   const before = tierOf(prev);
   const after = tierOf(next);
   const change = tierChange(prev, next);
@@ -1260,18 +1251,30 @@ function MyRankCard({ rank, players }: { rank: number; players: number }) {
           </a>
         </span>
       </p>
-      <p className="text-[10px] text-white/35">「결과 저장하고 마치기」를 눌러야 반영돼요.</p>
+      <p className="text-[10px] text-white/35">{result.counted ? "✓ 자동으로 반영됐어요." : "봇이 대신 끝낸 판이라 랭크에 반영되지 않았어요."}</p>
     </div>
   );
 }
 
-function Standings({ state, viewerSeat, names, onGameEnd }: { state: GameState; viewerSeat: Seat; names: Record<Seat, string>; onGameEnd: () => void }) {
+function Standings({
+  state,
+  viewerSeat,
+  names,
+  onGameEnd,
+  rankResult,
+}: {
+  state: GameState;
+  viewerSeat: Seat;
+  names: Record<Seat, string>;
+  onGameEnd: () => void;
+  rankResult: RankResult | null;
+}) {
   const order = state.seats.map((s, i) => ({ s, i })).sort((a, b) => (a.s.place ?? 99) - (b.s.place ?? 99));
   const me = state.seats[viewerSeat];
   return (
     <div className={`${PANEL} flex flex-col gap-3 p-4`}>
       <p className="text-center text-xl font-black text-yellow-200 light:text-amber-700">{me.place === 1 ? "🏆 여관의 챔피언!" : `🏁 ${me.place}위`}</p>
-      <MyRankCard rank={me.place ?? state.seatCount} players={state.seatCount} />
+      <MyRankCard result={rankResult} />
       <div className="flex flex-col gap-2">
         {order.map(({ s, i }) => {
           const hero = s.hero ? HERO_BY_ID[s.hero] : null;
@@ -1297,7 +1300,7 @@ function Standings({ state, viewerSeat, names, onGameEnd }: { state: GameState; 
         })}
       </div>
       <button onClick={onGameEnd} className={`${BTN_GOLD} self-center px-6`}>
-        결과 저장하고 마치기
+        마치기
       </button>
     </div>
   );
