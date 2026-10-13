@@ -8,7 +8,7 @@ import type { CardUnit } from "./UnitCard";
 
 /**
  * 롤토체스식 시너지 표 — 항상 떠 있다(넓은 화면은 왼쪽 세로 패널, 좁은 화면은 위에 붙는 가로 띠).
- * 줄마다 육각 배지(브론즈 2 · 실버 4 · 골드 6), 이름, 인원/다음 단계, 2·4·6 눈금, 짧은 설명.
+ * 줄마다 육각 배지(브론즈 2 · 실버 4 · 골드 6), 이름, 인원/다음 단계, 2·4·6 눈금, 짧은 설명, 그 아래 단계별 효과표(1명만 있어도 보임).
  * 마우스를 올리면(모바일은 탭) 단계별 효과, 내 유닛 중 해당 유닛, 이번 판 풀의 해당 유닛 목록.
  */
 
@@ -64,6 +64,26 @@ function Pips({ t }: { t: Trait }) {
         </span>
       ))}
     </span>
+  );
+}
+
+/** 보드에 1명만 있어도 바로 보이는 단계별 효과표(켜진 단계는 금색, 아직은 흐리게). */
+function LevelTable({ t }: { t: Trait }) {
+  const lv = synergyLevel(t.count);
+  return (
+    <ul className="mb-1 ml-10 mr-1 flex flex-col gap-0.5 text-[10px] leading-snug">
+      {t.levels.map(([n, text]) => {
+        const on = lv === n;
+        return (
+          <li key={n} className={`flex gap-1 ${on ? "font-semibold text-yellow-100 light:text-amber-800" : t.count >= n ? "text-white/60 light:text-slate-600" : "text-white/40 light:text-slate-400"}`}>
+            <span className={`shrink-0 rounded px-1 font-black ${on ? "bg-yellow-400 text-black" : "bg-white/10 light:bg-black/10"}`}>{n}</span>
+            <span className="min-w-0">
+              <AbilityText text={text} />
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -179,14 +199,14 @@ export default function SynergyTracker({
                 key={t.key}
                 type="button"
                 onClick={() => setPinned(pinned === t.key ? null : t.key)}
-                className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-1.5 py-1 text-left ${pinned === t.key ? "border-yellow-300 bg-yellow-300/10" : "border-white/10 bg-black/30"} ${synergyLevel(t.count) ? "" : "opacity-60"}`}
+                className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-1.5 py-1 text-left ${pinned === t.key ? "border-yellow-300 bg-yellow-300/10" : "border-white/10 bg-black/30"}`}
               >
                 <Hex t={t} />
                 <span className="flex flex-col leading-tight">
                   <span className="text-[11px] font-bold text-white">
                     {t.name} <span className="text-yellow-300">{t.count}</span>
                   </span>
-                  <span className="max-w-[9rem] truncate text-[10px] text-white/55">{t.short}</span>
+                  <span className="max-w-[11rem] truncate text-[10px] text-white/55">{currentText(t)}</span>
                 </span>
               </button>
             ))}
@@ -209,7 +229,6 @@ export default function SynergyTracker({
       </div>
       {traits.length === 0 && <p className="px-1 text-[11px] text-white/45">같은 종족·직업을 2·4·6명 모으면 시너지가 켜져요. 마우스를 올리면 자세히 보여요.</p>}
       {traits.map((t) => {
-        const active = synergyLevel(t.count) > 0;
         const next = t.levels.find(([n]) => n > t.count)?.[0];
         return (
           <div
@@ -223,7 +242,7 @@ export default function SynergyTracker({
               onClick={() => setPinned(pinned === t.key ? null : t.key)}
               className={`flex w-full items-center gap-2 rounded-xl border px-1.5 py-1 text-left transition ${
                 openKey === t.key ? "border-yellow-300/70 bg-yellow-300/10" : "border-transparent hover:bg-white/5"
-              } ${active ? "" : "opacity-55"}`}
+              }`}
             >
               <Hex t={t} />
               <span className="min-w-0 flex-1">
@@ -237,9 +256,10 @@ export default function SynergyTracker({
                     <Pips t={t} />
                   </span>
                 </span>
-                <span className="block truncate text-[10px] text-white/55 light:text-slate-500">{active ? currentText(t) : t.short}</span>
+                <span className="block truncate text-[10px] text-white/55 light:text-slate-500">{t.short}</span>
               </span>
             </button>
+            <LevelTable t={t} />
             {openKey === t.key && (
               <div className="tb-pop absolute left-full top-0 z-50 ml-2 w-72 rounded-2xl border border-amber-400/40 bg-stone-950/95 p-3 shadow-2xl backdrop-blur">
                 <TraitDetail t={t} board={shown} owned={tab === "me" ? owned : []} tribesInPlay={tribesInPlay} />
