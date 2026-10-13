@@ -1,4 +1,5 @@
 import type { StatDetails } from "./details";
+import { RP_GAIN_KEY, RP_LOSS_KEY, tierOf } from "./rankTier";
 
 const n = (v: number | undefined) => (v ?? 0).toLocaleString("ko-KR");
 
@@ -162,7 +163,9 @@ export interface RankMetric {
   asc?: boolean;
   /** Minimum denominator to qualify for a ratio/average board. */
   minDen?: number;
-  format: "count" | "percent" | "avg" | "money";
+  /** Subtracted details key: value = num − sub (e.g. 랭크 점수 rpGain − rpLoss). Needs the p_sub SQL. */
+  sub?: string;
+  format: "count" | "percent" | "avg" | "money" | "rp";
   unit?: string;
 }
 
@@ -236,6 +239,7 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "tp-perfect", label: "무실수 레벨", num: "perfectLevels", format: "count", unit: "개" },
   ],
   "tavern-brawl": [
+    { id: "tb-rp", label: "🏆 랭크 점수", num: RP_GAIN_KEY, sub: RP_LOSS_KEY, format: "rp" },
     { id: "tb-wins", label: "1위 횟수", num: "firstPlaces", format: "count", unit: "번" },
     { id: "tb-top4", label: "4위 안 비율", num: "topFour", den: "played", minDen: 10, format: "percent" },
     { id: "tb-golden", label: "황금 유닛", num: "triples", format: "count", unit: "개" },
@@ -266,5 +270,9 @@ export function formatRankMetric(m: RankMetric, value: number, num: number, den:
   if (m.format === "percent") return `${Math.round(value * 1000) / 10}% (${n(num)}/${n(den ?? 0)})`;
   if (m.format === "avg") return `${value.toFixed(1)}${m.unit ?? ""}`;
   if (m.format === "money") return `$${n(Math.round(value))}`;
+  if (m.format === "rp") {
+    const { tier } = tierOf(Math.max(0, value));
+    return `${tier.emoji} ${tier.name} · ${n(Math.max(0, value))} RP`;
+  }
   return `${n(value)}${m.unit ?? ""}`;
 }

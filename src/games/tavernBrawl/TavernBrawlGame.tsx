@@ -47,6 +47,8 @@ import {
   type BotTakeoverState,
 } from "@/games/shared/bot/botTakeover";
 import { selfResult } from "@/games/shared/selfResult";
+import { listPlayerStats } from "@/lib/stats/playerStats";
+import { applyRp, rpFromDetails } from "@/lib/stats/rankTier";
 
 /**
  * 여관 난투 온라인 대전 진입점 — 갓생 플래너와 같은 락스텝 패턴(docs/cloud-sync.md).
@@ -191,6 +193,8 @@ export default function TavernBrawlGame({ onComplete }: PlayableGameProps) {
   }, [phase]);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
+  /** 결과 저장 중복 방지(랭크 점수를 읽느라 잠깐 비동기) — 다음 판이 시작되면 풀린다 */
+  const endingRef = useRef(false);
   function requestStateSync() {
     const channel = channelRef.current;
     if (!channel) return;
@@ -708,9 +712,18 @@ export default function TavernBrawlGame({ onComplete }: PlayableGameProps) {
 
   const connectedSeats = useMemo(() => new Set([...occupants.map((o) => o.seat), ...botSeats, ...takeoverSeats]), [occupants, botSeats, takeoverSeats]);
 
-  function handleGameEnd() {
-    if (!gameState || gameState.phase !== "ended") return;
+  useEffect(() => {
+    if (gameState?.phase !== "ended") endingRef.current = false;
+  }, [gameState?.phase]);
+
+  async function handleGameEnd() {
+    if (!gameState || gameState.phase !== "ended" || endingRef.current) return;
+    endingRef.current = true;
     const rankings = computeRankings(gameState);
+    // 누적 랭크 점수: 지금 RP(이 기기에 동기화된 전적)에서 이번 순위만큼 — 0 아래로는 안 내려감
+    const prevRp = rpFromDetails((await listPlayerStats()).find((t) => t.gameId === "tavern-brawl")?.details);
+    const myRank = rankings.find((r) => r.seat === mySeat)?.rank ?? gameState.seatCount;
+    const rp = applyRp(prevRp, myRank, gameState.seatCount);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
       self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }, (seat, rank): Record<string, number> => {
@@ -724,6 +737,7 @@ export default function TavernBrawlGame({ onComplete }: PlayableGameProps) {
           tier6: st.stats.maxTier >= 6 ? 1 : 0,
           damageDealt: st.stats.damageDealt,
           maxBoardPower: st.board.reduce((a, u) => a + u.atk + u.hp, 0),
+          ...(seat === mySeat ? rp.details : {}),
         };
       }),
       finishedAt: new Date().toISOString(),

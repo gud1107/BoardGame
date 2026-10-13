@@ -12,7 +12,7 @@ import type { CardUnit } from "./UnitCard";
  * 마우스를 올리면(모바일은 탭) 단계별 효과, 내 유닛 중 해당 유닛, 이번 판 풀의 해당 유닛 목록.
  */
 
-type Trait = { key: string; kind: "tribe" | "class"; emoji: string; name: string; color: string; short: string; levels: [number, string][]; count: number };
+export type Trait = { key: string; kind: "tribe" | "class"; emoji: string; name: string; color: string; short: string; levels: [number, string][]; count: number };
 
 const LEVEL_STYLE = [
   "bg-stone-700 text-white/60 border-white/15", // 0
@@ -24,7 +24,7 @@ const LEVEL_STYLE = [
   "bg-gradient-to-b from-yellow-200 to-yellow-500 text-yellow-950 border-yellow-100 shadow-[0_0_12px_rgba(250,204,21,0.7)]", // 6 골드
 ];
 
-function traitsOf(board: readonly { defId: string }[]): Trait[] {
+export function traitsOf(board: readonly { defId: string }[]): Trait[] {
   const tc = tribeCounts(board);
   const cc = classCounts(board);
   const list: Trait[] = [

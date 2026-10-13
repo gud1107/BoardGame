@@ -25,7 +25,9 @@ import RulebookModal from "./RulebookModal";
 import { AbilityText } from "./AbilityFeed";
 import { UnitTooltipHost, unitTip } from "./UnitTooltip";
 import { EmoteBubble, EmotePicker, type EmoteKind, type EmoteSlot } from "./emotes";
-import SynergyTracker from "./SynergyTracker";
+import SynergyTracker, { traitsOf } from "./SynergyTracker";
+import { listPlayerStats } from "@/lib/stats/playerStats";
+import { applyRp, rpForRank, rpFromDetails, tierChange, tierOf, type RankTier } from "@/lib/stats/rankTier";
 import HeroPreview from "./HeroPreview";
 import CombatStats from "./CombatStats";
 import { getTavernBrawlSound } from "./tavernBrawlBgm";
@@ -1166,12 +1168,110 @@ function CombatView({
 
 /* ── 결과 ─────────────────────────────────────────────────── */
 
+/** 최종 보드의 종족·직업 — 켜진 시너지는 단계 색, 1명뿐인 건 흐리게 */
+function FinalTraits({ board }: { board: readonly CardUnit[] }) {
+  const traits = traitsOf(board);
+  if (!traits.length) return null;
+  return (
+    <div className="flex flex-wrap gap-1 pl-8">
+      {traits.map((t) => {
+        const lv = synergyLevel(t.count);
+        return (
+          <span
+            key={t.key}
+            title={`${t.name} ${t.count}명${lv ? ` — ${lv}단계 켜짐` : ""}`}
+            className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${
+              lv >= 6
+                ? "border-yellow-200 bg-yellow-400/25 text-yellow-100"
+                : lv >= 4
+                  ? "border-slate-200/70 bg-slate-300/20 text-slate-100"
+                  : lv >= 2
+                    ? "border-amber-500/70 bg-amber-700/30 text-amber-100"
+                    : "border-white/10 text-white/45"
+            } light:text-slate-800`}
+          >
+            {t.emoji} {t.name} {t.count}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function RpDelta({ v }: { v: number }) {
+  return (
+    <span className={`w-14 shrink-0 text-right text-xs font-black tabular-nums ${v > 0 ? "text-emerald-300 light:text-emerald-600" : v < 0 ? "text-rose-300 light:text-rose-600" : "text-white/40"}`}>
+      {v > 0 ? `+${v}` : v} RP
+    </span>
+  );
+}
+
+function TierBadge({ tier, big }: { tier: RankTier; big?: boolean }) {
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full bg-gradient-to-b px-2.5 py-0.5 font-black shadow ${tier.badge} ${big ? "text-base" : "text-xs"}`}>
+      {tier.emoji} {tier.name}
+    </span>
+  );
+}
+
+/** 내 누적 랭크 점수: 지금 → 이번 판 반영 후, 승급/강등 표시. 실제 기록은 "결과 저장"에서. */
+function MyRankCard({ rank, players }: { rank: number; players: number }) {
+  const [prev, setPrev] = useState<number | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void listPlayerStats().then((all) => {
+      if (alive) setPrev(rpFromDetails(all.find((t) => t.gameId === "tavern-brawl")?.details));
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  if (prev === null) return null;
+  const { delta, next } = applyRp(prev, rank, players);
+  const before = tierOf(prev);
+  const after = tierOf(next);
+  const change = tierChange(prev, next);
+  return (
+    <div className={`relative overflow-hidden rounded-2xl border p-3 ${change === "promoted" ? "tb-upglow border-yellow-300/70 bg-yellow-400/10" : change === "demoted" ? "border-rose-400/60 bg-rose-500/10" : "border-white/10 bg-black/25 light:bg-white"}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-bold text-white/60 light:text-slate-500">🏆 랭크</span>
+        {before.index !== after.index && (
+          <>
+            <TierBadge tier={before.tier} />
+            <span className="text-white/50">→</span>
+          </>
+        )}
+        <TierBadge tier={after.tier} big />
+        {change === "promoted" && <span className="tb-pop rounded-full bg-yellow-400 px-2 py-0.5 text-xs font-black text-black">⬆ 승급!</span>}
+        {change === "demoted" && <span className="tb-pop rounded-full bg-rose-600 px-2 py-0.5 text-xs font-black text-white">⬇ 강등</span>}
+        <span className="ml-auto text-sm font-black tabular-nums text-white light:text-slate-900">
+          {prev} → {next} RP <RpDelta v={delta} />
+        </span>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+        <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-yellow-200" style={{ width: `${Math.round(after.progress * 100)}%` }} />
+      </div>
+      <p className="mt-1 flex justify-between text-[10px] text-white/45 light:text-slate-500">
+        <span>{after.next ? `${after.next.emoji} ${after.next.name}까지 ${after.next.min - next} RP` : "최고 티어!"}</span>
+        <span>
+          1~4위 +40/+30/+20/+10 · 5~8위 −10/−20/−30/−40 ·{" "}
+          <a href="/stats" target="_blank" rel="noreferrer" className="underline">
+            랭킹 보기
+          </a>
+        </span>
+      </p>
+      <p className="text-[10px] text-white/35">「결과 저장하고 마치기」를 눌러야 반영돼요.</p>
+    </div>
+  );
+}
+
 function Standings({ state, viewerSeat, names, onGameEnd }: { state: GameState; viewerSeat: Seat; names: Record<Seat, string>; onGameEnd: () => void }) {
   const order = state.seats.map((s, i) => ({ s, i })).sort((a, b) => (a.s.place ?? 99) - (b.s.place ?? 99));
   const me = state.seats[viewerSeat];
   return (
     <div className={`${PANEL} flex flex-col gap-3 p-4`}>
       <p className="text-center text-xl font-black text-yellow-200 light:text-amber-700">{me.place === 1 ? "🏆 여관의 챔피언!" : `🏁 ${me.place}위`}</p>
+      <MyRankCard rank={me.place ?? state.seatCount} players={state.seatCount} />
       <div className="flex flex-col gap-2">
         {order.map(({ s, i }) => {
           const hero = s.hero ? HERO_BY_ID[s.hero] : null;
@@ -1184,7 +1284,9 @@ function Standings({ state, viewerSeat, names, onGameEnd }: { state: GameState; 
                 <span className="ml-auto text-xs text-white/50 light:text-slate-500">
                   🏠{s.stats.maxTier} · {s.stats.wins}승 {s.stats.losses}패 · ✨{s.stats.triples}
                 </span>
+                <RpDelta v={rpForRank(s.place ?? state.seatCount, state.seatCount)} />
               </p>
+              <FinalTraits board={s.board} />
               <div className="flex flex-wrap gap-2.5 pl-8 pb-1.5">
                 {s.board.map((u) => (
                   <UnitCard key={u.uid} unit={u} size="sm" />

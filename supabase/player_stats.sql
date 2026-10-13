@@ -391,9 +391,13 @@ grant execute on function public_leaderboard(text, text, integer, integer, boole
 -- value = num and players who never recorded the key (or recorded 0 on a
 -- higher-is-better board) are left out. Same exposure as public_leaderboard:
 -- public_name / public_avatar_url only, plus the caller's own row (is_me).
+-- p_sub (optional) is subtracted from num: value = num - sub, floored at 0
+-- (여관 난투 랭크 점수 = rpGain - rpLoss; details can't hold negatives), and
+-- everyone who recorded num is ranked, even at 0.
 drop function if exists public_metric_leaderboard(text, text, text, boolean, integer, integer);
 drop function if exists public_metric_leaderboard(text, text, text, boolean, integer, integer, boolean);
 drop function if exists public_metric_leaderboard(text, text, text, boolean, integer, integer, boolean, integer);
+drop function if exists public_metric_leaderboard(text, text, text, boolean, integer, integer, boolean, integer, text);
 create or replace function public_metric_leaderboard(
   p_game_id text,
   p_num text,
@@ -402,7 +406,8 @@ create or replace function public_metric_leaderboard(
   p_min_den integer default 1,
   p_limit integer default 50,
   p_include_bots boolean default true,
-  p_bot_level integer default null
+  p_bot_level integer default null,
+  p_sub text default null
 ) returns table (
   rank bigint,
   nickname text,
@@ -416,7 +421,8 @@ create or replace function public_metric_leaderboard(
   with base as (
     select s.user_id,
            s.played,
-           case when p_den is null then (s.details ->> p_num)::numeric
+           case when p_sub is not null then greatest((s.details ->> p_num)::numeric - coalesce((s.details ->> p_sub)::numeric, 0), 0)
+                when p_den is null then (s.details ->> p_num)::numeric
                 else coalesce((s.details ->> p_num)::numeric, 0) end as num,
            case when p_den is null then null
                 when p_den = 'played' then s.played::numeric
@@ -425,12 +431,13 @@ create or replace function public_metric_leaderboard(
     where s.game_id = p_game_id
       and p_num ~ '^[a-zA-Z][a-zA-Z0-9]{0,39}$'
       and (p_den is null or p_den ~ '^[a-zA-Z][a-zA-Z0-9]{0,39}$')
+      and (p_sub is null or p_sub ~ '^[a-zA-Z][a-zA-Z0-9]{0,39}$')
   ),
   vals as (
     select b.*, case when p_den is null then b.num else round(b.num / b.den, 4) end as value
     from base b
     where b.num is not null
-      and (p_den is not null or p_asc or b.num > 0)
+      and (p_den is not null or p_asc or p_sub is not null or b.num > 0)
       and (p_den is null or b.den >= greatest(coalesce(p_min_den, 1), 1))
   ),
   ranked as (
@@ -450,7 +457,7 @@ create or replace function public_metric_leaderboard(
   order by r.rnk, r.played desc;
 $$ language sql stable security definer set search_path = public;
 
-grant execute on function public_metric_leaderboard(text, text, text, boolean, integer, integer, boolean, integer) to anon, authenticated;
+grant execute on function public_metric_leaderboard(text, text, text, boolean, integer, integer, boolean, integer, text) to anon, authenticated;
 
 -- 봇 레벨별 비교 (공개 랭킹). One row per bucket — level -1 = 사람끼리,
 -- 0 = mid-game takeover bots only, 1..10 = strongest lobby bot — with the

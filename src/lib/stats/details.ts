@@ -6,6 +6,7 @@
  * keys starting with `min` keep the lowest, every other key is summed.
  * Values are non-negative numbers.
  */
+import { RP_GAIN_KEY, rpFromDetails, tierOf } from "./rankTier";
 export type StatDetails = Record<string, number>;
 
 export function mergeStatDetails(base: StatDetails | undefined, delta: StatDetails | undefined): StatDetails {
@@ -63,6 +64,10 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "해골 발동", value: (d) => n(d.skullTriggers) },
   ],
   "tavern-brawl": [
+    {
+      label: "🏆 랭크",
+      value: (d) => (d[RP_GAIN_KEY] === undefined ? null : `${tierOf(rpFromDetails(d)).tier.emoji} ${tierOf(rpFromDetails(d)).tier.name} · ${n(rpFromDetails(d))} RP`),
+    },
     { label: "1위 / 4위 안", value: (d) => `${n(d.firstPlaces)} / ${n(d.topFour)}` },
     { label: "황금 유닛", value: (d) => n(d.triples) },
     { label: "전투 승리", value: (d) => n(d.combatWins) },

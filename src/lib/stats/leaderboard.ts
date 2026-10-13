@@ -104,6 +104,9 @@ export async function fetchMetricLeaderboard(
     p_asc: !!metric.asc,
     p_min_den: metric.minDen ?? 1,
     p_limit: limit,
+    // Sent only for subtracting boards (랭크 점수), so the others keep working
+    // against a project still on the pre-p_sub SQL.
+    ...(metric.sub ? { p_sub: metric.sub } : {}),
     // Sent only when filtering, so the default view also works against a
     // project still on the pre-bot-filter SQL.
     ...filterArgs(filter),
