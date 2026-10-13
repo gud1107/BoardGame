@@ -176,7 +176,7 @@ function PlayersPanel({
                 {!connectedSeats.has(i) && <span title="연결 끊김">📡</span>}
                 <span className="ml-auto shrink-0 text-white/50 light:text-slate-500">
                   🏠{s.tier} {s.lastResult === "win" ? "🟢" : s.lastResult === "loss" ? "🔴" : s.lastResult === "draw" ? "⚪" : ""}
-                  {s.winStreak >= 2 ? `🔥${s.winStreak}` : ""} {status}
+                  {s.winStreak >= 2 ? `🔥${s.winStreak}` : ""} {s.stats.triples > 0 && <span title={`황금 유닛 ${s.stats.triples}번 만듦`}>✨{s.stats.triples}</span>} {status}
                 </span>
               </span>
               <span className="mt-0.5 block h-1.5 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
@@ -258,6 +258,18 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
   useSuiteBgm(getTavernBrawlSound, state.phase !== "ended", state.phase === "combat" ? 1 : 0);
 
   // 황금 유닛·탈락·우승 효과음
+  const fxTimers = useRef(new Set<number>());
+  const later = useCallback((fn: () => void, ms: number) => {
+    const t = window.setTimeout(() => {
+      fxTimers.current.delete(t);
+      fn();
+    }, ms);
+    fxTimers.current.add(t);
+  }, []);
+  useEffect(() => {
+    const timers = fxTimers.current;
+    return () => timers.forEach((t) => window.clearTimeout(t));
+  }, []);
   // 3장 합성: 새로 생긴 황금 유닛을 찾아 합성 연출(빨려 들어옴 → 충돌 순간 효과음)
   const triplesRef = useRef(me.stats.triples);
   const goldenUidsRef = useRef(new Set([...me.hand, ...me.board].filter((u) => u.golden).map((u) => u.uid)));
@@ -270,16 +282,28 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
     triplesRef.current = me.stats.triples;
     if (!merged || !fresh.length) return;
     sfx("reroll");
-    const t0 = window.setTimeout(() => {
-      setMergeFx((q) => [...q, ...fresh.map((u) => ({ id: u.uid, unit: { defId: u.defId, atk: u.atk, hp: u.hp, golden: true, kw: u.kw } }))]);
-    }, 0);
-    const t1 = window.setTimeout(() => sfx("golden"), 700);
-    return () => {
-      window.clearTimeout(t0);
-      window.clearTimeout(t1);
-    };
-  }, [me.stats.triples, me.hand, me.board]);
+    // 상태가 곧바로 또 바뀌어도(다음 동기화) 연출이 끊기지 않게 — 타이머는 언마운트 때만 정리
+    later(() => setMergeFx((q) => [...q, ...fresh.map((u) => ({ id: u.uid, unit: { defId: u.defId, atk: u.atk, hp: u.hp, golden: true, kw: u.kw } }))]), 0);
+    later(() => sfx("golden"), 700);
+  }, [me.stats.triples, me.hand, me.board, later]);
   const doneMerge = useCallback(() => setMergeFx((q) => q.slice(1)), []);
+
+  // 상대가 황금 유닛을 만들면 작은 알림(어떤 유닛인지는 비공개 — 전장처럼 횟수만)
+  const rivalTriplesRef = useRef(state.seats.map((s) => s.stats.triples));
+  const [rivalToasts, setRivalToasts] = useState<{ id: number; seat: Seat }[]>([]);
+  const rivalSeq = useRef(0);
+  useEffect(() => {
+    const prev = rivalTriplesRef.current;
+    const made = state.seats.map((s, i) => i).filter((i) => i !== viewerSeat && state.seats[i].stats.triples > (prev[i] ?? 0));
+    rivalTriplesRef.current = state.seats.map((s) => s.stats.triples);
+    if (!made.length) return;
+    const items = made.map((seat) => ({ id: ++rivalSeq.current, seat: seat as Seat }));
+    later(() => {
+      setRivalToasts((q) => [...q, ...items].slice(-3));
+      sfx("ability");
+    }, 0);
+    later(() => setRivalToasts((q) => q.filter((x) => !items.some((y) => y.id === x.id))), 3200);
+  }, [state.seats, viewerSeat, later]);
   const aliveRef = useRef(me.alive);
   useEffect(() => {
     if (aliveRef.current && !me.alive && state.phase !== "ended") sfx("eliminated");
@@ -350,6 +374,16 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
     <div className="flex flex-col gap-3">
       <style>{COMBAT_CSS}</style>
       <UnitTooltipHost />
+      {rivalToasts.length > 0 && (
+        <div className="pointer-events-none fixed right-3 top-16 z-[80] flex flex-col items-end gap-1.5">
+          {rivalToasts.map((t) => (
+            <div key={t.id} className="tb-feed flex items-center gap-1.5 rounded-full border border-yellow-300/70 bg-gradient-to-r from-amber-700/95 to-yellow-600/95 px-3 py-1 text-xs font-bold text-yellow-50 shadow-[0_0_14px_rgba(250,204,21,0.5)]">
+              <span className="text-sm">✨</span>
+              <span className="max-w-[9rem] truncate">{names[t.seat] ?? `${t.seat + 1}번`}</span>님이 황금 유닛을 만들었어요
+            </div>
+          ))}
+        </div>
+      )}
       {mergeFx[0] && <GoldenMergeFX key={mergeFx[0].id} unit={mergeFx[0].unit} onDone={doneMerge} />}
       {statsView && statsReady && statsCombat && (
         <CombatStats

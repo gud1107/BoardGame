@@ -91,14 +91,38 @@ export default function UnitCard({
       } ${onClick ? "cursor-pointer" : "cursor-default"}`}
     >
       <div
-        className={`absolute inset-0 overflow-hidden rounded-xl border-2 bg-gradient-to-b ${TIER_BG[d.tier]} ${
-          unit.golden ? "border-yellow-300 shadow-[0_0_14px_rgba(253,224,71,0.7)]" : "border-black/30 light:border-slate-400"
+        className={`absolute inset-0 overflow-hidden rounded-xl border-2 bg-gradient-to-b ${
+          unit.golden
+            ? "border-yellow-100 from-yellow-200 via-amber-400 to-amber-700 shadow-[0_0_0_2px_#92400e,0_0_18px_4px_rgba(250,204,21,0.75)]"
+            : `${TIER_BG[d.tier]} border-black/30 light:border-slate-400`
         } ${hasShield ? "outline outline-2 outline-offset-1 outline-amber-200/80" : ""}`}
       >
-        {unit.golden && <div className="tb-golden pointer-events-none absolute inset-0" />}
-        <div className={`flex h-[54%] items-center justify-center ${emoji} drop-shadow`}>{d.emoji}</div>
-        <div className="truncate px-1 text-center text-[9px] font-semibold leading-tight text-white/90 sm:text-[10px]">{d.name}</div>
-        <div className="truncate px-0.5 text-center text-[8px] leading-tight sm:text-[9px]">
+        {unit.golden && (
+          <>
+            {/* 금박 결 + 안쪽 테두리 + 네 귀퉁이 보석 */}
+            <div className="pointer-events-none absolute inset-0 opacity-40 mix-blend-overlay [background:repeating-linear-gradient(135deg,rgba(255,255,255,.5)_0_2px,transparent_2px_7px)]" />
+            <div className="pointer-events-none absolute inset-[3px] rounded-lg border border-yellow-50/80 shadow-[inset_0_0_10px_rgba(120,53,15,.55)]" />
+            {(["left-[3px] top-[3px]", "right-[3px] top-[3px]", "left-[3px] bottom-[3px]", "right-[3px] bottom-[3px]"] as const).map((pos) => (
+              <span key={pos} className={`pointer-events-none absolute ${pos} h-1.5 w-1.5 rotate-45 bg-gradient-to-br from-white to-amber-500 shadow-[0_0_4px_#fde047]`} />
+            ))}
+            <div className="tb-golden pointer-events-none absolute inset-0" />
+          </>
+        )}
+        <div
+          className={`flex h-[54%] items-center justify-center ${emoji} drop-shadow ${
+            unit.golden ? "[background:radial-gradient(circle_at_50%_55%,rgba(255,255,255,.7),transparent_62%)]" : ""
+          }`}
+        >
+          {d.emoji}
+        </div>
+        <div
+          className={`truncate px-1 text-center text-[9px] leading-tight sm:text-[10px] ${
+            unit.golden ? "font-black text-amber-950 drop-shadow-[0_1px_0_rgba(255,255,255,.6)]" : "font-semibold text-white/90"
+          }`}
+        >
+          {d.name}
+        </div>
+        <div className={`truncate px-0.5 text-center text-[8px] leading-tight sm:text-[9px] ${unit.golden ? "mx-1 rounded-full bg-black/45" : ""}`}>
           <span style={{ color: tribe?.color ?? "#cbd5e1" }}>{tribe ? tribe.name : "중립"}</span>
           {cls && (
             <>
@@ -118,7 +142,12 @@ export default function UnitCard({
           {d.shopEnd && <span title="성장">🌱</span>}
         </div>
       </div>
-      <span className="absolute -top-1.5 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-1 text-[8px] leading-3 tracking-tighter text-yellow-300">
+      <span
+        className={`absolute -top-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-1 text-[8px] leading-3 tracking-tighter ${
+          unit.golden ? "border border-amber-800 bg-gradient-to-b from-yellow-100 to-amber-400 font-black text-amber-900 shadow-[0_0_6px_#facc15]" : "bg-black/70 text-yellow-300"
+        }`}
+      >
+        {unit.golden ? "👑" : ""}
         {"★".repeat(d.tier)}
       </span>
       {tribe && (
@@ -131,10 +160,10 @@ export default function UnitCard({
           {CLASSES[d.cls].emoji}
         </span>
       )}
-      <span className={`absolute -bottom-1.5 -left-1.5 flex items-center justify-center rounded-full border border-black/40 bg-amber-500 font-bold text-white ${stat} ${buffedAtk ? "text-lime-200" : ""}`}>
+      <span className={`absolute -bottom-1.5 -left-1.5 flex items-center justify-center rounded-full border font-bold text-white ${unit.golden ? "border-yellow-100 bg-gradient-to-b from-amber-400 to-orange-600 ring-2 ring-yellow-300" : "border-black/40 bg-amber-500"} ${stat} ${buffedAtk ? "text-lime-200" : ""}`}>
         {unit.atk}
       </span>
-      <span className={`absolute -bottom-1.5 -right-1.5 flex items-center justify-center rounded-full border border-black/40 bg-rose-600 font-bold text-white ${stat} ${buffedHp ? "text-lime-200" : ""}`}>
+      <span className={`absolute -bottom-1.5 -right-1.5 flex items-center justify-center rounded-full border font-bold text-white ${unit.golden ? "border-yellow-100 bg-gradient-to-b from-rose-500 to-rose-700 ring-2 ring-yellow-300" : "border-black/40 bg-rose-600"} ${stat} ${buffedHp ? "text-lime-200" : ""}`}>
         {Math.max(0, unit.hp)}
       </span>
       {float && <span className={`tb-float pointer-events-none absolute left-1/2 top-1/3 -translate-x-1/2 text-lg font-black drop-shadow-[0_2px_2px_rgba(0,0,0,0.9)] ${float.startsWith("+") ? "text-lime-300" : "text-red-400"}`}>{float}</span>}
