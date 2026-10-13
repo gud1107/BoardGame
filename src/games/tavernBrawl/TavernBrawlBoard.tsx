@@ -62,6 +62,8 @@ type Props = {
   names: Record<Seat, string>;
   connectedSeats: Set<Seat>;
   deadlineMs: number | null;
+  /** 이번 단계 전체 제한 시간(ms) — 남은 시간 막대의 기준 */
+  totalMs?: number;
   nowMs: number;
   onAction: (action: EngineAction) => void;
   onGameEnd: () => void;
@@ -262,13 +264,77 @@ function PlayerStrip({ state, viewerSeat, names, onInspect }: { state: GameState
   );
 }
 
-function Timer({ deadlineMs, nowMs }: { deadlineMs: number | null; nowMs: number }) {
-  if (!deadlineMs) return null;
-  const left = Math.max(0, Math.ceil((deadlineMs - nowMs) / 1000));
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${left <= 5 ? "bg-rose-500 text-white" : "bg-black/40 text-amber-100 light:bg-white light:text-amber-900"}`}>⏱ {left}</span>;
-}
+const TIMER_CSS = `
+@keyframes tb-tm-pulse { 0%,100% { transform: scale(1) } 50% { transform: scale(1.18) } }
+@keyframes tb-tm-shake { 0%,100% { transform: translateX(0) rotate(0) } 25% { transform: translateX(-2px) rotate(-3deg) } 75% { transform: translateX(2px) rotate(3deg) } }
+@keyframes tb-tm-vignette { 0%,100% { opacity: .35 } 50% { opacity: .85 } }
+@keyframes tb-tm-stripes { to { background-position: 28px 0 } }
+.tb-tm-pulse { animation: tb-tm-pulse 1s ease-in-out infinite; }
+.tb-tm-shake { animation: tb-tm-shake .25s linear infinite; }
+.tb-tm-vignette { animation: tb-tm-vignette 1s ease-in-out infinite; }
+.tb-tm-stripes { background-image: repeating-linear-gradient(-45deg, rgba(255,255,255,.22) 0 7px, transparent 7px 14px); background-size: 28px 100%; animation: tb-tm-stripes .6s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .tb-tm-pulse, .tb-tm-shake, .tb-tm-stripes { animation: none; } .tb-tm-vignette { animation: none; opacity: .5; } }
+`;
 
-export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSeats, deadlineMs, nowMs, onAction, onGameEnd, emotes = {}, onEmote, rankResult = null }: Props) {
+/** 남은 초가 이 값 이하면 "시간 부족" 분위기 */
+const HURRY_SEC = 10;
+const PANIC_SEC = 5;
+
+/**
+ * 단계 제한 시간 — "23초 / 40초"와 줄어드는 막대. 10초 남으면 빨갛게 박동하며 째깍,
+ * 5초부터 숫자가 떨리고 화면 가장자리가 붉게 맥박친다. 시간 기준은 이 기기가 단계 시작을 본 시각.
+ */
+function PhaseTimer({ deadlineMs, totalMs, nowMs, label, done }: { deadlineMs: number | null; totalMs: number; nowMs: number; label: string; /** 이미 준비 끝(또는 관전) — 재촉하지 않는다 */ done: boolean }) {
+  const left = deadlineMs ? Math.max(0, Math.ceil((deadlineMs - nowMs) / 1000)) : null;
+  const total = Math.max(1, Math.round(totalMs / 1000));
+  // 초가 바뀔 때만 째깍(같은 초에 여러 번 렌더돼도 한 번)
+  const lastTickRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (left === null || left === lastTickRef.current) return;
+    lastTickRef.current = left;
+    if (done) return;
+    if (left === 0) sfx("timeUp");
+    else if (left <= PANIC_SEC) sfx("tickUrgent");
+    else if (left <= HURRY_SEC) sfx("tick");
+  }, [left, done]);
+  if (left === null || !totalMs) return null;
+  const hurry = !done && left <= HURRY_SEC;
+  const panic = left <= PANIC_SEC;
+  const pct = Math.min(100, ((deadlineMs! - nowMs) / totalMs) * 100);
+  return (
+    <>
+      <style>{TIMER_CSS}</style>
+      {hurry && (
+        <div
+          className="tb-tm-vignette pointer-events-none fixed inset-0 z-[55]"
+          style={{ boxShadow: `inset 0 0 ${panic ? 140 : 80}px ${panic ? 40 : 18}px rgba(220,38,38,${panic ? 0.75 : 0.5})` }}
+          aria-hidden
+        />
+      )}
+      <div
+        className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 transition-colors ${
+          panic ? "border-rose-400 bg-rose-950/80" : hurry ? "border-rose-400/60 bg-rose-950/50" : "border-amber-900/40 bg-black/30 light:border-amber-200 light:bg-white"
+        }`}
+      >
+        <span className={`text-lg leading-none ${panic ? "tb-tm-shake" : hurry ? "tb-tm-pulse" : ""}`}>{hurry ? "⏰" : "⏱"}</span>
+        <span className="flex items-baseline gap-0.5 tabular-nums">
+          <span className={`font-black leading-none ${panic ? "tb-tm-pulse text-3xl text-rose-300" : hurry ? "text-2xl text-rose-300" : "text-xl text-amber-100 light:text-amber-900"}`}>{left}</span>
+          <span className="text-xs font-bold text-white/45 light:text-slate-500">/ {total}초</span>
+        </span>
+        <span className="relative h-3 min-w-0 flex-1 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
+          <span
+            className={`absolute inset-y-0 left-0 rounded-full transition-[width] duration-500 ease-linear ${
+              panic ? "tb-tm-stripes bg-rose-500" : hurry ? "tb-tm-stripes bg-gradient-to-r from-rose-600 to-orange-400" : pct > 50 ? "bg-gradient-to-r from-emerald-500 to-lime-300" : "bg-gradient-to-r from-amber-500 to-yellow-300"
+            }`}
+            style={{ width: `${pct}%` }}
+          />
+        </span>
+        <span className={`shrink-0 text-[11px] font-bold ${hurry ? "text-rose-200" : "text-white/55 light:text-slate-500"}`}>{panic ? "서둘러요!" : hurry ? "시간이 얼마 안 남았어요" : done ? "다른 손님 기다리는 중" : label}</span>
+      </div>
+    </>
+  );
+}
+export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSeats, deadlineMs, totalMs = 0, nowMs, onAction, onGameEnd, emotes = {}, onEmote, rankResult = null }: Props) {
   const me = state.seats[viewerSeat];
   const [rules, setRules] = useState(false);
   const [view, setView] = useState<View>(initialView);
@@ -367,7 +433,6 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
         {state.phase === "heroPick" ? "영웅 고르기" : state.phase === "shop" ? "🛒 상점 단계" : state.phase === "combat" ? "⚔️ 전투" : "🏁 끝"}
       </span>
       <span className="ml-auto flex items-center gap-2">
-        <Timer deadlineMs={deadlineMs} nowMs={nowMs} />
         {statsReady && (
           <button
             onClick={() => setStatsView((v) => (v ? null : { round: state.round, auto: false }))}
@@ -435,6 +500,11 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
         />
       )}
       {header}
+      {(state.phase === "shop" || state.phase === "heroPick") && (
+        <PhaseTimer deadlineMs={deadlineMs} totalMs={totalMs} nowMs={nowMs} label={state.phase === "shop" ? "상점 시간" : "영웅 고르기"}
+          done={!me.alive || (state.phase === "shop" ? me.ready : me.hero !== null)}
+        />
+      )}
       <div className={`grid gap-3 lg:grid-cols-[1fr_17rem] ${tracker ? "xl:grid-cols-[15rem_1fr_17rem]" : ""}`}>
         {tracker && <div className="relative z-40 hidden xl:block">{tracker("column")}</div>}
         <div className="min-w-0">

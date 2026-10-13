@@ -1062,6 +1062,7 @@ export default function TavernBrawlGame({ onComplete }: PlayableGameProps) {
           names={names}
           connectedSeats={connectedSeats}
           deadlineMs={deadlineMs}
+          totalMs={phaseDurationMs(gameState)}
           nowMs={nowMs}
           onAction={handleAction}
           onGameEnd={handleGameEnd}

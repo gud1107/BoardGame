@@ -20,6 +20,10 @@ const SFX = {
   ],
   discover: fx.arp("harp", ["A4", "D5", "F#5", "A5"], 0.06, 0.6, 0.8),
   power: [fx.whoosh(300, 2400, 0.3, 0.12), ...fx.arp("bell", ["A5", "E6"], 0.08, 0.5, 0.6)],
+  /** 시간 압박 — 남은 10~6초 째깍, 5초부터 더 높고 진한 째깍 + 심장 쿵 */
+  tick: [fx.click(1300, 0.09)],
+  tickUrgent: [fx.click(2100, 0.16), { inst: "taiko", note: "C2", at: 0, dur: 0.15, gain: 0.35 }],
+  timeUp: [fx.whoosh(1800, 300, 0.3, 0.12), { inst: "taiko", note: "C2", at: 0.05, gain: 0.6 }],
   ready: [fx.click(1500, 0.12), ...fx.arp("pluck", ["D5", "A5"], 0.06, 0.25, 0.7)],
   attack: [fx.whoosh(900, 300, 0.12, 0.1), fx.thud(150, 0.2, 0.42, 0.08)],
   /** 예비 동작 끝 — 칼바람 */
