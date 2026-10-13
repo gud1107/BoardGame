@@ -429,7 +429,7 @@ function GoldCounter({ gold, max }: { gold: number; max: number }) {
   return (
     <span className="relative inline-flex">
       <span
-        key={fx?.id ?? 0}
+        key={`pill-${fx?.id ?? 0}`}
         className={`inline-flex items-center gap-1.5 rounded-2xl bg-gradient-to-b from-yellow-200 via-yellow-400 to-amber-600 px-3 py-1 text-black shadow-[0_0_14px_rgba(250,204,21,0.45)] ${fx ? "tb-goldpulse" : ""}`}
         title="골드 — 유닛 구매 3, 새로고침 1, 여관 등급업"
       >
@@ -438,7 +438,7 @@ function GoldCounter({ gold, max }: { gold: number; max: number }) {
         <span className="text-xs font-bold text-black/55">/{max}</span>
       </span>
       {fx && (
-        <span key={fx.id} className={`tb-coinfloat pointer-events-none absolute left-1/2 -top-3 text-lg font-black drop-shadow-[0_2px_2px_rgba(0,0,0,0.9)] ${fx.delta > 0 ? "text-lime-300" : "text-rose-300"}`}>
+        <span key={`float-${fx.id}`} className={`tb-coinfloat pointer-events-none absolute left-1/2 -top-3 text-lg font-black drop-shadow-[0_2px_2px_rgba(0,0,0,0.9)] ${fx.delta > 0 ? "text-lime-300" : "text-rose-300"}`}>
           {fx.delta > 0 ? `+${fx.delta}` : fx.delta}
         </span>
       )}

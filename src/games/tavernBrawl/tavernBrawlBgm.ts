@@ -72,13 +72,12 @@ const SFX = {
   launch_cannon: [fx.thud(60, 0.35, 0.7), ...fx.crack(0, 0.4)],
   /** 능력 발동 하이라이트 */
   ability: [...fx.arp("glock", ["A5", "E6", "A6"], 0.045, 0.35, 0.55), { inst: "bell", note: "E6", at: 0.1, dur: 0.6, gain: 0.35 }],
-  /** 전투 시작 — 칼 맞부딪힘 */
+  /** 전투 시작 — 칼 맞부딪힘(짧게: 울림 없이 ~0.25초 안에 끝) */
   clash: [
-    fx.whoosh(3000, 800, 0.15, 0.12),
-    { wave: "square", freq: 2400, to: 1900, glide: 0.4, dur: 0.45, peak: 0.05, attack: 0.001, at: 0.12 },
-    { wave: "sine", freq: 3300, dur: 0.5, peak: 0.08, attack: 0.001, at: 0.12 },
-    ...fx.crack(0.12, 0.3),
-    { inst: "taiko", note: "C2", at: 0.12 },
+    fx.whoosh(3000, 800, 0.07, 0.1),
+    { wave: "square", freq: 2400, to: 1900, glide: 0.1, dur: 0.12, peak: 0.05, attack: 0.001, at: 0.05 },
+    { wave: "sine", freq: 3300, dur: 0.15, peak: 0.07, attack: 0.001, at: 0.05 },
+    ...fx.crack(0.05, 0.3),
   ],
   shieldPop: [
     { wave: "noise", dur: 0.25, peak: 0.3, attack: 0.001, filter: { type: "highpass", freq: 4000, to: 9000 } },
