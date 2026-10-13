@@ -18,7 +18,7 @@ import {
   type GameState,
   type Seat,
 } from "./engine";
-import { CLASSES, CLASS_ORDER, HERO_BY_ID, SHOP_SLOTS, TRIBES, TRIBE_ORDER, UPGRADE_BASE, unitDef } from "./units";
+import { CLASSES, CLASS_ORDER, HERO_BY_ID, SHOP_SLOTS, type HeroId, TRIBES, TRIBE_ORDER, UPGRADE_BASE, unitDef } from "./units";
 import UnitCard, { UnitDetail, type CardUnit } from "./UnitCard";
 import CombatReplay, { COMBAT_CSS, sideOfSeat } from "./CombatReplay";
 import RulebookModal from "./RulebookModal";
@@ -26,6 +26,7 @@ import { AbilityText } from "./AbilityFeed";
 import { UnitTooltipHost, unitTip } from "./UnitTooltip";
 import { EmoteBubble, EmotePicker, type EmoteKind, type EmoteSlot } from "./emotes";
 import SynergyTracker from "./SynergyTracker";
+import HeroPreview from "./HeroPreview";
 import { getTavernBrawlSound } from "./tavernBrawlBgm";
 import type { ArenaApi } from "./three/Arena3D";
 import { webglAvailable } from "./three/webgl";
@@ -330,16 +331,19 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
 function HeroPick({ state, viewerSeat, names, onAction }: { state: GameState; viewerSeat: Seat; names: Record<Seat, string>; onAction: (a: EngineAction) => void }) {
   const me = state.seats[viewerSeat];
   const waiting = state.seats.map((s, i) => (s.hero ? null : names[i])).filter(Boolean);
+  // 능력 미리보기: 마우스오버(넓은 화면) 또는 "미리보기" 탭(모바일)
+  const [hover, setHover] = useState<string | null>(null);
+  const [tapped, setTapped] = useState<string | null>(null);
   return (
     <div className={`${PANEL} flex flex-col items-center gap-4 p-5`}>
-      <p className="text-center text-sm text-amber-100/80 light:text-amber-900">영웅 3명 중 한 명을 고르세요. 영웅마다 고유 능력이 있어요.</p>
+      <p className="text-center text-sm text-amber-100/80 light:text-amber-900">영웅 3명 중 한 명을 고르세요. 영웅마다 고유 능력이 있어요. 마우스를 올리면 능력 미리보기가 보여요.</p>
       <div className="grid w-full max-w-3xl gap-3 sm:grid-cols-3">
         {me.heroOptions.map((id) => {
           const h = HERO_BY_ID[id];
           const picked = me.hero === id;
           return (
+            <div key={id} className="relative flex flex-col gap-1" onMouseEnter={() => setHover(id)} onMouseLeave={() => setHover((h) => (h === id ? null : h))}>
             <button
-              key={id}
               disabled={me.hero !== null}
               onClick={() => {
                 sfx("power");
@@ -358,6 +362,24 @@ function HeroPick({ state, viewerSeat, names, onAction }: { state: GameState; vi
                 <AbilityText text={h.text} />
               </span>
             </button>
+            <button
+              type="button"
+              onClick={() => setTapped(tapped === id ? null : id)}
+              className="rounded-lg bg-white/5 py-1 text-[11px] font-bold text-amber-200/80 sm:hidden"
+            >
+              👁 효과 미리보기 {tapped === id ? "▴" : "▾"}
+            </button>
+            {tapped === id && (
+              <div className="tb-pop rounded-2xl border border-amber-400/40 bg-stone-950/95 p-3 sm:hidden">
+                <HeroPreview hero={id as HeroId} />
+              </div>
+            )}
+            {hover === id && (
+              <div className="tb-pop pointer-events-none absolute left-1/2 top-full z-50 mt-2 hidden w-72 -translate-x-1/2 rounded-2xl border border-amber-400/40 bg-stone-950/95 p-3 shadow-2xl backdrop-blur sm:block">
+                <HeroPreview hero={id as HeroId} />
+              </div>
+            )}
+            </div>
           );
         })}
       </div>
