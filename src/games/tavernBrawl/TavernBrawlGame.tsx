@@ -29,7 +29,7 @@ import {
 import { chooseBotAction } from "./bot";
 import { replayDurationMs } from "./CombatReplay";
 import TavernBrawlBoard from "./TavernBrawlBoard";
-import { EMOTES, isEmoteKind, type EmoteKind, type EmoteSlot } from "./emotes";
+import { EMOTE_COOLDOWN_MS, EMOTES, isEmoteKind, type EmoteKind, type EmoteSlot } from "./emotes";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, FillEmptySeatsButton, RemoveBotButton } from "@/components/lobby/BotSeatControls";
@@ -553,7 +553,7 @@ export default function TavernBrawlGame({ onComplete }: PlayableGameProps) {
     (kind: EmoteKind) => {
       if (mySeat === null) return;
       const t = Date.now();
-      if (t - lastEmoteRef.current < 1200) return; // 도배 방지
+      if (t - lastEmoteRef.current < EMOTE_COOLDOWN_MS) return; // 도배 방지
       lastEmoteRef.current = t;
       channelRef.current?.send({ type: "broadcast", event: "emote", payload: { seat: mySeat, kind } });
     },

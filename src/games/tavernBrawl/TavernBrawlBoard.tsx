@@ -24,7 +24,7 @@ import CombatReplay, { COMBAT_CSS, sideOfSeat } from "./CombatReplay";
 import RulebookModal from "./RulebookModal";
 import { AbilityText } from "./AbilityFeed";
 import { UnitTooltipHost, unitTip } from "./UnitTooltip";
-import { EmoteBubble, EmotePicker, type EmoteKind, type EmoteSlot } from "./emotes";
+import { EmoteBubble, EmoteWheel, type EmoteKind, type EmoteSlot } from "./emotes";
 import SynergyTracker, { traitsOf } from "./SynergyTracker";
 import { rpForRank, tierChange, tierOf, type RankResult, type RankTier } from "@/lib/stats/rankTier";
 import HeroPreview from "./HeroPreview";
@@ -338,7 +338,6 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
             📊 전투 통계
           </button>
         )}
-        {onEmote && state.phase !== "ended" && <EmotePicker onEmote={onEmote} />}
         {canWebgl && (
           <button onClick={toggleView} className="rounded-full border border-white/15 px-2.5 py-1 text-xs text-white/70 light:border-amber-300 light:text-amber-800" title="3D 탁자 / 2D 카드 화면 전환">
             {view === "3d" ? "🖼️ 2D로" : "🧊 3D로"}
@@ -374,6 +373,7 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
     <div className="flex flex-col gap-3">
       <style>{COMBAT_CSS}</style>
       <UnitTooltipHost />
+      {onEmote && state.phase !== "ended" && <EmoteWheel onEmote={onEmote} mine={emotes[viewerSeat]} />}
       {rivalToasts.length > 0 && (
         <div className="pointer-events-none fixed right-3 top-16 z-[80] flex flex-col items-end gap-1.5">
           {rivalToasts.map((t) => (
