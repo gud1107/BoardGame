@@ -467,7 +467,7 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
       : null;
 
   let body: React.ReactNode;
-  if (state.phase === "heroPick") body = <HeroPick state={state} viewerSeat={viewerSeat} names={names} onAction={onAction} />;
+  if (state.phase === "heroPick") body = <HeroPick state={state} viewerSeat={viewerSeat} names={names} onAction={onAction} view={view} quality={quality} />;
   else if (state.phase === "shop" && me.alive) body = <ShopView state={state} viewerSeat={viewerSeat} onAction={onAction} view={view} quality={quality} myEmote={emotes[viewerSeat]} />;
   else if (state.phase === "shop") body = <Spectator state={state} viewerSeat={viewerSeat} />;
   else if (state.phase === "combat") body = <CombatView key={state.round} onMyCombatEnded={onMyCombatEnded} state={state} viewerSeat={viewerSeat} names={names} onAction={onAction} view={view} quality={quality} emotes={emotes} />;
@@ -524,21 +524,71 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
 
 /* ── 영웅 고르기 ─────────────────────────────────────────── */
 
-function HeroPick({ state, viewerSeat, names, onAction }: { state: GameState; viewerSeat: Seat; names: Record<Seat, string>; onAction: (a: EngineAction) => void }) {
+const NO_UNITS: never[] = [];
+
+function HeroPick({
+  state,
+  viewerSeat,
+  names,
+  onAction,
+  view,
+  quality,
+}: {
+  state: GameState;
+  viewerSeat: Seat;
+  names: Record<Seat, string>;
+  onAction: (a: EngineAction) => void;
+  view: View;
+  quality: "high" | "low";
+}) {
   const me = state.seats[viewerSeat];
   const waiting = state.seats.map((s, i) => (s.hero ? null : names[i])).filter(Boolean);
+  const arenaApi = useRef<ArenaApi | null>(null);
   // 능력 미리보기: 마우스오버(넓은 화면) 또는 "미리보기" 탭(모바일)
   const [hover, setHover] = useState<string | null>(null);
   const [tapped, setTapped] = useState<string | null>(null);
+  /** 마지막으로 본 영웅 — 마우스가 카드 밖으로 나가도 탁자 위 말은 그대로 */
+  const [lastSeen, setLastSeen] = useState<string | null>(null);
+  // 고른 영웅이 곧 내 말: 고르기 전엔 보고 있는 영웅이 탁자 위에 서서 걸어 볼 수 있다
+  const stageHero = me.hero ?? hover ?? tapped ?? lastSeen ?? me.heroOptions[0] ?? null;
+  const stageAvatars = useMemo(
+    () => (stageHero ? [{ key: "me", hero: stageHero, name: "나", side: 0 as const, hp: me.hp, controllable: true }] : undefined),
+    [stageHero, me.hp],
+  );
+  const focus = (id: string) => {
+    setHover(id);
+    setLastSeen(id);
+  };
   return (
     <div className={`${PANEL} flex flex-col items-center gap-4 p-5`}>
-      <p className="text-center text-sm text-amber-100/80 light:text-amber-900">영웅 3명 중 한 명을 고르세요. 영웅마다 고유 능력이 있어요. 마우스를 올리면 능력 미리보기가 보여요.</p>
+      <p className="text-center text-sm text-amber-100/80 light:text-amber-900">
+        영웅 3명 중 한 명을 고르세요. 고른 영웅이 탁자 위를 돌아다니는 <b>내 말</b>이 돼요. 마우스를 올리면 능력 미리보기가 보여요.
+      </p>
+      {view === "3d" && stageHero && (
+        <div className="relative w-full max-w-3xl overflow-hidden rounded-xl">
+          <Arena3D units={NO_UNITS} mode="shop" apiRef={arenaApi} avatars={stageAvatars} quality={quality} centerAvatar className="h-52 w-full sm:h-60" />
+          <div className="pointer-events-none absolute left-2 top-2 rounded-lg bg-black/60 px-2 py-1 text-[11px] font-bold text-amber-100">
+            {me.hero ? (
+              <>
+                {HERO_BY_ID[me.hero].emoji} 내 말: {HERO_BY_ID[me.hero].name}
+              </>
+            ) : (
+              <>
+                👀 {HERO_BY_ID[stageHero].emoji} {HERO_BY_ID[stageHero].name} 미리보기
+              </>
+            )}
+          </div>
+          <div className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/55 px-2.5 py-0.5 text-[10px] text-white/70">
+            바닥을 눌러 걷기 · WASD/방향키 · 스페이스 점프 · 말을 누르면 춤
+          </div>
+        </div>
+      )}
       <div className="grid w-full max-w-3xl gap-3 sm:grid-cols-3">
         {me.heroOptions.map((id) => {
           const h = HERO_BY_ID[id];
           const picked = me.hero === id;
           return (
-            <div key={id} className="relative flex flex-col gap-1" onMouseEnter={() => setHover(id)} onMouseLeave={() => setHover((h) => (h === id ? null : h))}>
+            <div key={id} className="relative flex flex-col gap-1" onMouseEnter={() => focus(id)} onMouseLeave={() => setHover((h) => (h === id ? null : h))}>
             <button
               disabled={me.hero !== null}
               onClick={() => {
@@ -546,7 +596,7 @@ function HeroPick({ state, viewerSeat, names, onAction }: { state: GameState; vi
                 onAction({ type: "PICK_HERO", seat: viewerSeat, hero: id });
               }}
               className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-4 text-center transition ${
-                picked ? "border-yellow-300 bg-yellow-300/10" : "border-amber-900/40 bg-black/20 hover:border-amber-400 light:border-amber-300 light:bg-white"
+                picked ? "border-yellow-300 bg-yellow-300/10" : !me.hero && view === "3d" && stageHero === id ? "border-amber-400/80 bg-amber-400/5" : "border-amber-900/40 bg-black/20 hover:border-amber-400 light:border-amber-300 light:bg-white"
               } disabled:cursor-default`}
             >
               <span className="text-5xl">{h.emoji}</span>
@@ -560,7 +610,10 @@ function HeroPick({ state, viewerSeat, names, onAction }: { state: GameState; vi
             </button>
             <button
               type="button"
-              onClick={() => setTapped(tapped === id ? null : id)}
+              onClick={() => {
+                setTapped(tapped === id ? null : id);
+                setLastSeen(id);
+              }}
               className="rounded-lg bg-white/5 py-1 text-[11px] font-bold text-amber-200/80 sm:hidden"
             >
               👁 효과 미리보기 {tapped === id ? "▴" : "▾"}

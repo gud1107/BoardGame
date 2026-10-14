@@ -804,6 +804,8 @@ export interface Arena3DProps {
   insert?: { onInsert: (index: number) => void } | null;
   quality?: "high" | "low";
   className?: string;
+  /** 아바타 첫 자리를 탁자 가운데로(영웅 고르기 무대) */
+  centerAvatar?: boolean;
 }
 
 function avatarHome(side: 0 | 1, mode: "shop" | "combat", compact: boolean): THREE.Vector3 {
@@ -812,7 +814,7 @@ function avatarHome(side: 0 | 1, mode: "shop" | "combat", compact: boolean): THR
   return compact ? new THREE.Vector3(1.9 * s, 0, 3.3 * s) : new THREE.Vector3(3.9 * s, 0, 1.25 * s);
 }
 
-function Scene({ units, mode, apiRef, selected, onPick, onGrab, insert, quality, avatars }: Arena3DProps) {
+function Scene({ units, mode, apiRef, selected, onPick, onGrab, insert, quality, avatars, centerAvatar }: Arena3DProps) {
   const { size } = useThree();
   const compact = size.width < 640 || size.width / Math.max(1, size.height) < 1.15;
   const sharedRef = useRef<Shared>({ inserts: [], target: new Map(), cur: new Map(), anim: new Map(), shake: { start: -1e9, power: 0 } });
@@ -879,7 +881,7 @@ function Scene({ units, mode, apiRef, selected, onPick, onGrab, insert, quality,
         </mesh>
       )}
       {avatars?.map((a) => (
-        <Avatar key={a.key} info={a} home={avatarHome(a.side, mode, compact)} bounds={bounds} registry={avatarsRef} cur={sharedRef} memKey={`${mode}:${compact ? "c" : "w"}:${a.key}`} />
+        <Avatar key={a.key} info={a} home={centerAvatar ? new THREE.Vector3(0, 0, compact ? 0.6 : 0.3) : avatarHome(a.side, mode, compact)} bounds={bounds} registry={avatarsRef} cur={sharedRef} memKey={`${centerAvatar ? "pick" : mode}:${compact ? "c" : "w"}:${a.key}`} />
       ))}
       <Table mode={mode} />
       {units.map((u) => (

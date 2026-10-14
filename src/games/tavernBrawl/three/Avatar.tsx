@@ -86,6 +86,15 @@ export function Avatar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [info.key, memKey, registry]);
 
+  // 모습이 바뀌면(영웅 고르기에서 다른 영웅을 볼 때) 한 바퀴 춤으로 "바뀌었다"를 보여 준다
+  const lastHero = useRef(info.hero);
+  useEffect(() => {
+    if (lastHero.current === info.hero) return;
+    lastHero.current = info.hero;
+    const st = registry.current.get(info.key);
+    if (st) st.danceAt = now();
+  }, [info.hero, info.key, registry]);
+
   // 감정표현: 말풍선 + 종류별 동작
   useEffect(() => {
     const e = info.emote;
@@ -258,7 +267,7 @@ export function Avatar({
       <group ref={tilt}>
       <group ref={body} onClick={dance} onPointerOver={info.controllable ? () => (document.body.style.cursor = "pointer") : undefined} onPointerOut={() => (document.body.style.cursor = "")}>
         <group scale={1.0}>
-          <Figure defId="n_kid" uid={`avatar-${info.key}`} golden={false} actRef={act} spec={spec} />
+          <Figure key={info.hero ?? "mage"} defId="n_kid" uid={`avatar-${info.key}`} golden={false} actRef={act} spec={spec} />
         </group>
       </group>
       </group>
