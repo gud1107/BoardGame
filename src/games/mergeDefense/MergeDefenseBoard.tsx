@@ -45,6 +45,7 @@ import {
   HIRES,
   hireCost,
   sendCost,
+  SEND_INCOME,
   unitRange,
   AUTO_PARTS,
   AUTO_UPGRADE_MIN_GOLD,
@@ -522,7 +523,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           if (ev.to === view) fx.push({ type: "portal", color: "#ef4444", label: `침략자 ${GRADE_NAMES[ev.grade]} ${UNITS[ev.kind].name}`, t0: now, dur: 1400, seed: ev.id });
           if (audible) audio.playEliteIncoming();
         } else if (ev.seat === mySeat) {
-          showBanner({ text: `⚔️ ${what} → ${names[ev.to] ?? "상대"}`, tone: "good" });
+          showBanner({ text: `⚔️ ${what} → ${names[ev.to] ?? "상대"}`, sub: ev.income ? `💰 웨이브 수입 +${ev.income} (매 웨이브 +${state.boards[mySeat]?.income ?? 0})` : undefined, tone: "good" });
           if (audible) audio.playSendUnit();
         }
         continue;
@@ -570,7 +571,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           showBanner({ text: `👾 ${names[ev.seat] ?? "상대"}님이 ${what}을(를) 보냈어요!`, sub: HIRES[ev.mob].desc, tone: "danger" });
           if (audible) audio.playEliteIncoming();
         } else if (ev.seat === mySeat) {
-          showBanner({ text: `👾 ${what} → ${names[ev.to] ?? "상대"}`, tone: "good" });
+          showBanner({ text: `👾 ${what} → ${names[ev.to] ?? "상대"}`, sub: ev.income ? `💰 웨이브 수입 +${ev.income} (매 웨이브 +${state.boards[mySeat]?.income ?? 0})` : undefined, tone: "good" });
           if (audible) audio.playSendUnit();
         }
         if (ev.to === view) fx.push({ type: "portal", color: HIRE_FX_COLOR[ev.mob], label: `${HIRES[ev.mob].name} 등장!`, t0: now, dur: 1500, seed: ev.id });
@@ -1321,7 +1322,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
         <div className="flex flex-col gap-1 rounded-xl border border-rose-400/25 bg-rose-950/30 px-2 py-1.5 light:border-rose-200 light:bg-rose-50">
           <div className="flex items-center justify-between text-[11px] text-rose-100/80 light:text-rose-700">
             <span className="font-bold">⚔️ 공격 → {target !== null ? names[target] : "-"}</span>
-            <span className="opacity-80">{me.sendCd > 0 ? `재사용 ${sendCdSec}초` : state.wave < 1 ? "1웨이브부터" : "상대 미니맵을 눌러 대상 변경"}</span>
+            <span className="opacity-80">{me.sendCd > 0 ? `재사용 ${sendCdSec}초` : state.wave < 1 ? "1웨이브부터" : `보낼 때마다 가격의 ${Math.round(SEND_INCOME.rate * 100)}%가 웨이브 수입으로`}</span>
           </div>
           <div className="grid grid-cols-5 gap-1">
             <button
@@ -1330,7 +1331,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
                 if (selected === null || target === null) return;
                 onAction({ type: "send", slot: selected, to: target });
               }}
-              title="고른 유닛의 복제본을 골드로 보내요 — 내 유닛은 그대로 남아요"
+              title={`고른 유닛의 복제본을 골드로 보내요 — 내 유닛은 그대로 남고, 가격의 ${Math.round(SEND_INCOME.rate * 100)}%만큼 웨이브 수입이 늘어요`}
               className="flex flex-col items-center rounded-lg bg-gradient-to-b from-rose-500 to-red-800 py-1 text-white shadow-[0_3px_0_#7f1d1d] transition active:translate-y-0.5 active:shadow-none disabled:opacity-40"
             >
               <span className="text-[13px] leading-tight font-black">⚔️ 보내기</span>
@@ -1493,6 +1494,11 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
               </span>
             )}
           </span>
+          {versus && (
+            <span className="text-xs font-semibold text-amber-200/80 light:text-amber-700" title="보내기·몬스터 구매로 쌓인 수입 — 웨이브마다 보너스와 함께 들어와요">
+              💰 +{me.income ?? 0}/W
+            </span>
+          )}
           <GemGuide board={me} wave={state.wave} />
           <span className="text-xs font-semibold text-white/60 light:text-slate-500" title="이만큼 처치하면 다음 상대에게 정예 몬스터를 보내요">
             🔥 {me.sendMeter}/{SEND_EVERY}

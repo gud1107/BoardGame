@@ -495,6 +495,8 @@ export interface Board {
   bot: boolean;
   /** Ticks until this board may send another unit (유닛 대결 only). */
   sendCd: number;
+  /** 유닛 대결: extra gold paid every wave, raised by sends and hires (`sendIncome`). */
+  income?: number;
   /** 🛡️ 결속 level (0..BRACE_MAX) — shortens smash stuns. */
   brace?: number;
   /** 🎯 집중 level (0..FOCUS_MAX) — raises crit chance and damage. */
@@ -543,8 +545,8 @@ export type GameEvent =
   | { id: number; tick: number; seat: SeatIndex; type: "upgrade"; kind: UnitKind; level: number }
   | { id: number; tick: number; seat: SeatIndex; type: "sell"; slot: number; gold: number }
   | { id: number; tick: number; seat: SeatIndex; type: "send"; to: SeatIndex }
-  | { id: number; tick: number; seat: SeatIndex; type: "invade"; to: SeatIndex; kind: UnitKind; grade: number }
-  | { id: number; tick: number; seat: SeatIndex; type: "hire"; to: SeatIndex; mob: HireKind }
+  | { id: number; tick: number; seat: SeatIndex; type: "invade"; to: SeatIndex; kind: UnitKind; grade: number; income?: number }
+  | { id: number; tick: number; seat: SeatIndex; type: "hire"; to: SeatIndex; mob: HireKind; income?: number }
   | { id: number; tick: number; seat: SeatIndex; type: "move"; a: number; b: number }
   /** `rage` = it was berserk (bonus paid); `warlord` = a bought mini boss (only announced when berserk). */
   | { id: number; tick: number; seat: SeatIndex; type: "boss-kill"; rage?: boolean; warlord?: boolean; gold?: number; gems?: number }
@@ -750,6 +752,16 @@ export function invaderHp(grade: number, wave: number): number {
  */
 export function sendCost(grade: number, wave: number): number {
   return Math.round((18 + 2 * Math.max(1, wave)) * Math.pow(2.3, grade - 1));
+}
+
+/**
+ * 유닛 대결 수입 (Legion TD style): every gold-paid send or hire raises your
+ * per-wave income by `rate` of its price, paid with the wave bonus. Attacking
+ * is an investment, not just a cost. Mutable for balance sims.
+ */
+export const SEND_INCOME = { rate: 0.1 };
+export function sendIncome(price: number): number {
+  return Math.max(1, Math.round(price * SEND_INCOME.rate));
 }
 
 export function waveCount(wave: number): number {
@@ -979,7 +991,9 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
     if (to === null) return state;
     const s = cloneState(state);
     const board = s.boards[seat];
-    board.gold -= sendCost(unit.grade, s.wave);
+    const price = sendCost(unit.grade, s.wave);
+    board.gold -= price;
+    board.income = (board.income ?? 0) + sendIncome(price);
     board.sendCd = SEND_COOLDOWN_TICKS;
     const hp = Math.round(invaderHp(unit.grade, s.wave) * difficultyHp(s));
     s.boards[to].mobs.push({
@@ -998,7 +1012,7 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
       grade: unit.grade,
       bornWave: s.wave,
     });
-    pushEvent(s, { seat, type: "invade", to, kind: unit.kind, grade: unit.grade });
+    pushEvent(s, { seat, type: "invade", to, kind: unit.kind, grade: unit.grade, income: sendIncome(price) });
     return s;
   }
 
@@ -1045,6 +1059,7 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
     const s = cloneState(state);
     const board = s.boards[seat];
     board.gold -= price;
+    board.income = (board.income ?? 0) + sendIncome(price);
     board.sendCd = SEND_COOLDOWN_TICKS;
     const road = s.boards[to].mobs;
     if (action.mob === "swarm") {
@@ -1058,7 +1073,7 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
     } else {
       road.push(makeMob(s, action.mob, s.wave, seat));
     }
-    pushEvent(s, { seat, type: "hire", to, mob: action.mob });
+    pushEvent(s, { seat, type: "hire", to, mob: action.mob, income: sendIncome(price) });
     return s;
   }
 
@@ -1141,7 +1156,7 @@ function spawnWaves(s: MergeDefenseState) {
     pushEvent(s, { seat: -1, type: "wave", wave, boss });
     for (const board of s.boards) {
       if (!board.alive) continue;
-      if (wave > 1) earn(board, waveBonus(wave - 1));
+      if (wave > 1) earn(board, waveBonus(wave - 1) + (board.income ?? 0));
       if (wave >= LATE_WAVE) board.lateWaves = (board.lateWaves ?? 0) + 1;
       if (wave > 1) {
         // Close out the previous wave's peak (immutable append — states share arrays).
@@ -1486,6 +1501,8 @@ export interface RankedSeat {
   jamsTaken: number;
   jamsBlocked: number;
   reflectsTaken: number;
+  /** 유닛 대결 per-wave income built from sends / hires. */
+  income: number;
   /** Waves from W10 started alive / of those, waves that paid the combo gold milestone. */
   lateWaves: number;
   comboBonusWaves: number;
@@ -1503,6 +1520,7 @@ export function computeRankings(state: MergeDefenseState): RankedSeat[] {
     jamsTaken: b.jamsTaken ?? 0,
     jamsBlocked: b.jamsBlocked ?? 0,
     reflectsTaken: b.reflectsTaken ?? 0,
+    income: b.income ?? 0,
     lateWaves: b.lateWaves ?? 0,
     comboBonusWaves: b.comboBonusWaves ?? 0,
   }));
@@ -1512,7 +1530,7 @@ export function computeRankings(state: MergeDefenseState): RankedSeat[] {
   sorted.forEach((r, i) => {
     const prev = sorted[i - 1];
     if (i > 0 && (prev.out !== r.out || prev.kills !== r.kills)) rank = i + 1;
-    ranked.push({ seat: r.seat, rank, wave: r.wave, kills: r.kills, combo: r.combo, jamsSent: r.jamsSent, jamsTaken: r.jamsTaken, jamsBlocked: r.jamsBlocked, reflectsTaken: r.reflectsTaken, lateWaves: r.lateWaves, comboBonusWaves: r.comboBonusWaves });
+    ranked.push({ seat: r.seat, rank, wave: r.wave, kills: r.kills, combo: r.combo, jamsSent: r.jamsSent, jamsTaken: r.jamsTaken, jamsBlocked: r.jamsBlocked, reflectsTaken: r.reflectsTaken, income: r.income, lateWaves: r.lateWaves, comboBonusWaves: r.comboBonusWaves });
   });
   return ranked;
 }

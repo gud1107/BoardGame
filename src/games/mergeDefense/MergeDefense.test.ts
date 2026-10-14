@@ -7,6 +7,8 @@ import {
   fieldLoad,
   hireCost,
   sendCost,
+  sendIncome,
+  waveBonus,
   SWARM_SIZE,
   SEND_COOLDOWN_TICKS,
   slotCenter,
@@ -125,6 +127,13 @@ describe("merge defense engine", () => {
     const sent = applyAction(s, 0, { type: "send", slot: 3 });
     expect(sent.boards[0].units[3]).toEqual(s.boards[0].units[3]);
     expect(sent.boards[0].gold).toBe(5);
+    // The spend becomes per-wave income, paid with the next wave bonus.
+    expect(sent.boards[0].income).toBe(sendIncome(price));
+    let paid: MergeDefenseState = { ...sent, boards: sent.boards.map((b) => ({ ...b, mobs: [] })) };
+    const startWave = paid.wave;
+    const goldBefore = paid.boards[0].gold;
+    while (paid.wave === startWave) paid = stepGame({ ...paid, boards: paid.boards.map((b) => ({ ...b, mobs: [] })) });
+    expect(paid.boards[0].gold - goldBefore).toBe(waveBonus(startWave) + sendIncome(price));
     expect(sent.boards[0].sendCd).toBe(SEND_COOLDOWN_TICKS);
     const inv = sent.boards[1].mobs.find((m) => m.kind === "invader")!;
     expect(sent.boards[1].mobs.length).toBe(before + 1);

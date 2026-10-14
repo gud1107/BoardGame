@@ -41,6 +41,7 @@ function seat(seatNo: number, rank: number, extra: Partial<RankedSeat> = {}): Ra
     jamsTaken: 2,
     jamsBlocked: 1,
     reflectsTaken: 0,
+    income: 12,
     lateWaves: 0,
     comboBonusWaves: 0,
     ...extra,

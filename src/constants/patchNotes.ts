@@ -58,11 +58,12 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
-    version: "v1.58.1",
+    version: "v1.59.0",
     releaseDate: "2026-10-14",
-    title: "🏰 랜덤 합성 디펜스 — 유닛 대결 보내기를 골드로",
+    title: "🏰 랜덤 합성 디펜스 — 골드로 보내기 + 보낼수록 늘어나는 웨이브 수입",
     changes: [
       { game: "merge-defense", type: "IMPROVE", desc: "⚔️ 보내기가 이제 골드로 — 고른 유닛의 복제본을 상대 길에 보내고 내 유닛은 그대로 남아요(등급이 높을수록 비쌈)" },
+      { game: "merge-defense", type: "FEAT", desc: "💰 웨이브 수입 — 보내기·몬스터 구매에 쓴 골드의 10%가 매 웨이브 수입으로 영구 누적, 공격이 곧 투자" },
     ],
   },
   {
