@@ -1096,6 +1096,16 @@ function drawMob(ctx: Ctx, m: Mob, trav: number, now: number, mini: boolean, hit
       ctx.fill();
     }
   }
+  if ((m.bleedT ?? 0) > 0 && !mini) {
+    // 출혈: red drops falling from the body.
+    for (let i = 0; i < 2; i++) {
+      const t = (now / 500 + i / 2) % 1;
+      ctx.fillStyle = `rgba(220,38,38,${0.9 - t * 0.7})`;
+      ctx.beginPath();
+      ctx.arc((i ? 1 : -1) * size * 0.35, size * 0.2 + t * 7, 1.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
   if ((m.vulnT ?? 0) > 0) {
     // 취약: a red target reticle around the body.
     ctx.strokeStyle = "rgba(251,113,133,0.85)";

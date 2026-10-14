@@ -123,8 +123,9 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         <section>
           <h3 className={h3}>✨ 타워 스킬</h3>
           <p className="mb-1.5 text-xs text-white/60 light:text-slate-500">
-            <span style={{ color: GRADE_COLORS[3] }}>영웅</span>이 되면 첫 번째 스킬, <span style={{ color: GRADE_COLORS[4] }}>전설</span>이 되면 두 번째 스킬이 열리고,{" "}
-            <span style={{ color: GRADE_COLORS[5] }}>신화</span>는 두 스킬이 모두 강해져요. 기절은 보스·전쟁군주에게 절반만 걸리고, 기절이 풀린 몬스터는 1초 동안 다시 기절하지 않아요.
+            모든 유닛은 <span style={{ color: GRADE_COLORS[1] }}>일반</span>부터 작은 스킬이 있고, <span style={{ color: GRADE_COLORS[2] }}>희귀</span>에서 하나 더,{" "}
+            <span style={{ color: GRADE_COLORS[3] }}>영웅</span>·<span style={{ color: GRADE_COLORS[4] }}>전설</span>에서 큰 스킬이 하나씩 열려요(한 번 열린 스킬은 계속 유지).{" "}
+            <span style={{ color: GRADE_COLORS[5] }}>신화</span>는 영웅·전설 스킬이 강해져요. 번개의 정전기는 감전(영웅)이 열리면 감전으로 바뀌어요. 기절은 보스·전쟁군주에게 절반만 걸리고, 기절이 풀린 몬스터는 1초 동안 다시 기절하지 않아요.
           </p>
           <ul className="space-y-1 text-white/70 light:text-slate-600">
             {SKILL_IDS.map((id) => {
@@ -132,9 +133,11 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
               return (
                 <li key={id}>
                   {UNITS[sk.kind].emoji} <span style={{ color: GRADE_COLORS[sk.grade] }}>{GRADE_NAMES[sk.grade]}</span> {sk.emoji} <b>{sk.name}</b> — {sk.desc}
-                  <span className="ml-1 text-xs" style={{ color: GRADE_COLORS[5] }}>
-                    신화: {sk.mythic}
-                  </span>
+                  {sk.mythic && (
+                    <span className="ml-1 text-xs" style={{ color: GRADE_COLORS[5] }}>
+                      신화: {sk.mythic}
+                    </span>
+                  )}
                 </li>
               );
             })}

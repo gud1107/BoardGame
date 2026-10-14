@@ -60,10 +60,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.60.0",
     releaseDate: "2026-10-15",
-    title: "🏰 랜덤 합성 디펜스 — 영웅·전설 타워 스킬 10종",
+    title: "🏰 랜덤 합성 디펜스 — 등급별 타워 스킬 20종",
     changes: [
       { game: "merge-defense", type: "FEAT", desc: "✨ 타워 스킬 — 영웅·전설 등급에서 열리는 스킬 10종(빙결·감전 기절, 한파, 화상·전염, 취약·부식, 충격파, 처형), 신화는 강화" },
       { game: "merge-defense", type: "IMPROVE", desc: "몬스터 기절·화상·취약 표시, 스킬 발동·해금 연출, 유닛 정보와 룰북에 스킬 설명 · 후반 몬스터 체력 증가로 난이도 유지" },
+      { game: "merge-defense", type: "FEAT", desc: "일반·희귀 스킬 10종 추가 — 속사·출혈·마력 증폭·중력장·냉기·얼음 파편·정전기·전도·잔류 독·쇠약, 처형은 보스에게도 5% 이하에서" },
     ],
   },
   {

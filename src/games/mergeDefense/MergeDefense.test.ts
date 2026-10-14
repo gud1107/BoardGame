@@ -11,6 +11,8 @@ import {
   SKILL_IDS,
   STUN_GUARD,
   unitSkills,
+  unitInterval,
+  SKILL,
   unitDamage,
   mitigated,
   sendIncome,
@@ -582,13 +584,13 @@ describe("merge defense engine", () => {
     }
   });
 
-  it("tower skills: two per unit kind, unlocked at 영웅 and 전설", () => {
+  it("tower skills: one per grade 일반~전설 for every unit kind", () => {
     for (const kind of UNIT_KIND_LIST) {
-      expect(SKILL_IDS.filter((id) => SKILLS[id].kind === kind)).toHaveLength(2);
-      expect(unitSkills({ kind, grade: 2 })).toHaveLength(0);
-      expect(unitSkills({ kind, grade: 3 })).toHaveLength(1);
-      expect(unitSkills({ kind, grade: 4 })).toHaveLength(2);
+      const own = SKILL_IDS.filter((id) => SKILLS[id].kind === kind);
+      expect(own.map((id) => SKILLS[id].grade).sort()).toEqual([1, 2, 3, 4]);
+      for (let g = 1; g <= 4; g++) expect(unitSkills({ kind, grade: g }).some((id) => SKILLS[id].grade === g)).toBe(true);
     }
+    expect(unitSkills({ kind: "thunder", grade: 3 })).not.toContain("static");
   });
 
   it("tower skills: 빙결 freezes every 5th shot, then a stun guard blocks an instant re-freeze", () => {
@@ -608,7 +610,7 @@ describe("merge defense engine", () => {
     expect(s.boards[0].mobs[0].stunGuard).toBe(STUN_GUARD);
   });
 
-  it("tower skills: 처형 finishes a weakened monster but never a boss; 약점 사격 marks 취약", () => {
+  it("tower skills: 처형 finishes a weakened monster (bosses only under 5%); 약점 사격 marks 취약", () => {
     // Crits off; HP chosen so the hit leaves 6% of max HP: only 처형 can finish it.
     const chance = CRIT.chance;
     CRIT.chance = 0;
@@ -617,9 +619,13 @@ describe("merge defense engine", () => {
     while (s.boards[0].shots.length === 0) s = stepGame(s);
     expect(s.boards[0].mobs.find((m) => m.id === 900)).toBeUndefined();
     expect(s.boards[0].shots[0].skill).toBe("execute");
+    // Bosses only fall to 처형 under 5%: 6% left survives, 4% left is finished.
     let b = skillArena("archer", 4, [{ kind: "boss", hp: hit("boss") + 60 }]);
     while (b.boards[0].shots.length === 0) b = stepGame(b);
+    let low = skillArena("archer", 4, [{ kind: "boss", hp: hit("boss") + 40 }]);
+    while (low.boards[0].shots.length === 0) low = stepGame(low);
     CRIT.chance = chance;
+    expect(low.boards[0].mobs.find((m) => m.id === 900)).toBeUndefined();
     const boss = b.boards[0].mobs.find((m) => m.id === 900)!;
     expect(boss.hp).toBeGreaterThan(0);
     expect(boss.vulnT).toBeGreaterThan(0);
@@ -642,6 +648,24 @@ describe("merge defense engine", () => {
     const lossBase = 1e6 - stepGame(base).boards[0].mobs[0].hp;
     const lossVuln = 1e6 - stepGame(vuln).boards[0].mobs[0].hp;
     expect(lossVuln).toBeCloseTo(lossBase * 1.5, 5);
+  });
+
+  it("tower skills: low grades — 속사 shortens the 6th cooldown, 출혈 bleeds, 정전기 stuns, 잔류 독 lasts longer", () => {
+    let a = skillArena("archer", 2, [{ hp: 1e9 }]);
+    let quick = false;
+    for (let i = 0; i < 600 && !quick; i++) {
+      a = stepGame(a);
+      if (a.boards[0].shots.some((sh) => sh.skill === "rapid")) quick = true;
+    }
+    expect(quick).toBe(true);
+    expect(a.boards[0].units[0]!.cd).toBeLessThan(unitInterval(a.boards[0].units[0]!));
+    expect(a.boards[0].mobs[0].bleedT).toBeGreaterThan(0);
+    let t = skillArena("thunder", 1, [{ hp: 1e9 }]);
+    for (let i = 0; i < 600 && !t.boards[0].shots.some((sh) => sh.skill === "static"); i++) t = stepGame(t);
+    expect(t.boards[0].mobs.some((m) => (m.stunT ?? 0) > 0)).toBe(true);
+    let p = skillArena("poison", 1, [{ hp: 1e9 }]);
+    while (p.boards[0].shots.length === 0) p = stepGame(p);
+    expect(p.boards[0].mobs[0].poisonT).toBe(SKILL.linger.ticks);
   });
 
   it("tower skills: 감전 stuns the whole chain and 전염 spreads poison to neighbours", () => {

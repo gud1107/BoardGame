@@ -161,6 +161,16 @@ function guideVisible(mode: GuideMode, wave: number): boolean {
 /** Attack range the guide assumes for a new build (grade-1 average). */
 const BUILD_RANGE = 140;
 const SKILL_COLOR: Record<SkillId, string> = {
+  rapid: "#fdba74",
+  bleed: "#dc2626",
+  amplify: "#a78bfa",
+  gravity: "#818cf8",
+  chill: "#bae6fd",
+  shards: "#67e8f9",
+  static: "#fef08a",
+  conduct: "#fde68a",
+  linger: "#86efac",
+  weaken: "#bbf7d0",
   weakspot: "#fb923c",
   execute: "#f43f5e",
   burn: "#f97316",
@@ -282,7 +292,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
 
   /** "스킬 해금" callout when a merge / gamble lands on a skill grade (영웅·전설) or empowers them (신화). */
   function skillUnlockFx(unit: Unit | null | undefined, grade: number, c: { x: number; y: number }, t0: number) {
-    if (!unit || unit.grade !== grade || grade < 3) return;
+    if (!unit || unit.grade !== grade || grade < 2) return;
     const fresh = unitSkills(unit).filter((id) => SKILLS[id].grade === grade);
     const text = grade >= MAX_GRADE ? "✦ 스킬 강화!" : fresh.length ? `${SKILLS[fresh[0]].emoji} ${SKILLS[fresh[0]].name} 해금!` : null;
     if (text) fxRef.current.push({ type: "text", x: c.x, y: c.y - 40, text, color: "#f0abfc", t0, dur: 1300, size: 14 });
@@ -1474,6 +1484,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
                     {selectedMob.slowT > 0 && <span className="text-sky-300"> · ❄️ 둔화 {pct(selectedMob.slowPct)}</span>}
                     {selectedMob.poisonT > 0 && <span className="text-emerald-300"> · ☠️ 독 {fmt1(selectedMob.poisonDps)}/초</span>}
                     {(selectedMob.burnT ?? 0) > 0 && <span className="text-orange-300"> · 🔥 화상 {fmt1(selectedMob.burnDps ?? 0)}/초</span>}
+                    {(selectedMob.bleedT ?? 0) > 0 && <span className="text-red-300"> · 🩸 출혈 {fmt1(selectedMob.bleedDps ?? 0)}/초</span>}
                     {(selectedMob.stunT ?? 0) > 0 && <span className="text-yellow-200"> · 💫 기절</span>}
                     {(selectedMob.vulnT ?? 0) > 0 && <span className="text-rose-300"> · 🎯 취약 +{pct(selectedMob.vulnPct ?? 0)}</span>}
                   </p>
@@ -1568,11 +1579,11 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
                     return (
                       <span
                         key={id}
-                        title={`${sk.desc} · 신화: ${sk.mythic}`}
+                        title={sk.mythic ? `${sk.desc} · 신화: ${sk.mythic}` : sk.desc}
                         className={`rounded-full px-2 py-0.5 ${on ? "bg-fuchsia-500/25 text-fuchsia-100 light:bg-fuchsia-100 light:text-fuchsia-800" : "bg-white/5 text-white/40 light:bg-slate-50 light:text-slate-400"}`}
                       >
                         {sk.emoji} {sk.name}
-                        {on ? (selectedUnit.grade >= MAX_GRADE ? " ✦" : "") : ` 🔒${GRADE_NAMES[sk.grade]}`}
+                        {on ? (selectedUnit.grade >= MAX_GRADE && sk.mythic ? " ✦" : "") : ` 🔒${GRADE_NAMES[sk.grade]}`}
                       </span>
                     );
                   })}
