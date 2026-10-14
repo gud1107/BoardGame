@@ -422,7 +422,8 @@ export function drawBoard(ctx: Ctx, board: Board, opts: DrawOptions) {
   const mobs = [...board.mobs].sort((a, b) => a.trav - b.trav);
   for (const m of mobs) {
     const slow = m.slowT > 0 ? m.slowPct : 0;
-    const trav = m.trav + (m.speed * (1 - slow) * opts.alpha) / TICKS_PER_SEC;
+    const frozen = (m.stunT ?? 0) > 0;
+    const trav = frozen ? m.trav : m.trav + (m.speed * (1 - slow) * opts.alpha) / TICKS_PER_SEC;
     drawMob(ctx, m, trav, now, !!mini, opts.hits?.get(m.id));
   }
 
@@ -1081,6 +1082,46 @@ function drawMob(ctx: Ctx, m: Mob, trav: number, now: number, mini: boolean, hit
       ctx.beginPath();
       ctx.arc((i - 1) * size * 0.5, -size - t * 9, 1.4, 0, Math.PI * 2);
       ctx.fill();
+    }
+  }
+
+  if ((m.burnT ?? 0) > 0 && !mini) {
+    // 화상: flickering flame tongues licking up from the body.
+    for (let i = 0; i < 4; i++) {
+      const t = (now / 380 + i / 4) % 1;
+      const x = (i - 1.5) * size * 0.45 + Math.sin(now / 90 + i) * 1.2;
+      ctx.fillStyle = `rgba(${t < 0.5 ? "253,186,116" : "249,115,22"},${0.85 - t * 0.8})`;
+      ctx.beginPath();
+      ctx.ellipse(x, -size * 0.3 - t * 10, 1.8 - t, 3 - t * 1.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  if ((m.vulnT ?? 0) > 0) {
+    // 취약: a red target reticle around the body.
+    ctx.strokeStyle = "rgba(251,113,133,0.85)";
+    ctx.lineWidth = mini ? 0.8 : 1.2;
+    ctx.beginPath();
+    ctx.arc(0, -size * 0.1, size * 1.15, 0, Math.PI * 2);
+    ctx.stroke();
+    if (!mini) {
+      for (let i = 0; i < 4; i++) {
+        const a = (i * Math.PI) / 2 + now / 900;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * size * 0.95, -size * 0.1 + Math.sin(a) * size * 0.95);
+        ctx.lineTo(Math.cos(a) * size * 1.4, -size * 0.1 + Math.sin(a) * size * 1.4);
+        ctx.stroke();
+      }
+    }
+  }
+  if ((m.stunT ?? 0) > 0) {
+    // 빙결 / 감전: icy shell + circling stars.
+    ctx.fillStyle = "rgba(186,230,253,0.28)";
+    ctx.beginPath();
+    ctx.arc(0, -size * 0.1, size * 1.05, 0, Math.PI * 2);
+    ctx.fill();
+    for (let i = 0; i < 3; i++) {
+      const a = now / 200 + (i * Math.PI * 2) / 3;
+      star(ctx, Math.cos(a) * size * 0.9, -size - 4 + Math.sin(a) * 2.5, mini ? 1.4 : 2.4, "#fde047");
     }
   }
 

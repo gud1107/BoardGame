@@ -7,6 +7,12 @@ import {
   fieldLoad,
   hireCost,
   sendCost,
+  SKILLS,
+  SKILL_IDS,
+  STUN_GUARD,
+  unitSkills,
+  unitDamage,
+  mitigated,
   sendIncome,
   waveBonus,
   SWARM_SIZE,
@@ -44,9 +50,39 @@ import {
   slotAtPoint,
   type MapId,
   type MergeDefenseState,
+  type Mob,
 } from "./engine";
 
 const UNIT_KIND_LIST = ["archer", "mage", "frost", "thunder", "poison"] as const;
+
+/** One tower of `kind`/`grade` in pad 0 with hand-placed monsters parked next to it (prep phase over, no spawns yet). */
+function skillArena(kind: (typeof UNIT_KIND_LIST)[number], grade: number, mobs: { kind?: Mob["kind"]; hp: number; gap?: number }[]): MergeDefenseState {
+  let s = startGame(2, 77);
+  const c = slotCenter(0);
+  let best = 0;
+  for (let t = 0; t < PATH_LEN; t += 2) {
+    const p = pathPoint(t);
+    const q = pathPoint(best);
+    if (Math.hypot(p.x - c.x, p.y - c.y) < Math.hypot(q.x - c.x, q.y - c.y)) best = t;
+  }
+  s = { ...s, tick: PREP_TICKS + 30, wave: 1 };
+  s.boards[0].units[0] = { kind, grade, cd: 0 };
+  s.boards[0].mobs = mobs.map((m, i) => ({
+    id: 900 + i,
+    kind: m.kind ?? "normal",
+    hp: m.hp,
+    maxHp: 1000,
+    trav: best + (m.gap ?? 0),
+    speed: 0.001,
+    slowT: 0,
+    slowPct: 0,
+    poisonT: 0,
+    poisonDps: 0,
+    from: -1,
+    bornWave: 1,
+  }));
+  return s;
+}
 
 function runBots(n: number, seed: number, maxTicks = 20 * 60 * 25, mode: "survival" | "versus" = "survival", map: MapId = "classic"): MergeDefenseState {
   let s = startGame(n, seed, [], mode, null, "normal", map);
@@ -544,6 +580,77 @@ describe("merge defense engine", () => {
       for (const b of s.boards) if (!b.alive) expect(b.outAt).not.toBeNull();
       for (const b of s.boards) if (b.alive) expect(fieldLoad(b)).toBeLessThan(loadLimit(n));
     }
+  });
+
+  it("tower skills: two per unit kind, unlocked at 영웅 and 전설", () => {
+    for (const kind of UNIT_KIND_LIST) {
+      expect(SKILL_IDS.filter((id) => SKILLS[id].kind === kind)).toHaveLength(2);
+      expect(unitSkills({ kind, grade: 2 })).toHaveLength(0);
+      expect(unitSkills({ kind, grade: 3 })).toHaveLength(1);
+      expect(unitSkills({ kind, grade: 4 })).toHaveLength(2);
+    }
+  });
+
+  it("tower skills: 빙결 freezes every 5th shot, then a stun guard blocks an instant re-freeze", () => {
+    let s = skillArena("frost", 3, [{ hp: 1e9 }]);
+    let froze = -1;
+    for (let i = 0; i < 400 && froze < 0; i++) {
+      s = stepGame(s);
+      if ((s.boards[0].mobs[0].stunT ?? 0) > 0) froze = i;
+    }
+    expect(froze).toBeGreaterThan(0);
+    expect(s.boards[0].units[0]!.fired! % 5).toBe(0);
+    const at = s.boards[0].mobs[0].trav;
+    s.boards[0].mobs[0].speed = 50;
+    s = stepGame(s);
+    expect(s.boards[0].mobs[0].trav).toBe(at);
+    while ((s.boards[0].mobs[0].stunT ?? 0) > 0) s = stepGame(s);
+    expect(s.boards[0].mobs[0].stunGuard).toBe(STUN_GUARD);
+  });
+
+  it("tower skills: 처형 finishes a weakened monster but never a boss; 약점 사격 marks 취약", () => {
+    // Crits off; HP chosen so the hit leaves 6% of max HP: only 처형 can finish it.
+    const chance = CRIT.chance;
+    CRIT.chance = 0;
+    const hit = (kind: Mob["kind"]) => mitigated(kind, unitDamage({ kind: "archer", grade: 4, cd: 0 }, startGame(2, 1).boards[0]), "physical");
+    let s = skillArena("archer", 4, [{ hp: hit("normal") + 60 }]);
+    while (s.boards[0].shots.length === 0) s = stepGame(s);
+    expect(s.boards[0].mobs.find((m) => m.id === 900)).toBeUndefined();
+    expect(s.boards[0].shots[0].skill).toBe("execute");
+    let b = skillArena("archer", 4, [{ kind: "boss", hp: hit("boss") + 60 }]);
+    while (b.boards[0].shots.length === 0) b = stepGame(b);
+    CRIT.chance = chance;
+    const boss = b.boards[0].mobs.find((m) => m.id === 900)!;
+    expect(boss.hp).toBeGreaterThan(0);
+    expect(boss.vulnT).toBeGreaterThan(0);
+  });
+
+  it("tower skills: 화상 burns over time and 취약 makes every hit land harder", () => {
+    let s = skillArena("mage", 3, [{ hp: 1e6 }]);
+    while (s.boards[0].shots.length === 0) s = stepGame(s);
+    const m = s.boards[0].mobs[0];
+    expect(m.burnT).toBeGreaterThan(0);
+    s.boards[0].units[0] = null;
+    const before = m.hp;
+    s = stepGame(s);
+    expect(s.boards[0].mobs[0].hp).toBeLessThan(before);
+    // Same poison tick with and without 취약.
+    const base = skillArena("poison", 1, [{ hp: 1e6 }]);
+    base.boards[0].units[0] = null;
+    base.boards[0].mobs[0] = { ...base.boards[0].mobs[0], poisonT: 10, poisonDps: 100 };
+    const vuln = { ...base, boards: base.boards.map((b, i) => (i === 0 ? { ...b, mobs: [{ ...b.mobs[0], vulnT: 10, vulnPct: 0.5 }] } : b)) };
+    const lossBase = 1e6 - stepGame(base).boards[0].mobs[0].hp;
+    const lossVuln = 1e6 - stepGame(vuln).boards[0].mobs[0].hp;
+    expect(lossVuln).toBeCloseTo(lossBase * 1.5, 5);
+  });
+
+  it("tower skills: 감전 stuns the whole chain and 전염 spreads poison to neighbours", () => {
+    let s = skillArena("thunder", 3, [{ hp: 1e9 }, { hp: 1e9, gap: 4 }, { hp: 1e9, gap: 8 }]);
+    for (let i = 0; i < 400 && !s.boards[0].shots.some((sh) => sh.skill === "shock"); i++) s = stepGame(s);
+    expect(s.boards[0].mobs.filter((m) => (m.stunT ?? 0) > 0).length).toBeGreaterThanOrEqual(2);
+    let p = skillArena("poison", 3, [{ hp: 1e9 }, { hp: 1e9, gap: 10 }]);
+    while (p.boards[0].shots.length === 0) p = stepGame(p);
+    expect(p.boards[0].mobs.every((m) => m.poisonT > 0)).toBe(true);
   });
 
   it("gamble odds add up to 100%", () => {

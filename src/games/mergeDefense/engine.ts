@@ -353,6 +353,65 @@ export interface Unit {
   stun?: number;
   /** Gold spent on this unit (summon costs, summed through merges; gems count 0) — 판매 refunds SELL_REFUND of it. */
   paid?: number;
+  /** Attacks fired since it was made — drives "every Nth attack" skills. */
+  fired?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Tower skills — each kind unlocks one at 영웅 (grade 3) and a second at 전설
+// (grade 4); 신화 (grade 5) strengthens both. Proc skills count attacks
+// (`Unit.fired`), never the RNG, so they read as "every Nth shot".
+// ---------------------------------------------------------------------------
+
+export type SkillId = "weakspot" | "execute" | "burn" | "shockwave" | "freeze" | "blizzard" | "shock" | "overload" | "plague" | "corrode";
+
+export interface SkillDef {
+  kind: UnitKind;
+  grade: 3 | 4;
+  name: string;
+  emoji: string;
+  /** What it does (grade 3/4 numbers). */
+  desc: string;
+  /** What 신화 changes. */
+  mythic: string;
+}
+
+/**
+ * Numbers live here so balance sims can sweep them. Stun ticks are halved on
+ * bosses / warlords, and every stunned monster gets `STUN_GUARD` ticks of
+ * immunity afterwards so stacked stuns can't pin it forever.
+ */
+export const SKILL = {
+  weakspot: { pct: 0.15, mythicPct: 0.25, ticks: 40 },
+  execute: { pct: 0.1, mythicPct: 0.15 },
+  burn: { dpsOfDmg: 0.35, mythicDpsOfDmg: 0.6, ticks: 60 },
+  shockwave: { every: 4, mythicEvery: 3, push: 26, bigPush: 8 },
+  freeze: { every: 5, mythicEvery: 4, ticks: 20, mythicTicks: 30 },
+  blizzard: { radius: 45, mythicRadius: 70 },
+  shock: { every: 4, ticks: 8, mythicTicks: 12 },
+  overload: { extraChain: 1, vulnPct: 0.06, mythicVulnPct: 0.1, ticks: 40 },
+  plague: { radius: 35, share: 0.3, mythicShare: 0.5, max: 3 },
+  corrode: { pct: 0.07, mythicPct: 0.12 },
+};
+export const STUN_GUARD = 20;
+
+export const SKILLS: Record<SkillId, SkillDef> = {
+  weakspot: { kind: "archer", grade: 3, name: "약점 사격", emoji: "🎯", desc: "맞은 몬스터가 2초 동안 모든 피해를 15% 더 받아요(취약)", mythic: "취약 25%" },
+  execute: { kind: "archer", grade: 4, name: "처형", emoji: "💀", desc: "체력 10% 이하로 떨어진 몬스터를 즉시 처치(보스·전쟁군주 제외)", mythic: "15% 이하" },
+  burn: { kind: "mage", grade: 3, name: "화상", emoji: "🔥", desc: "폭발에 맞은 몬스터가 3초 동안 불타요(공격력의 35%/초, 마법)", mythic: "공격력의 60%/초" },
+  shockwave: { kind: "mage", grade: 4, name: "충격파", emoji: "💨", desc: "4번째 공격마다 폭발에 맞은 몬스터를 뒤로 밀쳐내요(큰 몬스터는 조금)", mythic: "3번째 공격마다" },
+  freeze: { kind: "frost", grade: 3, name: "빙결", emoji: "🧊", desc: "5번째 공격마다 대상을 1초 얼려요(기절, 보스는 절반)", mythic: "4번째마다 1.5초" },
+  blizzard: { kind: "frost", grade: 4, name: "한파", emoji: "🌨️", desc: "둔화가 대상 주변(반경 45)의 몬스터 모두에게 퍼져요", mythic: "반경 70" },
+  shock: { kind: "thunder", grade: 3, name: "감전", emoji: "💫", desc: "4번째 공격마다 연쇄로 맞은 몬스터 전부 0.4초 기절", mythic: "0.6초" },
+  overload: { kind: "thunder", grade: 4, name: "과부하", emoji: "🌩️", desc: "연쇄 +1마리, 맞은 몬스터 2초 동안 피해 6% 더 받음(취약)", mythic: "취약 10%" },
+  plague: { kind: "poison", grade: 3, name: "전염", emoji: "🦠", desc: "독이 대상 주변(반경 35) 몬스터 최대 3마리에게 30% 세기로 옮아요", mythic: "50% 세기" },
+  corrode: { kind: "poison", grade: 4, name: "부식", emoji: "🧪", desc: "중독된 몬스터가 모든 피해를 7% 더 받아요", mythic: "12%" },
+};
+export const SKILL_IDS = Object.keys(SKILLS) as SkillId[];
+
+/** Skills this unit has unlocked (grade ≥ the skill's grade). */
+export function unitSkills(u: Pick<Unit, "kind" | "grade">): SkillId[] {
+  return SKILL_IDS.filter((id) => SKILLS[id].kind === u.kind && u.grade >= SKILLS[id].grade);
 }
 
 /** Share of a unit's gold (`Unit.paid`) that 판매 gives back. */
@@ -448,6 +507,15 @@ export interface Mob {
   slowPct: number;
   poisonT: number;
   poisonDps: number;
+  /** Ticks frozen / stunned in place (skills), then `stunGuard` ticks immune. */
+  stunT?: number;
+  stunGuard?: number;
+  /** 취약: takes `vulnPct` more damage of every kind while `vulnT` > 0. */
+  vulnT?: number;
+  vulnPct?: number;
+  /** 화상 damage over time (magic). */
+  burnT?: number;
+  burnDps?: number;
   /** Seat that sent this elite/invader (for colour/labels); -1 for wave mobs. */
   from: SeatIndex;
   /** 유닛 대결 invaders only: the unit that was sent (drawn as a corrupted tower). */
@@ -471,6 +539,8 @@ export interface Shot {
   crit?: boolean;
   /** Main target's mob id (lets the UI pin crit numbers to the right mob). */
   target?: number;
+  /** A proc skill went off on this attack (for its burst FX). */
+  skill?: SkillId;
 }
 
 /**
@@ -681,11 +751,13 @@ export function upgradeCost(level: number): number {
 }
 
 /**
- * Wave HP: +17% per wave up to `knee`, then a gentler +12% so the late game
- * stops spiking (bot sim: median game ~9 → ~10.5 min, wider comeback window).
+ * Wave HP: +17% per wave up to `knee`, then a gentler late ramp so the late
+ * game stops spiking (bot sim: median game ~9 → ~10.5 min, wider comeback
+ * window). `late` went 1.12 → 1.15 with tower skills (영웅/전설), which on
+ * their own pushed bot medians from W34 to ~W42.
  * Exported as a mutable object so balance sims can sweep it.
  */
-export const WAVE_CURVE = { base: 66, growth: 1.17, knee: 15, late: 1.12 };
+export const WAVE_CURVE = { base: 66, growth: 1.17, knee: 15, late: 1.15 };
 export function waveHp(wave: number): number {
   const c = WAVE_CURVE;
   const early = Math.min(wave, c.knee) - 1;
@@ -1193,7 +1265,41 @@ function closeWave(board: Board) {
 }
 
 function damage(mob: Mob, amount: number, type: DamageType) {
-  mob.hp -= mitigated(mob.kind, amount, type);
+  const vuln = (mob.vulnT ?? 0) > 0 ? (mob.vulnPct ?? 0) : 0;
+  mob.hp -= mitigated(mob.kind, amount, type) * (1 + vuln);
+}
+
+const isBig = (m: Mob) => m.kind === "boss" || m.kind === "warlord";
+
+/** Skill stun: halved on bosses / warlords, ignored while the post-stun guard runs. */
+function stunMob(m: Mob, ticks: number) {
+  if ((m.stunGuard ?? 0) > 0 || m.hp <= 0) return;
+  const t = isBig(m) ? Math.round(ticks / 2) : ticks;
+  m.stunT = Math.max(m.stunT ?? 0, t);
+}
+
+function makeVulnerable(m: Mob, pct: number, ticks: number) {
+  if ((m.vulnT ?? 0) > 0 && (m.vulnPct ?? 0) > pct) return;
+  m.vulnPct = pct;
+  m.vulnT = Math.max(m.vulnT ?? 0, ticks);
+}
+
+function slowMob(m: Mob, pct: number) {
+  // Wraiths shrug off the chill.
+  if (m.kind === "wraith") return;
+  m.slowT = Math.max(m.slowT, 40);
+  m.slowPct = Math.max(m.slowPct, m.kind === "boss" ? pct / 2 : pct);
+}
+
+function poisonMob(m: Mob, dps: number) {
+  m.poisonDps = Math.max(m.poisonDps, dps);
+  m.poisonT = 60;
+}
+
+/** Road distance between two monsters (the road is a closed loop). */
+function roadGap(a: Mob, b: Mob): number {
+  const gap = Math.abs((a.trav % PATH_LEN) - (b.trav % PATH_LEN));
+  return Math.min(gap, PATH_LEN - gap);
 }
 
 function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, ordered: Mob[]) {
@@ -1254,50 +1360,103 @@ function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, or
   const dmg = unitDamage(unit, board) * (crit ? cs.mult : 1);
   const type = UNITS[unit.kind].dmgType;
   const hits: number[] = [target.id];
+  const g = unit.grade;
+  const mythic = g >= MAX_GRADE;
+  const fired = (unit.fired = (unit.fired ?? 0) + 1);
+  const every = (n: number) => fired % n === 0;
+  let proc: SkillId | undefined;
   switch (unit.kind) {
-    case "archer":
+    case "archer": {
+      const struck = [target];
       damage(target, dmg, type);
-      if (unit.grade >= 3 && ordered[1]) {
+      if (g >= 3 && ordered[1]) {
         damage(ordered[1], dmg * 0.6, type);
         hits.push(ordered[1].id);
+        struck.push(ordered[1]);
       }
-      break;
-    case "mage": {
-      const radius = 55 + unit.grade * 5;
-      for (const m of ordered) {
-        let gap = Math.abs((m.trav % PATH_LEN) - (target.trav % PATH_LEN));
-        gap = Math.min(gap, PATH_LEN - gap);
-        if (gap <= radius) {
-          damage(m, dmg, type);
-          if (m !== target) hits.push(m.id);
+      if (g >= 3) for (const m of struck) makeVulnerable(m, mythic ? SKILL.weakspot.mythicPct : SKILL.weakspot.pct, SKILL.weakspot.ticks);
+      if (g >= 4) {
+        const line = mythic ? SKILL.execute.mythicPct : SKILL.execute.pct;
+        for (const m of struck) {
+          if (!isBig(m) && m.hp > 0 && m.hp <= m.maxHp * line) {
+            m.hp = 0;
+            proc = "execute";
+          }
         }
       }
       break;
     }
+    case "mage": {
+      const radius = 55 + g * 5;
+      const struck: Mob[] = [];
+      for (const m of ordered) {
+        if (roadGap(m, target) <= radius) {
+          damage(m, dmg, type);
+          struck.push(m);
+          if (m !== target) hits.push(m.id);
+        }
+      }
+      if (g >= 3) {
+        const dps = dmg * (mythic ? SKILL.burn.mythicDpsOfDmg : SKILL.burn.dpsOfDmg);
+        for (const m of struck) {
+          m.burnDps = Math.max(m.burnDps ?? 0, dps);
+          m.burnT = SKILL.burn.ticks;
+        }
+      }
+      if (g >= 4 && every(mythic ? SKILL.shockwave.mythicEvery : SKILL.shockwave.every)) {
+        for (const m of struck) m.trav = Math.max(0, m.trav - (isBig(m) ? SKILL.shockwave.bigPush : SKILL.shockwave.push));
+        proc = "shockwave";
+      }
+      break;
+    }
     case "frost": {
-      const pct = Math.min(0.7, 0.35 + unit.grade * 0.07);
+      const pct = Math.min(0.7, 0.35 + g * 0.07);
       damage(target, dmg, type);
-      // Wraiths shrug off the chill.
-      if (target.kind !== "wraith") {
-        target.slowT = Math.max(target.slowT, 40);
-        target.slowPct = Math.max(target.slowPct, target.kind === "boss" ? pct / 2 : pct);
+      slowMob(target, pct);
+      if (g >= 4) {
+        const radius = mythic ? SKILL.blizzard.mythicRadius : SKILL.blizzard.radius;
+        for (const m of ordered) {
+          if (m !== target && roadGap(m, target) <= radius) {
+            slowMob(m, pct);
+            hits.push(m.id);
+          }
+        }
+      }
+      if (g >= 3 && every(mythic ? SKILL.freeze.mythicEvery : SKILL.freeze.every)) {
+        stunMob(target, mythic ? SKILL.freeze.mythicTicks : SKILL.freeze.ticks);
+        proc = "freeze";
       }
       break;
     }
     case "thunder": {
-      const chain = 2 + Math.floor(unit.grade / 2);
-      ordered.slice(0, chain + 1).forEach((m, i) => {
+      const chain = 2 + Math.floor(g / 2) + (g >= 4 ? SKILL.overload.extraChain : 0);
+      const struck = ordered.slice(0, chain + 1);
+      struck.forEach((m, i) => {
         damage(m, dmg * (i === 0 ? 1 : 0.7), type);
         if (i > 0) hits.push(m.id);
       });
+      if (g >= 4) for (const m of struck) makeVulnerable(m, mythic ? SKILL.overload.mythicVulnPct : SKILL.overload.vulnPct, SKILL.overload.ticks);
+      if (g >= 3 && every(SKILL.shock.every)) {
+        for (const m of struck) stunMob(m, mythic ? SKILL.shock.mythicTicks : SKILL.shock.ticks);
+        proc = "shock";
+      }
       break;
     }
     case "poison": {
       damage(target, dmg, type);
-      const pct = 0.025 + unit.grade * 0.01;
+      const pct = 0.025 + g * 0.01;
       const cap = dmg * 6;
-      target.poisonDps = Math.max(target.poisonDps, Math.min(target.maxHp * pct, cap));
-      target.poisonT = 60;
+      poisonMob(target, Math.min(target.maxHp * pct, cap));
+      if (g >= 3) {
+        const share = mythic ? SKILL.plague.mythicShare : SKILL.plague.share;
+        let spread = 0;
+        for (const m of ordered) {
+          if (m === target || roadGap(m, target) > SKILL.plague.radius) continue;
+          if (spread++ >= SKILL.plague.max) break;
+          poisonMob(m, Math.min(m.maxHp * pct, cap) * share);
+          hits.push(m.id);
+        }
+      }
       break;
     }
   }
@@ -1308,7 +1467,7 @@ function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, or
     const p = pathPoint(m.trav);
     pts.push(Math.round(p.x), Math.round(p.y));
   }
-  board.shots.push({ slot, kind: unit.kind, grade: unit.grade, pts, target: target.id, ...(crit ? { crit: true } : {}) });
+  board.shots.push({ slot, kind: unit.kind, grade: unit.grade, pts, target: target.id, ...(crit ? { crit: true } : {}), ...(proc ? { skill: proc } : {}) });
   void s;
 }
 
@@ -1332,16 +1491,34 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
   s.boards.forEach((board, seat) => {
     if (!board.alive) return;
 
-    // Movement + status effects.
+    // Movement + status effects. 부식: a 전설+ poison tower makes poisoned monsters 취약.
+    const corrodeGrade = board.units.reduce((best, u) => (u && u.kind === "poison" && u.grade >= SKILLS.corrode.grade ? Math.max(best, u.grade) : best), 0);
+    const corrode = corrodeGrade === 0 ? 0 : corrodeGrade >= MAX_GRADE ? SKILL.corrode.mythicPct : SKILL.corrode.pct;
     for (const m of board.mobs) {
       const slow = m.slowT > 0 ? m.slowPct : 0;
-      m.trav += (m.speed * (1 - slow)) / TICKS_PER_SEC;
+      if ((m.stunT ?? 0) > 0) {
+        m.stunT! -= 1;
+        if (m.stunT === 0) m.stunGuard = STUN_GUARD;
+      } else {
+        m.trav += (m.speed * (1 - slow)) / TICKS_PER_SEC;
+        if ((m.stunGuard ?? 0) > 0) m.stunGuard! -= 1;
+      }
       if (m.slowT > 0) m.slowT -= 1;
       if (m.slowT === 0) m.slowPct = 0;
       if (m.poisonT > 0) {
+        if (corrode > 0) makeVulnerable(m, corrode, 2);
         damage(m, m.poisonDps / TICKS_PER_SEC, "magic");
         m.poisonT -= 1;
         if (m.poisonT === 0) m.poisonDps = 0;
+      }
+      if ((m.burnT ?? 0) > 0) {
+        damage(m, (m.burnDps ?? 0) / TICKS_PER_SEC, "magic");
+        m.burnT! -= 1;
+        if (m.burnT === 0) m.burnDps = 0;
+      }
+      if ((m.vulnT ?? 0) > 0) {
+        m.vulnT! -= 1;
+        if (m.vulnT === 0) m.vulnPct = 0;
       }
     }
 

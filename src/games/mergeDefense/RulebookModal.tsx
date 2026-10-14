@@ -1,7 +1,7 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { BOSS_EVERY, DAMAGE_TYPE_LABEL, MOB_INFO, TICKS_PER_SEC, GAMBLE_COST, GAMBLE_ODDS, GRADE_COLORS, GRADE_NAMES, loadLimit, MAP_IDS, MAPS, SEND_EVERY, UNIT_KINDS, UNITS } from "./engine";
+import { BOSS_EVERY, DAMAGE_TYPE_LABEL, MOB_INFO, TICKS_PER_SEC, GAMBLE_COST, GAMBLE_ODDS, GRADE_COLORS, GRADE_NAMES, loadLimit, MAP_IDS, MAPS, SEND_EVERY, SKILL_IDS, SKILLS, UNIT_KINDS, UNITS } from "./engine";
 import { MapThumb } from "./RoomSettings";
 
 export default function RulebookModal({ onClose }: { onClose: () => void }) {
@@ -118,6 +118,27 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
             ))}
             <span className="text-white/50 light:text-slate-500">(한 단계마다 공격력 ×2.5)</span>
           </p>
+        </section>
+
+        <section>
+          <h3 className={h3}>✨ 타워 스킬</h3>
+          <p className="mb-1.5 text-xs text-white/60 light:text-slate-500">
+            <span style={{ color: GRADE_COLORS[3] }}>영웅</span>이 되면 첫 번째 스킬, <span style={{ color: GRADE_COLORS[4] }}>전설</span>이 되면 두 번째 스킬이 열리고,{" "}
+            <span style={{ color: GRADE_COLORS[5] }}>신화</span>는 두 스킬이 모두 강해져요. 기절은 보스·전쟁군주에게 절반만 걸리고, 기절이 풀린 몬스터는 1초 동안 다시 기절하지 않아요.
+          </p>
+          <ul className="space-y-1 text-white/70 light:text-slate-600">
+            {SKILL_IDS.map((id) => {
+              const sk = SKILLS[id];
+              return (
+                <li key={id}>
+                  {UNITS[sk.kind].emoji} <span style={{ color: GRADE_COLORS[sk.grade] }}>{GRADE_NAMES[sk.grade]}</span> {sk.emoji} <b>{sk.name}</b> — {sk.desc}
+                  <span className="ml-1 text-xs" style={{ color: GRADE_COLORS[5] }}>
+                    신화: {sk.mythic}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
         </section>
 
         <section>

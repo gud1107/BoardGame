@@ -45,6 +45,10 @@ import {
   HIRES,
   hireCost,
   sendCost,
+  SKILLS,
+  SKILL_IDS,
+  unitSkills,
+  type SkillId,
   SEND_INCOME,
   unitRange,
   AUTO_PARTS,
@@ -156,6 +160,18 @@ function guideVisible(mode: GuideMode, wave: number): boolean {
 }
 /** Attack range the guide assumes for a new build (grade-1 average). */
 const BUILD_RANGE = 140;
+const SKILL_COLOR: Record<SkillId, string> = {
+  weakspot: "#fb923c",
+  execute: "#f43f5e",
+  burn: "#f97316",
+  shockwave: "#c4b5fd",
+  freeze: "#7dd3fc",
+  blizzard: "#e0f2fe",
+  shock: "#fde047",
+  overload: "#facc15",
+  plague: "#4ade80",
+  corrode: "#a3e635",
+};
 const HIRE_FX_COLOR: Record<(typeof HIRE_KINDS)[number], string> = { swarm: "#f59e0b", wraith: "#818cf8", golem: "#a8a29e", warlord: "#dc2626" };
 const MOB_SPARK: Record<string, string> = {
   boss: "#c084fc",
@@ -261,6 +277,16 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   const hitsRef = useRef(new Map<number, number>());
   const dmgRef = useRef(new Map<number, { acc: number; shown: number; magic?: number }>());
   const firedRef = useRef<Record<number, number>>({});
+  /** Last time each skill's name callout was shown (rate limit). */
+  const skillCalloutRef = useRef<Partial<Record<SkillId, number>>>({});
+
+  /** "스킬 해금" callout when a merge / gamble lands on a skill grade (영웅·전설) or empowers them (신화). */
+  function skillUnlockFx(unit: Unit | null | undefined, grade: number, c: { x: number; y: number }, t0: number) {
+    if (!unit || unit.grade !== grade || grade < 3) return;
+    const fresh = unitSkills(unit).filter((id) => SKILLS[id].grade === grade);
+    const text = grade >= MAX_GRADE ? "✦ 스킬 강화!" : fresh.length ? `${SKILLS[fresh[0]].emoji} ${SKILLS[fresh[0]].name} 해금!` : null;
+    if (text) fxRef.current.push({ type: "text", x: c.x, y: c.y - 40, text, color: "#f0abfc", t0, dur: 1300, size: 14 });
+  }
   const shakeRef = useRef({ t0: 0, dur: 0, amp: 0 });
   /** Hit-stop: while performance.now() < until, the main board renders this frozen frame. */
   const hitStopRef = useRef<{ until: number; at: number; alpha: number; state: MergeDefenseState | null }>({ until: 0, at: 0, alpha: 0, state: null });
@@ -461,6 +487,16 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           const t0 = now + (shot.kind === "archer" ? 140 : 60);
           fx.push({ type: "impact", x: shot.pts[0], y: shot.pts[1] - 4, color: shot.crit ? "#facc15" : UNITS[shot.kind].color, size: (8 + shot.grade * 2) * (shot.crit ? 1.8 : 1), t0, dur: shot.crit ? 260 : 180, seed: shot.slot + state.tick });
           if (shot.crit) fx.push({ type: "ring", x: shot.pts[0], y: shot.pts[1] - 4, color: "#fde047", r0: 4, r1: 22, t0, dur: 240 });
+          if (shot.skill) {
+            const sk = SKILLS[shot.skill];
+            const color = SKILL_COLOR[shot.skill];
+            for (let i = 0; i < shot.pts.length; i += 2) fx.push({ type: "ring", x: shot.pts[i], y: shot.pts[i + 1] - 4, color, r0: 6, r1: shot.skill === "shockwave" ? 34 : 20, t0, dur: 320 });
+            // Name callout at most once per skill per 0.9s so frequent procs don't flood the board.
+            if (now - (skillCalloutRef.current[shot.skill] ?? 0) > 900) {
+              skillCalloutRef.current[shot.skill] = now;
+              fx.push({ type: "text", x: shot.pts[0], y: shot.pts[1] - 22, text: `${sk.emoji} ${sk.name}`, color, t0, dur: 700, size: 12 });
+            }
+          }
         }
         if (shot.crit && shot.grade >= 3) shake(1.2, 90);
       }
@@ -614,6 +650,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           fx.push({ type: "spark", x: c.x, y: c.y, color: GRADE_COLORS[ev.grade], t0: now, dur: 650, seed: ev.id });
           fx.push({ type: "ring", x: c.x, y: c.y, color: GRADE_COLORS[ev.grade], r0: 10, r1: 46, t0: now, dur: 550 });
           fx.push({ type: "text", x: c.x, y: c.y - 22, text: `진화! ${GRADE_NAMES[ev.grade]}`, color, t0: now + 200, dur: 1100, size: ev.grade >= 4 ? 20 : 15 });
+          skillUnlockFx(state.boards[ev.seat]?.units[ev.slot], ev.grade, c, now + 700);
           if (mine && audible) audio.playMerge(ev.grade);
           break;
         }
@@ -623,6 +660,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           fx.push({ type: "evolve", x: c.x, y: c.y + 4, color: GRADE_COLORS[ev.grade], grade: ev.grade, t0: now, dur: 800 + ev.grade * 120 });
           bornAtRef.current[ev.slot] = { t: now, big: true };
           fx.push({ type: "text", x: c.x, y: c.y - 22, text: `💎 ${GRADE_NAMES[ev.grade]}!`, color: GRADE_COLORS[ev.grade], t0: now, dur: 1200, size: 18 });
+          skillUnlockFx(state.boards[ev.seat]?.units[ev.slot], ev.grade, c, now + 500);
           if (mine && audible) audio.playGamble(true);
           break;
         }
@@ -1435,6 +1473,9 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
                     👟 속도 {Math.round(speed)}
                     {selectedMob.slowT > 0 && <span className="text-sky-300"> · ❄️ 둔화 {pct(selectedMob.slowPct)}</span>}
                     {selectedMob.poisonT > 0 && <span className="text-emerald-300"> · ☠️ 독 {fmt1(selectedMob.poisonDps)}/초</span>}
+                    {(selectedMob.burnT ?? 0) > 0 && <span className="text-orange-300"> · 🔥 화상 {fmt1(selectedMob.burnDps ?? 0)}/초</span>}
+                    {(selectedMob.stunT ?? 0) > 0 && <span className="text-yellow-200"> · 💫 기절</span>}
+                    {(selectedMob.vulnT ?? 0) > 0 && <span className="text-rose-300"> · 🎯 취약 +{pct(selectedMob.vulnPct ?? 0)}</span>}
                   </p>
                   {info.trait && <p className="mt-0.5 break-keep text-white/60">{info.trait}</p>}
                   {tip && <p className="mt-0.5 font-semibold text-amber-200">{tip}</p>}
@@ -1521,6 +1562,20 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
                   <span className="rounded-full bg-white/10 px-2 py-0.5 light:bg-slate-100">⏱️ 공속 <b>{st.perSec.toFixed(2)}</b>회/초</span>
                   <span className="rounded-full bg-white/10 px-2 py-0.5 light:bg-slate-100">🎯 사거리 <b>{Math.round(st.range)}</b></span>
                   <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-amber-100 light:bg-amber-100 light:text-amber-800">💥 초당 피해 <b>{fmt1(st.dps)}</b></span>
+                  {SKILL_IDS.filter((id) => SKILLS[id].kind === selectedUnit.kind).map((id) => {
+                    const sk = SKILLS[id];
+                    const on = unitSkills(selectedUnit).includes(id);
+                    return (
+                      <span
+                        key={id}
+                        title={`${sk.desc} · 신화: ${sk.mythic}`}
+                        className={`rounded-full px-2 py-0.5 ${on ? "bg-fuchsia-500/25 text-fuchsia-100 light:bg-fuchsia-100 light:text-fuchsia-800" : "bg-white/5 text-white/40 light:bg-slate-50 light:text-slate-400"}`}
+                      >
+                        {sk.emoji} {sk.name}
+                        {on ? (selectedUnit.grade >= MAX_GRADE ? " ✦" : "") : ` 🔒${GRADE_NAMES[sk.grade]}`}
+                      </span>
+                    );
+                  })}
                   {interactive && selected !== null && (
                     <button
                       type="button"
