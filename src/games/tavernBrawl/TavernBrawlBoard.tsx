@@ -30,6 +30,7 @@ import { rpForRank, tierChange, tierOf, type RankResult, type RankTier } from "@
 import HeroPreview from "./HeroPreview";
 import CombatStats from "./CombatStats";
 import GoldenMergeFX from "./GoldenMergeFX";
+import FinalStandFX, { type FinalStandPlayer } from "./FinalStandFX";
 import { getTavernBrawlSound } from "./tavernBrawlBgm";
 import type { ArenaApi } from "./three/Arena3D";
 import { webglAvailable } from "./three/webgl";
@@ -393,6 +394,25 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
   }, [me.stats.triples, me.hand, me.board, later]);
   const doneMerge = useCallback(() => setMergeFx((q) => q.slice(1)), []);
 
+  // 최후의 4인(5인 이상으로 시작) / 최후의 결투(3인 이상으로 시작): 전투 재생이 끝나고 상점 단계가 열릴 때 한 번
+  const aliveCount = state.seats.filter((s) => s.alive).length;
+  const announcedRef = useRef(aliveCount);
+  const [finalFx, setFinalFx] = useState<{ id: number; count: 4 | 2; players: FinalStandPlayer[] } | null>(null);
+  useEffect(() => {
+    if (state.phase !== "shop") return;
+    const before = announcedRef.current;
+    announcedRef.current = aliveCount;
+    const count = aliveCount === 2 && before > 2 && state.seatCount >= 3 ? 2 : aliveCount === 4 && before > 4 && state.seatCount >= 5 ? 4 : null;
+    if (!count) return;
+    const players = state.seats.flatMap((s, seat) => (s.alive ? [{ seat, name: names[seat] ?? `${seat + 1}번`, hero: s.hero, hp: s.hp, me: seat === viewerSeat }] : []));
+    later(() => {
+      setFinalFx({ id: state.round, count, players });
+      sfx(count === 2 ? "finalDuel" : "finalFour");
+    }, 250);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 단계·생존자 수가 바뀔 때만
+  }, [state.phase, aliveCount]);
+  const doneFinal = useCallback(() => setFinalFx(null), []);
+
   // 상대가 황금 유닛을 만들면 작은 알림(어떤 유닛인지는 비공개 — 전장처럼 횟수만)
   const rivalTriplesRef = useRef(state.seats.map((s) => s.stats.triples));
   const [rivalToasts, setRivalToasts] = useState<{ id: number; seat: Seat }[]>([]);
@@ -488,6 +508,7 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
           ))}
         </div>
       )}
+      {finalFx && <FinalStandFX key={finalFx.id} count={finalFx.count} players={finalFx.players} onDone={doneFinal} />}
       {mergeFx[0] && <GoldenMergeFX key={mergeFx[0].id} unit={mergeFx[0].unit} onDone={doneMerge} />}
       {statsView && statsReady && statsCombat && (
         <CombatStats

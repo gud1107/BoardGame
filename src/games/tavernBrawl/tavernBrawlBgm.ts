@@ -19,6 +19,25 @@ const SFX = {
     ...fx.chord("pad", ["D4", "F#4", "A4", "D5"], 1.1, 0.8, 0.3),
   ],
   discover: fx.arp("harp", ["A4", "D5", "F#5", "A5"], 0.06, 0.6, 0.8),
+  /** 최후의 4인 — 천둥 + 팀파니 롤 + 브라스 상승 화음 */
+  finalFour: [
+    fx.whoosh(3000, 200, 0.5, 0.16),
+    { inst: "taiko", note: "C2", at: 0.0, gain: 1 },
+    { inst: "taiko", note: "C2", at: 0.45, gain: 0.9 },
+    ...fx.chord("brass", ["D3", "A3", "D4"], 0.45, 0.9, 0.5),
+    ...fx.chord("brass", ["F3", "C4", "F4", "A4"], 0.9, 1.2, 0.5),
+    ...fx.arp("bell", ["D5", "A5", "D6"], 0.12, 0.9, 1.0),
+  ],
+  /** 최후의 결투 — 칼 부딪힘 두 번 + 낮은 북 + 단조 브라스 */
+  finalDuel: [
+    fx.whoosh(2600, 300, 0.4, 0.16),
+    { inst: "taiko", note: "C2", at: 0, gain: 1 },
+    ...fx.crack(0.62, 0.5),
+    fx.thud(80, 0.5, 0.9, 0.62),
+    { inst: "taiko", note: "C2", at: 0.62, gain: 1 },
+    ...fx.chord("brass", ["D3", "F3", "A3", "D4"], 0.7, 1.5, 0.55),
+    { inst: "bell", note: "D6", at: 0.7, dur: 1.2, gain: 0.5 },
+  ],
   power: [fx.whoosh(300, 2400, 0.3, 0.12), ...fx.arp("bell", ["A5", "E6"], 0.08, 0.5, 0.6)],
   /** 시간 압박 — 남은 10~6초 째깍, 5초부터 더 높고 진한 째깍 + 심장 쿵 */
   tick: [fx.click(1300, 0.09)],
