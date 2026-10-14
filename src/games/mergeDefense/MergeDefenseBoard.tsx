@@ -49,6 +49,7 @@ import {
   SKILL_IDS,
   unitSkills,
   type SkillId,
+  type UnitKind,
   SEND_INCOME,
   unitRange,
   AUTO_PARTS,
@@ -71,6 +72,7 @@ import {
   type SeatIndex,
 } from "./engine";
 import { coverageFor, drawBoard, drawFx, SEAT_COLORS, type Fx } from "./render";
+import { SKILL_FX_MS } from "./skillFx";
 import * as audio from "./mergeDefenseAudio";
 import RulebookModal from "./RulebookModal";
 import MapIntro from "./MapIntro";
@@ -126,9 +128,34 @@ interface FxPrefs {
   numbers: boolean;
   hitstop: boolean;
   slowmo: boolean;
+  skills: boolean;
 }
 const FX_PREFS_KEY = "merge-defense:fx";
-const FX_DEFAULT: FxPrefs = { shake: true, numbers: true, hitstop: true, slowmo: true };
+const FX_DEFAULT: FxPrefs = { shake: true, numbers: true, hitstop: true, slowmo: true, skills: true };
+/** Always-on skill accents replay at most this often per tower (procs are never throttled). */
+const PASSIVE_SKILL_FX_GAP_MS = 380;
+/** Which always-on skills show an accent for a shot of `kind` at `grade` (pts = hit positions). */
+function passiveSkillFx(kind: UnitKind, grade: number, pts: number[]): SkillId[] {
+  const out: SkillId[] = [];
+  if (kind === "archer") {
+    if (grade >= 2) out.push("bleed");
+    if (grade >= 3) out.push("weakspot");
+  } else if (kind === "mage") {
+    if (grade >= 2) out.push("gravity");
+    if (grade >= 3) out.push("burn");
+  } else if (kind === "frost") {
+    if (grade >= 2 && grade < 4 && pts.length > 2) out.push("shards");
+    if (grade >= 4) out.push("blizzard");
+  } else if (kind === "thunder") {
+    if (grade >= 4) out.push("overload");
+  } else if (kind === "poison") {
+    if (grade >= 3 && pts.length > 2) out.push("plague");
+    if (grade >= 4) out.push("corrode");
+  }
+  return out;
+}
+/** Screen shake for the big procs. */
+const SKILL_SHAKE: Partial<Record<SkillId, [number, number]>> = { execute: [2.6, 170], shockwave: [2, 150], freeze: [1.2, 110], shock: [1.4, 120] };
 /** Slow motion: playback rate and peak zoom; each trigger sets its own length and tint. */
 const SLOWMO = { rate: 0.25, zoom: 0.14 };
 /** Crit combo callout (the chain itself is counted by the engine); shown from COMBO_MIN. */
@@ -289,6 +316,8 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   const firedRef = useRef<Record<number, number>>({});
   /** Last time each skill's name callout was shown (rate limit). */
   const skillCalloutRef = useRef<Partial<Record<SkillId, number>>>({});
+  /** Last always-on skill accent per "slot:skill" (rate limit). */
+  const passiveFxRef = useRef<Record<string, number>>({});
 
   /** "스킬 해금" callout when a merge / gamble lands on a skill grade (영웅·전설) or empowers them (신화). */
   function skillUnlockFx(unit: Unit | null | undefined, grade: number, c: { x: number; y: number }, t0: number) {
@@ -497,10 +526,27 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           const t0 = now + (shot.kind === "archer" ? 140 : 60);
           fx.push({ type: "impact", x: shot.pts[0], y: shot.pts[1] - 4, color: shot.crit ? "#facc15" : UNITS[shot.kind].color, size: (8 + shot.grade * 2) * (shot.crit ? 1.8 : 1), t0, dur: shot.crit ? 260 : 180, seed: shot.slot + state.tick });
           if (shot.crit) fx.push({ type: "ring", x: shot.pts[0], y: shot.pts[1] - 4, color: "#fde047", r0: 4, r1: 22, t0, dur: 240 });
+          const skillFx = fxPrefsRef.current.skills;
+          if (skillFx) {
+            const big = shot.grade >= MAX_GRADE;
+            const at = { x: shot.pts[0], y: shot.pts[1] - 4 };
+            for (const skill of passiveSkillFx(shot.kind, shot.grade, shot.pts)) {
+              const key = `${shot.slot}:${skill}`;
+              if (now - (passiveFxRef.current[key] ?? 0) < PASSIVE_SKILL_FX_GAP_MS) continue;
+              passiveFxRef.current[key] = now;
+              fx.push({ type: "skill", skill, ...at, pts: shot.pts, from, big, t0, dur: SKILL_FX_MS[skill] ?? 500, seed: shot.slot * 31 + state.tick });
+            }
+            if (shot.skill) {
+              fx.push({ type: "skill", skill: shot.skill, ...at, pts: shot.pts, from, big, t0, dur: SKILL_FX_MS[shot.skill] ?? 600, seed: shot.slot * 17 + state.tick });
+              const sh = SKILL_SHAKE[shot.skill];
+              if (sh) shake(sh[0] * (big ? 1.4 : 1), sh[1]);
+              if (audible) audio.playSkillProc(shot.skill);
+            }
+          }
           if (shot.skill) {
             const sk = SKILLS[shot.skill];
             const color = SKILL_COLOR[shot.skill];
-            for (let i = 0; i < shot.pts.length; i += 2) fx.push({ type: "ring", x: shot.pts[i], y: shot.pts[i + 1] - 4, color, r0: 6, r1: shot.skill === "shockwave" ? 34 : 20, t0, dur: 320 });
+            if (!skillFx) for (let i = 0; i < shot.pts.length; i += 2) fx.push({ type: "ring", x: shot.pts[i], y: shot.pts[i + 1] - 4, color, r0: 6, r1: shot.skill === "shockwave" ? 34 : 20, t0, dur: 320 });
             // Name callout at most once per skill per 0.9s so frequent procs don't flood the board.
             if (now - (skillCalloutRef.current[shot.skill] ?? 0) > 900) {
               skillCalloutRef.current[shot.skill] = now;
@@ -1296,6 +1342,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
                     ["numbers", "🔢 데미지 숫자 (내 보드)"],
                     ["hitstop", "⏸️ 보스 처치 멈춤"],
                     ["slowmo", "🎬 슬로모션 (광폭 보스·신화)"],
+                    ["skills", "✨ 스킬 이펙트"],
                   ] as const
                 ).map(([key, label]) => (
                   <button

@@ -30,6 +30,7 @@ import {
   type Unit,
   type UnitKind,
 } from "./engine";
+import { drawSkillFx, type SkillFx } from "./skillFx";
 
 /**
  * Seat identity colors (mini boards, sender rings, results chart). The dataviz
@@ -1763,7 +1764,9 @@ export type Fx =
   /** A bought/sent monster bursting out of the portal onto this road. */
   | { type: "portal"; color: string; label: string; t0: number; dur: number; seed: number }
   /** The consumed unit's energy streaming into the merge cell. */
-  | { type: "absorb"; from: { x: number; y: number }; to: { x: number; y: number }; color: string; t0: number; dur: number };
+  | { type: "absorb"; from: { x: number; y: number }; to: { x: number; y: number }; color: string; t0: number; dur: number }
+  /** A tower skill going off (see skillFx.ts). */
+  | SkillFx;
 
 export function drawFx(ctx: Ctx, fx: Fx[], now: number) {
   for (const f of fx) {
@@ -1771,6 +1774,7 @@ export function drawFx(ctx: Ctx, fx: Fx[], now: number) {
     if (k < 0 || k > 1) continue;
     ctx.save();
     if (f.type === "shot") drawShot(ctx, f, k);
+    else if (f.type === "skill") drawSkillFx(ctx, f, k);
     else if (f.type === "ring") {
       ctx.strokeStyle = f.color;
       ctx.globalAlpha = 1 - k;

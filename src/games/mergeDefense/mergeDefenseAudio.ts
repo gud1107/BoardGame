@@ -1,6 +1,6 @@
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import { isSfxEffectivelyMuted, useAudioSettingsStore } from "@/lib/audio/audioSettings";
-import type { UnitKind } from "./engine";
+import type { UnitKind, SkillId } from "./engine";
 
 /**
  * Maps 랜덤 합성 디펜스 moments onto the project's shared, code-synthesized
@@ -207,6 +207,67 @@ export function playMinionCall(boss: boolean) {
  * One soft hit for a tower attack; silently skipped when rate-limited or muted.
  * `far` = an opponent's board: quieter, muffled and on its own (sparser) rate limit.
  */
+const SKILL_SOUND_GAP_MS = 90;
+const SKILL_SOUND_KIND_GAP_MS = 260;
+let lastSkillAt = 0;
+const lastSkillKind: Partial<Record<SkillId, number>> = {};
+
+/** A tower proc skill on your viewed board — each has its own short signature. */
+export function playSkillProc(skill: SkillId) {
+  const settings = useAudioSettingsStore.getState();
+  if (isSfxEffectivelyMuted(settings) || settings.sfxVolume <= 0 || hitVolume <= 0) return;
+  const nowMs = performance.now();
+  if (nowMs - lastSkillAt < SKILL_SOUND_GAP_MS || nowMs - (lastSkillKind[skill] ?? -1e9) < SKILL_SOUND_KIND_GAP_MS) return;
+  const a = hitAudio();
+  if (!a) return;
+  lastSkillAt = nowMs;
+  lastSkillKind[skill] = nowMs;
+  const { ctx, bus, noise: buf } = a;
+  bus.gain.value = HIT_LEVEL * 1.6 * settings.sfxVolume * hitVolume;
+  switch (skill) {
+    case "execute":
+      // Blade "shing" over a low thud.
+      tone(ctx, env(ctx, bus, 0.9, 0.002, 0.22), "sine", 140, 55, 0.24);
+      noise(ctx, buf, env(ctx, bus, 0.6, 0.002, 0.18), "highpass", 5200, 1.2, 0.2);
+      tone(ctx, env(ctx, bus, 0.35, 0.004, 0.3), "triangle", 1900, 2400, 0.3);
+      break;
+    case "freeze":
+      // Crystalline chime cluster.
+      for (const [f, d] of [
+        [2093, 0.35],
+        [2637, 0.3],
+        [3136, 0.25],
+      ] as const)
+        tone(ctx, env(ctx, bus, 0.45, 0.002, d), "sine", f, f * 1.01, d);
+      noise(ctx, buf, env(ctx, bus, 0.3, 0.001, 0.08), "highpass", 7000, 1, 0.1);
+      break;
+    case "shock":
+      // Buzzy zap.
+      tone(ctx, env(ctx, bus, 0.55, 0.001, 0.16), "sawtooth", 220, 90, 0.18);
+      noise(ctx, buf, env(ctx, bus, 0.55, 0.001, 0.12), "bandpass", 2600, 3, 0.14);
+      break;
+    case "static":
+      noise(ctx, buf, env(ctx, bus, 0.35, 0.001, 0.05), "bandpass", 4200, 4, 0.06);
+      break;
+    case "shockwave":
+      // Deep whump + air.
+      tone(ctx, env(ctx, bus, 0.9, 0.004, 0.3), "sine", 110, 40, 0.32);
+      noise(ctx, buf, env(ctx, bus, 0.45, 0.01, 0.25), "lowpass", 900, 0.7, 0.28);
+      break;
+    case "amplify":
+      // Rising arcane shimmer.
+      tone(ctx, env(ctx, bus, 0.45, 0.01, 0.3), "triangle", 520, 1560, 0.3);
+      tone(ctx, env(ctx, bus, 0.25, 0.02, 0.32), "sine", 1040, 2080, 0.32);
+      break;
+    case "rapid":
+      noise(ctx, buf, env(ctx, bus, 0.45, 0.003, 0.08), "bandpass", 2400, 1.5, 0.1);
+      tone(ctx, env(ctx, bus, 0.25, 0.002, 0.06), "triangle", 900, 1300, 0.07);
+      break;
+    default:
+      break;
+  }
+}
+
 let lastCritAt = 0;
 
 /** `critPitch` lifts the crit "ting" as a crit combo climbs. */
