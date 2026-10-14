@@ -624,13 +624,9 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
     (action: EngineAction) => {
       const cursor = cursorRef.current;
       if (!cursor) return;
-      if (actingHostRef.current === getDeviceId()) {
-        // 담당 자신의 행동도 같은 번호 줄에 선다(self 수신으로 담당도 번호 순서대로 적용).
-        relaySeqRef.current = Math.max(relaySeqRef.current, cursor.applied) + 1;
-        channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action, game: cursor.game, seq: relaySeqRef.current, by: getDeviceId() } });
-      } else {
-        channelRef.current?.send({ type: "broadcast", event: "action-request", payload: { action, game: cursor.game } });
-      }
+      // 담당 자신의 행동도 손님과 똑같이 요청 → (서버를 거쳐 자기에게 돌아온 뒤) 번호 → 방송 경로를 탄다.
+      // 바로 번호를 붙이면 담당의 답이 한 번 왕복만큼(실측 약 100ms) 빨라 선착순에서 유리해진다.
+      channelRef.current?.send({ type: "broadcast", event: "action-request", payload: { action, game: cursor.game } });
     },
     [],
   );
