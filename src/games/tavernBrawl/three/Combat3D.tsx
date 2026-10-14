@@ -197,6 +197,40 @@ export default function Combat3D({
         if (dmgOf > 0) s?.play(lethal ? "impactHeavy" : "impact", dmgOf);
         if (sound && (dmgOf >= 6 || lethal)) navigator.vibrate?.(lethal ? [30, 20, 40] : 25);
       });
+    } else if (ev.t === "skill") {
+      // 기력 가득 → 직업 스킬: 시전자가 푸르게 빛나며 이름을 외치고, 적에겐 그 캐릭터 공격 스타일로 날아간다
+      s?.play("ability");
+      a()?.glow(ev.uid);
+      a()?.ring(ev.uid, "#60a5fa", 1.6);
+      a()?.burst(ev.uid, "#93c5fd", 26, 2, 0.8);
+      a()?.popup(ev.uid, ev.label, "#7dd3fc", 0.85);
+      later(0, () => pushFeed([{ side: ev.side, uid: ev.uid, label: ev.label, text: ev.text }]));
+      const src = frame.sides.flat().find((u) => u.uid === ev.uid) ?? prev?.sides.flat().find((u) => u.uid === ev.uid);
+      const st = src ? attackStyle(src.defId) : null;
+      const enemyIds = new Set((prev?.sides[1 - ev.side] ?? frame.sides[1 - ev.side]).map((u) => u.uid));
+      const hitEnemy = ev.targets.filter((uid) => enemyIds.has(uid));
+      const D = STEP_MS.skill / speed;
+      if (st) for (const uid of hitEnemy) a()?.projectile(st.kind, st.color, ev.uid, uid, D * 0.35);
+      later(hitEnemy.length && st ? D * 0.35 : 0, () => {
+        if (st) for (const uid of hitEnemy) a()?.impactFx(st.kind, st.color, uid, ev.uid, true);
+        const max = hits(frame, () => ev.uid);
+        if (max > 0) {
+          a()?.shake(3 + max);
+          s?.play("impact", max);
+        }
+        const before = new Map((prev?.sides.flat() ?? []).map((u) => [u.uid, u]));
+        for (const u of frame.sides.flat()) {
+          const b = before.get(u.uid);
+          if (!b) {
+            a()?.ring(u.uid, "#c084fc", 1.3);
+            continue;
+          }
+          const da = u.atk - b.atk;
+          const dh = u.hp - b.hp;
+          if (da > 0 || dh > 0) a()?.popup(u.uid, `+${Math.max(0, da)}/+${Math.max(0, dh)}`, "#4ade80", 0.75);
+          else if (da < 0) a()?.popup(u.uid, `공격력 ${da}`, "#f87171", 0.75);
+        }
+      });
     } else if (ev.t === "soc") {
       s?.play("soc");
       if (ev.uid) {
@@ -325,6 +359,9 @@ export default function Combat3D({
       const u = [...(prev?.sides.flat() ?? []), ...frame.sides.flat()].find((x) => x.uid === ev.from);
       const t = [...(prev?.sides.flat() ?? []), ...frame.sides.flat()].find((x) => x.uid === ev.to);
       return u ? `${unitDef(u.defId).emoji} ${unitDef(u.defId).name} — ${attackStyle(u.defId).verb}${t ? ` → ${unitDef(t.defId).emoji} ${unitDef(t.defId).name}` : ""}` : null;
+    })() : ev.t === "skill" ? (() => {
+      const u = [...(prev?.sides.flat() ?? []), ...frame.sides.flat()].find((x) => x.uid === ev.uid);
+      return u ? `⚡ ${unitDef(u.defId).emoji} ${unitDef(u.defId).name}의 ${ev.label} — ${ev.text}` : null;
     })() : null;
 
   return (
@@ -341,7 +378,7 @@ export default function Combat3D({
       <AbilityFeed items={feed} />
       {attackerName && (
         <div className="pointer-events-none absolute bottom-9 left-1/2 -translate-x-1/2">
-          <span key={idx} className={`tb-banner whitespace-nowrap rounded-full px-3 py-0.5 text-[11px] font-semibold text-white ${ev.t === "attack" && ev.side === viewSide ? "bg-emerald-900/80" : "bg-rose-900/80"}`}>
+          <span key={idx} className={`tb-banner whitespace-nowrap rounded-full px-3 py-0.5 text-[11px] font-semibold text-white ${ev.t === "skill" ? (ev.side === viewSide ? "bg-sky-700/90" : "bg-fuchsia-900/85") : ev.t === "attack" && ev.side === viewSide ? "bg-emerald-900/80" : "bg-rose-900/80"}`}>
             {attackerName}
           </span>
         </div>

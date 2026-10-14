@@ -3,6 +3,7 @@
 import type { Keyword } from "./units";
 import { CLASSES, KEYWORDS, TRIBES, unitDef } from "./units";
 import { AbilityText } from "./AbilityFeed";
+import { skillOf, skillPower } from "./skills";
 import { unitTip } from "./UnitTooltip";
 import { useRef } from "react";
 
@@ -177,6 +178,7 @@ export default function UnitCard({
 export function UnitDetail({ unit }: { unit: CardUnit }) {
   const d = unitDef(unit.defId);
   const tribe = d.tribe ? TRIBES[d.tribe] : null;
+  const skill = skillOf(unit.defId);
   return (
     <div className="flex min-w-0 flex-col gap-1 text-xs text-white/80 light:text-slate-700">
       <p className="font-bold text-white light:text-slate-900">
@@ -191,6 +193,11 @@ export function UnitDetail({ unit }: { unit: CardUnit }) {
         <p className="break-keep">
           <AbilityText text={d.text} />
           {unit.golden && (d.battlecry || d.deathrattle || d.startOfCombat || d.onAttack || d.onAllyDeath || d.shopEnd || d.shopStart || d.onSell) ? " (황금: 효과 2배)" : ""}
+        </p>
+      )}
+      {skill && (
+        <p className="break-keep text-sky-300 light:text-sky-700">
+          ⚡ 스킬 {skill.emoji} {skill.name} (기력 {skill.mana}): {skill.text(skillPower(unit.defId, unit.golden))}
         </p>
       )}
       {unit.kw.filter((k) => !d.keywords.includes(k)).length > 0 && (

@@ -140,6 +140,42 @@ export function statTexture(value: number, kind: "atk" | "hp", buffed: boolean):
   return t;
 }
 
+const manaCache = new Map<string, THREE.CanvasTexture>();
+/** 기력 칸(전투): 칸 수 = 스킬에 필요한 기력, 찬 칸은 파랑, 가득 차면 밝게 */
+export function manaTexture(value: number, max: number): THREE.CanvasTexture {
+  const key = `${value}/${max}`;
+  const hit = manaCache.get(key);
+  if (hit) return hit;
+  const c = document.createElement("canvas");
+  c.width = 160;
+  c.height = 32;
+  const g = c.getContext("2d")!;
+  const full = value >= max;
+  g.fillStyle = "rgba(12,10,9,0.85)";
+  g.beginPath();
+  g.roundRect(0, 0, 160, 32, 14);
+  g.fill();
+  const gap = 6;
+  const w = (160 - 12 - gap * (max - 1)) / max;
+  for (let i = 0; i < max; i++) {
+    g.fillStyle = i < value ? (full ? "#7dd3fc" : "#2563eb") : "rgba(255,255,255,0.14)";
+    g.beginPath();
+    g.roundRect(6 + i * (w + gap), 7, w, 18, 8);
+    g.fill();
+  }
+  if (full) {
+    g.lineWidth = 3;
+    g.strokeStyle = "#e0f2fe";
+    g.beginPath();
+    g.roundRect(1.5, 1.5, 157, 29, 13);
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  manaCache.set(key, t);
+  return t;
+}
+
 const textCache = new Map<string, THREE.CanvasTexture>();
 /** 떠오르는 큰 숫자/글자 (피해·막음·버프) */
 export function popupTexture(text: string, color: string): { tex: THREE.CanvasTexture; aspect: number } {

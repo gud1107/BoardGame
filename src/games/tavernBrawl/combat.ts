@@ -1,5 +1,6 @@
 import { seededRng } from "@/lib/rng";
 import { KEYWORDS, unitDef, type ClassId, type Effect, type HeroId, type Keyword, type Tribe } from "./units";
+import { skillOf, skillPower } from "./skills";
 
 /**
  * 여관 난투 전투 시뮬레이터 — 순수 함수. 같은 (보드A, 보드B, 영웅, 시드) → 항상 같은 결과·같은 프레임.
@@ -8,6 +9,7 @@ import { KEYWORDS, unitDef, type ClassId, type Effect, type HeroId, type Keyword
  *
  * 규칙(룰북 §8): 유닛이 많은 쪽 선공(같으면 시드) → 양쪽이 번갈아 "다음 차례 유닛"이 공격 →
  * 대상은 도발 우선 무작위 → 서로 공격력만큼 피해 교환 → 죽음 처리(죽음의 메아리·부활) 반복.
+ * 기력(룰북 §9.5-1, skills.ts): 공격 +1, 피해 받고 생존 +1. 가득 차면 자기 차례에 직업 스킬을 먼저 쓴다.
  */
 
 export interface UnitInstance {
@@ -32,6 +34,8 @@ export interface Snap {
   hp: number;
   golden: boolean;
   kw: Keyword[];
+  /** 전투 중 기력(상점 보드엔 없음) */
+  mana?: number;
 }
 
 /** 능력 발동 알림(재생 화면 하이라이트용). label = 짧은 이름, text = 효과 설명 */
@@ -47,6 +51,8 @@ export type FrameEvent =
   | { t: "soc"; side: 0 | 1; uid: string | null; label: string; text?: string }
   | { t: "ability"; items: AbilityNote[] }
   | { t: "attack"; side: 0 | 1; from: string; to: string; splash: string[] }
+  /** 직업 스킬 발동(기력 가득) — targets = 스킬이 닿은 유닛 */
+  | { t: "skill"; side: 0 | 1; uid: string; label: string; text: string; targets: string[] }
   | { t: "deaths"; uids: string[] }
   | { t: "end"; winner: 0 | 1 | null };
 
@@ -85,6 +91,7 @@ export const MAX_COMBAT_STEPS = 300;
 interface CU extends UnitInstance {
   poisoned: boolean;
   attacked: boolean;
+  mana: number;
 }
 
 export function tribeOf(defId: string): Tribe | null {
@@ -145,15 +152,15 @@ function removeKw(u: { kw: Keyword[] }, k: Keyword) {
 }
 
 function snap(list: CU[]): Snap[] {
-  return list.map((u) => ({ uid: u.uid, defId: u.defId, atk: u.atk, hp: u.hp, golden: u.golden, kw: [...u.kw] }));
+  return list.map((u) => ({ uid: u.uid, defId: u.defId, atk: u.atk, hp: u.hp, golden: u.golden, kw: [...u.kw], mana: u.mana }));
 }
 
 export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, record = false): CombatResult {
   const rng = seededRng(seed);
   const pick = <T,>(arr: T[]): T => arr[Math.floor(rng() * arr.length)];
   const sides: [CU[], CU[]] = [
-    a.board.map((u) => ({ ...u, kw: [...u.kw], poisoned: false, attacked: false })),
-    b.board.map((u) => ({ ...u, kw: [...u.kw], poisoned: false, attacked: false })),
+    a.board.map((u) => ({ ...u, kw: [...u.kw], poisoned: false, attacked: false, mana: 0 })),
+    b.board.map((u) => ({ ...u, kw: [...u.kw], poisoned: false, attacked: false, mana: 0 })),
   ];
   const heroes = [a.hero, b.hero] as const;
   const counts = [tribeCounts(a.board), tribeCounts(b.board)];
@@ -204,6 +211,12 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
     u.hp -= amount;
     hurt.add(u);
     if (poison) u.poisoned = true;
+    if (u.hp > 0 && !u.poisoned) gainMana(u);
+  }
+
+  function gainMana(u: CU) {
+    const sk = skillOf(u.defId);
+    if (sk) u.mana = Math.min(sk.mana, u.mana + 1);
   }
 
   function targetsFor(side: 0 | 1, source: CU | null, target: string, tribe?: Tribe): CU[] {
@@ -240,7 +253,7 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
   function summon(side: 0 | 1, defId: string, golden: boolean, at: number): CU | null {
     if (sides[side].length >= 7) return null;
     const inst = baseInstance(defId, golden, `s${side}-${summonN++}`);
-    const cu: CU = { ...inst, poisoned: false, attacked: false };
+    const cu: CU = { ...inst, poisoned: false, attacked: false, mana: 0 };
     if (tribeOf(defId) === "beast") {
       const bonus = beastBonus(side);
       cu.atk += bonus;
@@ -378,6 +391,95 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
       if (shift[0] + shift[1] > 0) push({ t: "deaths", uids: [] });
       flushNotes();
     }
+  }
+
+  /** 기력이 가득 찬 유닛의 직업 스킬. 반환값 = 이번 공격에 더할 피해(전사), 안 썼으면 null */
+  function castSkill(side: 0 | 1, u: CU): number | null {
+    const cls = classOf(u.defId);
+    const sk = skillOf(u.defId);
+    if (!cls || !sk || u.mana < sk.mana) return null;
+    u.mana = 0;
+    const p = skillPower(u.defId, u.golden);
+    const enemy = (1 - side) as 0 | 1;
+    const foes = () => sides[enemy].filter((x) => !isDead(x));
+    const targets: CU[] = [];
+    let bonus = 0;
+    switch (cls) {
+      case "warrior":
+        bonus = 2 * p;
+        targets.push(u);
+        break;
+      case "guardian":
+        addKw(u, "shield");
+        addKw(u, "taunt");
+        u.hp += p;
+        targets.push(u);
+        break;
+      case "assassin": {
+        const f = foes();
+        if (f.length) {
+          const t = f.reduce((lo, x) => (x.hp < lo.hp ? x : lo), f[0]);
+          damage(t, 2 * p, false, u);
+          targets.push(t);
+        }
+        break;
+      }
+      case "mage": {
+        const f = foes();
+        if (f.length) {
+          const t = pick(f);
+          const i = sides[enemy].indexOf(t);
+          const near = [sides[enemy][i - 1], sides[enemy][i + 1]].filter((x): x is CU => !!x && !isDead(x));
+          damage(t, 2 * p, false, u);
+          for (const n of near) damage(n, p, false, u);
+          targets.push(t, ...near);
+        }
+        break;
+      }
+      case "ranger": {
+        const f = foes();
+        for (const t of f) damage(t, Math.ceil(p / 2), false, u);
+        targets.push(...f);
+        break;
+      }
+      case "cleric": {
+        const allies = sides[side].filter((x) => !isDead(x));
+        if (allies.length) {
+          const t = allies.reduce((lo, x) => (x.hp < lo.hp ? x : lo), allies[0]);
+          t.hp += 2 * p;
+          addKw(t, "shield");
+          targets.push(t);
+        }
+        break;
+      }
+      case "berserker":
+        u.atk += p;
+        u.hp += p;
+        targets.push(u);
+        break;
+      case "summoner": {
+        const sp = summon(side, "t_spirit", false, sides[side].indexOf(u) + 1);
+        if (sp) {
+          sp.atk = p;
+          sp.hp = p;
+          targets.push(sp);
+        }
+        break;
+      }
+      case "plunderer": {
+        const f = foes();
+        if (f.length) {
+          const t = pick(f);
+          const take = Math.min(p, t.atk);
+          t.atk -= take;
+          u.atk += p;
+          targets.push(t);
+        }
+        break;
+      }
+    }
+    push({ t: "skill", side, uid: u.uid, label: `${sk.emoji} ${sk.name}`, text: sk.text(p), targets: targets.map((x) => x.uid) });
+    return bonus;
   }
 
   // ── 선공 결정 ──
@@ -545,6 +647,10 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
     for (let i = 0; i < list.length && list[idx].atk <= 0; i++) idx = (idx + 1) % list.length;
     const attacker = list[idx];
     const enemy = (1 - turn) as 0 | 1;
+    // 기력이 가득 차면 스킬을 먼저 쓴다(스킬로 적이 쓰러질 수 있음)
+    const cast = castSkill(turn, attacker);
+    let skillBonus = cast ?? 0;
+    if (cast !== null) processDeaths(turn === 0 ? [0, 1] : [1, 0]);
     const swings = hasKw(attacker, "windfury") ? 2 : 1;
     for (let sw = 0; sw < swings; sw++) {
       if (isDead(attacker) || !sides[turn].includes(attacker) || sides[enemy].length === 0) break;
@@ -563,9 +669,11 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
       const dIdx = sides[enemy].indexOf(defender);
       const splash = hasKw(attacker, "cleave") ? [sides[enemy][dIdx - 1], sides[enemy][dIdx + 1]].filter((u): u is CU => !!u) : [];
       const atkPoison = hasKw(attacker, "poison");
-      damage(defender, attacker.atk, atkPoison, attacker);
+      damage(defender, attacker.atk + skillBonus, atkPoison, attacker);
+      skillBonus = 0;
       for (const s of splash) damage(s, attacker.atk, atkPoison, attacker);
       if (!sneaky) damage(attacker, defender.atk, hasKw(defender, "poison"), defender);
+      if (!isDead(attacker)) gainMana(attacker);
       push({ t: "attack", side: turn, from: attacker.uid, to: defender.uid, splash: splash.map((s) => s.uid) });
       processDeaths(turn === 0 ? [0, 1] : [1, 0]);
     }

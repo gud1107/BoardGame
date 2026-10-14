@@ -81,6 +81,28 @@ describe("combat", () => {
     expect(simulateCombat(side([]), side([unit("b_dog")]), 1).winner).toBe(1);
   });
 
+  it("기력: 공격·피격으로 차고, 가득 차면 스킬을 쓰고 0으로", () => {
+    const r = simulateCombat(side([unit("k_squire", { uid: "g", hp: 40 })]), side([unit("k_squire", { uid: "h", hp: 40 })]), 11, true);
+    const skills = r.frames.filter((f) => f.ev.t === "skill");
+    expect(skills.length).toBeGreaterThan(0);
+    const first = skills[0];
+    const ev = first.ev;
+    if (ev.t !== "skill") throw new Error();
+    expect(ev.label).toContain("방벽");
+    const caster = first.sides[ev.side].find((u) => u.uid === ev.uid)!;
+    expect(caster.mana).toBe(0);
+    expect(caster.kw).toContain("shield");
+    // 기록 여부와 상관없이 결과 동일
+    const plain = simulateCombat(side([unit("k_squire", { uid: "g", hp: 40 })]), side([unit("k_squire", { uid: "h", hp: 40 })]), 11);
+    expect(plain.winner).toBe(r.winner);
+  });
+
+  it("토큰(직업 없음)은 기력이 차지 않는다", () => {
+    const r = simulateCombat(side([unit("t_wolf", { uid: "w", hp: 60 })]), side([unit("t_wolf", { uid: "x", hp: 60 })]), 3, true);
+    expect(r.frames.some((f) => f.ev.t === "skill")).toBe(false);
+    expect(r.frames.every((f) => f.sides.flat().every((u) => !u.mana))).toBe(true);
+  });
+
   it("전투 통계: 1:1 맞교환 피해가 정확하고, 기록해도 결과는 같다", () => {
     const r = simulateCombat(side([unit("n_merc", { uid: "m" })]), side([unit("b_dog", { uid: "d" })]), 7, true);
     const m = r.stats.find((s) => s.uid === "m")!;

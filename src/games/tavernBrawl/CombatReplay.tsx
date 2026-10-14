@@ -8,6 +8,7 @@ import { EmoteBubble, type EmoteSlot } from "./emotes";
 import type { CombatRecord } from "./engine";
 import { HERO_BY_ID } from "./units";
 import UnitCard from "./UnitCard";
+import { skillOf } from "./skills";
 import { getTavernBrawlSound } from "./tavernBrawlBgm";
 
 /**
@@ -22,7 +23,7 @@ import { getTavernBrawlSound } from "./tavernBrawlBgm";
  *   이후   제자리로 복귀. 죽음은 부풀었다가 회전하며 산산조각, 소환은 튀어 오르며 등장.
  */
 
-export const STEP_MS: Record<Frame["ev"]["t"], number> = { start: 900, soc: 750, ability: 700, attack: 1050, deaths: 600, end: 3000 };
+export const STEP_MS: Record<Frame["ev"]["t"], number> = { start: 900, soc: 750, ability: 700, skill: 1000, attack: 1050, deaths: 600, end: 3000 };
 /** 돌진이 대상에 닿는 시점(공격 프레임 길이 대비) */
 export const IMPACT_AT = 0.42;
 
@@ -368,6 +369,44 @@ export default function CombatReplay({
         }
       }
       if (pops.length) addFx(pops, 1100);
+    } else if (ev.t === "skill") {
+      s?.play("ability");
+      feedIn([{ side: ev.side, uid: ev.uid, label: ev.label, text: ev.text }]);
+      const src = el(ev.uid);
+      const pops: FxInput[] = [];
+      if (src) {
+        if (typeof src.animate === "function") {
+          src.animate([{ transform: "scale(1)", filter: "brightness(1)" }, { transform: "scale(1.3) translateY(-6px)", filter: "brightness(2.2) drop-shadow(0 0 16px #60a5fa)" }, { transform: "scale(1)", filter: "brightness(1)" }], { duration: 520 });
+        }
+        const c = center(src);
+        pops.push({ kind: "ring", x: c.x, y: c.y, color: "#60a5fa" });
+        pops.push({ kind: "dmg", x: c.x, y: c.y - 48, text: ev.label, size: 16, tone: "gold" });
+      }
+      for (const uid of ev.targets) {
+        if (uid === ev.uid) continue;
+        const node = el(uid);
+        if (!node) continue;
+        const c = center(node);
+        pops.push({ kind: "ring", x: c.x, y: c.y, color: ev.side === viewSide ? "#93c5fd" : "#fca5a5" });
+      }
+      if (prev) {
+        const dmg = hitUnits(prev, frame, [], false);
+        if (dmg > 0) {
+          shake(3 + dmg);
+          s?.play("impact", dmg);
+        }
+        const before = new Map(prev.sides.flat().map((u) => [u.uid, u]));
+        for (const u of frame.sides.flat()) {
+          const b = before.get(u.uid);
+          const node = el(u.uid);
+          if (!node) continue;
+          const c = center(node);
+          if (!b) pops.push({ kind: "dmg", x: c.x, y: c.y - 30, text: "등장!", size: 15, tone: "green" });
+          else if (u.atk > b.atk || u.hp > b.hp) pops.push({ kind: "dmg", x: c.x, y: c.y - 24, text: `+${Math.max(0, u.atk - b.atk)}/+${Math.max(0, u.hp - b.hp)}`, size: 17, tone: "green" });
+          else if (u.atk < b.atk && u.hp === b.hp) pops.push({ kind: "dmg", x: c.x, y: c.y - 24, text: `−${b.atk - u.atk} 공격력`, size: 15, tone: "red" });
+        }
+      }
+      if (pops.length) addFx(pops, 1100);
     } else if (ev.t === "soc") {
       s?.play("soc");
       feedIn([{ side: ev.side, uid: ev.uid, label: `✦ ${ev.label}`, text: ev.uid ? (ev.text ?? "") : "시너지 발동" }]);
@@ -512,6 +551,7 @@ export default function CombatReplay({
             <div data-uid={u.uid} className="will-change-transform">
               <UnitCard unit={u} size="md" />
             </div>
+            <ManaPips u={u} />
           </div>
         ))}
       </div>
@@ -553,6 +593,11 @@ export default function CombatReplay({
           {ev.t === "soc" && (
             <span key={idx} className="tb-banner relative rounded-full bg-black/70 px-3 py-0.5 text-xs font-semibold text-amber-200">
               ✦ {ev.label}
+            </span>
+          )}
+          {ev.t === "skill" && (
+            <span key={idx} className={`tb-banner relative rounded-full px-3 py-0.5 text-xs font-black text-white shadow-[0_0_14px_rgba(96,165,250,0.6)] ${ev.side === viewSide ? "bg-sky-700/90" : "bg-rose-800/90"}`}>
+              ⚡ {ev.label} <span className="font-semibold text-white/80">— {ev.text}</span>
             </span>
           )}
           {ev.t === "start" && <span className="tb-banner relative rounded-full bg-black/70 px-4 py-1 text-sm font-black tracking-wider text-amber-200">⚔️ 전투 시작!</span>}
@@ -780,3 +825,20 @@ export const COMBAT_CSS = `
 @keyframes tb-proj { from { transform:translate(-50%,-50%) translate(0,0) scale(.6); } to { transform:translate(-50%,-50%) translate(var(--tx),var(--ty)) scale(1.1); } }
 .tb-proj { animation: tb-proj var(--dur) cubic-bezier(.4,0,.8,.6) forwards; }
 `;
+
+/** 기력 칸: 직업 스킬까지 남은 기력(가득 차면 빛남). 토큰(직업 없음)은 표시 안 함 */
+export function ManaPips({ u }: { u: Snap }) {
+  const sk = skillOf(u.defId);
+  if (!sk || u.mana === undefined) return null;
+  const full = u.mana >= sk.mana;
+  return (
+    <div className="mt-1 flex justify-center gap-0.5" title={`기력 ${u.mana}/${sk.mana} — 가득 차면 ${sk.emoji} ${sk.name}`}>
+      {Array.from({ length: sk.mana }, (_, i) => (
+        <span
+          key={i}
+          className={`h-1.5 w-3 rounded-full transition-colors duration-300 ${i < (u.mana ?? 0) ? (full ? "bg-sky-300 shadow-[0_0_6px_#7dd3fc]" : "bg-sky-500") : "bg-white/15 light:bg-slate-400/40"}`}
+        />
+      ))}
+    </div>
+  );
+}

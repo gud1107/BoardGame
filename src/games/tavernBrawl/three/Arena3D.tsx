@@ -5,7 +5,8 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber"
 import * as THREE from "three";
 import type { Snap } from "../combat";
 import { unitDef } from "../units";
-import { popupTexture, statTexture, tagTexture, woodTexture } from "./textures";
+import { manaTexture, popupTexture, statTexture, tagTexture, woodTexture } from "./textures";
+import { skillOf } from "../skills";
 import { CLASSES, TRIBES } from "../units";
 import Figure, { type FigureAct } from "./figures";
 import { StyleFxLayer, fxLife, type StyleFxInput, type StyleFxItem } from "./StyleFx";
@@ -164,6 +165,9 @@ function TokenImpl({
     return tagTexture(`${tribe?.emoji ?? "⚪"}${cls?.emoji ?? ""}`, [tribe?.color ?? "#94a3b8", cls?.color ?? tribe?.color ?? "#94a3b8"], d.token ? 1 : d.tier, u.golden);
   }, [d.tribe, d.cls, d.tier, d.token, u.golden]);
   const hpTex = useMemo(() => statTexture(Math.max(0, u.hp), "hp", u.hp > d.hp * m), [u.hp, d.hp, m]);
+  // 기력 칸(전투만, 직업 있는 유닛만) — 가득 차면 다음 차례에 스킬
+  const maxMana = skillOf(u.defId)?.mana ?? 0;
+  const manaTex = useMemo(() => (u.mana === undefined || !maxMana ? null : manaTexture(u.mana, maxMana)), [u.mana, maxMana]);
 
   useFrame(() => {
     const g = group.current;
@@ -391,6 +395,11 @@ function TokenImpl({
           <sprite position={[0.34, 0.16, 0.38]} scale={[0.28, 0.28, 1]} renderOrder={2}>
             <spriteMaterial map={hpTex} toneMapped={false} depthTest={false} />
           </sprite>
+          {manaTex && (
+            <sprite position={[0, 1.52, 0]} scale={[0.66, 0.13, 1]} renderOrder={3}>
+              <spriteMaterial map={manaTex} toneMapped={false} depthTest={false} transparent />
+            </sprite>
+          )}
           {/* 키워드 */}
           {u.kw.includes("shield") && (
             <mesh ref={bubble} position={[0, 0.7, 0]}>
