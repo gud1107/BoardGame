@@ -6,6 +6,7 @@ import {
   computeRankings,
   fieldLoad,
   hireCost,
+  sendCost,
   SWARM_SIZE,
   SEND_COOLDOWN_TICKS,
   slotCenter,
@@ -112,13 +113,18 @@ describe("merge defense engine", () => {
     expect(s.boards[0].mobs.every((m) => m.hp === m.maxHp)).toBe(true);
   });
 
-  it("유닛 대결: sending a unit removes it and drops an invader on the target's road", () => {
+  it("유닛 대결: sending a unit costs gold, keeps the unit and drops an invader copy on the target's road", () => {
     let s = startGame(2, 21, [], "versus");
     while (s.wave < 1) s = stepGame(s);
     s.boards[0].units[3] = { kind: "thunder", grade: 3, cd: 0 };
+    const price = sendCost(3, s.wave);
+    s.boards[0].gold = price - 1;
+    expect(applyAction(s, 0, { type: "send", slot: 3 })).toBe(s);
+    s.boards[0].gold = price + 5;
     const before = s.boards[1].mobs.length;
     const sent = applyAction(s, 0, { type: "send", slot: 3 });
-    expect(sent.boards[0].units[3]).toBeNull();
+    expect(sent.boards[0].units[3]).toEqual(s.boards[0].units[3]);
+    expect(sent.boards[0].gold).toBe(5);
     expect(sent.boards[0].sendCd).toBe(SEND_COOLDOWN_TICKS);
     const inv = sent.boards[1].mobs.find((m) => m.kind === "invader")!;
     expect(sent.boards[1].mobs.length).toBe(before + 1);

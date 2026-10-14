@@ -44,6 +44,7 @@ import {
   HIRE_KINDS,
   HIRES,
   hireCost,
+  sendCost,
   unitRange,
   AUTO_PARTS,
   AUTO_UPGRADE_MIN_GOLD,
@@ -995,7 +996,8 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   const canMergeNow = interactive && pairs.length > 0;
   const versus = state.mode === "versus";
   const sendCdSec = Math.ceil(me.sendCd / TICKS_PER_SEC);
-  const canSend = interactive && versus && selected !== null && me.sendCd === 0 && state.wave >= 1 && target !== null;
+  const sendPrice = selectedUnit ? sendCost(selectedUnit.grade, state.wave) : null;
+  const canSend = interactive && versus && sendPrice !== null && me.gold >= sendPrice && me.sendCd === 0 && state.wave >= 1 && target !== null;
   const waveLeftTicks = state.tick < PREP_TICKS ? PREP_TICKS - state.tick : WAVE_TICKS - ((state.tick - PREP_TICKS) % WAVE_TICKS);
   const nextWave = state.tick < PREP_TICKS ? 1 : state.wave + 1;
   const nextIsBoss = isBossWave(nextWave);
@@ -1327,12 +1329,12 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
               onClick={() => {
                 if (selected === null || target === null) return;
                 onAction({ type: "send", slot: selected, to: target });
-                setSelected(null);
               }}
+              title="고른 유닛의 복제본을 골드로 보내요 — 내 유닛은 그대로 남아요"
               className="flex flex-col items-center rounded-lg bg-gradient-to-b from-rose-500 to-red-800 py-1 text-white shadow-[0_3px_0_#7f1d1d] transition active:translate-y-0.5 active:shadow-none disabled:opacity-40"
             >
               <span className="text-[13px] leading-tight font-black">⚔️ 보내기</span>
-              <span className="text-[9px] font-semibold opacity-85">{selected === null ? "유닛 선택" : "선택 유닛"}</span>
+              <span className="font-mono text-[9px] font-semibold opacity-85">{sendPrice === null ? "유닛 선택" : `🪙${sendPrice}`}</span>
             </button>
             {HIRE_KINDS.map((kind) => {
               const def = HIRES[kind];

@@ -568,9 +568,9 @@ export type GameEvent =
 
 /**
  * "survival" (생존전): only the automatic elite pressure.
- * "versus" (유닛 대결): players may also sacrifice their own units — a sent
- * unit leaves your board and walks the target's road as an invader whose
- * strength scales with its grade.
+ * "versus" (유닛 대결): players may also pay gold to send a copy of one of
+ * their units — it walks the target's road as an invader whose strength
+ * scales with its grade, and the original stays on your board.
  */
 export type GameMode = "survival" | "versus";
 export const GAME_MODES: GameMode[] = ["survival", "versus"];
@@ -606,7 +606,7 @@ export type Action =
   | { type: "upgrade"; kind: UnitKind }
   /** 판매: remove the unit in `slot` for SELL_REFUND of the gold spent on it. */
   | { type: "sell"; slot: number }
-  /** 유닛 대결: sacrifice the unit in `slot` onto `to`'s road. */
+  /** 유닛 대결: pay `sendCost` to drop a copy of the unit in `slot` onto `to`'s road (the unit stays). */
   | { type: "send"; slot: number; to?: SeatIndex }
   /** Pay gold to clear every stun on your board. */
   | { type: "wake" }
@@ -741,6 +741,15 @@ export function slotPreference(): number[] {
 
 export function invaderHp(grade: number, wave: number): number {
   return Math.round(waveHp(Math.max(2, wave)) * 3 * Math.pow(2.3, grade - 1));
+}
+
+/**
+ * 유닛 대결 보내기 price: a copy of a grade-`grade` unit marches on the target
+ * while the original stays home. Scales with the invader's HP (×2.3 per grade)
+ * so gold per HP stays near the monster hires.
+ */
+export function sendCost(grade: number, wave: number): number {
+  return Math.round((18 + 2 * Math.max(1, wave)) * Math.pow(2.3, grade - 1));
 }
 
 export function waveCount(wave: number): number {
@@ -965,12 +974,12 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
 
   if (action.type === "send") {
     const unit = cur.units[action.slot];
-    if (state.mode !== "versus" || !unit || cur.sendCd > 0 || state.wave < 1) return state;
+    if (state.mode !== "versus" || !unit || cur.sendCd > 0 || state.wave < 1 || cur.gold < sendCost(unit.grade, state.wave)) return state;
     const to = action.to !== undefined && action.to !== seat && state.boards[action.to]?.alive ? action.to : nextAliveOpponent(state, seat);
     if (to === null) return state;
     const s = cloneState(state);
     const board = s.boards[seat];
-    board.units[action.slot] = null;
+    board.gold -= sendCost(unit.grade, s.wave);
     board.sendCd = SEND_COOLDOWN_TICKS;
     const hp = Math.round(invaderHp(unit.grade, s.wave) * difficultyHp(s));
     s.boards[to].mobs.push({
@@ -1629,14 +1638,14 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex, auto:
     const keep = slotPref.indexOf(a) < slotPref.indexOf(b) ? a : b;
     return { type: "merge", a: keep === a ? b : a, b: keep };
   }
-  // 유닛 대결: a full, unmergeable board throws its weakest unit at the
-  // opponent (also frees a cell for a fresh summon).
+  // 유닛 대결: a full, unmergeable board with spare gold sends a copy of its
+  // strongest unit it can comfortably pay for.
   if (ok("attack") && state.mode === "versus" && free === 0 && board.sendCd === 0 && state.wave >= 3) {
-    let weakest = -1;
+    let pick = -1;
     board.units.forEach((u, i) => {
-      if (u && u.grade <= 2 && (weakest < 0 || u.grade < board.units[weakest]!.grade)) weakest = i;
+      if (u && board.gold >= sendCost(u.grade, state.wave) * 2 && (pick < 0 || u.grade > board.units[pick]!.grade)) pick = i;
     });
-    if (weakest >= 0) return { type: "send", slot: weakest };
+    if (pick >= 0) return { type: "send", slot: pick };
   }
   // A full board with spare gold sharpens its crits.
   const focus = board.focus ?? 0;

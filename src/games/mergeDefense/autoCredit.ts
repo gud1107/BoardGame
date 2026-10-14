@@ -41,7 +41,6 @@ export function trackAction(c: AutoCredit, a: Action, byAuto: boolean) {
       if (toAuto) c.slots.add(a.a);
       break;
     }
-    case "send":
     case "sell":
       c.slots.delete(a.slot);
       break;

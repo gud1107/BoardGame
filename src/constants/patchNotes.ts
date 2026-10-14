@@ -58,6 +58,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.58.1",
+    releaseDate: "2026-10-14",
+    title: "🏰 랜덤 합성 디펜스 — 유닛 대결 보내기를 골드로",
+    changes: [
+      { game: "merge-defense", type: "IMPROVE", desc: "⚔️ 보내기가 이제 골드로 — 고른 유닛의 복제본을 상대 길에 보내고 내 유닛은 그대로 남아요(등급이 높을수록 비쌈)" },
+    ],
+  },
+  {
     version: "v1.58.0",
     releaseDate: "2026-10-13",
     title: "🏙️ 신규 게임 단어 마천루 — 주제 단어를 쏟아내 3D 탑 쌓기, 🍺 여관 난투 — 직업 9개·새 종족 4개·유닛 75종, 판마다 바뀌는 종족",
