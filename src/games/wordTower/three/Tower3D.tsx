@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, type ReactNode } from "react";
+import { memo, useMemo, useRef, type ReactNode } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { EntryStatus } from "../engine";
@@ -79,6 +79,28 @@ function stackHeight(slabs: SlabView[]): number {
 
 /* ── 블록 ─────────────────────────────────────────────────── */
 
+const geoCache = new Map<number, THREE.BufferGeometry>();
+
+/**
+ * 블록 상자 — 면을 [옆 3면, 위·아래, 앞] 순서로 다시 묶어 재질 그룹을 6개 → 3개로 줄인다
+ * (그룹 하나 = draw call 하나라, 8명 × 수십 층이면 휴대폰 CPU가 버거워진다). 높이별로 공유.
+ */
+function slabGeometry(h: number): THREE.BufferGeometry {
+  const hit = geoCache.get(h);
+  if (hit) return hit;
+  const g = new THREE.BoxGeometry(SLAB_W, h, SLAB_W);
+  const idx = Array.from(g.getIndex()!.array);
+  // BoxGeometry 면 순서: +x, -x, +y, -y, +z(앞), -z — 면마다 삼각형 2개 = 인덱스 6개
+  const face = (i: number) => idx.slice(i * 6, i * 6 + 6);
+  g.setIndex([0, 1, 5, 2, 3, 4].flatMap(face));
+  g.clearGroups();
+  g.addGroup(0, 18, 0); // 옆 3면
+  g.addGroup(18, 12, 1); // 위·아래
+  g.addGroup(30, 6, 2); // 앞
+  geoCache.set(h, g);
+  return g;
+}
+
 function Slab({ slab, color, baseY }: { slab: SlabView; color: string; baseY: number }) {
   const mesh = useRef<THREE.Mesh>(null);
   const anim = useRef<{ born: number | null; y: number | null; fall: number | null; flash: number | null; last: EntryStatus | null }>({
@@ -96,8 +118,8 @@ function Slab({ slab, color, baseY }: { slab: SlabView; color: string; baseY: nu
     const side = slabSideTexture(color, slab.blocks);
     const top = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(0.85), roughness: 0.6 });
     const mk = (map: THREE.Texture) => new THREE.MeshStandardMaterial({ map, roughness: 0.55, metalness: 0.05 });
-    // BoxGeometry 면 순서: +x, -x, +y, -y, +z(앞), -z
-    return [mk(side), mk(side), top, top, mk(face), mk(side)];
+    // slabGeometry의 그룹 순서: 옆, 위·아래, 앞
+    return [mk(side), top, mk(face)];
   }, [color, slab.blocks, slab.label]);
 
   useFrame((frame, delta) => {
@@ -145,9 +167,7 @@ function Slab({ slab, color, baseY }: { slab: SlabView; color: string; baseY: nu
   });
 
   return (
-    <mesh ref={mesh} material={materials}>
-      <boxGeometry args={[SLAB_W, h, SLAB_W]} />
-    </mesh>
+    <mesh ref={mesh} material={materials} geometry={slabGeometry(h)} />
   );
 }
 
@@ -210,7 +230,8 @@ function NameTag({ tower, topY }: { tower: TowerView; topY: number }) {
 
 /* ── 탑 ───────────────────────────────────────────────────── */
 
-function Tower({ tower, x }: { tower: TowerView; x: number }) {
+/** memo — 보드가 타이머 때문에 0.25초마다 다시 그려져도, 바뀌지 않은 탑·블록은 건너뛴다. */
+const Tower = memo(function Tower({ tower, x }: { tower: TowerView; x: number }) {
   const group = useRef<THREE.Group>(null);
   const top = stackHeight(tower.slabs);
   // 쌓인 순서대로 바닥 높이 — 거절 블록은 자기 자리에서 떨어지고, 위 블록은 그만큼 내려온다.
@@ -245,7 +266,7 @@ function Tower({ tower, x }: { tower: TowerView; x: number }) {
       </group>
     </group>
   );
-}
+});
 
 /* ── 배경 도시 ────────────────────────────────────────────── */
 
