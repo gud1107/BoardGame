@@ -122,11 +122,11 @@ const waiting = (isHost: boolean) => (
   </div>
 );
 
-/** Every look tier (rows W1 / W10 / W20 / W30) of the common monsters + the boss, drawn once. */
+/** Every look tier (rows W1 / W10 / W20 / W30) of the wave monsters + the boss, drawn once. */
 function MonsterTiers() {
   return (
     <canvas
-      width={880}
+      width={1120}
       height={760}
       className="w-full rounded-xl"
       style={{ background: "#2f5d2a" }}
@@ -136,7 +136,7 @@ function MonsterTiers() {
         ctx.setTransform(2, 0, 0, 2, 0, 0);
         ctx.fillStyle = "#e5e7eb";
         ctx.font = "bold 11px sans-serif";
-        const kinds = ["normal", "fast", "tank", "boss"] as const;
+        const kinds = ["normal", "fast", "tank", "knight", "shaman", "boss"] as const;
         [1, 10, 20, 30].forEach((w, row) => {
           ctx.fillText(`W${w}`, 6, 60 + row * 92);
           kinds.forEach((kind, col) => {

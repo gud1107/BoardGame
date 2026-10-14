@@ -62,7 +62,7 @@ export function playSendUnit() {
 
 /** Peak gain at SFX slider = 1 and hit volume "보통" — deliberately far below the shared cues. */
 const HIT_LEVEL = 0.07;
-const HIT_KIND_GAP_MS: Record<UnitKind, number> = { archer: 110, mage: 160, frost: 150, thunder: 150, poison: 190 };
+const HIT_KIND_GAP_MS: Record<UnitKind, number> = { archer: 110, mage: 160, frost: 150, thunder: 150, poison: 190, cannon: 220, holy: 150, wind: 120 };
 const HIT_GLOBAL_GAP_MS = 45;
 /** Opponent boards: much quieter, muffled, and sparser so they never mask your own board. */
 const FAR_LEVEL = 0.3;
@@ -259,6 +259,25 @@ export function playSkillProc(skill: SkillId) {
       tone(ctx, env(ctx, bus, 0.45, 0.01, 0.3), "triangle", 520, 1560, 0.3);
       tone(ctx, env(ctx, bus, 0.25, 0.02, 0.32), "sine", 1040, 2080, 0.32);
       break;
+    case "concuss":
+    case "chainblast":
+      // Big blast: low boom + crackle.
+      tone(ctx, env(ctx, bus, 1, 0.003, 0.32), "sine", 120, 35, 0.34);
+      noise(ctx, buf, env(ctx, bus, 0.7, 0.002, 0.24), "lowpass", 1400, 0.7, 0.26);
+      if (skill === "chainblast") noise(ctx, buf, env(ctx, bus, 0.4, 0.05, 0.2), "bandpass", 2600, 2, 0.24);
+      break;
+    case "judgment":
+      // Choir-like chord swell.
+      for (const f of [523, 659, 784, 1047]) tone(ctx, env(ctx, bus, 0.28, 0.02, 0.45), "triangle", f, f, 0.46);
+      break;
+    case "tornado":
+      noise(ctx, buf, env(ctx, bus, 0.7, 0.05, 0.4), "bandpass", 700, 1.5, 0.45);
+      tone(ctx, env(ctx, bus, 0.3, 0.05, 0.35), "sine", 300, 600, 0.38);
+      break;
+    case "whirl":
+    case "gust":
+      noise(ctx, buf, env(ctx, bus, 0.45, 0.01, 0.16), "bandpass", skill === "whirl" ? 1100 : 1800, 1.4, 0.18);
+      break;
     case "rapid":
       noise(ctx, buf, env(ctx, bus, 0.45, 0.003, 0.08), "bandpass", 2400, 1.5, 0.1);
       tone(ctx, env(ctx, bus, 0.25, 0.002, 0.06), "triangle", 900, 1300, 0.07);
@@ -349,6 +368,23 @@ export function playTowerHit(kind: UnitKind, grade: number, far = false, crit = 
     case "poison": {
       // Bubbly "blup": a rising sine blip.
       tone(ctx, env(ctx, bus, 0.45, 0.004, 0.09), "sine", 260 * p, 620 * p, 0.1);
+      break;
+    }
+    case "cannon": {
+      // Muffled "boom": low sine drop + a dull noise thump.
+      tone(ctx, env(ctx, bus, 0.8, 0.003, 0.16), "sine", 160 * p, 50 * p, 0.18);
+      noise(ctx, buf, env(ctx, bus, 0.5, 0.002, 0.1), "lowpass", 700 * p, 0.8, 0.12);
+      break;
+    }
+    case "holy": {
+      // Clear bell "ting" with a soft fifth.
+      tone(ctx, env(ctx, bus, 0.38, 0.003, 0.14), "sine", 1320 * p, 1320 * p, 0.15);
+      tone(ctx, env(ctx, bus, 0.18, 0.003, 0.12), "sine", 1980 * p, 1980 * p, 0.13);
+      break;
+    }
+    case "wind": {
+      // Quick airy "fwish".
+      noise(ctx, buf, env(ctx, bus, 0.45, 0.004, 0.05), "bandpass", 1600 * p, 1.2, 0.07);
       break;
     }
   }

@@ -11,6 +11,9 @@ import {
   SKILL_IDS,
   STUN_GUARD,
   unitSkills,
+  sanctuaryHaste,
+  SHAMAN_HEAL,
+  UNIT_KINDS,
   unitInterval,
   SKILL,
   unitDamage,
@@ -55,7 +58,7 @@ import {
   type Mob,
 } from "./engine";
 
-const UNIT_KIND_LIST = ["archer", "mage", "frost", "thunder", "poison"] as const;
+const UNIT_KIND_LIST = ["archer", "mage", "frost", "thunder", "poison", "cannon", "holy", "wind"] as const;
 
 /** One tower of `kind`/`grade` in pad 0 with hand-placed monsters parked next to it (prep phase over, no spawns yet). */
 function skillArena(kind: (typeof UNIT_KIND_LIST)[number], grade: number, mobs: { kind?: Mob["kind"]; hp: number; gap?: number }[]): MergeDefenseState {
@@ -677,6 +680,42 @@ describe("merge defense engine", () => {
     expect(p.boards[0].mobs.every((m) => m.poisonT > 0)).toBe(true);
   });
 
+  it("new towers & monsters: 철갑기사 ignores stuns and knockback, 주술사 heals its neighbours", () => {
+    expect(UNIT_KINDS).toEqual([...UNIT_KIND_LIST]);
+    // 기절탄 / 토네이도 never stun or move a knight.
+    let s = skillArena("wind", 3, [{ kind: "knight", hp: 1e9 }]);
+    const at = s.boards[0].mobs[0].trav;
+    for (let i = 0; i < 400 && !s.boards[0].shots.some((sh) => sh.skill === "tornado"); i++) s = stepGame(s);
+    const knight = s.boards[0].mobs.find((m) => m.id === 900)!;
+    expect(knight.stunT ?? 0).toBe(0);
+    expect(knight.trav).toBeGreaterThanOrEqual(at);
+    // A shaman next to a hurt monster tops it up on its pulse.
+    let h = skillArena("archer", 1, [{ kind: "shaman", hp: 1000 }, { hp: 500, gap: 10 }]);
+    h.boards[0].units[0] = null;
+    while (h.tick % SHAMAN_HEAL.every !== SHAMAN_HEAL.every - 1) h = stepGame(h);
+    const before = h.boards[0].mobs.find((m) => m.id === 901)!.hp;
+    h = stepGame(h);
+    expect(h.boards[0].mobs.find((m) => m.id === 901)!.hp).toBeCloseTo(before + 1000 * SHAMAN_HEAL.pct, 5);
+  });
+
+  it("new towers: 연쇄 폭발 bursts a cannon kill onto its neighbours; 성역 speeds up nearby towers only", () => {
+    const chance = CRIT.chance;
+    CRIT.chance = 0;
+    let s = skillArena("cannon", 4, [{ hp: 1 }, { hp: 1e6, gap: 20 }]);
+    while (s.boards[0].shots.length === 0) s = stepGame(s);
+    CRIT.chance = chance;
+    expect(s.boards[0].shots[0].skill).toBe("chainblast");
+    const b = startGame(2, 5);
+    b.boards[0].units[0] = { kind: "holy", grade: 4, cd: 0 };
+    b.boards[0].units[1] = { kind: "archer", grade: 1, cd: 0 };
+    const far = b.boards[0].units.findIndex((_, i) => i > 1 && Math.hypot(slotCenter(i).x - slotCenter(0).x, slotCenter(i).y - slotCenter(0).y) > 120);
+    b.boards[0].units[far] = { kind: "archer", grade: 1, cd: 0 };
+    const haste = sanctuaryHaste(b.boards[0]);
+    expect(haste[0]).toBe(0);
+    expect(haste[1]).toBeGreaterThan(0);
+    expect(haste[far]).toBe(0);
+  });
+
   it("gamble odds add up to 100%", () => {
     expect(GAMBLE_ODDS.reduce((t, o) => t + o.pct, 0)).toBe(100);
   });
@@ -815,7 +854,7 @@ describe("merge defense engine", () => {
   });
 
   it("armor cuts physical hits, resist cuts magic ones", async () => {
-    const { mitigated, MOB_INFO, UNITS } = await import("./engine");
+    const { mitigated, MOB_INFO, UNITS, TOWER_POWER } = await import("./engine");
     expect(UNITS.archer.dmgType).toBe("physical");
     expect(UNITS.mage.dmgType).toBe("magic");
     expect(mitigated("golem", 100, "physical")).toBeCloseTo(100 * (1 - MOB_INFO.golem.armor));
@@ -833,7 +872,7 @@ describe("merge defense engine", () => {
       t = stepGame(t);
       lost = 10_000 - (t.boards[0].mobs.find((m) => m.id === 999)?.hp ?? 10_000);
     }
-    const base = UNITS.archer.dmg * (1 - MOB_INFO.tank.armor);
+    const base = UNITS.archer.dmg * TOWER_POWER * (1 - MOB_INFO.tank.armor);
     expect([base, base * 2].some((v) => Math.abs(v - lost) < 1e-6)).toBe(true);
   });
 

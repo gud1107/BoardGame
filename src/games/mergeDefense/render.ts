@@ -562,6 +562,15 @@ export function drawTower(ctx: Ctx, x: number, y: number, u: Unit, now: number, 
     case "poison":
       drawPoison(ctx, now, firing, !!o.mini);
       break;
+    case "cannon":
+      drawCannon(ctx, now, o.aim, firing, !!o.mini);
+      break;
+    case "holy":
+      drawHoly(ctx, now, firing, !!o.mini, u.grade >= 4);
+      break;
+    case "wind":
+      drawWind(ctx, now, firing, !!o.mini);
+      break;
   }
 
   // Mythic sparkles
@@ -816,6 +825,142 @@ function drawThunder(ctx: Ctx, now: number, firing: boolean, mini: boolean) {
   }
 }
 
+function drawCannon(ctx: Ctx, now: number, aim: number | undefined, firing: boolean, mini: boolean) {
+  // Wooden carriage with two wheels and an iron barrel that tracks its target.
+  ctx.fillStyle = "#78350f";
+  roundRect(ctx, -11, -6, 22, 8, 2);
+  ctx.fill();
+  for (const wx of [-8, 8]) {
+    ctx.fillStyle = "#44403c";
+    ctx.beginPath();
+    ctx.arc(wx, 2, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#a8a29e";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI + now / 2000;
+      ctx.moveTo(wx - Math.cos(a) * 4, 2 - Math.sin(a) * 4);
+      ctx.lineTo(wx + Math.cos(a) * 4, 2 + Math.sin(a) * 4);
+    }
+    ctx.stroke();
+  }
+  const ang = aim === undefined ? -Math.PI / 4 : Math.max(-Math.PI + 0.3, Math.min(-0.3, aim));
+  const recoil = firing ? -3 : 0;
+  ctx.save();
+  ctx.translate(0, -8);
+  ctx.rotate(ang);
+  const g = ctx.createLinearGradient(0, -5, 0, 5);
+  g.addColorStop(0, "#a8a29e");
+  g.addColorStop(0.5, "#44403c");
+  g.addColorStop(1, "#1c1917");
+  ctx.fillStyle = g;
+  roundRect(ctx, -4 + recoil, -5, 20, 10, 3);
+  ctx.fill();
+  ctx.fillStyle = "#292524";
+  roundRect(ctx, 14 + recoil, -6, 4, 12, 1.5);
+  ctx.fill();
+  if (firing && !mini) {
+    ctx.fillStyle = "rgba(253,186,116,0.9)";
+    ctx.beginPath();
+    ctx.arc(21, 0, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.fillStyle = "#57534e";
+  ctx.beginPath();
+  ctx.arc(0, -8, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawHoly(ctx: Ctx, now: number, firing: boolean, mini: boolean, aura: boolean) {
+  // 성역 range: a faint golden circle around 전설+ paladins.
+  if (aura && !mini) {
+    ctx.strokeStyle = `rgba(253,224,71,${0.18 + 0.1 * Math.sin(now / 400)})`;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 5]);
+    ctx.beginPath();
+    ctx.arc(0, -6, 75, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  // White-stone obelisk with a gold cap and a floating halo.
+  const g = ctx.createLinearGradient(-8, 0, 8, 0);
+  g.addColorStop(0, "#e2e8f0");
+  g.addColorStop(0.5, "#ffffff");
+  g.addColorStop(1, "#cbd5e1");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(-8, 6);
+  ctx.lineTo(-5, -16);
+  ctx.lineTo(5, -16);
+  ctx.lineTo(8, 6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "#f59e0b";
+  ctx.beginPath();
+  ctx.moveTo(-6, -16);
+  ctx.lineTo(0, -24);
+  ctx.lineTo(6, -16);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "#fbbf24";
+  roundRect(ctx, -1.2, -12, 2.4, 12, 1);
+  ctx.fill();
+  roundRect(ctx, -4.5, -8.5, 9, 2.4, 1);
+  ctx.fill();
+  const bob = Math.sin(now / 400) * 1.5;
+  ctx.strokeStyle = firing ? "#fffbeb" : "#fde047";
+  ctx.lineWidth = 2;
+  if (!mini) {
+    ctx.shadowColor = "#fde047";
+    ctx.shadowBlur = firing ? 14 : 7;
+  }
+  ellipse(ctx, 0, -29 + bob, 7, 2.4);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
+function drawWind(ctx: Ctx, now: number, firing: boolean, mini: boolean) {
+  // Stone totem with spinning teal blades and wisps of air.
+  ctx.fillStyle = "#475569";
+  roundRect(ctx, -6, -10, 12, 16, 3);
+  ctx.fill();
+  ctx.fillStyle = "#334155";
+  roundRect(ctx, -8, 3, 16, 4, 2);
+  ctx.fill();
+  const spin = now / (firing ? 60 : 160);
+  ctx.save();
+  ctx.translate(0, -14);
+  ctx.rotate(spin);
+  for (let i = 0; i < 3; i++) {
+    ctx.rotate((Math.PI * 2) / 3);
+    ctx.fillStyle = i % 2 ? "#5eead4" : "#99f6e4";
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(6, -4, 12, -1);
+    ctx.quadraticCurveTo(6, 1, 0, 0);
+    ctx.fill();
+  }
+  ctx.fillStyle = "#0f766e";
+  ctx.beginPath();
+  ctx.arc(0, 0, 2.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  if (!mini) {
+    ctx.strokeStyle = "rgba(204,251,241,0.7)";
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 2; i++) {
+      const t = (now / 900 + i * 0.5) % 1;
+      ctx.globalAlpha = 1 - t;
+      ctx.beginPath();
+      ctx.arc(0, -14, 10 + t * 10, -0.6 + i * Math.PI, 0.6 + i * Math.PI);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
 function drawPoison(ctx: Ctx, now: number, firing: boolean, mini: boolean) {
   // Legs
   ctx.strokeStyle = "#1f2937";
@@ -985,7 +1130,7 @@ function drawMob(ctx: Ctx, m: Mob, trav: number, now: number, mini: boolean, hit
 
   const tier = mobTier(m);
   const tierScale = TIER_STYLE[tier]?.scale ?? 1;
-  const size = { normal: 9, fast: 8, tank: 12, boss: 19, elite: 12, invader: 13, golem: 14, wraith: 11, warlord: 16 }[m.kind] * tierScale;
+  const size = { normal: 9, fast: 8, tank: 12, boss: 19, elite: 12, invader: 13, golem: 14, wraith: 11, warlord: 16, knight: 11, shaman: 10 }[m.kind] * tierScale;
   ctx.fillStyle = "rgba(0,0,0,0.3)";
   ellipse(ctx, 0, size * 0.75, size * 0.95, size * 0.32);
   ctx.fill();
@@ -1047,6 +1192,12 @@ function drawMob(ctx: Ctx, m: Mob, trav: number, now: number, mini: boolean, hit
       break;
     case "warlord":
       drawWarlord(ctx, m, now, mini);
+      break;
+    case "knight":
+      drawKnight(ctx, m, now, mini);
+      break;
+    case "shaman":
+      drawShaman(ctx, m, now, mini);
       break;
   }
   ctx.restore();
@@ -1650,6 +1801,94 @@ function drawGolem(ctx: Ctx, m: Mob, now: number, mini: boolean) {
   }
 }
 
+function drawKnight(ctx: Ctx, m: Mob, now: number, mini: boolean) {
+  // Armored walker behind a tower shield.
+  const step = Math.sin(now / 160 + m.id) * 1.2;
+  ctx.fillStyle = "#334155";
+  roundRect(ctx, -4, 4 + step * 0.3, 3, 5, 1);
+  roundRect(ctx, 1, 4 - step * 0.3, 3, 5, 1);
+  ctx.fill();
+  const body = ctx.createLinearGradient(0, -10, 0, 6);
+  body.addColorStop(0, "#e2e8f0");
+  body.addColorStop(1, "#64748b");
+  ctx.fillStyle = body;
+  roundRect(ctx, -6, -6, 11, 12, 3);
+  ctx.fill();
+  // Helmet with visor slit.
+  ctx.fillStyle = "#94a3b8";
+  ctx.beginPath();
+  ctx.arc(0, -8, 5.5, Math.PI, 0);
+  ctx.lineTo(5.5, -5);
+  ctx.lineTo(-5.5, -5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "#0f172a";
+  ctx.fillRect(-1, -8.5, 6, 1.6);
+  ctx.fillStyle = "#dc2626";
+  ctx.beginPath();
+  ctx.moveTo(0, -13.5);
+  ctx.quadraticCurveTo(-5, -16, -6, -11);
+  ctx.quadraticCurveTo(-3, -13, 0, -12);
+  ctx.fill();
+  // Shield in front.
+  ctx.fillStyle = "#1e3a8a";
+  ctx.strokeStyle = "#fbbf24";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(4, -8);
+  ctx.lineTo(11, -8);
+  ctx.lineTo(11, 0);
+  ctx.quadraticCurveTo(11, 5, 7.5, 7);
+  ctx.quadraticCurveTo(4, 5, 4, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  if (!mini) {
+    ctx.fillStyle = "#fbbf24";
+    ctx.fillRect(7, -6, 1, 9);
+    ctx.fillRect(5.5, -3, 4, 1);
+  }
+}
+
+function drawShaman(ctx: Ctx, m: Mob, now: number, mini: boolean) {
+  // Hooded caster with a glowing green staff.
+  const sway = Math.sin(now / 240 + m.id) * 1.2;
+  const robe = ctx.createLinearGradient(0, -12, 0, 8);
+  robe.addColorStop(0, "#4d7c0f");
+  robe.addColorStop(1, "#14532d");
+  ctx.fillStyle = robe;
+  ctx.beginPath();
+  ctx.moveTo(0, -13);
+  ctx.quadraticCurveTo(7, -6, 7, 8);
+  ctx.lineTo(-7, 8);
+  ctx.quadraticCurveTo(-7, -6, 0, -13);
+  ctx.fill();
+  ctx.fillStyle = "#1a2e05";
+  ellipse(ctx, 1.5, -6, 3.8, 3.2);
+  ctx.fill();
+  ctx.fillStyle = "#bef264";
+  ellipse(ctx, 0.5, -6.2, 0.9, 1);
+  ctx.fill();
+  ellipse(ctx, 3, -6.2, 0.9, 1);
+  ctx.fill();
+  ctx.strokeStyle = "#78350f";
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(8, 8);
+  ctx.lineTo(9 + sway, -12);
+  ctx.stroke();
+  const pulse = 0.6 + 0.4 * Math.sin(now / 200 + m.id);
+  if (!mini) {
+    ctx.shadowColor = "#4ade80";
+    ctx.shadowBlur = 8 * pulse;
+  }
+  ctx.fillStyle = `rgba(134,239,172,${0.7 + 0.3 * pulse})`;
+  ctx.beginPath();
+  ctx.arc(9 + sway, -13.5, 2.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+}
+
 function drawWraith(ctx: Ctx, m: Mob, now: number, mini: boolean) {
   // Translucent hooded spirit with a wispy, flickering tail.
   const hover = Math.sin(now / 180 + m.id) * 2;
@@ -2249,6 +2488,74 @@ function drawShot(ctx: Ctx, f: Extract<Fx, { type: "shot" }>, k: number) {
         ctx.arc(tx, ty, 10, 0, Math.PI * 2);
         ctx.fill();
       }
+      break;
+    }
+    case "cannon": {
+      // Iron ball on a high arc, then a fiery splash.
+      if (k < 0.55) {
+        const t = k / 0.55;
+        ctx.fillStyle = "#1c1917";
+        ctx.strokeStyle = "#a8a29e";
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.arc(fx + (tx - fx) * t, fy - 8 + (ty - fy + 8) * t - Math.sin(t * Math.PI) * 34, 3 + f.grade * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        const t = (k - 0.55) / 0.45;
+        const r = 10 + t * 32;
+        ctx.globalAlpha = 1 - t;
+        const g = ctx.createRadialGradient(tx, ty, 0, tx, ty, r);
+        g.addColorStop(0, "rgba(255,247,237,0.95)");
+        g.addColorStop(0.35, "rgba(251,146,60,0.85)");
+        g.addColorStop(0.7, "rgba(120,53,15,0.5)");
+        g.addColorStop(1, "rgba(68,64,60,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(tx, ty, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+    case "holy": {
+      // Straight beam of light from the halo, thick then thinning.
+      ctx.globalAlpha = 1 - k;
+      ctx.strokeStyle = "rgba(253,224,71,0.55)";
+      ctx.lineWidth = width * 2.6 * (1 - k * 0.5);
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(fx, fy - 28);
+      ctx.lineTo(tx, ty);
+      ctx.stroke();
+      ctx.strokeStyle = "#fffbeb";
+      ctx.lineWidth = width;
+      ctx.stroke();
+      for (let i = 2; i < f.pts.length; i += 2) {
+        ctx.strokeStyle = "rgba(254,240,138,0.8)";
+        ctx.lineWidth = width * 0.8;
+        ctx.beginPath();
+        ctx.moveTo(tx, ty);
+        ctx.lineTo(f.pts[i], f.pts[i + 1]);
+        ctx.stroke();
+      }
+      break;
+    }
+    case "wind": {
+      // A curved crescent blade of air.
+      const t = Math.min(1, k * 1.8);
+      const x = fx + (tx - fx) * t;
+      const y = fy - 14 + (ty - fy + 14) * t;
+      const ang = Math.atan2(ty - fy, tx - fx);
+      ctx.globalAlpha = 1 - Math.max(0, k - 0.55) / 0.45;
+      ctx.strokeStyle = "#ccfbf1";
+      ctx.lineWidth = 1.8 + f.grade * 0.3;
+      ctx.beginPath();
+      ctx.arc(x, y, 6 + f.grade, ang - 1.1, ang + 1.1);
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(94,234,212,0.6)";
+      ctx.beginPath();
+      ctx.arc(x - Math.cos(ang) * 5, y - Math.sin(ang) * 5, 5 + f.grade, ang - 1, ang + 1);
+      ctx.stroke();
       break;
     }
   }

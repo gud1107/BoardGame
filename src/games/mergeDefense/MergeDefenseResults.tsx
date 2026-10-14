@@ -229,23 +229,23 @@ export default function MergeDefenseResults({
         <table className="w-full border-collapse text-xs whitespace-nowrap">
           <thead>
             <tr className="text-white/50">
-              <th className="border-b border-white/10 px-1.5 py-2 text-left sm:px-2">#</th>
-              <th className="border-b border-white/10 px-1.5 py-2 text-left sm:px-2">플레이어</th>
-              <th className="border-b border-white/10 px-1.5 py-2 text-right sm:px-2" title="버틴 웨이브">
+              <th className="border-b border-white/10 px-1.5 max-[350px]:px-1 py-2 text-left sm:px-2">#</th>
+              <th className="border-b border-white/10 px-1.5 max-[350px]:px-1 py-2 text-left sm:px-2">플레이어</th>
+              <th className="border-b border-white/10 px-1.5 max-[350px]:px-1 py-2 text-right sm:px-2" title="버틴 웨이브">
                 🌊<span className="hidden sm:inline"> 웨이브</span>
               </th>
               {/* Narrow phones drop this column (versus already needs the room for 수입/견제); it's on the chart's 처치 tab too. */}
-              <th className={`border-b border-white/10 px-1.5 py-2 text-right sm:px-2 ${versus ? "max-[420px]:hidden" : "max-[350px]:hidden"}`}>처치</th>
-              <th className="border-b border-white/10 px-1.5 py-2 text-right sm:px-2" title="최고 치명타 콤보">
+              <th className={`border-b border-white/10 px-1.5 max-[350px]:px-1 py-2 text-right sm:px-2 ${versus ? "max-[420px]:hidden" : "max-[350px]:hidden"}`}>처치</th>
+              <th className="border-b border-white/10 px-1.5 max-[350px]:px-1 py-2 text-right sm:px-2" title="최고 치명타 콤보">
                 ⚡<span className="hidden sm:inline"> 콤보</span>
               </th>
               {versus && (
-                <th className="border-b border-white/10 px-1.5 py-2 text-right max-[350px]:hidden sm:px-2" title="보내기·몬스터 구매로 쌓은 웨이브당 수입">
+                <th className="border-b border-white/10 px-1.5 max-[350px]:px-1 py-2 text-right max-[350px]:hidden sm:px-2" title="보내기·몬스터 구매로 쌓은 웨이브당 수입">
                   💰<span className="hidden sm:inline"> 수입</span>
                 </th>
               )}
               {versus && (
-                <th className="border-b border-white/10 px-1.5 py-2 text-right sm:px-2" title="콤보 견제를 건 횟수 / 당한 횟수 / 결속으로 막은 횟수 / 막혀서 반격당한 횟수">
+                <th className="border-b border-white/10 px-1.5 max-[350px]:px-1 py-2 text-right sm:px-2" title="콤보 견제를 건 횟수 / 당한 횟수 / 결속으로 막은 횟수 / 막혀서 반격당한 횟수">
                   견제
                 </th>
               )}
@@ -254,21 +254,21 @@ export default function MergeDefenseResults({
           <tbody>
             {rankings.map(({ seat, rank, wave, kills, combo, jamsSent, jamsTaken, jamsBlocked, reflectsTaken, income }) => (
               <tr key={seat} className={rank === 1 ? "bg-amber-400/10" : ""}>
-                <td className="border-b border-white/5 px-1.5 py-2 text-left font-bold text-amber-200 sm:px-2">{rank === 1 ? "🏆" : rank}</td>
-                <td className="max-w-[7.5rem] truncate border-b border-white/5 px-1.5 py-2 text-left text-white sm:max-w-none sm:px-2" title={names[seat]}>
+                <td className="border-b border-white/5 px-1.5 max-[350px]:px-1 py-2 text-left font-bold text-amber-200 sm:px-2">{rank === 1 ? "🏆" : rank}</td>
+                <td className="max-w-[7.5rem] truncate border-b border-white/5 px-1.5 max-[350px]:px-1 py-2 text-left text-white sm:max-w-none sm:px-2" title={names[seat]}>
                   {seat === mySeat && <span className="mr-1 text-amber-200">나</span>}
                   {names[seat]}
                 </td>
-                <td className="border-b border-white/5 px-1.5 py-2 text-right text-amber-200 sm:px-2">{wave}</td>
-                <td className={`border-b border-white/5 px-1.5 py-2 text-right text-white/70 sm:px-2 ${versus ? "max-[420px]:hidden" : "max-[350px]:hidden"}`}>{kills.toLocaleString("ko-KR")}</td>
-                <td className={`border-b border-white/5 px-1.5 py-2 text-right sm:px-2 ${combo > 0 && combo === bestCombo ? "font-bold text-amber-300" : "text-white/70"}`}>
+                <td className="border-b border-white/5 px-1.5 max-[350px]:px-1 py-2 text-right text-amber-200 sm:px-2">{wave}</td>
+                <td className={`border-b border-white/5 px-1.5 max-[350px]:px-1 py-2 text-right text-white/70 sm:px-2 ${versus ? "max-[420px]:hidden" : "max-[350px]:hidden"}`}>{kills.toLocaleString("ko-KR")}</td>
+                <td className={`border-b border-white/5 px-1.5 max-[350px]:px-1 py-2 text-right sm:px-2 ${combo > 0 && combo === bestCombo ? "font-bold text-amber-300" : "text-white/70"}`}>
                   {combo > 0 ? combo : "-"}
                 </td>
                 {versus && (
-                  <td className="border-b border-white/5 px-1.5 py-2 text-right font-mono text-[11px] text-amber-200/80 max-[350px]:hidden sm:px-2">{income > 0 ? `+${income}` : "-"}</td>
+                  <td className="border-b border-white/5 px-1.5 max-[350px]:px-1 py-2 text-right font-mono text-[11px] text-amber-200/80 max-[350px]:hidden sm:px-2">{income > 0 ? `+${income}` : "-"}</td>
                 )}
                 {versus && (
-                  <td className="border-b border-white/5 px-1.5 py-2 text-right font-mono text-[11px] text-white/70 sm:px-2">
+                  <td className="border-b border-white/5 px-1.5 max-[350px]:px-1 py-2 text-right font-mono text-[11px] text-white/70 sm:px-2">
                     <span className="text-emerald-300">{jamsSent}</span>/<span className="text-rose-300">{jamsTaken}</span>/
                     <span className="text-sky-300">{jamsBlocked}</span>/<span className="text-violet-300">{reflectsTaken}</span>
                   </td>

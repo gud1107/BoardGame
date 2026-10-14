@@ -58,6 +58,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.61.0",
+    releaseDate: "2026-10-15",
+    title: "🏰 랜덤 합성 디펜스 — 새 타워 3종·새 몬스터 2종·전체 상향",
+    changes: [
+      { game: "merge-defense", type: "FEAT", desc: "새 타워 💣 대포(범위 포격·연쇄 폭발) · ☀️ 성기사(큰 몬스터 특효·심판·성역) · 🌪️ 바람(초고속 연타·토네이도), 각 스킬 4개" },
+      { game: "merge-defense", type: "FEAT", desc: "새 몬스터 🛡️ 철갑기사(기절·밀치기 면역, W12~) · 🧙 주술사(주변 몬스터 치유, W8~)" },
+      { game: "merge-defense", type: "IMPROVE", desc: "모든 타워 공격력 +15%, 몬스터 체력 곡선 재조정 · 상대 미니맵에 큰 스킬 발동·영웅 이상 진화 표시" },
+    ],
+  },
+  {
     version: "v1.60.0",
     releaseDate: "2026-10-15",
     title: "🏰 랜덤 합성 디펜스 — 등급별 타워 스킬 20종",

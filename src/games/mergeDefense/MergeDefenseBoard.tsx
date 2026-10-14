@@ -151,11 +151,27 @@ function passiveSkillFx(kind: UnitKind, grade: number, pts: number[]): SkillId[]
   } else if (kind === "poison") {
     if (grade >= 3 && pts.length > 2) out.push("plague");
     if (grade >= 4) out.push("corrode");
+  } else if (kind === "cannon") {
+    out.push("shrapnel");
+    if (grade >= 2) out.push("apshell");
+  } else if (kind === "holy") {
+    if (grade >= 2 && pts.length > 2) out.push("radiance");
   }
   return out;
 }
 /** Screen shake for the big procs. */
-const SKILL_SHAKE: Partial<Record<SkillId, [number, number]>> = { execute: [2.6, 170], shockwave: [2, 150], freeze: [1.2, 110], shock: [1.4, 120] };
+const SKILL_SHAKE: Partial<Record<SkillId, [number, number]>> = {
+  execute: [2.6, 170],
+  shockwave: [2, 150],
+  freeze: [1.2, 110],
+  shock: [1.4, 120],
+  concuss: [2.4, 160],
+  chainblast: [3, 200],
+  judgment: [2, 160],
+  tornado: [1.8, 220],
+};
+/** Procs worth a callout on an opponent's minimap (so you feel them getting strong). */
+const MINI_CALLOUT: ReadonlySet<SkillId> = new Set(["execute", "freeze", "shock", "shockwave", "concuss", "chainblast", "judgment", "tornado", "amplify"]);
 /** Slow motion: playback rate and peak zoom; each trigger sets its own length and tint. */
 const SLOWMO = { rate: 0.25, zoom: 0.14 };
 /** Crit combo callout (the chain itself is counted by the engine); shown from COMBO_MIN. */
@@ -188,6 +204,18 @@ function guideVisible(mode: GuideMode, wave: number): boolean {
 /** Attack range the guide assumes for a new build (grade-1 average). */
 const BUILD_RANGE = 140;
 const SKILL_COLOR: Record<SkillId, string> = {
+  shrapnel: "#a8a29e",
+  apshell: "#e7e5e4",
+  concuss: "#fb923c",
+  chainblast: "#facc15",
+  tithe: "#fde047",
+  radiance: "#fef08a",
+  judgment: "#fbbf24",
+  sanctuary: "#fde68a",
+  gust: "#ccfbf1",
+  whirl: "#99f6e4",
+  tornado: "#5eead4",
+  gale: "#2dd4bf",
   rapid: "#fdba74",
   bleed: "#dc2626",
   amplify: "#a78bfa",
@@ -318,6 +346,10 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   const skillCalloutRef = useRef<Partial<Record<SkillId, number>>>({});
   /** Last always-on skill accent per "slot:skill" (rate limit). */
   const passiveFxRef = useRef<Record<string, number>>({});
+  /** Callouts drawn over each opponent's minimap (big procs, 영웅+ merges). */
+  const miniFxRef = useRef<Record<number, Fx[]>>({});
+  /** Last minimap callout per seat (rate limit so a strong board doesn't paint over itself). */
+  const miniCalloutAtRef = useRef<Record<number, number>>({});
 
   /** "스킬 해금" callout when a merge / gamble lands on a skill grade (영웅·전설) or empowers them (신화). */
   function skillUnlockFx(unit: Unit | null | undefined, grade: number, c: { x: number; y: number }, t0: number) {
@@ -556,6 +588,25 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
         }
         if (shot.crit && shot.grade >= 3) shake(1.2, 90);
       }
+      // Opponents' big procs: a bold callout on their minimap so you see them getting strong.
+      state.boards.forEach((b, seat) => {
+        if (seat === view || !b.alive) return;
+        const shot = b.shots.find((sh) => sh.skill && MINI_CALLOUT.has(sh.skill));
+        if (!shot || !shot.skill || now - (miniCalloutAtRef.current[seat] ?? 0) < 700) return;
+        miniCalloutAtRef.current[seat] = now;
+        const sk = SKILLS[shot.skill];
+        const list = (miniFxRef.current[seat] ??= []);
+        const color = SKILL_COLOR[shot.skill];
+        list.push({ type: "ring", x: shot.pts[0], y: shot.pts[1], color, r0: 10, r1: 70, t0: now, dur: 600 });
+        list.push({ type: "text", x: Math.min(BOARD_W - 80, Math.max(80, shot.pts[0])), y: Math.max(40, shot.pts[1] - 20), text: `${sk.emoji} ${sk.name}!`, color, t0: now, dur: 1100, size: 46 });
+      });
+      // 주술사 heal pulses on the viewed board.
+      for (const m of board.mobs) {
+        if (m.kind !== "shaman" || m.healAt !== state.tick) continue;
+        const p = pathPoint(m.trav);
+        fx.push({ type: "ring", x: p.x, y: p.y - 4, color: "#4ade80", r0: 6, r1: 40, t0: now, dur: 520 });
+        fx.push({ type: "text", x: p.x, y: p.y - 22, text: "+치유", color: "#86efac", t0: now, dur: 700, size: 11 });
+      }
       // Other living boards: a faint, muffled patter so you can hear them fight.
       if (audible) {
         state.boards.forEach((b, seat) => {
@@ -593,6 +644,15 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
     const fresh = state.events.filter((e) => e.id > lastEventIdRef.current);
     if (fresh.length > 0) lastEventIdRef.current = fresh[fresh.length - 1].id;
     for (const ev of fresh) {
+      if ((ev.type === "merge" || ev.type === "gamble") && ev.seat !== view && ev.grade >= 3) {
+        const u = state.boards[ev.seat]?.units[ev.slot];
+        if (u) {
+          const c = slotCenter(ev.slot);
+          const list = (miniFxRef.current[ev.seat] ??= []);
+          list.push({ type: "ring", x: c.x, y: c.y, color: GRADE_COLORS[ev.grade], r0: 10, r1: 60, t0: now, dur: 700 });
+          list.push({ type: "text", x: Math.min(BOARD_W - 90, Math.max(90, c.x)), y: Math.max(40, c.y - 24), text: `⬆ ${GRADE_NAMES[ev.grade]} ${UNITS[u.kind].name}`, color: GRADE_COLORS[ev.grade], t0: now, dur: 1400, size: 40 });
+        }
+      }
       if (ev.type === "wave") {
         if (ev.boss) {
           shake(3.5, 380);
@@ -982,6 +1042,11 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
         ctx.clearRect(0, 0, w, h);
         ctx.setTransform(k, 0, 0, k, 0, 0);
         drawBoard(ctx, live.boards[seat], { alpha: live.phase === "playing" ? liveAlpha : 0, now: real, mini: true, limit: eliminationLimit(live) });
+        const mfx = miniFxRef.current[seat];
+        if (mfx && mfx.length) {
+          miniFxRef.current[seat] = mfx.filter((f) => real - f.t0 < f.dur);
+          drawFx(ctx, miniFxRef.current[seat], real);
+        }
       });
       raf = requestAnimationFrame(loop);
     };
@@ -1699,7 +1764,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
       </div>
 
       {/* Upgrades */}
-      <div className="grid grid-cols-5 gap-1.5">
+      <div className="grid grid-cols-4 gap-1.5">
         {UNIT_KINDS.map((kind) => {
           const level = me.upgrades[kind];
           const maxed = level >= MAX_UPGRADE;
@@ -1730,7 +1795,15 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
       </div>
 
       <p className="-mt-0.5 text-center text-[10px] break-keep text-white/50 light:text-slate-500">
-        ⚔️ 물리: 🏹 궁수 · ⚡ 번개 (방어력에 막힘) &nbsp;|&nbsp; ✨ 마법: 🔮 마법사 · ❄️ 서리 · ☠️ 독 (마법 저항에 막힘)
+        ⚔️ 물리:{" "}
+        {UNIT_KINDS.filter((k) => UNITS[k].dmgType === "physical")
+          .map((k) => `${UNITS[k].emoji} ${UNITS[k].name}`)
+          .join(" · ")}{" "}
+        (방어력에 막힘) &nbsp;|&nbsp; ✨ 마법:{" "}
+        {UNIT_KINDS.filter((k) => UNITS[k].dmgType === "magic")
+          .map((k) => `${UNITS[k].emoji} ${UNITS[k].name}`)
+          .join(" · ")}{" "}
+        (마법 저항에 막힘)
       </p>
 
       {/* Board-wide upgrades */}

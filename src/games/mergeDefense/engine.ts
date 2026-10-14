@@ -103,7 +103,7 @@ export const MAPS: Record<MapId, MapDef> = {
       [34, 34], [94, 28], [306, 28], [366, 34],
       [34, 246], [94, 252], [306, 252], [366, 246],
     ],
-    hp: 1,
+    hp: 0.66,
     grass: ["#3a7f86", "#173c45"],
   },
 };
@@ -309,8 +309,8 @@ export const GAMBLE_ODDS: readonly { grade: number; pct: number }[] = [
 const MAX_EVENTS = 40;
 
 export type SeatIndex = number;
-export type UnitKind = "archer" | "mage" | "frost" | "thunder" | "poison";
-export const UNIT_KINDS: UnitKind[] = ["archer", "mage", "frost", "thunder", "poison"];
+export type UnitKind = "archer" | "mage" | "frost" | "thunder" | "poison" | "cannon" | "holy" | "wind";
+export const UNIT_KINDS: UnitKind[] = ["archer", "mage", "frost", "thunder", "poison", "cannon", "holy", "wind"];
 
 export interface UnitDef {
   name: string;
@@ -336,7 +336,16 @@ export const UNITS: Record<UnitKind, UnitDef> = {
   frost: { name: "서리", emoji: "❄️", color: "#38bdf8", dmg: 6, interval: 18, range: 135, dmgType: "magic", desc: "둔화" },
   thunder: { name: "번개", emoji: "⚡", color: "#facc15", dmg: 8, interval: 20, range: 135, dmgType: "physical", desc: "연쇄 공격" },
   poison: { name: "독", emoji: "☠️", color: "#22c55e", dmg: 4, interval: 24, range: 140, dmgType: "magic", desc: "최대 체력 % 독 (보스 특효)" },
+  cannon: { name: "대포", emoji: "💣", color: "#78716c", dmg: 20, interval: 36, range: 135, dmgType: "physical", desc: "느린 포격 · 주변 몬스터에 60% 폭발 피해" },
+  holy: { name: "성기사", emoji: "☀️", color: "#fbbf24", dmg: 9, interval: 18, range: 130, dmgType: "magic", desc: "빛의 광선 · 큰 몬스터(탱커·정예·보스 등)에 피해 +40%" },
+  wind: { name: "바람", emoji: "🌪️", color: "#5eead4", dmg: 6, interval: 9, range: 140, dmgType: "physical", desc: "아주 빠른 연타 · 빠른 몬스터에 피해 +30%" },
 };
+
+/**
+ * 타워 상향 (2026-10-15): every tower hits this much harder than its listed
+ * base. Monster HP (WAVE_CURVE) was re-tuned by bot sim to keep game length.
+ */
+export const TOWER_POWER = 1.15;
 
 export const GRADE_NAMES = ["", "일반", "희귀", "영웅", "전설", "신화"];
 export const GRADE_COLORS = ["", "#cbd5e1", "#38bdf8", "#a855f7", "#f59e0b", "#f43f5e"];
@@ -384,7 +393,19 @@ export type SkillId =
   | "linger"
   | "weaken"
   | "plague"
-  | "corrode";
+  | "corrode"
+  | "shrapnel"
+  | "apshell"
+  | "concuss"
+  | "chainblast"
+  | "tithe"
+  | "radiance"
+  | "judgment"
+  | "sanctuary"
+  | "gust"
+  | "whirl"
+  | "tornado"
+  | "gale";
 
 export interface SkillDef {
   kind: UnitKind;
@@ -422,6 +443,18 @@ export const SKILL = {
   shock: { every: 4, ticks: 8, mythicTicks: 12 },
   overload: { extraChain: 1, vulnPct: 0.06, mythicVulnPct: 0.1, ticks: 40 },
   plague: { radius: 35, share: 0.3, mythicShare: 0.5, max: 3 },
+  shrapnel: { dpsOfDmg: 0.15, ticks: 40 },
+  apshell: { pierce: 0.5 },
+  concuss: { every: 4, ticks: 10, mythicTicks: 16 },
+  chainblast: { pct: 0.2, mythicPct: 0.35, radius: 40 },
+  tithe: { every: 8, gold: 1 },
+  radiance: { share: 0.5 },
+  judgment: { every: 5, pct: 0.03, mythicPct: 0.05, cap: 8, mythicCap: 12 },
+  sanctuary: { radius: 75, haste: 0.1, mythicHaste: 0.15 },
+  gust: { every: 6, push: 12, bigPush: 4 },
+  whirl: { every: 4, max: 3, radius: 35, share: 0.6 },
+  tornado: { every: 7, mythicEvery: 5, radius: 45, push: 28, ticks: 6 },
+  gale: { wait: 0.8, mythicWait: 0.7 },
   corrode: { pct: 0.07, mythicPct: 0.12 },
 };
 export const STUN_GUARD = 20;
@@ -447,8 +480,36 @@ export const SKILLS: Record<SkillId, SkillDef> = {
   overload: { kind: "thunder", grade: 4, name: "과부하", emoji: "🌩️", desc: "연쇄 +1마리, 맞은 몬스터 2초 동안 피해 6% 더 받음(취약)", mythic: "취약 10%" },
   plague: { kind: "poison", grade: 3, name: "전염", emoji: "🦠", desc: "독이 대상 주변(반경 35) 몬스터 최대 3마리에게 30% 세기로 옮아요", mythic: "50% 세기" },
   corrode: { kind: "poison", grade: 4, name: "부식", emoji: "🧪", desc: "중독된 몬스터가 모든 피해를 7% 더 받아요", mythic: "12%" },
+  shrapnel: { kind: "cannon", grade: 1, name: "파편", emoji: "🔩", desc: "폭발에 맞은 몬스터가 2초 동안 출혈(공격력의 15%/초, 물리)" },
+  apshell: { kind: "cannon", grade: 2, name: "철갑탄", emoji: "🎯", desc: "직격당한 몬스터의 방어력을 절반 무시해요" },
+  concuss: { kind: "cannon", grade: 3, name: "기절탄", emoji: "💫", desc: "4번째 포격마다 폭발에 맞은 몬스터 전부 0.5초 기절", mythic: "0.8초" },
+  chainblast: { kind: "cannon", grade: 4, name: "연쇄 폭발", emoji: "🧨", desc: "포격으로 쓰러진 몬스터가 터져 주변(반경 40)에 그 최대 체력의 20% 피해", mythic: "35%" },
+  tithe: { kind: "holy", grade: 1, name: "헌금", emoji: "🪙", desc: "8번째 공격마다 골드 +1" },
+  radiance: { kind: "holy", grade: 2, name: "성광 관통", emoji: "🔆", desc: "광선이 뒤의 몬스터 1마리를 50% 피해로 관통해요" },
+  judgment: { kind: "holy", grade: 3, name: "심판", emoji: "⚖️", desc: "5번째 공격마다 대상 최대 체력 3%의 추가 피해(공격력 8배까지)", mythic: "5% · 12배까지" },
+  sanctuary: { kind: "holy", grade: 4, name: "성역", emoji: "🕊️", desc: "주변(75) 다른 타워의 공격 속도 +10%", mythic: "+15%" },
+  gust: { kind: "wind", grade: 1, name: "돌풍", emoji: "🍃", desc: "6번째 공격마다 대상을 뒤로 살짝 밀어내요" },
+  whirl: { kind: "wind", grade: 2, name: "회오리", emoji: "🌀", desc: "4번째 공격마다 주변 몬스터 3마리에게 60% 피해" },
+  tornado: { kind: "wind", grade: 3, name: "토네이도", emoji: "🌪️", desc: "7번째 공격마다 주변(45) 몬스터를 크게 밀치고 0.3초 기절", mythic: "5번째마다" },
+  gale: { kind: "wind", grade: 4, name: "질풍", emoji: "💨", desc: "공격 속도 +25%", mythic: "+43%" },
 };
 export const SKILL_IDS = Object.keys(SKILLS) as SkillId[];
+
+/** 성역: per-slot attack-speed bonus from 전설+ 성기사 towers nearby (never from itself). */
+export function sanctuaryHaste(board: Board): number[] {
+  const out = board.units.map(() => 0);
+  board.units.forEach((u, i) => {
+    if (!u || u.kind !== "holy" || u.grade < SKILLS.sanctuary.grade) return;
+    const pct = u.grade >= MAX_GRADE ? SKILL.sanctuary.mythicHaste : SKILL.sanctuary.haste;
+    const c = slotCenter(i);
+    board.units.forEach((v, j) => {
+      if (!v || j === i) return;
+      const d = slotCenter(j);
+      if (Math.hypot(d.x - c.x, d.y - c.y) <= SKILL.sanctuary.radius) out[j] = Math.max(out[j], pct);
+    });
+  });
+  return out;
+}
 
 /** Skills this unit has unlocked (grade ≥ the skill's grade). */
 export function unitSkills(u: Pick<Unit, "kind" | "grade">): SkillId[] {
@@ -462,7 +523,7 @@ export function sellValue(unit: Unit): number {
   return Math.floor((unit.paid ?? 0) * SELL_REFUND);
 }
 
-export type MobKind = "normal" | "fast" | "tank" | "boss" | "elite" | "invader" | "golem" | "wraith" | "warlord";
+export type MobKind = "normal" | "fast" | "tank" | "boss" | "elite" | "invader" | "golem" | "wraith" | "warlord" | "knight" | "shaman";
 
 /**
  * Per-kind defences (fractions of damage removed): `armor` cuts 물리 hits
@@ -480,6 +541,8 @@ export const MOB_INFO: Record<MobKind, { name: string; emoji: string; armor: num
   golem: { name: "바위 골렘", emoji: "🪨", armor: 0.5, resist: 0, trait: "쓰러지면 작은 몬스터로 쪼개짐" },
   wraith: { name: "망령", emoji: "👻", armor: 0.1, resist: 0.45, trait: "아주 빠름 · 둔화 면역" },
   warlord: { name: "전쟁군주", emoji: "👹", armor: 0.3, resist: 0.15, trait: "미니 보스 · 졸개 소환" },
+  knight: { name: "철갑기사", emoji: "🛡️", armor: 0.4, resist: 0.1, trait: "기절·밀치기 면역 · 둔화 절반 (W12~)" },
+  shaman: { name: "주술사", emoji: "🧙", armor: 0, resist: 0.35, trait: "주변 몬스터를 1초마다 최대 체력 3%씩 치유 (W8~)" },
 };
 
 /** HP (× the wave's base) and speed per monster kind. */
@@ -493,7 +556,12 @@ export const MOB_SPEC: Record<MobKind, { hp: number; speed: number }> = {
   golem: { hp: 9, speed: 34 },
   wraith: { hp: 2.2, speed: 112 },
   warlord: { hp: 20, speed: 38 },
+  knight: { hp: 2.4, speed: 46 },
+  shaman: { hp: 1.5, speed: 54 },
 };
+
+/** 주술사: heals monsters within `radius` road distance by `pct` of their max HP every `every` ticks. */
+export const SHAMAN_HEAL = { radius: 45, pct: 0.03, every: 20 };
 
 /** Look tier by the wave a monster was made for: 0 W1–9 · 1 강화 W10+ · 2 정예 W20+ · 3 심연 W30+. */
 export function mobTier(m: Pick<Mob, "bornWave">): 0 | 1 | 2 | 3 {
@@ -561,6 +629,8 @@ export interface Mob {
   /** 출혈 damage over time (physical). */
   bleedT?: number;
   bleedDps?: number;
+  /** 주술사: tick of its last heal pulse (for the FX). */
+  healAt?: number;
   /** Seat that sent this elite/invader (for colour/labels); -1 for wave mobs. */
   from: SeatIndex;
   /** 유닛 대결 invaders only: the unit that was sent (drawn as a corrupted tower). */
@@ -803,7 +873,7 @@ export function upgradeCost(level: number): number {
  * and boss 처형 (medians back to ~W32–37 across maps and modes).
  * Exported as a mutable object so balance sims can sweep it.
  */
-export const WAVE_CURVE = { base: 66, growth: 1.17, knee: 15, late: 1.17 };
+export const WAVE_CURVE = { base: 66, growth: 1.13, knee: 15, late: 1.11 };
 export function waveHp(wave: number): number {
   const c = WAVE_CURVE;
   const early = Math.min(wave, c.knee) - 1;
@@ -829,7 +899,7 @@ export function fieldLoad(board: Board): number {
 }
 
 export function unitDamage(unit: Unit, board: Board): number {
-  return UNITS[unit.kind].dmg * Math.pow(GRADE_MULT, unit.grade - 1) * (1 + UPGRADE_STEP * board.upgrades[unit.kind]);
+  return UNITS[unit.kind].dmg * TOWER_POWER * Math.pow(GRADE_MULT, unit.grade - 1) * (1 + UPGRADE_STEP * (board.upgrades[unit.kind] ?? 0));
 }
 
 export function unitInterval(unit: Unit): number {
@@ -901,7 +971,7 @@ function emptyBoard(bot: boolean): Board {
     gold: START_GOLD,
     gems: START_GEMS,
     summons: 0,
-    upgrades: { archer: 0, mage: 0, frost: 0, thunder: 0, poison: 0 },
+    upgrades: { archer: 0, mage: 0, frost: 0, thunder: 0, poison: 0, cannon: 0, holy: 0, wind: 0 },
     kills: 0,
     sendMeter: 0,
     alive: true,
@@ -1233,6 +1303,8 @@ function makeMob(s: MergeDefenseState, kind: MobKind, wave: number, from: SeatIn
 function spawnKindFor(wave: number, index: number): MobKind {
   if (wave >= 6 && index % 5 === 4) return "tank";
   if (wave >= 3 && index % 4 === 2) return "fast";
+  if (wave >= 12 && index % 6 === 1) return "knight";
+  if (wave >= 8 && index % 7 === 3) return "shaman";
   return "normal";
 }
 
@@ -1310,16 +1382,28 @@ function closeWave(board: Board) {
   board.killHistory = [...(board.killHistory ?? []), board.kills];
 }
 
-function damage(mob: Mob, amount: number, type: DamageType) {
+function damage(mob: Mob, amount: number, type: DamageType, pierce = 0) {
   const vuln = (mob.vulnT ?? 0) > 0 ? (mob.vulnPct ?? 0) : 0;
-  mob.hp -= mitigated(mob.kind, amount, type) * (1 + vuln);
+  const info = MOB_INFO[mob.kind];
+  const def = (type === "physical" ? info.armor : info.resist) * (1 - pierce);
+  mob.hp -= amount * (1 - def) * (1 + vuln);
 }
 
 const isBig = (m: Mob) => m.kind === "boss" || m.kind === "warlord";
+/** 성기사 bonus targets: the heavy ones. */
+const HOLY_PREY: ReadonlySet<MobKind> = new Set(["tank", "boss", "warlord", "elite", "invader", "golem", "knight"]);
+/** 바람 bonus targets: the quick ones. */
+const WIND_PREY: ReadonlySet<MobKind> = new Set(["fast", "wraith"]);
+
+/** Knockback (skills): bosses / warlords budge a little, 철갑기사 not at all. */
+function pushBack(m: Mob, px: number, bigPx: number) {
+  if (m.kind === "knight") return;
+  m.trav = Math.max(0, m.trav - (isBig(m) ? bigPx : px));
+}
 
 /** Skill stun: halved on bosses / warlords, ignored while the post-stun guard runs. */
 function stunMob(m: Mob, ticks: number) {
-  if ((m.stunGuard ?? 0) > 0 || m.hp <= 0) return;
+  if ((m.stunGuard ?? 0) > 0 || m.hp <= 0 || m.kind === "knight") return;
   const t = isBig(m) ? Math.round(ticks / 2) : ticks;
   m.stunT = Math.max(m.stunT ?? 0, t);
 }
@@ -1334,7 +1418,7 @@ function slowMob(m: Mob, pct: number, ticks = 40) {
   // Wraiths shrug off the chill.
   if (m.kind === "wraith") return;
   m.slowT = Math.max(m.slowT, ticks);
-  m.slowPct = Math.max(m.slowPct, m.kind === "boss" ? pct / 2 : pct);
+  m.slowPct = Math.max(m.slowPct, m.kind === "boss" || m.kind === "knight" ? pct / 2 : pct);
 }
 
 function poisonMob(m: Mob, dps: number, ticks = 60) {
@@ -1465,7 +1549,7 @@ function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, or
         }
       }
       if (g >= 4 && every(mythic ? SKILL.shockwave.mythicEvery : SKILL.shockwave.every)) {
-        for (const m of struck) m.trav = Math.max(0, m.trav - (isBig(m) ? SKILL.shockwave.bigPush : SKILL.shockwave.push));
+        for (const m of struck) pushBack(m, SKILL.shockwave.push, SKILL.shockwave.bigPush);
         proc = "shockwave";
       }
       break;
@@ -1532,6 +1616,81 @@ function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, or
           hits.push(m.id);
         }
       }
+      break;
+    }
+    case "cannon": {
+      damage(target, dmg, type, g >= 2 ? SKILL.apshell.pierce : 0);
+      const struck = [target];
+      for (const m of ordered) {
+        if (m === target || roadGap(m, target) > 40) continue;
+        damage(m, dmg * 0.6, type);
+        struck.push(m);
+        hits.push(m.id);
+      }
+      for (const m of struck) {
+        m.bleedDps = Math.max(m.bleedDps ?? 0, dmg * SKILL.shrapnel.dpsOfDmg);
+        m.bleedT = Math.max(m.bleedT ?? 0, SKILL.shrapnel.ticks);
+      }
+      if (g >= 3 && every(SKILL.concuss.every)) {
+        for (const m of struck) stunMob(m, mythic ? SKILL.concuss.mythicTicks : SKILL.concuss.ticks);
+        proc = "concuss";
+      }
+      if (g >= 4) {
+        // Victims of this shell burst — one generation only (no chain of chains).
+        const pct = mythic ? SKILL.chainblast.mythicPct : SKILL.chainblast.pct;
+        for (const v of struck) {
+          if (v.hp > 0 || isBig(v)) continue;
+          for (const m of ordered) {
+            if (m === v || m.hp <= 0 || roadGap(m, v) > SKILL.chainblast.radius) continue;
+            damage(m, v.maxHp * pct, "physical");
+          }
+          proc = "chainblast";
+        }
+      }
+      break;
+    }
+    case "holy": {
+      const bonus = (m: Mob) => (HOLY_PREY.has(m.kind) ? 1.4 : 1);
+      damage(target, dmg * bonus(target), type);
+      if (g >= 2 && ordered[1]) {
+        damage(ordered[1], dmg * SKILL.radiance.share * bonus(ordered[1]), type);
+        hits.push(ordered[1].id);
+      }
+      if (every(SKILL.tithe.every)) earn(board, SKILL.tithe.gold);
+      if (g >= 3 && every(SKILL.judgment.every)) {
+        const extra = Math.min(target.maxHp * (mythic ? SKILL.judgment.mythicPct : SKILL.judgment.pct), dmg * (mythic ? SKILL.judgment.mythicCap : SKILL.judgment.cap));
+        damage(target, extra, type);
+        proc = "judgment";
+      }
+      break;
+    }
+    case "wind": {
+      const bonus = (m: Mob) => (WIND_PREY.has(m.kind) ? 1.3 : 1);
+      damage(target, dmg * bonus(target), type);
+      if (every(SKILL.gust.every)) {
+        pushBack(target, SKILL.gust.push, SKILL.gust.bigPush);
+        proc = "gust";
+      }
+      if (g >= 2 && every(SKILL.whirl.every)) {
+        let n = 0;
+        for (const m of ordered) {
+          if (m === target || roadGap(m, target) > SKILL.whirl.radius) continue;
+          if (n++ >= SKILL.whirl.max) break;
+          damage(m, dmg * SKILL.whirl.share * bonus(m), type);
+          hits.push(m.id);
+        }
+        proc = "whirl";
+      }
+      if (g >= 3 && every(mythic ? SKILL.tornado.mythicEvery : SKILL.tornado.every)) {
+        for (const m of ordered) {
+          if (roadGap(m, target) > SKILL.tornado.radius) continue;
+          pushBack(m, SKILL.tornado.push, SKILL.tornado.push / 4);
+          stunMob(m, SKILL.tornado.ticks);
+          if (m !== target) hits.push(m.id);
+        }
+        proc = "tornado";
+      }
+      if (g >= 4) wait *= mythic ? SKILL.gale.mythicWait : SKILL.gale.wait;
       break;
     }
   }
@@ -1603,6 +1762,18 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
       }
     }
 
+    // 주술사: pulse-heal nearby monsters (not other shamans' own pulse twice — each heals once per pulse).
+    if ((s.tick % SHAMAN_HEAL.every) === 0) {
+      for (const sh of board.mobs) {
+        if (sh.kind !== "shaman" || sh.hp <= 0 || (sh.stunT ?? 0) > 0) continue;
+        for (const m of board.mobs) {
+          if (m.hp <= 0 || m.hp >= m.maxHp || roadGap(m, sh) > SHAMAN_HEAL.radius) continue;
+          m.hp = Math.min(m.maxHp, m.hp + m.maxHp * SHAMAN_HEAL.pct);
+        }
+        sh.healAt = s.tick;
+      }
+    }
+
     if (board.sendCd > 0) board.sendCd -= 1;
 
     // Bosses / warlords keep calling minions — big monsters count as one head
@@ -1650,6 +1821,7 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
     // Attacks — each unit hits the oldest live mob inside its own range.
     const ordered = board.mobs.filter((m) => m.hp > 0).sort((a, b) => b.trav - a.trav);
     const pos = ordered.map((m) => pathPoint(m.trav));
+    const haste = sanctuaryHaste(board);
     board.units.forEach((unit, slot) => {
       if (!unit) return;
       if (unit.stun) {
@@ -1669,7 +1841,7 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
       });
       if (inRange.length === 0) return;
       const wait = attack(s, board, slot, unit, inRange);
-      unit.cd = Math.max(1, Math.round(unitInterval(unit) * wait));
+      unit.cd = Math.max(1, Math.round(unitInterval(unit) * wait * (1 - haste[slot])));
     });
 
     // Deaths + rewards.
@@ -1947,7 +2119,7 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex, auto:
   // Spare gold → upgrade the kind with the most total grade on board, leaning
   // toward the damage type that the monsters on the road + the next wave
   // defend least against (armor cuts 물리, resist cuts 마법).
-  const weight: Record<UnitKind, number> = { archer: 0, mage: 0, frost: 0, thunder: 0, poison: 0 };
+  const weight = Object.fromEntries(UNIT_KINDS.map((k) => [k, 0])) as Record<UnitKind, number>;
   for (const u of board.units) if (u) weight[u.kind] += Math.pow(GRADE_MULT, u.grade - 1);
   const facing = waveComposition(state, Math.max(1, state.wave + 1));
   for (const m of board.mobs) if (m.hp > 0) facing[m.kind] = (facing[m.kind] ?? 0) + 1;

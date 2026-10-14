@@ -45,6 +45,15 @@ export const SKILL_FX_MS: Partial<Record<SkillId, number>> = {
   overload: 520,
   plague: 800,
   corrode: 600,
+  concuss: 800,
+  chainblast: 900,
+  judgment: 900,
+  tornado: 900,
+  whirl: 520,
+  gust: 420,
+  radiance: 420,
+  apshell: 420,
+  shrapnel: 500,
 };
 
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
@@ -764,7 +773,235 @@ function drawCorrode(ctx: Ctx, f: SkillFx, k: number) {
   burstDots(ctx, x, y, k, 8, 16, 1.6, "#a3e635", f.seed, 14);
 }
 
+
+// ---------------------------------------------------------------------------
+// 대포 · 성기사 · 바람
+// ---------------------------------------------------------------------------
+
+/** 기절탄: a heavy blast — fireball, black smoke ring, stun stars spinning over every victim. */
+function drawConcuss(ctx: Ctx, f: SkillFx, k: number) {
+  const s = f.big ? 1.3 : 1;
+  const { x, y } = f;
+  const R = (14 + easeOut(k) * 40) * s;
+  ctx.globalAlpha = 1 - k;
+  const g = ctx.createRadialGradient(x, y, 0, x, y, R);
+  g.addColorStop(0, "rgba(255,255,255,0.95)");
+  g.addColorStop(0.3, "rgba(253,186,116,0.9)");
+  g.addColorStop(0.65, "rgba(194,65,12,0.55)");
+  g.addColorStop(1, "rgba(41,37,36,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y, R, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(68,64,60,0.85)";
+  ctx.lineWidth = 6 * (1 - k);
+  ctx.beginPath();
+  ctx.ellipse(x, y + 4, R * 1.1, R * 0.5, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  for (const p of pointsOf(f)) {
+    for (let i = 0; i < 3; i++) {
+      const a = k * 9 + (i * Math.PI * 2) / 3;
+      ctx.globalAlpha = Math.sin(Math.min(1, k * 1.2) * Math.PI);
+      ctx.fillStyle = "#fde047";
+      ctx.beginPath();
+      const sx = p.x + Math.cos(a) * 9;
+      const sy = p.y - 14 + Math.sin(a) * 3;
+      for (let j = 0; j < 10; j++) {
+        const b = (j / 10) * Math.PI * 2 - Math.PI / 2;
+        const r = j % 2 ? 1.3 : 3;
+        if (j === 0) ctx.moveTo(sx + Math.cos(b) * r, sy + Math.sin(b) * r);
+        else ctx.lineTo(sx + Math.cos(b) * r, sy + Math.sin(b) * r);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  burstDots(ctx, x, y, k, 16, 46 * s, 2.4, "#fb923c", f.seed, 20);
+}
+
+/** 연쇄 폭발: staggered secondary explosions popping across the splash. */
+function drawChainblast(ctx: Ctx, f: SkillFx, k: number) {
+  const s = f.big ? 1.3 : 1;
+  const pts = pointsOf(f);
+  pts.forEach((p, i) => {
+    const t = clamp01((k - i * 0.1) / 0.6);
+    if (t <= 0 || t >= 1) return;
+    const R = (8 + easeOut(t) * 34) * s;
+    ctx.globalAlpha = 1 - t;
+    const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, R);
+    g.addColorStop(0, "rgba(254,252,232,1)");
+    g.addColorStop(0.35, "rgba(250,204,21,0.9)");
+    g.addColorStop(0.7, "rgba(220,38,38,0.6)");
+    g.addColorStop(1, "rgba(127,29,29,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, R, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#fef08a";
+    ctx.lineWidth = 2.5 * (1 - t);
+    ctx.beginPath();
+    for (let j = 0; j < 8; j++) {
+      const a = (j / 8) * Math.PI * 2 + rnd(f.seed, j + i);
+      ctx.moveTo(p.x + Math.cos(a) * R * 0.5, p.y + Math.sin(a) * R * 0.5);
+      ctx.lineTo(p.x + Math.cos(a) * R * 1.15, p.y + Math.sin(a) * R * 1.15);
+    }
+    ctx.stroke();
+    burstDots(ctx, p.x, p.y, t, 10, 30 * s, 2, "#facc15", f.seed + i, 16);
+  });
+}
+
+/** 심판: a pillar of light slams down on the target with a golden rune ring and feathers. */
+function drawJudgment(ctx: Ctx, f: SkillFx, k: number) {
+  const s = f.big ? 1.35 : 1;
+  const { x, y } = f;
+  const w = 10 * s * (k < 0.15 ? k / 0.15 : 1 - Math.max(0, k - 0.5) / 0.5);
+  ctx.globalAlpha = Math.min(1, (1 - k) * 1.6);
+  const g = ctx.createLinearGradient(x - w, 0, x + w, 0);
+  g.addColorStop(0, "rgba(253,224,71,0)");
+  g.addColorStop(0.5, "rgba(255,251,235,0.95)");
+  g.addColorStop(1, "rgba(253,224,71,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(x - w, y - 140, w * 2, 140);
+  ctx.globalAlpha = 1 - k;
+  glow(ctx, "#fbbf24", 16);
+  ctx.strokeStyle = "#fde68a";
+  ctx.lineWidth = 2.2;
+  const r = (12 + easeOut(k) * 28) * s;
+  ctx.beginPath();
+  ctx.ellipse(x, y + 2, r, r * 0.45, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2 + k * 2;
+    ctx.moveTo(x + Math.cos(a) * r * 0.8, y + 2 + Math.sin(a) * r * 0.36);
+    ctx.lineTo(x + Math.cos(a) * r * 0.95, y + 2 + Math.sin(a) * r * 0.43);
+  }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "#fffbeb";
+  for (let i = 0; i < 5; i++) {
+    const t = clamp01((k - 0.15) / 0.85);
+    const px = x + (rnd(f.seed, i) - 0.5) * 40 + Math.sin(t * 6 + i) * 4;
+    const py = y - 30 + t * 34 + rnd(f.seed, i + 5) * 10;
+    ctx.globalAlpha = (1 - t) * 0.9;
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(Math.sin(t * 5 + i) * 0.8);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 1.4, 3.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+/** 토네이도: a twisting funnel of wind rings lifting dust and leaves. */
+function drawTornado(ctx: Ctx, f: SkillFx, k: number) {
+  const s = f.big ? 1.3 : 1;
+  const { x, y } = f;
+  const grow = easeOut(clamp01(k / 0.25));
+  const fade = k < 0.7 ? 1 : 1 - (k - 0.7) / 0.3;
+  for (let i = 0; i < 9; i++) {
+    const h = i / 8;
+    const r = (6 + h * 26) * s * grow;
+    const cy = y - h * 56 * s * grow;
+    const sway = Math.sin(k * 10 + h * 4) * 6 * h;
+    ctx.globalAlpha = fade * (0.35 + 0.5 * (1 - h));
+    ctx.strokeStyle = i % 2 ? "rgba(204,251,241,0.9)" : "rgba(94,234,212,0.8)";
+    ctx.lineWidth = 2;
+    const a0 = k * 18 + i;
+    ctx.beginPath();
+    ctx.ellipse(x + sway, cy, Math.max(0.1, r), Math.max(0.1, r * 0.28), 0, a0, a0 + Math.PI * 1.4);
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#86efac";
+  for (let i = 0; i < 10; i++) {
+    const h = rnd(f.seed, i);
+    const a = k * 14 + i * 1.7;
+    const r = (6 + h * 24) * s;
+    ctx.globalAlpha = fade;
+    ctx.save();
+    ctx.translate(x + Math.cos(a) * r, y - h * 50 * s * grow + Math.sin(a) * r * 0.28);
+    ctx.rotate(a);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 2.2, 1, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  burstDots(ctx, x, y + 4, k, 10, 30 * s, 2, "rgba(214,188,140,0.85)", f.seed, 4);
+}
+
+/** 회오리: a spinning ring of air blades sweeping the neighbours. */
+function drawWhirl(ctx: Ctx, f: SkillFx, k: number) {
+  const { x, y } = f;
+  const r = 10 + easeOut(k) * 26;
+  ctx.globalAlpha = 1 - k;
+  ctx.strokeStyle = "#99f6e4";
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 4; i++) {
+    const a = k * 12 + (i * Math.PI) / 2;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * 0.55, 0, a, a + 0.9);
+    ctx.stroke();
+  }
+  for (const p of pointsOf(f).slice(1)) {
+    ctx.strokeStyle = "#ccfbf1";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(p.x - 6, p.y - 6);
+    ctx.lineTo(p.x + 6, p.y + 6);
+    ctx.stroke();
+  }
+}
+
+/** 돌풍: a quick pushing gust — streak lines across the target. */
+function drawGust(ctx: Ctx, f: SkillFx, k: number) {
+  const ang = Math.atan2(f.y - f.from.y, f.x - f.from.x);
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  ctx.rotate(ang);
+  ctx.strokeStyle = "rgba(204,251,241,0.9)";
+  ctx.lineWidth = 1.5;
+  ctx.globalAlpha = 1 - k;
+  for (let i = 0; i < 4; i++) {
+    const off = (i - 1.5) * 4;
+    const d = -10 + k * 22;
+    ctx.beginPath();
+    ctx.moveTo(d - 10, off);
+    ctx.lineTo(d + 4, off);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** 성광 관통 / 철갑탄: a bright pierce spark at the main hit. */
+function drawPierce(ctx: Ctx, f: SkillFx, k: number) {
+  const color = f.skill === "radiance" ? "#fef08a" : "#e7e5e4";
+  ctx.globalAlpha = 1 - k;
+  glow(ctx, color, 8);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  const r = 4 + k * 12;
+  ctx.beginPath();
+  for (let i = 0; i < 4; i++) {
+    const a = (i * Math.PI) / 2 + Math.PI / 4;
+    ctx.moveTo(f.x + Math.cos(a) * r * 0.3, f.y + Math.sin(a) * r * 0.3);
+    ctx.lineTo(f.x + Math.cos(a) * r, f.y + Math.sin(a) * r);
+  }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
 const DRAW: Partial<Record<SkillId, (ctx: Ctx, f: SkillFx, k: number) => void>> = {
+  concuss: drawConcuss,
+  chainblast: drawChainblast,
+  judgment: drawJudgment,
+  tornado: drawTornado,
+  whirl: drawWhirl,
+  gust: drawGust,
+  radiance: drawPierce,
+  apshell: drawPierce,
+  shrapnel: drawBleed,
   execute: drawExecute,
   freeze: drawFreeze,
   shock: drawShock,
