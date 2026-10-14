@@ -533,7 +533,11 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
 
   useEffect(() => {
     if (phase !== "waiting" || !isHost || startSentRef.current) return;
-    if (occupants.length + botSeats.length >= knownTargetPlayerCount) {
+    // 거의 동시에 들어온 두 사람이 같은 좌석을 잡으면(presence가 서로 아직 안 보일 때) 머릿수는 차도
+    // 좌석은 모자란다 — 그대로 시작하면 한 명이 구경꾼이 된다. 좌석 번호가 모두 달라질 때까지 기다린다
+    // (겹친 쪽은 좌석 다시 잡기 효과가 빈자리로 옮긴다).
+    const seats = new Set([...occupants.map((o) => o.seat), ...botSeats]);
+    if (seats.size === occupants.length + botSeats.length && seats.size >= knownTargetPlayerCount) {
       sendGameStart();
     }
   }, [occupants, botSeats, phase, knownTargetPlayerCount, isHost, sendGameStart]);
