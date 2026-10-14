@@ -20,6 +20,7 @@ import {
 import { TOPICS, topicDictionary, topicWordList } from "./words";
 import { CLOSED_TOPICS, closedAnswerFor } from "./closedTopics";
 import { wordTowerCues } from "./wordTowerSound";
+import { acceptSync, judgeOrdered, type OrderedCursor } from "./actionOrder";
 
 const act = (s: GameState, a: EngineAction) => applyAction(s, a);
 const timeout = (s: GameState) => act(s, { type: "TIMEOUT", stage: s.stage });
@@ -403,5 +404,48 @@ describe("answer count scales with players (정답 모으기)", () => {
     const sizes = s.topics.map((id) => CLOSED_BY_ID.get(id)!.answers.length).sort((a, b) => b - a);
     expect(sizes[0]).toBe(10); // 십간
     expect(sizes).toEqual([10, 5, 5, 4, 4]);
+  });
+});
+
+describe("방장 판정 순서 (actionOrder)", () => {
+  it("applies host numbers strictly in order and asks for a resync on a gap", () => {
+    const c: OrderedCursor = { game: 42, applied: 0 };
+    expect(judgeOrdered(c, 42, 1)).toBe("apply");
+    c.applied = 1;
+    expect(judgeOrdered(c, 42, 1)).toBe("duplicate");
+    expect(judgeOrdered(c, 42, 3)).toBe("gap");
+    expect(judgeOrdered(c, 7, 2)).toBe("other-game");
+    expect(acceptSync(c, 42, 1)).toBe(false);
+    expect(acceptSync(c, 42, 5)).toBe(true);
+    expect(acceptSync(null, 42, 0)).toBe(true);
+  });
+
+  it("two devices receiving the same host-numbered stream end up identical even when packets arrive shuffled", () => {
+    // 거의 동시에 같은 정답을 낸 두 사람 — 방장이 정한 번호대로만 적용하면 기기 간 결과가 같다.
+    const base = timeout(startGame(3, 11, { rounds: 3, buildSeconds: 45, mode: "closed" }));
+    const t = CLOSED_TOPICS.find((x) => x.id === base.topics[0])!;
+    const stream = [
+      { seq: 1, action: { type: "SUBMIT", seat: 2, text: t.answers[0].word } as EngineAction },
+      { seq: 2, action: { type: "SUBMIT", seat: 1, text: t.answers[0].word } as EngineAction },
+      { seq: 3, action: { type: "SUBMIT", seat: 1, text: t.answers[1].word } as EngineAction },
+    ];
+    const replay = (arrival: typeof stream) => {
+      const cur: OrderedCursor = { game: 1, applied: 0 };
+      let s = base;
+      const pending = [...arrival];
+      // 도착 순서가 섞여도 번호가 맞을 때까지 기다렸다 적용(실제 코드는 빠지면 재동기화)
+      while (pending.length) {
+        const i = pending.findIndex((m) => judgeOrdered(cur, 1, m.seq) === "apply");
+        const [m] = pending.splice(i, 1);
+        s = applyAction(s, m.action);
+        cur.applied += 1;
+      }
+      return s;
+    };
+    const a = replay(stream);
+    const b = replay([stream[2], stream[1], stream[0]]);
+    expect(a.entries).toEqual(b.entries);
+    expect(a.entries[0]).toMatchObject({ seat: 2, status: "ok" });
+    expect(a.entries[1]).toMatchObject({ seat: 1, status: "late" });
   });
 });

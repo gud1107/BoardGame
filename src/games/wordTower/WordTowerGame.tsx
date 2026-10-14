@@ -53,11 +53,16 @@ import {
   type BotTakeoverState,
 } from "@/games/shared/bot/botTakeover";
 import { selfResult } from "@/games/shared/selfResult";
+import { acceptSync, judgeOrdered, type OrderedCursor } from "./actionOrder";
 
 /**
  * 단어 마천루 온라인 대전 진입점 — 라이어를 찾아라와 같은 락스텝 패턴(docs/cloud-sync.md).
  * 방장이 시드+옵션을 브로드캐스트하면 모든 기기가 `startGame`으로 같은 주제 순서를
  * 재현하고, 이후 `EngineAction`만 주고받는다.
+ *
+ * 행동 순서는 방장이 정한다(actionOrder.ts): 손님은 `action-request`로 방장에게만 보내고,
+ * 방장이 도착 순서대로 번호를 붙여 `game-action`으로 다시 방송한다. 모두가 번호 순서대로만
+ * 적용하므로 정답 모으기의 선착순이 기기마다 어긋나지 않는다. 번호가 빠지면 상태를 다시 받는다.
  *
  * 시간 제한: 각 기기가 "단계(stage)가 바뀐 걸 본 시각"부터 로컬로 재고, 방장 기기만
  * 시간이 다 되면 `TIMEOUT { stage }`를 보낸다(엔진이 옛 stage는 무시). 심사는 투표권 있는
@@ -193,6 +198,11 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
     channel.send({ type: "broadcast", event: "state-request", payload: {} });
   }
   const startSentRef = useRef(false);
+  /** 방장: 다음에 붙일 번호. */
+  const relaySeqRef = useRef(0);
+  /** 모두: 이 판에서 마지막으로 적용한 방장 번호. */
+  const cursorRef = useRef<OrderedCursor | null>(null);
+  const lastGapSyncRef = useRef(0);
   const playerCountRef = useRef(targetPlayerCount);
   const optionsRef = useRef<GameOptions>(options);
   const isHost = intent === "create";
@@ -246,6 +256,8 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
       const roomOptions = { ...DEFAULT_OPTIONS, ...((payload?.options as Partial<GameOptions> | undefined) ?? {}) };
       const roster = (payload?.botSeats as Seat[] | undefined) ?? [];
       const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
+      cursorRef.current = { game: seed, applied: 0 };
+      relaySeqRef.current = 0;
       playerCountRef.current = playerCount;
       optionsRef.current = roomOptions;
       setOptions(roomOptions);
@@ -262,8 +274,33 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
 
     channel.on("broadcast", { event: "game-action" }, ({ payload }) => {
       const action = payload?.action as EngineAction;
+      const cursor = cursorRef.current;
+      if (!cursor) return;
+      const verdict = judgeOrdered(cursor, payload?.game as number, payload?.seq as number);
+      if (verdict === "gap") {
+        // 중간 번호를 놓쳤다 — 순서가 어긋난 채 적용하지 말고 최신 상태를 다시 받는다.
+        const now = Date.now();
+        if (now - lastGapSyncRef.current > 1000) {
+          lastGapSyncRef.current = now;
+          channel.send({ type: "broadcast", event: "state-request", payload: {} });
+        }
+        return;
+      }
+      if (verdict !== "apply") return;
+      cursor.applied += 1;
       setGameState((prev) => (prev ? applyAction(prev, action) : prev));
     });
+
+    // 방장만: 손님의 행동을 받은 순서대로 번호를 붙여 다시 방송
+    if (isHost) {
+      channel.on("broadcast", { event: "action-request" }, ({ payload }) => {
+        const action = payload?.action as EngineAction | undefined;
+        const cursor = cursorRef.current;
+        if (!action || !cursor || payload?.game !== cursor.game) return;
+        relaySeqRef.current = Math.max(relaySeqRef.current, cursor.applied) + 1;
+        channel.send({ type: "broadcast", event: "game-action", payload: { action, game: cursor.game, seq: relaySeqRef.current } });
+      });
+    }
 
     channel.on("broadcast", { event: "bot-roster" }, ({ payload }) => {
       const roster = (payload?.botSeats as Seat[] | undefined) ?? [];
@@ -301,6 +338,8 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
           event: "state-sync",
           payload: {
             state: gameStateRef.current,
+            game: cursorRef.current?.game,
+            seq: cursorRef.current?.applied ?? 0,
             botSeats: botSeatsRef.current,
             botLevels: botLevelsRef.current,
             botTakeover: botTakeoverRef.current,
@@ -315,8 +354,12 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
       const state = payload?.state as GameState | undefined;
       if (!state) return;
       // 이미 더 진행된 상태를 들고 있으면(재접속 응답이 늦게 온 경우) 덮어쓰지 않는다.
-      const mine = gameStateRef.current;
-      if (mine && mine.roundIndex === state.roundIndex && mine.stage > state.stage) return;
+      const game = payload?.game as number | undefined;
+      const seq = (payload?.seq as number | undefined) ?? 0;
+      if (game === undefined) return;
+      if (gameStateRef.current && !acceptSync(cursorRef.current, game, seq)) return;
+      cursorRef.current = { game, applied: seq };
+      relaySeqRef.current = Math.max(relaySeqRef.current, seq);
       const roster = (payload?.botSeats as Seat[] | undefined) ?? [];
       const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
       const takeover = (payload?.botTakeover as BotTakeoverState | undefined) ?? INITIAL_BOT_TAKEOVER_STATE;
@@ -537,9 +580,20 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
     }
   }
 
-  const handleAction = useCallback((action: EngineAction) => {
-    channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
-  }, []);
+  const handleAction = useCallback(
+    (action: EngineAction) => {
+      const cursor = cursorRef.current;
+      if (!cursor) return;
+      if (isHost) {
+        // 방장 자신의 행동도 같은 번호 줄에 선다(self 수신으로 방장도 번호 순서대로 적용).
+        relaySeqRef.current = Math.max(relaySeqRef.current, cursor.applied) + 1;
+        channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action, game: cursor.game, seq: relaySeqRef.current } });
+      } else {
+        channelRef.current?.send({ type: "broadcast", event: "action-request", payload: { action, game: cursor.game } });
+      }
+    },
+    [isHost],
+  );
 
   function castTakeoverVote(seatKey: string) {
     channelRef.current?.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type: "vote-cast", seatKey, voterDeviceId: deviceId } } });
@@ -597,7 +651,7 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
       const sendTimeout = () => {
         if (timeoutSentRef.current === state.stage) return;
         timeoutSentRef.current = state.stage;
-        channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action: { type: "TIMEOUT", stage: state.stage } } });
+        handleAction({ type: "TIMEOUT", stage: state.stage });
       };
       const duration = phaseDurationMs(state);
       if (isHost && duration > 0 && now - seen.at >= duration) sendTimeout();
