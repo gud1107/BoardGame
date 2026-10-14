@@ -19,6 +19,7 @@ import {
 } from "./engine";
 import { TOPICS, topicDictionary, topicWordList } from "./words";
 import { CLOSED_TOPICS, closedAnswerFor } from "./closedTopics";
+import { wordTowerCues } from "./wordTowerSound";
 
 const act = (s: GameState, a: EngineAction) => applyAction(s, a);
 const timeout = (s: GameState) => act(s, { type: "TIMEOUT", stage: s.stage });
@@ -282,6 +283,26 @@ describe("🎯 정답 모으기 mode", () => {
     expect(rec.accepted[0]).toBe(t.answers.length);
     expect(rec.entries.filter((e) => e.bonus).length).toBe(1);
     expect(rec.winners).toEqual([0]);
+  });
+
+  it("sound cues: another player's claim rings an alert, the last open answer gets a sting", () => {
+    let s = closedBuilding(2);
+    const t = topicOf(s);
+    const cues = wordTowerCues(0);
+    const names = (prev: GameState, next: GameState) => cues(prev, next).map((c) => (typeof c === "string" ? c : c.name));
+    // 남의 정답 → claimed, 내 정답 → place
+    let next = act(s, { type: "SUBMIT", seat: 1, text: t.answers[0].word });
+    expect(names(s, next)).toEqual(["claimed"]);
+    s = next;
+    next = act(s, { type: "SUBMIT", seat: 0, text: t.answers[1].word });
+    expect(names(s, next)).toEqual(["place"]);
+    s = next;
+    // 정답이 하나 남는 순간 lastOne — 그 전에는 없음
+    for (let i = 2; i < t.answers.length - 1; i++) {
+      next = act(s, { type: "SUBMIT", seat: 1, text: t.answers[i].word });
+      expect(names(s, next).includes("lastOne")).toBe(i === t.answers.length - 2);
+      s = next;
+    }
   });
 
   it("split answers end the round too, without a sweep bonus", () => {

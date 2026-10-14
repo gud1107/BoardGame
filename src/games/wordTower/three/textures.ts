@@ -144,3 +144,70 @@ export function nameTagTexture(name: string, height: number, color: string, isMe
   labelCache.set(key, t);
   return t;
 }
+
+const countCache = new Map<string, THREE.CanvasTexture>();
+
+/** 남은 10초 카운트다운 숫자 — 5초 이하는 붉게. */
+export function countdownTexture(sec: number): THREE.CanvasTexture {
+  const urgent = sec <= 5;
+  const key = `${sec}|${urgent}`;
+  const hit = countCache.get(key);
+  if (hit) return hit;
+  const S = 256;
+  const c = document.createElement("canvas");
+  c.width = S;
+  c.height = S;
+  const g = c.getContext("2d")!;
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.font = `900 200px ${FONT}`;
+  g.shadowColor = urgent ? "rgba(244,63,94,0.95)" : "rgba(251,146,60,0.9)";
+  g.shadowBlur = 36;
+  g.lineWidth = 14;
+  g.strokeStyle = "rgba(15,23,42,0.85)";
+  g.strokeText(String(sec), S / 2, S / 2 + 10);
+  g.fillStyle = urgent ? "#fb7185" : "#fed7aa";
+  g.fillText(String(sec), S / 2, S / 2 + 10);
+  const t = finish(c);
+  countCache.set(key, t);
+  return t;
+}
+
+let lastOneTex: THREE.CanvasTexture | null = null;
+
+/** 정답 모으기 "마지막 하나!" 현수막. */
+export function lastOneTexture(): THREE.CanvasTexture {
+  if (lastOneTex) return lastOneTex;
+  const W = 1024;
+  const H = 256;
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const g = c.getContext("2d")!;
+  const r = 70;
+  g.beginPath();
+  g.moveTo(r, 12);
+  g.arcTo(W - 12, 12, W - 12, H - 12, r);
+  g.arcTo(W - 12, H - 12, 12, H - 12, r);
+  g.arcTo(12, H - 12, 12, 12, r);
+  g.arcTo(12, 12, W - 12, 12, r);
+  g.closePath();
+  const grad = g.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, "#fde047");
+  grad.addColorStop(1, "#f59e0b");
+  g.fillStyle = grad;
+  g.fill();
+  g.lineWidth = 12;
+  g.strokeStyle = "#7c2d12";
+  g.stroke();
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.font = `900 112px ${FONT}`;
+  g.fillStyle = "#1c1917";
+  g.fillText("🎯 마지막 하나!", W / 2, 106);
+  g.font = `800 44px ${FONT}`;
+  g.fillStyle = "#7c2d12";
+  g.fillText("먼저 말하는 사람이 차지해요", W / 2, 196);
+  lastOneTex = finish(c);
+  return lastOneTex;
+}

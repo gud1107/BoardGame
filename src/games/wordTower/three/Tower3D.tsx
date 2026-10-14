@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, type ReactNode } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { EntryStatus } from "../engine";
-import { BLOCK_H, SLAB_W, nameTagTexture, slabFaceTexture, slabSideTexture } from "./textures";
+import { BLOCK_H, SLAB_W, countdownTexture, lastOneTexture, nameTagTexture, slabFaceTexture, slabSideTexture } from "./textures";
 
 /**
  * 단어 마천루 3D 무대. 표시 전용 — 상태는 props로만 받고, 움직임은 모두 "처음 본 시각" 기준의
@@ -14,6 +14,9 @@ import { BLOCK_H, SLAB_W, nameTagTexture, slabFaceTexture, slabSideTexture } fro
  * - 새 블록은 위에서 떨어져 통통 튀며 앉고, 보류 블록은 반투명하게 깜빡인다.
  * - 인정되면 금빛으로 번쩍, 거절되면 옆으로 굴러떨어지며 사라진다(위 블록들은 부드럽게 내려앉음).
  * - 높을수록 탑이 살짝 흔들린다. 1등 탑 위엔 왕관, 카메라는 가장 높은 탑에 맞춰 물러난다.
+ * - 남은 10초: 하늘·안개가 붉게 맥박치고, 화면 앞에 큰 숫자가 초마다 튀어나오며, 5초부터 카메라가 떨린다.
+ * - 정답 모으기 "마지막 하나!": 금빛 현수막이 뒤집히며 떨어지고, 탐조등 두 줄기가 무대를 훑는다.
+ *   (조명 개수가 바뀌면 모든 셰이더가 다시 컴파일되므로, 연출용 조명은 늘 켜 둔 채 밝기만 바꾼다.)
  */
 
 export interface SlabView {
@@ -281,7 +284,7 @@ function Skyline({ span }: { span: number }) {
 
 const FOV = 42;
 
-function CameraRig({ span, maxTop }: { span: number; maxTop: number }) {
+function CameraRig({ span, maxTop, shake }: { span: number; maxTop: number; shake: number }) {
   useFrame((frame, delta) => {
     const cam = frame.camera as THREE.PerspectiveCamera;
     const aspect = frame.size.width / Math.max(1, frame.size.height);
@@ -295,13 +298,172 @@ function CameraRig({ span, maxTop }: { span: number; maxTop: number }) {
     cam.position.y += (lookY + dist * 0.22 - cam.position.y) * k;
     cam.position.z += (dist - cam.position.z) * k;
     cam.lookAt(0, lookY, 0);
+    if (shake > 0) {
+      // lookAt이 매 프레임 방향을 새로 잡으니 떨림이 쌓이지 않는다.
+      const t = frame.clock.elapsedTime;
+      cam.rotateZ(Math.sin(t * 47) * shake);
+      cam.rotateX(Math.sin(t * 61 + 1.3) * shake * 0.6);
+    }
   });
   return null;
 }
 
+/* ── 연출: 화면 앞에 붙는 층 ───────────────────────────────── */
+
+const HUD_DIST = 6;
+const tmpDir = new THREE.Vector3();
+
+/** 카메라 바로 앞에 붙어 다니는 무리 — 탑 높이와 상관없이 늘 같은 자리에 보인다. CameraRig 뒤에 둘 것. */
+function CameraHud({ children }: { children: ReactNode }) {
+  const group = useRef<THREE.Group>(null);
+  useFrame((frame) => {
+    const g = group.current;
+    if (!g) return;
+    const cam = frame.camera;
+    cam.getWorldDirection(tmpDir);
+    g.position.copy(cam.position).addScaledVector(tmpDir, HUD_DIST);
+    g.quaternion.copy(cam.quaternion);
+  });
+  return <group ref={group}>{children}</group>;
+}
+
+const BG = new THREE.Color("#0b1022");
+const BG_RED = new THREE.Color("#4a0b1c");
+
+/** 남은 10초: 붉은 맥박(배경·안개·역광) + 초마다 튀어나오는 큰 숫자. */
+function HurryFx({ sec }: { sec: number | null }) {
+  const light = useRef<THREE.DirectionalLight>(null);
+  const num = useRef<THREE.Mesh>(null);
+  const st = useRef<{ level: number; sec: number | null; at: number }>({ level: 0, sec: null, at: 0 });
+  const material = useMemo(() => new THREE.MeshBasicMaterial({ map: countdownTexture(10), transparent: true, depthTest: false, depthWrite: false }), []);
+  useFrame((frame, delta) => {
+    const now = frame.clock.elapsedTime;
+    const a = st.current;
+    a.level += ((sec !== null ? 1 : 0) - a.level) * Math.min(1, delta * 3);
+    if (sec !== null && sec !== a.sec) a.at = now;
+    if (sec !== null) a.sec = sec;
+    const urgent = a.sec !== null && a.sec <= 5;
+    const pulse = 0.5 + 0.5 * Math.cos((now - a.at) * Math.PI * 2);
+    const glow = a.level * (urgent ? 0.55 + 0.45 * pulse : 0.35 + 0.35 * pulse);
+
+    if (light.current) light.current.intensity = glow * 2.2;
+    const bg = frame.scene.background;
+    if (bg instanceof THREE.Color) bg.copy(BG).lerp(BG_RED, glow);
+    const fog = frame.scene.fog as THREE.Fog | null;
+    if (fog) fog.color.copy(BG).lerp(BG_RED, glow);
+
+    const m = num.current;
+    if (!m) return;
+    m.visible = a.level > 0.02 && a.sec !== null;
+    if (!m.visible || a.sec === null) return;
+    const mat = m.material as THREE.MeshBasicMaterial;
+    mat.map = countdownTexture(a.sec);
+    const k = now - a.at;
+    const punch = 1 - easeOut(Math.min(1, k / 0.35));
+    m.scale.setScalar((urgent ? 1.25 : 1) * (1 + punch * 0.9));
+    m.position.z = punch * 1.2;
+    mat.opacity = a.level * Math.max(urgent ? 0.4 : 0.22, 0.95 - k * 0.85);
+  });
+  return (
+    <>
+      <directionalLight ref={light} position={[0, 6, -10]} color="#f43f5e" intensity={0} />
+      <CameraHud>
+        <mesh ref={num} material={material} position={[0, 0.1, 0]} renderOrder={20} visible={false}>
+          <planeGeometry args={[1.5, 1.5]} />
+        </mesh>
+      </CameraHud>
+    </>
+  );
+}
+
+/** 정답 모으기 마지막 하나: 뒤집히며 떨어지는 금빛 현수막 + 무대를 훑는 탐조등 + 바닥 충격파. */
+function LastOneFx({ on, span }: { on: boolean; span: number }) {
+  const banner = useRef<THREE.Mesh>(null);
+  const beams = useRef<THREE.Group>(null);
+  const ring = useRef<THREE.Mesh>(null);
+  const st = useRef<{ born: number | null; level: number }>({ born: null, level: 0 });
+  const bannerMat = useMemo(() => new THREE.MeshBasicMaterial({ map: lastOneTexture(), transparent: true, opacity: 0, depthTest: false, depthWrite: false, side: THREE.DoubleSide }), []);
+  const beamMat = useMemo(() => new THREE.MeshBasicMaterial({ color: "#fde68a", transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }), []);
+  const ringMat = useMemo(() => new THREE.MeshBasicMaterial({ color: "#facc15", transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }), []);
+  const edge = span / 2 + 1.6;
+
+  useFrame((frame, delta) => {
+    const now = frame.clock.elapsedTime;
+    const a = st.current;
+    if (on && a.born === null) a.born = now;
+    if (!on) a.born = null;
+    a.level += ((on ? 1 : 0) - a.level) * Math.min(1, delta * (on ? 6 : 4));
+    const k = a.born === null ? 99 : now - a.born;
+
+    const b = banner.current;
+    if (b) {
+      b.visible = a.level > 0.02;
+      const drop = Math.min(1, k / 0.75);
+      b.position.y = 1.45 + (1 - bounce(drop)) * 2.6 + Math.sin(now * 2.4) * 0.05;
+      b.rotation.y = (1 - easeOut(Math.min(1, k / 0.6))) * Math.PI * 2;
+      b.rotation.z = Math.sin(now * 1.7) * 0.025;
+      b.scale.setScalar(1 + Math.sin(now * 5) * 0.03);
+      (b.material as THREE.MeshBasicMaterial).opacity = a.level;
+    }
+
+    const g = beams.current;
+    if (g) {
+      g.visible = a.level > 0.02;
+      g.children.forEach((pivot, i) => {
+        const dir = i === 0 ? 1 : -1;
+        pivot.rotation.z = dir * (0.35 + Math.sin(now * 0.9 + i * 2.1) * 0.32);
+        pivot.rotation.x = Math.sin(now * 0.7 + i) * 0.15;
+        const mesh = pivot.children[0] as THREE.Mesh;
+        (mesh.material as THREE.MeshBasicMaterial).opacity = a.level * (0.13 + Math.sin(now * 3 + i) * 0.03);
+      });
+    }
+
+    const r = ring.current;
+    if (r) {
+      const t = Math.min(1, k / 1.3);
+      r.visible = t < 1;
+      r.scale.setScalar(0.5 + easeOut(t) * (edge + 1));
+      (r.material as THREE.MeshBasicMaterial).opacity = (1 - t) * 0.85;
+    }
+  });
+
+  return (
+    <>
+      <CameraHud>
+        <mesh ref={banner} material={bannerMat} renderOrder={21} visible={false}>
+          <planeGeometry args={[3.4, 0.85]} />
+        </mesh>
+      </CameraHud>
+      <group ref={beams} visible={false}>
+        {[-1, 1].map((side) => (
+          <group key={side} position={[side * edge, 10, -2.5]}>
+            {/* 원뿔 꼭짓점을 피벗에 맞춰 아래로 늘어뜨린다 */}
+            <mesh material={beamMat} position={[0, -6, 0]}>
+              <coneGeometry args={[1.7, 12, 24, 1, true]} />
+            </mesh>
+          </group>
+        ))}
+      </group>
+      <mesh ref={ring} material={ringMat} position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+        <ringGeometry args={[0.85, 1, 64]} />
+      </mesh>
+    </>
+  );
+}
+
 /* ── 장면 ─────────────────────────────────────────────────── */
 
-export default function Tower3D({ towers }: { towers: TowerView[] }) {
+export default function Tower3D({
+  towers,
+  hurrySec = null,
+  lastOne = false,
+}: {
+  towers: TowerView[];
+  /** 쌓기 마지막 10초의 남은 초(아니면 null). */
+  hurrySec?: number | null;
+  /** 정답 모으기에서 남은 정답이 하나. */
+  lastOne?: boolean;
+}) {
   const span = (towers.length - 1) * SPACING + SLAB_W;
   const maxTop = Math.max(0, ...towers.map((t) => stackHeight(t.slabs)));
   return (
@@ -319,7 +481,10 @@ export default function Tower3D({ towers }: { towers: TowerView[] }) {
       {towers.map((t, i) => (
         <Tower key={t.seat} tower={t} x={towerX(i, towers.length)} />
       ))}
-      <CameraRig span={span} maxTop={maxTop} />
+      <CameraRig span={span} maxTop={maxTop} shake={hurrySec !== null && hurrySec <= 5 ? 0.004 + (5 - hurrySec) * 0.0012 : 0} />
+      {/* 연출은 CameraRig 뒤 — 카메라가 움직인 뒤의 위치를 같은 프레임에 따라가도록 */}
+      <HurryFx sec={hurrySec} />
+      <LastOneFx on={lastOne} span={span} />
     </Canvas>
   );
 }

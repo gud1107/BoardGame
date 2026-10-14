@@ -1,5 +1,5 @@
 import { defineSuite, fx, type SfxRecipe, type SuiteConfig } from "@/lib/audio/proceduralSuite";
-import type { GameState } from "./engine";
+import { claimedBy, closedTopicOf, type GameState } from "./engine";
 
 /**
  * 단어 마천루 "Sky Builders" suite — a bright construction-site groove in F major at
@@ -7,6 +7,9 @@ import type { GameState } from "./engine";
  * kick/clap backbeat. During the last 10 seconds of building (intensity 1) a ticking
  * hat and a rising arp join. SFX: every placed word thunks down with a pitch that
  * climbs with the tower, pending words shimmer, approvals chime, rejections crumble.
+ * 정답 모으기: someone else claiming an answer rings a two-tone "taken!" alert, the
+ * last unclaimed answer gets a rising brass sting, and entering the final 10 seconds
+ * sounds a short alarm.
  */
 
 const PLACE_NOTES = ["F4", "G4", "A4", "C5", "D5", "F5", "G5", "A5", "C6"];
@@ -18,6 +21,10 @@ const SFX = {
   invalid: [fx.buzz(200, 150, 0.16, 0.08)],
   other: [fx.thud(110, 0.12, 0.16)],
   tick: [fx.click(2200, 0.16), { inst: "woodblock", note: "G5", gain: 0.6 }],
+  /** 정답 모으기: 남이 정답을 차지했다 — 내 정답(place)과 헷갈리지 않게 내려가는 두 음 + 짧은 쉭. */
+  claimed: [fx.pop(700, 1300, 0.14), { inst: "bell", note: "B5", at: 0.02, dur: 0.35, gain: 0.55 }, { inst: "bell", note: "E5", at: 0.14, dur: 0.5, gain: 0.55 }, fx.whoosh(2400, 900, 0.18, 0.06, 0.1)],
+  lastOne: [{ inst: "timpani", note: "C3" }, ...fx.arp("brass", ["C4", "E4", "G4", "C5"], 0.08, 0.5, 0.8), ...fx.chord("stab", ["C5", "E5", "G5", "C6"], 0.5, 1, 0.34), fx.whoosh(300, 2600, 0.5, 0.08, 0.05)],
+  hurry: [fx.whoosh(500, 1600, 0.35, 0.1), ...fx.chord("brass", ["D4", "F4", "Ab4"], 0.45, 0.9, 0.05), { inst: "timpani", note: "D2", at: 0.05 }],
   topic: [...fx.arp("marimba", ["F4", "A4", "C5", "F5"], 0.07, 0.4), ...fx.chord("brass", ["F4", "A4", "C5"], 0.6, 0.8, 0.3)],
   go: [{ inst: "woodblock", note: "C5" }, ...fx.chord("stab", ["F4", "A4", "C5", "F5"], 0.3, 1.1, 0.05)],
   review: [...fx.arp("vibes", ["C5", "E5", "G5"], 0.09, 0.5, 0.8)],
@@ -67,9 +74,10 @@ export function wordTowerCues(viewer: number) {
       return cues;
     }
     if (next.phase === "build" && next.entries.length > prev.entries.length) {
+      const closed = closedTopicOf(next.topics[next.roundIndex]);
       for (const e of next.entries.slice(prev.entries.length)) {
         if (e.seat !== viewer) {
-          cues.push("other");
+          cues.push(closed && e.status === "ok" ? "claimed" : "other");
           continue;
         }
         if (e.status === "late") cues.push("invalid");
@@ -79,6 +87,10 @@ export function wordTowerCues(viewer: number) {
           const h = next.entries.filter((x) => x.seat === viewer && x.status === "ok").reduce((a, x) => a + x.blocks, 0);
           cues.push({ name: "place", arg: h });
         }
+      }
+      if (closed) {
+        const open = (s: GameState) => closed.answers.filter((a) => claimedBy(s.entries, a.word) === null).length;
+        if (open(prev) > 1 && open(next) === 1) cues.push("lastOne");
       }
     }
     return cues;

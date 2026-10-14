@@ -35,18 +35,6 @@ const Tower3D = dynamic(() => import("./three/Tower3D"), { ssr: false, loading: 
 
 export const SEAT_COLORS = ["#f43f5e", "#3b82f6", "#22c55e", "#f59e0b", "#a855f7", "#14b8a6", "#ec4899", "#84cc16"];
 
-type View = "3d" | "2d";
-const VIEW_KEY = "word-tower-view";
-
-function initialView(): View {
-  if (!webglAvailable()) return "2d";
-  try {
-    return window.localStorage.getItem(VIEW_KEY) === "2d" ? "2d" : "3d";
-  } catch {
-    return "3d";
-  }
-}
-
 const PANEL = "rounded-2xl border border-white/10 bg-white/[0.04] p-4 light:border-slate-200 light:bg-white light:shadow-sm";
 const BTN = "rounded-xl px-4 py-2 text-sm font-bold transition disabled:opacity-40";
 const PRIMARY = `${BTN} bg-sky-500 text-white hover:bg-sky-400`;
@@ -431,7 +419,7 @@ function FinalPanel({ state, viewerSeat, names, onGameEnd }: { state: GameState;
 /* ── 보드 ─────────────────────────────────────────────────── */
 
 export default function WordTowerBoard({ state, viewerSeat, names, connectedSeats, voterSeats, isHost, deadlineMs, nowMs, onAction, onGameEnd }: Props) {
-  const [view, setView] = useState<View>(initialView);
+  // 3D 고정 — 2D 막대는 WebGL이 없는 기기에서만 쓴다.
   const [canWebgl] = useState(webglAvailable);
   const [rules, setRules] = useState(false);
   const topic = currentTopic(state);
@@ -451,10 +439,19 @@ export default function WordTowerBoard({ state, viewerSeat, names, connectedSeat
     if (remaining > 0) getWordTowerSound().play("tick");
   }, [hurry, remaining]);
 
+  // 남은 10초에 들어서는 순간 한 번 경보
+  const hurryRound = useRef<number | null>(null);
+  useEffect(() => {
+    if (!hurry || hurryRound.current === state.roundIndex) return;
+    hurryRound.current = state.roundIndex;
+    getWordTowerSound().play("hurry");
+  }, [hurry, state.roundIndex]);
+
   const showResult = state.phase === "result" || state.phase === "ended";
   // 정답 모으기는 모두의 답이 공개 — 탑 블록에도 단어가 보인다.
   const closedMode = closedTopicOf(state.topics[state.roundIndex]) !== null;
   const closedCount = closedTopicOf(state.topics[state.roundIndex])?.answers.length ?? null;
+  const lastOne = closedCount !== null && state.phase === "build" && closedTopicOf(state.topics[state.roundIndex])!.answers.filter((a) => claimedBy(state.entries, a.word) === null).length === 1;
   const leaders = useMemo(() => (showResult ? (state.history[state.history.length - 1]?.winners ?? []) : currentLeaders(state)), [showResult, state]);
 
   const towers: TowerView[] = useMemo(
@@ -485,16 +482,6 @@ export default function WordTowerBoard({ state, viewerSeat, names, connectedSeat
 
   const scoreboard = [...towers].sort((a, b) => b.height - a.height);
 
-  function toggleView() {
-    const next: View = view === "3d" ? "2d" : "3d";
-    setView(next);
-    try {
-      window.localStorage.setItem(VIEW_KEY, next);
-    } catch {
-      /* 저장 못 해도 이번 화면엔 적용 */
-    }
-  }
-
   const phaseLabel: Record<GameState["phase"], string> = {
     intro: "📣 주제 공개",
     build: "🏗️ 쌓는 중",
@@ -520,11 +507,6 @@ export default function WordTowerBoard({ state, viewerSeat, names, connectedSeat
         </span>
         <span className="ml-auto flex items-center gap-1.5">
           <SuiteSoundHud suite={getWordTowerSound} icon="🏗️" label="Sky Builders" preview="approve" />
-          {canWebgl && (
-            <button onClick={toggleView} className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] font-bold text-white/70 light:border-slate-300 light:text-slate-600" title="3D/2D 화면 전환">
-              {view === "3d" ? "🖼️ 2D" : "🧊 3D"}
-            </button>
-          )}
           <button onClick={() => setRules(true)} className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] font-bold text-white/70 light:border-slate-300 light:text-slate-600">
             📖 룰북
           </button>
@@ -542,7 +524,10 @@ export default function WordTowerBoard({ state, viewerSeat, names, connectedSeat
 
       {/* 무대 */}
       <div className="relative h-[44vh] max-h-[560px] min-h-[260px] overflow-hidden rounded-2xl border border-white/10 light:border-slate-300">
-        {view === "3d" && canWebgl ? <Tower3D towers={towers} /> : <Towers2D towers={towers} />}
+        {canWebgl ? <Tower3D towers={towers} hurrySec={hurry ? remaining : null} lastOne={lastOne} /> : <Towers2D towers={towers} />}
+        {!canWebgl && lastOne && (
+          <span className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 animate-bounce rounded-full bg-amber-400 px-4 py-1 text-base font-black whitespace-nowrap text-slate-900 shadow-lg">🎯 마지막 하나!</span>
+        )}
         {state.phase === "intro" && (
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center bg-slate-950/55 backdrop-blur-[2px]">
             <span className="text-xs font-bold tracking-widest text-sky-200/80">ROUND {state.roundIndex + 1}</span>
