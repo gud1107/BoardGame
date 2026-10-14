@@ -20,7 +20,7 @@ import {
 import { TOPICS, topicDictionary, topicWordList } from "./words";
 import { CLOSED_TOPICS, closedAnswerFor } from "./closedTopics";
 import { wordTowerCues } from "./wordTowerSound";
-import { acceptSync, judgeOrdered, type OrderedCursor } from "./actionOrder";
+import { acceptSync, actingHostOf, judgeOrdered, type OrderedCursor } from "./actionOrder";
 
 const act = (s: GameState, a: EngineAction) => applyAction(s, a);
 const timeout = (s: GameState) => act(s, { type: "TIMEOUT", stage: s.stage });
@@ -447,5 +447,18 @@ describe("방장 판정 순서 (actionOrder)", () => {
     expect(a.entries).toEqual(b.entries);
     expect(a.entries[0]).toMatchObject({ seat: 2, status: "ok" });
     expect(a.entries[1]).toMatchObject({ seat: 1, status: "late" });
+  });
+});
+
+describe("방장 승계 (actingHostOf)", () => {
+  it("keeps the room creator while present, else the lowest seat — the same answer on every device", () => {
+    const creator = { deviceId: "z", seat: 2, isHost: true };
+    const a = { deviceId: "b", seat: 1 };
+    const c = { deviceId: "a", seat: 3 };
+    expect(actingHostOf([a, creator, c])).toBe("z");
+    // 방장이 나가면 좌석 1번 — presence 순서가 기기마다 달라도 같은 결론
+    expect(actingHostOf([a, c])).toBe("b");
+    expect(actingHostOf([c, a])).toBe("b");
+    expect(actingHostOf([])).toBeNull();
   });
 });

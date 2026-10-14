@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo, useRef, type ReactNode } from "react";
+import { memo, useMemo, useRef, useState, type ReactNode } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { EntryStatus } from "../engine";
@@ -472,23 +472,64 @@ function LastOneFx({ on, span }: { on: boolean; span: number }) {
   );
 }
 
+/* ── 화질 자동 조절 ───────────────────────────────────────── */
+
+/**
+ * 1초마다 FPS를 재서 2초 연속 40 미만이면 렌더 해상도(dpr)를 0.5씩 낮춘다(최저 1).
+ * 저가폰에서 화면 픽셀 수가 가장 큰 부담이라 이것만으로도 체감이 크게 달라진다.
+ * 처음 2초는 셰이더 컴파일 때문에 건너뛴다.
+ */
+function QualityGuard({ dpr, onLower, onSample }: { dpr: number; onLower: (dpr: number) => void; onSample?: (fps: number, dpr: number) => void }) {
+  const st = useRef({ start: -1, t0: 0, frames: 0, low: 0 });
+  useFrame((frame) => {
+    const now = frame.clock.elapsedTime;
+    const a = st.current;
+    if (a.start < 0) {
+      a.start = now;
+      a.t0 = now;
+      return;
+    }
+    a.frames++;
+    if (now - a.t0 < 1) return;
+    const fps = a.frames / (now - a.t0);
+    a.t0 = now;
+    a.frames = 0;
+    onSample?.(fps, dpr);
+    if (now - a.start < 2) return;
+    a.low = fps < 40 ? a.low + 1 : 0;
+    if (a.low >= 2 && dpr > 1) {
+      // Canvas의 dpr prop으로 내린다 — frame.setDpr만 쓰면 다음 렌더 때 prop 값으로 되돌아간다.
+      onLower(Math.max(1, dpr - 0.5));
+      a.low = 0;
+    }
+  });
+  return null;
+}
+
 /* ── 장면 ─────────────────────────────────────────────────── */
 
 export default function Tower3D({
   towers,
   hurrySec = null,
   lastOne = false,
+  showFps = false,
 }: {
   towers: TowerView[];
   /** 쌓기 마지막 10초의 남은 초(아니면 null). */
   hurrySec?: number | null;
   /** 정답 모으기에서 남은 정답이 하나. */
   lastOne?: boolean;
+  /** 화면 구석에 FPS·해상도 표시(주소에 &fps=1 — 실기기 측정용). */
+  showFps?: boolean;
 }) {
+  const [sample, setSample] = useState<{ fps: number; dpr: number } | null>(null);
+  const [dpr, setDpr] = useState(() => (typeof window === "undefined" ? 1 : Math.min(2, Math.max(1, window.devicePixelRatio || 1))));
   const span = (towers.length - 1) * SPACING + SLAB_W;
   const maxTop = Math.max(0, ...towers.map((t) => stackHeight(t.slabs)));
   return (
-    <Canvas camera={{ fov: FOV, position: [0, 4, 12], near: 0.1, far: 200 }} dpr={[1, 2]} gl={{ antialias: true }}>
+    <div className="relative h-full w-full">
+    <Canvas camera={{ fov: FOV, position: [0, 4, 12], near: 0.1, far: 200 }} dpr={dpr} gl={{ antialias: true }}>
+      <QualityGuard dpr={dpr} onLower={setDpr} onSample={showFps ? (fps, d) => setSample({ fps, dpr: d }) : undefined} />
       <color attach="background" args={["#0b1022"]} />
       <fog attach="fog" args={["#0b1022", 16, 48]} />
       <hemisphereLight args={["#c7d2fe", "#1e1b4b", 0.9]} />
@@ -507,5 +548,11 @@ export default function Tower3D({
       <HurryFx sec={hurrySec} />
       <LastOneFx on={lastOne} span={span} />
     </Canvas>
+      {showFps && sample && (
+        <span className="pointer-events-none absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[10px] text-lime-300">
+          {sample.fps.toFixed(0)} fps · dpr {sample.dpr}
+        </span>
+      )}
+    </div>
   );
 }

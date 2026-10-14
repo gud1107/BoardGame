@@ -53,7 +53,7 @@ import {
   type BotTakeoverState,
 } from "@/games/shared/bot/botTakeover";
 import { selfResult } from "@/games/shared/selfResult";
-import { acceptSync, judgeOrdered, type OrderedCursor } from "./actionOrder";
+import { acceptSync, actingHostOf, judgeOrdered, type OrderedCursor } from "./actionOrder";
 
 /**
  * 단어 마천루 온라인 대전 진입점 — 라이어를 찾아라와 같은 락스텝 패턴(docs/cloud-sync.md).
@@ -63,6 +63,11 @@ import { acceptSync, judgeOrdered, type OrderedCursor } from "./actionOrder";
  * 행동 순서는 방장이 정한다(actionOrder.ts): 손님은 `action-request`로 방장에게만 보내고,
  * 방장이 도착 순서대로 번호를 붙여 `game-action`으로 다시 방송한다. 모두가 번호 순서대로만
  * 적용하므로 정답 모으기의 선착순이 기기마다 어긋나지 않는다. 번호가 빠지면 상태를 다시 받는다.
+ *
+ * 방장 승계: 게임 중 방장(방을 만든 기기)이 나가면, 남은 사람 중 좌석 번호가 가장 낮은 기기가
+ * "진행 담당"이 되어 번호 매기기·시간 초과·봇 단어를 이어받는다(`actingHostOf`, 모두가 같은 presence로
+ * 같은 결론). 새 담당은 자기 상태를 `authoritative` 동기화로 한 번 뿌려 모두를 맞춘 뒤 이어 간다.
+ * `game-action`에는 보낸 담당의 기기 id(`by`)가 실려, 지금 담당이 아닌 기기의 번호는 무시한다.
  *
  * 시간 제한: 각 기기가 "단계(stage)가 바뀐 걸 본 시각"부터 로컬로 재고, 방장 기기만
  * 시간이 다 되면 `TIMEOUT { stage }`를 보낸다(엔진이 옛 stage는 무시). 심사는 투표권 있는
@@ -203,6 +208,10 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
   /** 모두: 이 판에서 마지막으로 적용한 방장 번호. */
   const cursorRef = useRef<OrderedCursor | null>(null);
   const lastGapSyncRef = useRef(0);
+  /** 지금 진행 담당 기기 id(게임 중 방장 승계용). */
+  const actingHostRef = useRef<string | null>(null);
+  /** 담당에서 물러난 직후: 담당이 보내 주는 다음 동기화를 무조건 받는다. */
+  const resyncFromHostRef = useRef(false);
   const playerCountRef = useRef(targetPlayerCount);
   const optionsRef = useRef<GameOptions>(options);
   const isHost = intent === "create";
@@ -276,6 +285,8 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
       const action = payload?.action as EngineAction;
       const cursor = cursorRef.current;
       if (!cursor) return;
+      // 담당이 바뀌는 순간 옛 담당이 보낸 번호는 버린다(같은 번호에 다른 행동이 겹치지 않게).
+      if (payload?.by !== undefined && actingHostRef.current !== null && payload.by !== actingHostRef.current) return;
       const verdict = judgeOrdered(cursor, payload?.game as number, payload?.seq as number);
       if (verdict === "gap") {
         // 중간 번호를 놓쳤다 — 순서가 어긋난 채 적용하지 말고 최신 상태를 다시 받는다.
@@ -291,16 +302,15 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
       setGameState((prev) => (prev ? applyAction(prev, action) : prev));
     });
 
-    // 방장만: 손님의 행동을 받은 순서대로 번호를 붙여 다시 방송
-    if (isHost) {
-      channel.on("broadcast", { event: "action-request" }, ({ payload }) => {
-        const action = payload?.action as EngineAction | undefined;
-        const cursor = cursorRef.current;
-        if (!action || !cursor || payload?.game !== cursor.game) return;
-        relaySeqRef.current = Math.max(relaySeqRef.current, cursor.applied) + 1;
-        channel.send({ type: "broadcast", event: "game-action", payload: { action, game: cursor.game, seq: relaySeqRef.current } });
-      });
-    }
+    // 진행 담당만: 손님의 행동을 받은 순서대로 번호를 붙여 다시 방송
+    channel.on("broadcast", { event: "action-request" }, ({ payload }) => {
+      if (actingHostRef.current !== deviceId) return;
+      const action = payload?.action as EngineAction | undefined;
+      const cursor = cursorRef.current;
+      if (!action || !cursor || payload?.game !== cursor.game) return;
+      relaySeqRef.current = Math.max(relaySeqRef.current, cursor.applied) + 1;
+      channel.send({ type: "broadcast", event: "game-action", payload: { action, game: cursor.game, seq: relaySeqRef.current, by: deviceId } });
+    });
 
     channel.on("broadcast", { event: "bot-roster" }, ({ payload }) => {
       const roster = (payload?.botSeats as Seat[] | undefined) ?? [];
@@ -340,6 +350,7 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
             state: gameStateRef.current,
             game: cursorRef.current?.game,
             seq: cursorRef.current?.applied ?? 0,
+            from: deviceId,
             botSeats: botSeatsRef.current,
             botLevels: botLevelsRef.current,
             botTakeover: botTakeoverRef.current,
@@ -357,7 +368,11 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
       const game = payload?.game as number | undefined;
       const seq = (payload?.seq as number | undefined) ?? 0;
       if (game === undefined) return;
-      if (gameStateRef.current && !acceptSync(cursorRef.current, game, seq)) return;
+      // 새 진행 담당의 승계 동기화는 번호가 같거나 작아도 받는다(그 담당이 이제 기준).
+      const fromHost = payload?.from !== undefined && payload.from === actingHostRef.current;
+      const authoritative = fromHost && (payload?.authoritative === true || resyncFromHostRef.current);
+      if (gameStateRef.current && !authoritative && !acceptSync(cursorRef.current, game, seq)) return;
+      if (authoritative) resyncFromHostRef.current = false;
       cursorRef.current = { game, applied: seq };
       relaySeqRef.current = Math.max(relaySeqRef.current, seq);
       const roster = (payload?.botSeats as Seat[] | undefined) ?? [];
@@ -580,19 +595,44 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
     }
   }
 
+  // 진행 담당: 게임 중엔 presence로 정한다(방장이 나가면 남은 사람 중 좌석 번호가 가장 낮은 기기).
+  const actingHost = phase === "playing" ? (actingHostOf(occupants) ?? (isHost ? deviceId : null)) : isHost ? deviceId : null;
+  const prevActingRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevActingRef.current;
+    prevActingRef.current = actingHost;
+    actingHostRef.current = actingHost;
+    if (phase !== "playing" || prev === null || prev === actingHost) return;
+    const channel = channelRef.current;
+    const state = gameStateRef.current;
+    const cursor = cursorRef.current;
+    if (actingHost === deviceId && channel && state && cursor) {
+      // 이어받았다 — 내 상태를 기준으로 모두를 맞춘다.
+      channel.send({
+        type: "broadcast",
+        event: "state-sync",
+        payload: { state, game: cursor.game, seq: cursor.applied, from: deviceId, authoritative: true, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current, botTakeover: botTakeoverRef.current },
+      });
+    } else if (prev === deviceId) {
+      // 잠깐 담당이었다가 물러났다(presence가 잠시 어긋났던 경우) — 담당의 상태로 다시 맞춘다.
+      resyncFromHostRef.current = true;
+      requestStateSync();
+    }
+  }, [actingHost, phase, deviceId]);
+
   const handleAction = useCallback(
     (action: EngineAction) => {
       const cursor = cursorRef.current;
       if (!cursor) return;
-      if (isHost) {
-        // 방장 자신의 행동도 같은 번호 줄에 선다(self 수신으로 방장도 번호 순서대로 적용).
+      if (actingHostRef.current === getDeviceId()) {
+        // 담당 자신의 행동도 같은 번호 줄에 선다(self 수신으로 담당도 번호 순서대로 적용).
         relaySeqRef.current = Math.max(relaySeqRef.current, cursor.applied) + 1;
-        channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action, game: cursor.game, seq: relaySeqRef.current } });
+        channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action, game: cursor.game, seq: relaySeqRef.current, by: getDeviceId() } });
       } else {
         channelRef.current?.send({ type: "broadcast", event: "action-request", payload: { action, game: cursor.game } });
       }
     },
-    [isHost],
+    [],
   );
 
   function castTakeoverVote(seatKey: string) {
@@ -654,11 +694,12 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
         handleAction({ type: "TIMEOUT", stage: state.stage });
       };
       const duration = phaseDurationMs(state);
-      if (isHost && duration > 0 && now - seen.at >= duration) sendTimeout();
-      if (isHost && state.phase === "review" && reviewComplete(state, voterSeatsRef.current) && now - seen.at >= 1200) sendTimeout();
+      const amHost = actingHostRef.current === getDeviceId();
+      if (amHost && duration > 0 && now - seen.at >= duration) sendTimeout();
+      if (amHost && state.phase === "review" && reviewComplete(state, voterSeatsRef.current) && now - seen.at >= 1200) sendTimeout();
 
       // 봇 단어 — 봇마다 따로 정한 시각이 되면 한 단어씩
-      if (isHost && state.phase === "build") {
+      if (amHost && state.phase === "build") {
         const clock = botClockRef.current;
         if (clock.stage !== state.stage) {
           clock.stage = state.stage;
@@ -703,7 +744,7 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
       }
     }, 250);
     return () => window.clearInterval(interval);
-  }, [phase, isHost, roomCode, handleAction]);
+  }, [phase, roomCode, handleAction]);
 
   const deadlineMs = gameState && stageSeen && stageSeen.stage === gameState.stage && phaseDurationMs(gameState) > 0 ? stageSeen.at + phaseDurationMs(gameState) : null;
 
@@ -1122,7 +1163,7 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
           names={names}
           connectedSeats={connectedSeats}
           voterSeats={voterSeats}
-          isHost={isHost}
+          isHost={actingHost === deviceId}
           deadlineMs={deadlineMs}
           nowMs={nowMs}
           onAction={handleAction}

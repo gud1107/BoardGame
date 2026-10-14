@@ -25,3 +25,11 @@ export function acceptSync(cursor: OrderedCursor | null, game: number, seq: numb
   if (!cursor || cursor.game !== game) return true;
   return seq > cursor.applied;
 }
+
+/** 진행 담당 기기 — 방을 만든 기기가 남아 있으면 그 기기, 없으면 좌석 번호가 가장 낮은 사람. */
+export function actingHostOf(occupants: readonly { deviceId: string; seat: number; isHost?: boolean }[]): string | null {
+  const creator = occupants.find((o) => o.isHost);
+  if (creator) return creator.deviceId;
+  const first = [...occupants].sort((a, b) => a.seat - b.seat || (a.deviceId < b.deviceId ? -1 : 1))[0];
+  return first?.deviceId ?? null;
+}

@@ -421,6 +421,8 @@ function FinalPanel({ state, viewerSeat, names, onGameEnd }: { state: GameState;
 export default function WordTowerBoard({ state, viewerSeat, names, connectedSeats, voterSeats, isHost, deadlineMs, nowMs, onAction, onGameEnd }: Props) {
   // 3D 고정 — 2D 막대는 WebGL이 없는 기기에서만 쓴다.
   const [canWebgl] = useState(webglAvailable);
+  // 실기기 FPS 확인용: 주소에 &fps=1
+  const [showFps] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("fps") === "1");
   const [rules, setRules] = useState(false);
   const topic = currentTopic(state);
   const remainingMs = deadlineMs === null ? null : Math.max(0, deadlineMs - nowMs);
@@ -524,7 +526,7 @@ export default function WordTowerBoard({ state, viewerSeat, names, connectedSeat
 
       {/* 무대 */}
       <div className="relative h-[44vh] max-h-[560px] min-h-[260px] overflow-hidden rounded-2xl border border-white/10 light:border-slate-300">
-        {canWebgl ? <Tower3D towers={towers} hurrySec={hurry ? remaining : null} lastOne={lastOne} /> : <Towers2D towers={towers} />}
+        {canWebgl ? <Tower3D towers={towers} hurrySec={hurry ? remaining : null} lastOne={lastOne} showFps={showFps} /> : <Towers2D towers={towers} />}
         {!canWebgl && lastOne && (
           <span className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 animate-bounce rounded-full bg-amber-400 px-4 py-1 text-base font-black whitespace-nowrap text-slate-900 shadow-lg">🎯 마지막 하나!</span>
         )}
