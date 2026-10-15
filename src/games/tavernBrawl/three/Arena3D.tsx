@@ -41,7 +41,7 @@ export interface ArenaApi {
   /** 반격: uid가 to 쪽으로 짧게 받아친다 */
   counter(uid: string, to: string): void;
   /** 상점 탁자: 화면 좌표에서 가장 가까운 "끼워 넣을 자리" 번호(0..보드 수) */
-  nearestInsert(clientX: number, clientY: number): number;
+  nearestInsert(clientX: number, clientY: number): { index: number; back: boolean } | null;
   /** 승리 연출: from 아바타가 to 아바타에게 빛 구슬을 퍼붓는다(구슬 수 = 피해, 최대 12) */
   avatarStrike(from: string, to: string, damage: number, durMs: number): void;
   /** 아바타 춤(승리·무승부 세리머니) */
@@ -69,39 +69,60 @@ type Anim = {
 const SP = 1.08;
 const now = () => performance.now();
 
+/** 줄 z 위치: 앞줄은 가운데(상대) 쪽, 뒷줄은 내 쪽 끝 */
+function rowZ(mode: "shop" | "combat", back: boolean, sign: number): number {
+  if (mode === "shop") return back ? 0.65 : -0.55;
+  return (back ? 2.3 : 0.95) * sign;
+}
+
+/** 한 줄 안 가로 배치 — 좁은 화면에서 4명이 넘으면 간격을 줄이고 지그재그로 엇갈려 겹침을 줄인다 */
+function rowSlots(n: number, compact: boolean): { x: number; dz: number }[] {
+  const crowded = compact && n > 4;
+  const sp = crowded ? 4.4 / (n - 1) : SP;
+  return Array.from({ length: n }, (_, i) => ({ x: (i - (n - 1) / 2) * sp, dz: crowded ? (i % 2 ? 0.24 : -0.24) : 0 }));
+}
+
 function layout(units: ArenaUnit[], mode: "shop" | "combat", compact: boolean): Map<string, THREE.Vector3> {
   const out = new Map<string, THREE.Vector3>();
   for (const side of [0, 1] as const) {
-    const list = units.filter((u) => u.side === side);
-    const n = list.length;
     const sign = side === 0 ? 1 : -1;
-    list.forEach((u, i) => {
-      if (!compact) {
-        const z = mode === "shop" ? 0 : 1.3 * sign;
-        out.set(u.uid, new THREE.Vector3((i - (n - 1) / 2) * SP, 0, z));
-      } else {
-        const front = Math.min(n, 4);
-        const back = n - front;
-        const zf = mode === "shop" ? -0.6 : 0.95 * sign;
-        const zb = mode === "shop" ? 0.7 : 2.4 * sign;
-        if (i < front) out.set(u.uid, new THREE.Vector3((i - (front - 1) / 2) * SP, 0, zf));
-        else out.set(u.uid, new THREE.Vector3((i - front - (back - 1) / 2) * SP, 0, zb));
-      }
-    });
+    for (const back of [false, true]) {
+      const list = units.filter((u) => u.side === side && !!u.back === back);
+      const slots = rowSlots(list.length, compact);
+      const z = rowZ(mode, back, sign);
+      list.forEach((u, i) => out.set(u.uid, new THREE.Vector3(slots[i].x, 0, z + slots[i].dz * sign)));
+    }
   }
   return out;
 }
 
-/** 상점 보드에 끼워 넣을 자리 k(0..n)의 위치 */
-function insertPos(units: ArenaUnit[], pos: Map<string, THREE.Vector3>, k: number, compact: boolean): THREE.Vector3 {
-  const list = units.filter((u) => u.side === 0);
-  const n = list.length;
-  if (n === 0) return new THREE.Vector3(0, 0, 0);
-  const p = (i: number) => pos.get(list[i].uid)!;
-  if (k === 0) return p(0).clone().add(new THREE.Vector3(-SP * 0.55, 0, 0));
-  if (k === n) return p(n - 1).clone().add(new THREE.Vector3(SP * 0.55, 0, 0));
-  if (compact && k === Math.min(n, 4)) return p(k - 1).clone().add(new THREE.Vector3(SP * 0.55, 0, 0));
-  return p(k - 1).clone().lerp(p(k), 0.5);
+export interface InsertSlot {
+  p: THREE.Vector3;
+  /** 보드 전체(앞줄 → 뒷줄) 기준 자리 */
+  index: number;
+  back: boolean;
+}
+
+/** 상점 보드에 끼워 넣을 자리들 — 줄마다 (그 줄 수 + 1)개 */
+function insertSlots(units: ArenaUnit[], pos: Map<string, THREE.Vector3>, mode: "shop" | "combat"): InsertSlot[] {
+  const mine = units.filter((u) => u.side === 0);
+  const frontN = mine.filter((u) => !u.back).length;
+  const out: InsertSlot[] = [];
+  for (const back of [false, true]) {
+    const list = mine.filter((u) => !!u.back === back);
+    const z = rowZ(mode, back, 1);
+    const n = list.length;
+    const p = (i: number) => pos.get(list[i].uid)!;
+    for (let k = 0; k <= n; k++) {
+      let v: THREE.Vector3;
+      if (n === 0) v = new THREE.Vector3(0, 0, z);
+      else if (k === 0) v = p(0).clone().add(new THREE.Vector3(-SP * 0.55, 0, 0)).setZ(z);
+      else if (k === n) v = p(n - 1).clone().add(new THREE.Vector3(SP * 0.55, 0, 0)).setZ(z);
+      else v = p(k - 1).clone().lerp(p(k), 0.5).setZ(z);
+      out.push({ p: v, index: (back ? frontN : 0) + k, back });
+    }
+  }
+  return out;
 }
 
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
@@ -119,7 +140,7 @@ function bounce(t: number) {
 
 interface Shared {
   /** 상점 탁자에서 끼워 넣을 자리들(0..n) */
-  inserts: THREE.Vector3[];
+  inserts: InsertSlot[];
   target: Map<string, THREE.Vector3>;
   cur: Map<string, THREE.Vector3>;
   anim: Map<string, Anim>;
@@ -547,10 +568,10 @@ function Effects({
       },
       nearestInsert(clientX, clientY) {
         const rect = gl.domElement.getBoundingClientRect();
-        let best = shared.inserts.length - 1;
+        let best = -1;
         let bestD = Infinity;
-        shared.inserts.forEach((p, k) => {
-          const v = p.clone().setY(0.5).project(camera);
+        shared.inserts.forEach((slot, k) => {
+          const v = slot.p.clone().setY(0.5).project(camera);
           const x = ((v.x + 1) / 2) * rect.width + rect.left;
           const y = ((1 - v.y) / 2) * rect.height + rect.top;
           const d = Math.hypot(x - clientX, y - clientY);
@@ -559,7 +580,8 @@ function Effects({
             best = k;
           }
         });
-        return Math.max(0, best);
+        const hit = shared.inserts[best];
+        return hit ? { index: hit.index, back: hit.back } : null;
       },
       impactFx(kind, color, uid, from, big) {
         const at = posOf(uid);
@@ -728,7 +750,7 @@ function CameraRig({ mode, compact, sharedRef, withAvatars }: { mode: "shop" | "
     const cam = st.camera as THREE.PerspectiveCamera;
     const aspect = st.size.width / Math.max(1, st.size.height);
     const needW = compact ? (withAvatars ? 5.6 : 5.2) : withAvatars ? (mode === "combat" ? 11.2 : 10.2) : 8.6;
-    const needH = mode === "combat" ? (compact ? (withAvatars ? 7.6 : 6.2) : withAvatars ? 6.0 : 4.6) : compact ? (withAvatars ? 4.4 : 3.4) : withAvatars ? 3.4 : 2.6;
+    const needH = mode === "combat" ? (compact ? (withAvatars ? 7.6 : 6.2) : withAvatars ? 6.8 : 5.6) : compact ? (withAvatars ? 4.4 : 3.4) : withAvatars ? 4.0 : 3.2;
     const tanH = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
     const dist = Math.max(needW / (2 * tanH * aspect), needH / (2 * tanH)) * 1.02;
     const dir = (compact ? new THREE.Vector3(0, 0.9, 0.44) : new THREE.Vector3(0, 0.82, 0.57)).normalize();
@@ -810,7 +832,7 @@ export interface Arena3DProps {
   selected?: string | null;
   onPick?: (uid: string) => void;
   /** 상점: 손패/보드 유닛을 고른 상태면 끼워 넣을 자리 표시 */
-  insert?: { onInsert: (index: number) => void } | null;
+  insert?: { onInsert: (index: number, back: boolean) => void } | null;
   quality?: "high" | "low";
   className?: string;
   /** 아바타 첫 자리를 탁자 가운데로(영웅 고르기 무대) */
@@ -819,7 +841,7 @@ export interface Arena3DProps {
 
 function avatarHome(side: 0 | 1, mode: "shop" | "combat", compact: boolean): THREE.Vector3 {
   const s = side === 0 ? 1 : -1;
-  if (mode === "shop") return compact ? new THREE.Vector3(1.7, 0, 1.55) : new THREE.Vector3(2.7, 0, 0.75);
+  if (mode === "shop") return compact ? new THREE.Vector3(1.7, 0, 1.55) : new THREE.Vector3(3.5, 0, 0.05);
   return compact ? new THREE.Vector3(1.9 * s, 0, 3.3 * s) : new THREE.Vector3(3.9 * s, 0, 1.25 * s);
 }
 
@@ -844,7 +866,7 @@ function Scene({ units, mode, apiRef, selected, onPick, onGrab, insert, quality,
       mode === "shop"
         ? compact
           ? { minX: -2.2, maxX: 2.2, minZ: -1.4, maxZ: 1.9 }
-          : { minX: -3.3, maxX: 3.3, minZ: -1.2, maxZ: 1.3 }
+          : { minX: -3.9, maxX: 3.9, minZ: -1.2, maxZ: 1.3 }
         : compact
           ? { minX: -2.3, maxX: 2.3, minZ: -3.5, maxZ: 3.5 }
           : { minX: -4.4, maxX: 4.4, minZ: -2.4, maxZ: 2.4 },
@@ -860,10 +882,8 @@ function Scene({ units, mode, apiRef, selected, onPick, onGrab, insert, quality,
   // 목표 위치 갱신(현재 위치는 각 토큰이 부드럽게 따라감) — 그리기 전에 반영
   useLayoutEffect(() => {
     sharedRef.current.target = pos;
-    const mineCount = units.filter((u) => u.side === 0).length;
-    sharedRef.current.inserts = Array.from({ length: mineCount + 1 }, (_, k) => insertPos(units, pos, k, compact));
-  }, [pos, units, compact]);
-  const mine = units.filter((u) => u.side === 0).length;
+    sharedRef.current.inserts = insertSlots(units, pos, mode);
+  }, [pos, units, mode]);
   return (
     <>
       <color attach="background" args={["#140c07"]} />
@@ -893,26 +913,35 @@ function Scene({ units, mode, apiRef, selected, onPick, onGrab, insert, quality,
         <Avatar key={a.key} info={a} home={centerAvatar ? new THREE.Vector3(0, 0, compact ? 0.6 : 0.3) : avatarHome(a.side, mode, compact)} bounds={bounds} registry={avatarsRef} cur={sharedRef} memKey={`${centerAvatar ? "pick" : mode}:${compact ? "c" : "w"}:${a.key}`} />
       ))}
       <Table mode={mode} />
+      {/* 앞줄·뒷줄 구역(내 쪽, 상점은 늘, 전투는 양쪽) */}
+      {!centerAvatar &&
+        (mode === "shop" ? [1] : [1, -1]).flatMap((sign) =>
+          [false, true].map((back) => (
+            <mesh key={`${sign}${back}`} position={[0, 0.006, rowZ(mode, back, sign)]} rotation={[-Math.PI / 2, 0, 0]}>
+              <planeGeometry args={[compact ? 5 : 7.8, mode === "shop" ? 1.1 : 1.15]} />
+              <meshBasicMaterial color={back ? "#38bdf8" : "#f87171"} transparent opacity={0.14} depthWrite={false} toneMapped={false} />
+            </mesh>
+          )),
+        )}
       {units.map((u) => (
         <Token key={u.uid} u={u} sharedRef={sharedRef} selected={selected === u.uid} onPick={onPick ? stablePick : undefined} onGrab={onGrab ? stableGrab : undefined} size={compact ? 0.95 : 1.05} facing={0} />
       ))}
       {insert &&
-        Array.from({ length: mine + 1 }, (_, k) => {
-          const p = insertPos(units, pos, k, compact);
+        insertSlots(units, pos, mode).map(({ p, index, back }) => {
           return (
             <mesh
-              key={k}
+              key={`${back ? "b" : "f"}${index}`}
               position={[p.x, 0.03, p.z]}
               rotation={[-Math.PI / 2, 0, 0]}
               onClick={(e) => {
                 e.stopPropagation();
-                insert.onInsert(k);
+                insert.onInsert(index, back);
               }}
               onPointerOver={() => (document.body.style.cursor = "pointer")}
               onPointerOut={() => (document.body.style.cursor = "")}
             >
               <circleGeometry args={[0.3, 28]} />
-              <meshBasicMaterial color="#fde047" toneMapped={false} transparent opacity={0.75} />
+              <meshBasicMaterial color={back ? "#7dd3fc" : "#fde047"} toneMapped={false} transparent opacity={0.75} />
             </mesh>
           );
         })}

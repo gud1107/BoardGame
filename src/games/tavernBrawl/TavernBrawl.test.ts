@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { baseInstance, simulateCombat, type CombatSide, type UnitInstance } from "./combat";
+import { baseInstance, defaultBack, normalizeRows, simulateCombat, type CombatSide, type UnitInstance } from "./combat";
 import {
   applyAction,
   computeRankings,
@@ -95,6 +95,33 @@ describe("combat", () => {
     // 기록 여부와 상관없이 결과 동일
     const plain = simulateCombat(side([unit("k_squire", { uid: "g", hp: 40 })]), side([unit("k_squire", { uid: "h", hp: 40 })]), 11);
     expect(plain.winner).toBe(r.winner);
+  });
+
+  it("2줄: 근접은 앞줄이 살아 있으면 뒷줄을 못 친다, 원거리는 닿는다", () => {
+    for (let seed = 1; seed < 40; seed++) {
+      const melee = simulateCombat(side([unit("b_dog", { uid: "m", hp: 50 })]), side([unit("k_squire", { uid: "f", hp: 50, kw: [] }), unit("n_merc", { uid: "b", back: true })]), seed, true);
+      const hits = melee.frames.filter((f) => f.ev.t === "attack" && f.ev.from === "m").map((f) => (f.ev.t === "attack" ? f.ev.to : ""));
+      expect(hits.length).toBeGreaterThan(0);
+      expect(hits.every((t) => t === "f")).toBe(true);
+    }
+    const ranged = new Set<string>();
+    for (let seed = 1; seed < 40; seed++) {
+      const r = simulateCombat(side([unit("b_hunter", { uid: "r", hp: 50 })]), side([unit("k_squire", { uid: "f", hp: 50, kw: [] }), unit("n_merc", { uid: "b", back: true, hp: 50 })]), seed, true);
+      for (const f of r.frames) if (f.ev.t === "attack" && f.ev.from === "r") ranged.add(f.ev.to);
+    }
+    expect(ranged.has("b")).toBe(true);
+  });
+
+  it("2줄: 암살자는 뒷줄부터, 앞줄만 있으면 앞줄", () => {
+    const r = simulateCombat(side([unit("u_crow", { uid: "a", hp: 60 })]), side([unit("k_squire", { uid: "f", hp: 60 }), unit("n_merc", { uid: "b", back: true, hp: 60, atk: 1 })]), 5, true);
+    const first = r.frames.find((f) => f.ev.t === "attack" && f.ev.from === "a");
+    expect(first && first.ev.t === "attack" ? first.ev.to : null).toBe("b");
+  });
+
+  it("PLAY 기본 줄: 궁수·마법사·성직자는 뒷줄, 보드는 앞줄 → 뒷줄 순", () => {
+    expect(normalizeRows([{ back: true, n: 1 }, { n: 2 }, { back: true, n: 3 }, { n: 4 }]).map((u) => u.n)).toEqual([2, 4, 1, 3]);
+    expect(defaultBack("b_hunter")).toBe(true);
+    expect(defaultBack("b_dog")).toBe(false);
   });
 
   it("토큰(직업 없음)은 기력이 차지 않는다", () => {

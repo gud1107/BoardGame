@@ -1,5 +1,5 @@
 import { seededRng, shuffle } from "@/lib/rng";
-import { baseInstance, byLevel, classCounts, simulateCombat, synergyLevel, tribeCounts, type CombatSide, type UnitInstance } from "./combat";
+import { baseInstance, byLevel, classCounts, defaultBack, normalizeRows, simulateCombat, synergyLevel, tribeCounts, type CombatSide, type UnitInstance } from "./combat";
 import {
   HEROES,
   HERO_BY_ID,
@@ -133,8 +133,9 @@ export type EngineAction =
   | { type: "PICK_HERO"; seat: Seat; hero: HeroId }
   | { type: "BUY"; seat: Seat; round: number; slot: number }
   | { type: "SELL"; seat: Seat; round: number; uid: string }
-  | { type: "PLAY"; seat: Seat; round: number; uid: string; index: number }
-  | { type: "MOVE"; seat: Seat; round: number; uid: string; index: number }
+  /** index = 보드 전체(앞줄 → 뒷줄) 기준 자리. back을 주면 그 줄로(PLAY 기본은 직업별 기본 줄) */
+  | { type: "PLAY"; seat: Seat; round: number; uid: string; index: number; back?: boolean }
+  | { type: "MOVE"; seat: Seat; round: number; uid: string; index: number; back?: boolean }
   | { type: "REROLL"; seat: Seat; round: number }
   | { type: "FREEZE"; seat: Seat; round: number }
   | { type: "UPGRADE"; seat: Seat; round: number }
@@ -484,7 +485,9 @@ function applyShopAction(st: GameState, s: SeatState, a: SeatAction): boolean {
       if (!u || s.board.length >= BOARD_MAX) return false;
       s.hand = s.hand.filter((x) => x !== u);
       const at = Math.max(0, Math.min(a.index, s.board.length));
+      u.back = a.back ?? defaultBack(u.defId);
       s.board.splice(at, 0, u);
+      s.board = normalizeRows(s.board);
       runShopEffects(st, s, seat, u, unitDef(u.defId).battlecry, u.golden);
       if (u.golden) {
         const opts = discoverOptions(st, s, seat, Math.min(6, s.tier + 1));
@@ -497,8 +500,9 @@ function applyShopAction(st: GameState, s: SeatState, a: SeatAction): boolean {
       if (!u) return false;
       const rest = s.board.filter((x) => x !== u);
       const at = Math.max(0, Math.min(a.index, rest.length));
+      if (a.back !== undefined) u.back = a.back;
       rest.splice(at, 0, u);
-      s.board = rest;
+      s.board = normalizeRows(rest);
       return true;
     }
     case "REROLL": {

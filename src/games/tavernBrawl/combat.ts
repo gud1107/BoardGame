@@ -9,6 +9,7 @@ import { skillOf, skillPower } from "./skills";
  *
  * 규칙(룰북 §8): 유닛이 많은 쪽 선공(같으면 시드) → 양쪽이 번갈아 "다음 차례 유닛"이 공격 →
  * 대상은 도발 우선 무작위 → 서로 공격력만큼 피해 교환 → 죽음 처리(죽음의 메아리·부활) 반복.
+ * 2줄 배치(룰북 §9.5-2): 근접은 앞줄이 살아 있으면 앞줄만, 원거리(궁수·마법사)는 아무나, 암살자는 뒷줄부터.
  * 기력(룰북 §9.5-1, skills.ts): 공격 +1, 피해 받고 생존 +1. 가득 차면 자기 차례에 직업 스킬을 먼저 쓴다.
  */
 
@@ -19,6 +20,8 @@ export interface UnitInstance {
   hp: number;
   golden: boolean;
   kw: Keyword[];
+  /** 뒷줄(룰북 §9.5-2). 없으면 앞줄 */
+  back?: boolean;
 }
 
 export interface CombatSide {
@@ -36,6 +39,7 @@ export interface Snap {
   kw: Keyword[];
   /** 전투 중 기력(상점 보드엔 없음) */
   mana?: number;
+  back?: boolean;
 }
 
 /** 능력 발동 알림(재생 화면 하이라이트용). label = 짧은 이름, text = 효과 설명 */
@@ -152,15 +156,41 @@ function removeKw(u: { kw: Keyword[] }, k: Keyword) {
 }
 
 function snap(list: CU[]): Snap[] {
-  return list.map((u) => ({ uid: u.uid, defId: u.defId, atk: u.atk, hp: u.hp, golden: u.golden, kw: [...u.kw], mana: u.mana }));
+  return list.map((u) => ({ uid: u.uid, defId: u.defId, atk: u.atk, hp: u.hp, golden: u.golden, kw: [...u.kw], mana: u.mana, back: !!u.back }));
+}
+
+/** 원거리 직업 — 줄과 상관없이 아무 적이나 공격 */
+export function isRanged(defId: string): boolean {
+  const c = classOf(defId);
+  return c === "ranger" || c === "mage";
+}
+
+/** 새로 보드에 낼 때 기본 줄: 궁수·마법사·성직자는 뒷줄 */
+export function defaultBack(defId: string): boolean {
+  const c = classOf(defId);
+  return c === "ranger" || c === "mage" || c === "cleric";
+}
+
+/** 앞줄 먼저, 뒷줄 나중(각 줄 안 순서 유지) — 보드 배열은 항상 이 순서 */
+export function normalizeRows<T extends { back?: boolean }>(board: T[]): T[] {
+  return [...board.filter((u) => !u.back), ...board.filter((u) => u.back)];
+}
+
+/** 공격자가 닿는 적들(룰북 §9.5-2) */
+export function reachable<T extends { defId: string; back?: boolean }>(attacker: { defId: string }, foes: T[]): T[] {
+  const front = foes.filter((u) => !u.back);
+  const back = foes.filter((u) => u.back);
+  if (isRanged(attacker.defId)) return foes;
+  if (classOf(attacker.defId) === "assassin") return back.length ? back : front;
+  return front.length ? front : back;
 }
 
 export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, record = false): CombatResult {
   const rng = seededRng(seed);
   const pick = <T,>(arr: T[]): T => arr[Math.floor(rng() * arr.length)];
   const sides: [CU[], CU[]] = [
-    a.board.map((u) => ({ ...u, kw: [...u.kw], poisoned: false, attacked: false, mana: 0 })),
-    b.board.map((u) => ({ ...u, kw: [...u.kw], poisoned: false, attacked: false, mana: 0 })),
+    normalizeRows(a.board).map((u) => ({ ...u, kw: [...u.kw], poisoned: false, attacked: false, mana: 0 })),
+    normalizeRows(b.board).map((u) => ({ ...u, kw: [...u.kw], poisoned: false, attacked: false, mana: 0 })),
   ];
   const heroes = [a.hero, b.hero] as const;
   const counts = [tribeCounts(a.board), tribeCounts(b.board)];
@@ -250,10 +280,10 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
     return byLevel(lv, 2, 3, 5);
   }
 
-  function summon(side: 0 | 1, defId: string, golden: boolean, at: number): CU | null {
+  function summon(side: 0 | 1, defId: string, golden: boolean, at: number, back = false): CU | null {
     if (sides[side].length >= 7) return null;
     const inst = baseInstance(defId, golden, `s${side}-${summonN++}`);
-    const cu: CU = { ...inst, poisoned: false, attacked: false, mana: 0 };
+    const cu: CU = { ...inst, poisoned: false, attacked: false, mana: 0, back };
     if (tribeOf(defId) === "beast") {
       const bonus = beastBonus(side);
       cu.atk += bonus;
@@ -275,7 +305,7 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
       } else if (e.kind === "grant") {
         for (const u of targetsFor(side, source, e.target, e.tribe)) addKw(u, e.keyword);
       } else if (e.kind === "summon") {
-        for (let i = 0; i < e.count * m; i++) summon(side, e.unit, false, at + i);
+        for (let i = 0; i < e.count * m; i++) summon(side, e.unit, false, at + i, !!source?.back);
       } else if (e.kind === "damage") {
         const enemy = (1 - side) as 0 | 1;
         const alive = sides[enemy].filter((u) => u.hp > 0 && !u.poisoned);
@@ -336,7 +366,7 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
         if (def.deathrattle) note(d.side, d.u.uid, `🪦 ${def.name}`, def.text.replace(/^.*?죽음의 메아리: /, "죽음의 메아리: "));
         runEffects(d.side, d.u, def.deathrattle, d.u.golden, at);
         if (hasKw(d.u, "reborn")) {
-          const r = summon(d.side, d.u.defId, d.u.golden, at + (sides[d.side].length - before));
+          const r = summon(d.side, d.u.defId, d.u.golden, at + (sides[d.side].length - before), !!d.u.back);
           if (r) {
             r.hp = 1;
             removeKw(r, "reborn");
@@ -344,7 +374,7 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
           }
         } else if (heroes[d.side] === "necro" && !necroUsed[d.side] && !d.u.defId.startsWith("t_")) {
           necroUsed[d.side] = true;
-          const r = summon(d.side, d.u.defId, d.u.golden, at + (sides[d.side].length - before));
+          const r = summon(d.side, d.u.defId, d.u.golden, at + (sides[d.side].length - before), !!d.u.back);
           if (r) {
             r.hp = 1;
             removeKw(r, "reborn");
@@ -355,7 +385,7 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
         if (classOf(d.u.defId) === "summoner") {
           const v = byLevel(clv(d.side, "summoner"), 2, 4, 7);
           if (v) {
-            const sp = summon(d.side, "t_spirit", false, at + (sides[d.side].length - before));
+            const sp = summon(d.side, "t_spirit", false, at + (sides[d.side].length - before), !!d.u.back);
             if (sp) {
               sp.atk = v;
               sp.hp = v;
@@ -429,7 +459,7 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
         if (f.length) {
           const t = pick(f);
           const i = sides[enemy].indexOf(t);
-          const near = [sides[enemy][i - 1], sides[enemy][i + 1]].filter((x): x is CU => !!x && !isDead(x));
+          const near = [sides[enemy][i - 1], sides[enemy][i + 1]].filter((x): x is CU => !!x && !isDead(x) && !!x.back === !!t.back);
           damage(t, 2 * p, false, u);
           for (const n of near) damage(n, p, false, u);
           targets.push(t, ...near);
@@ -458,7 +488,7 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
         targets.push(u);
         break;
       case "summoner": {
-        const sp = summon(side, "t_spirit", false, sides[side].indexOf(u) + 1);
+        const sp = summon(side, "t_spirit", false, sides[side].indexOf(u) + 1, !!u.back);
         if (sp) {
           sp.atk = p;
           sp.hp = p;
@@ -654,12 +684,12 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
     const swings = hasKw(attacker, "windfury") ? 2 : 1;
     for (let sw = 0; sw < swings; sw++) {
       if (isDead(attacker) || !sides[turn].includes(attacker) || sides[enemy].length === 0) break;
-      const taunts = sides[enemy].filter((u) => hasKw(u, "taunt"));
-      // 암살자(시너지 2 이상): 도발 무시하고 공격력이 가장 높은 적
+      // 닿는 줄: 근접은 앞줄(없으면 뒷줄), 원거리는 전체, 암살자는 뒷줄(없으면 앞줄)
+      const pool = reachable(attacker, sides[enemy]);
+      const taunts = pool.filter((u) => hasKw(u, "taunt"));
+      // 암살자(시너지 2 이상): 도발 무시하고 닿는 줄에서 공격력이 가장 높은 적
       const sneaky = classOf(attacker.defId) === "assassin" && clv(turn, "assassin") >= 2;
-      const defender = sneaky
-        ? sides[enemy].reduce((hi, u) => (u.atk > hi.atk ? u : hi), sides[enemy][0])
-        : pick(taunts.length ? taunts : sides[enemy]);
+      const defender = sneaky ? pool.reduce((hi, u) => (u.atk > hi.atk ? u : hi), pool[0]) : pick(taunts.length ? taunts : pool);
       const ad = unitDef(attacker.defId);
       if (ad.onAttack) {
         runEffects(turn, attacker, ad.onAttack, attacker.golden, idx);
@@ -667,7 +697,7 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
         flushNotes();
       }
       const dIdx = sides[enemy].indexOf(defender);
-      const splash = hasKw(attacker, "cleave") ? [sides[enemy][dIdx - 1], sides[enemy][dIdx + 1]].filter((u): u is CU => !!u) : [];
+      const splash = hasKw(attacker, "cleave") ? [sides[enemy][dIdx - 1], sides[enemy][dIdx + 1]].filter((u): u is CU => !!u && !!u.back === !!defender.back) : [];
       const atkPoison = hasKw(attacker, "poison");
       damage(defender, attacker.atk + skillBonus, atkPoison, attacker);
       skillBonus = 0;

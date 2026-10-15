@@ -874,7 +874,7 @@ function ShopView({
     send({ type: "BUY", seat: viewerSeat, round, slot }, "buy");
     setSel(null);
   };
-  const play = (uid: string, index: number) => {
+  const play = (uid: string, index: number, back?: boolean) => {
     if (me.board.length >= BOARD_MAX) {
       showToast(`⚔️ 보드 ${me.board.length}/${BOARD_MAX} 꽉 참`, "보드 유닛을 팔거나(상점으로 끌기) 자리를 비우세요");
       return;
@@ -887,11 +887,19 @@ function ShopView({
         window.setTimeout(() => sfx("ability"), 120);
       } else if (u.golden) showToast(`✨ 황금 ${d.name}`, `발견: ${Math.min(6, me.tier + 1)}등급 유닛 3장 중 1장을 골라요`);
     }
-    send({ type: "PLAY", seat: viewerSeat, round, uid, index }, "play");
+    send({ type: "PLAY", seat: viewerSeat, round, uid, index, back }, "play");
     setSel(null);
   };
-  const move = (uid: string, index: number) => {
-    send({ type: "MOVE", seat: viewerSeat, round, uid, index });
+  const move = (uid: string, index: number, back?: boolean) => {
+    send({ type: "MOVE", seat: viewerSeat, round, uid, index, back });
+  };
+  /** 줄 끝(앞줄 끝 = 앞줄 수, 뒷줄 끝 = 보드 수)에 놓을 자리 */
+  const frontCount = me.board.filter((u) => !u.back).length;
+  const rowEnd = (back: boolean, excludeUid?: string) =>
+    back ? me.board.filter((u) => u.uid !== excludeUid).length : me.board.filter((u) => !u.back && u.uid !== excludeUid).length;
+  const place = (index: number, back: boolean) => {
+    if (selection?.kind === "hand") play(selection.uid, index, back);
+    else if (selection?.kind === "board") move(selection.uid, index, back);
   };
   const sell = (uid: string) => {
     send({ type: "SELL", seat: viewerSeat, round, uid }, "sell");
@@ -962,11 +970,20 @@ function ShopView({
       return;
     }
     let index = me.board.length;
-    if (k.startsWith("board:")) index = Number(k.slice(6));
-    else if (k === "board3d") index = arenaApi.current?.nearestInsert(d.x, d.y) ?? me.board.length;
-    else if (k !== "board") return;
-    if (data.from === "hand") play(data.uid, index);
-    else move(data.uid, index);
+    let back: boolean | undefined;
+    if (k.startsWith("board:")) {
+      const [, i, b] = k.split(":");
+      index = Number(i);
+      back = b === "1";
+    } else if (k.startsWith("boardrow:")) {
+      back = k === "boardrow:1";
+      index = rowEnd(back, data.from === "board" ? data.uid : undefined);
+    } else if (k === "board3d") {
+      const near = arenaApi.current?.nearestInsert(d.x, d.y);
+      if (near) ({ index, back } = near);
+    } else if (k !== "board") return;
+    if (data.from === "hand") play(data.uid, index, back);
+    else move(data.uid, index, back);
   };
   const startDrag = (data: DragData, card: CardUnit, ev: { clientX: number; clientY: number; pointerType: string }) => {
     const sx = ev.clientX;
@@ -1153,7 +1170,7 @@ function ShopView({
       {/* 보드 */}
       <div data-drop="board" className={`${PANEL} flex flex-col gap-2 transition ${dragging ? "ring-1 ring-emerald-300/40" : ""} ${hoverDrop?.startsWith("board") ? "ring-2 ring-emerald-300/80" : ""}`}>
         <p className={LABEL}>
-          <CapBadge label="⚔️ 보드" n={me.board.length} max={BOARD_MAX} /> <span className="ml-1">왼쪽부터 공격해요</span>
+          <CapBadge label="⚔️ 보드" n={me.board.length} max={BOARD_MAX} /> <span className="ml-1">앞줄 왼쪽부터 공격 · 근접은 상대 앞줄부터, 🏹궁수·🔮마법사는 아무나, 🗡️암살자는 뒷줄부터</span>
         </p>
         {view === "3d" ? (
           <div data-drop="board3d" className="relative overflow-hidden rounded-xl">
@@ -1176,7 +1193,7 @@ function ShopView({
               }}
               insert={
                 insertMode && (selection!.kind === "board" || me.board.length < BOARD_MAX)
-                  ? { onInsert: (i) => (selection!.kind === "hand" ? play(selection!.uid, i) : move(selection!.uid, i)) }
+                  ? { onInsert: (i, back) => place(i, back) }
                   : null
               }
             />
@@ -1189,10 +1206,23 @@ function ShopView({
             )}
           </div>
         ) : (
-        <div className="flex min-h-[6rem] flex-wrap items-center gap-x-3 gap-y-3 px-1 pt-2 sm:min-h-[7rem]">
-          {me.board.map((u, i) => (
-            <div key={u.uid} data-drop={`board:${i}`} className={`flex items-center gap-1.5 rounded-xl ${hoverDrop === `board:${i}` ? "outline-2 outline-dashed outline-emerald-300" : ""}`}>
-              {insertMode && <InsertMark onClick={() => (selection!.kind === "hand" ? play(selection!.uid, i) : move(selection!.uid, i))} />}
+        <div className="flex flex-col gap-1.5">
+        {([false, true] as const).map((back) => {
+          const list = me.board.map((u, i) => ({ u, i })).filter((x) => !!x.u.back === back);
+          const canPlace = insertMode && (selection!.kind === "board" || me.board.length < BOARD_MAX);
+          const rowKey = `boardrow:${back ? 1 : 0}`;
+          return (
+        <div
+          key={rowKey}
+          data-drop={rowKey}
+          className={`relative flex min-h-[6rem] flex-wrap items-center gap-x-3 gap-y-3 rounded-xl px-1 pb-1 pt-6 sm:min-h-[7rem] ${back ? "bg-sky-500/5" : "bg-rose-500/5"} ${hoverDrop === rowKey ? "outline-2 outline-dashed outline-emerald-300" : ""}`}
+        >
+          <span className={`pointer-events-none absolute left-2 top-0.5 text-[10px] font-bold ${back ? "text-sky-200/80 light:text-sky-700" : "text-rose-200/80 light:text-rose-700"}`}>
+            {back ? "🏹 뒷줄 — 원거리·암살자만 닿아요" : "🛡️ 앞줄 — 근접 공격을 먼저 받아요"}
+          </span>
+          {list.map(({ u, i }) => (
+            <div key={u.uid} data-drop={`board:${i}:${back ? 1 : 0}`} className={`flex items-center gap-1.5 rounded-xl ${hoverDrop === `board:${i}:${back ? 1 : 0}` ? "outline-2 outline-dashed outline-emerald-300" : ""}`}>
+              {canPlace && <InsertMark onClick={() => place(i, back)} />}
               <UnitCard
                 unit={u}
                 glow={!!boosts[u.uid]}
@@ -1208,10 +1238,11 @@ function ShopView({
               />
             </div>
           ))}
-          {insertMode && (selection!.kind === "board" || me.board.length < BOARD_MAX) && (
-            <InsertMark onClick={() => (selection!.kind === "hand" ? play(selection!.uid, me.board.length) : move(selection!.uid, me.board.length))} />
-          )}
-          {me.board.length === 0 && !insertMode && <span className="text-xs text-white/40 light:text-amber-800/50">손패의 유닛을 골라 보드에 내세요.</span>}
+          {canPlace && <InsertMark onClick={() => place(back ? me.board.length : frontCount, back)} />}
+          {list.length === 0 && !insertMode && <span className="text-xs text-white/40 light:text-amber-800/50">{back ? "비어 있음" : me.board.length ? "비어 있음 — 상대 근접 공격이 바로 뒷줄로 와요" : "손패의 유닛을 골라 보드에 내세요."}</span>}
+        </div>
+          );
+        })}
         </div>
         )}
       </div>
@@ -1268,18 +1299,35 @@ function ShopView({
               </button>
             )}
             {selection?.kind === "hand" && (
-              <button disabled={me.board.length >= BOARD_MAX} onClick={() => play(selection.uid, me.board.length)} className={BTN_GOLD}>
-                보드에 내기
-              </button>
+              <>
+                <button disabled={me.board.length >= BOARD_MAX} onClick={() => play(selection.uid, frontCount, false)} className={BTN_GOLD}>
+                  🛡️ 앞줄에 내기
+                </button>
+                <button disabled={me.board.length >= BOARD_MAX} onClick={() => play(selection.uid, me.board.length, true)} className={BTN_GOLD}>
+                  🏹 뒷줄에 내기
+                </button>
+              </>
             )}
             {selection?.kind === "board" && selectedUnit && (
               <>
-                <button disabled={me.board[0]?.uid === selectedUnit.uid} onClick={() => move(selectedUnit.uid, me.board.findIndex((u) => u.uid === selectedUnit.uid) - 1)} className={BTN_DARK}>
-                  ◀
-                </button>
-                <button disabled={me.board.at(-1)?.uid === selectedUnit.uid} onClick={() => move(selectedUnit.uid, me.board.findIndex((u) => u.uid === selectedUnit.uid) + 1)} className={BTN_DARK}>
-                  ▶
-                </button>
+                {(() => {
+                  const i = me.board.findIndex((u) => u.uid === selectedUnit.uid);
+                  const back = !!selectedUnit.back;
+                  const row = me.board.filter((u) => !!u.back === back);
+                  return (
+                    <>
+                      <button disabled={row[0]?.uid === selectedUnit.uid} onClick={() => move(selectedUnit.uid, i - 1, back)} className={BTN_DARK}>
+                        ◀
+                      </button>
+                      <button disabled={row.at(-1)?.uid === selectedUnit.uid} onClick={() => move(selectedUnit.uid, i + 1, back)} className={BTN_DARK}>
+                        ▶
+                      </button>
+                      <button onClick={() => move(selectedUnit.uid, rowEnd(!back, selectedUnit.uid), !back)} className={BTN_DARK} title="앞줄과 뒷줄 바꾸기">
+                        {back ? "⬆ 앞줄로" : "⬇ 뒷줄로"}
+                      </button>
+                    </>
+                  );
+                })()}
                 {hero?.id === "mage" && powerReady && (
                   <button onClick={() => activatePower(selectedUnit.uid)} className={BTN_DARK}>
                     🧙 +1/+1

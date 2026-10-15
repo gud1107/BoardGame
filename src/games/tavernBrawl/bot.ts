@@ -1,4 +1,4 @@
-import { classCounts, simulateCombat, synergyLevel, tribeCounts, type CombatSide, type UnitInstance } from "./combat";
+import { classCounts, defaultBack, isRanged, normalizeRows, simulateCombat, synergyLevel, tribeCounts, type CombatSide, type UnitInstance } from "./combat";
 import {
   BOARD_MAX,
   BUY_COST,
@@ -129,15 +129,29 @@ function heuristicOrder(board: UnitInstance[]): UnitInstance[] {
   return [...board].sort((a, b) => key(a) - key(b));
 }
 
+/** 줄 배정: 직업 기본 줄 / 원거리만 뒤 / 튼튼한 쪽 앞(체력 하위 절반 뒤) — 앞줄이 비지 않게 */
+type RowRule = "default" | "ranged" | "sturdy";
+function withRows(order: UnitInstance[], rule: RowRule): UnitInstance[] {
+  const hpCut = [...order].map((u) => u.hp).sort((a, b) => b - a)[Math.ceil(order.length / 2) - 1] ?? 0;
+  const rows = order.map((u) => ({
+    ...u,
+    back: rule === "default" ? defaultBack(u.defId) : rule === "ranged" ? isRanged(u.defId) : u.hp < hpCut && !u.kw.includes("taunt"),
+  }));
+  if (rows.length && rows.every((u) => u.back)) rows[0].back = false;
+  return normalizeRows(rows);
+}
+
 function chooseOrder(state: GameState, seat: Seat, p: Profile, rng: () => number): UnitInstance[] {
   const s = state.seats[seat];
   if (p.arrange === "none") return s.board;
-  const base = heuristicOrder(s.board);
+  const base = withRows(heuristicOrder(s.board), "default");
   if (p.arrange === "heuristic") return base;
   const enemies = knownEnemyBoards(state, seat);
   if (enemies.length === 0 || s.board.length < 2) return base;
-  const candidates: UnitInstance[][] = [base, [...base].reverse(), [...s.board].sort((a, b) => a.atk - b.atk), [...s.board].sort((a, b) => b.hp - a.hp)];
-  for (let i = 0; i < 3; i++) candidates.push([...s.board].sort(() => rng() - 0.5));
+  const orders = [heuristicOrder(s.board), [...heuristicOrder(s.board)].reverse(), [...s.board].sort((a, b) => a.atk - b.atk), [...s.board].sort((a, b) => b.hp - a.hp)];
+  for (let i = 0; i < 2; i++) orders.push([...s.board].sort(() => rng() - 0.5));
+  const candidates: UnitInstance[][] = [base];
+  for (const o of orders) for (const rule of ["default", "ranged", "sturdy"] as const) candidates.push(withRows(o, rule));
   let best = base;
   let bestScore = -Infinity;
   candidates.forEach((order, ci) => {
@@ -244,8 +258,8 @@ export function planShopTurn(state: GameState, seat: Seat, level: number, rng: (
   // 7) 배치
   const order = chooseOrder(st, seat, p, rng);
   order.forEach((u, index) => {
-    const cur = me().board.findIndex((x) => x.uid === u.uid);
-    if (cur !== index) act({ type: "MOVE", seat, round, uid: u.uid, index });
+    const cur = me().board.find((x) => x.uid === u.uid);
+    if (me().board.indexOf(cur!) !== index || !!cur?.back !== !!u.back) act({ type: "MOVE", seat, round, uid: u.uid, index, back: !!u.back });
   });
   actions.push({ type: "READY", seat, round });
   return actions;

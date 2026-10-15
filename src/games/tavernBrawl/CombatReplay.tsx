@@ -541,11 +541,24 @@ export default function CombatReplay({
   const usePrev = prev !== null && ((ev.t === "attack" && !impacted) || (ev.t === "deaths" && ev.uids.length > 0));
   const shown = usePrev && prev ? prev.sides : frame.sides;
 
+  // 2줄: 위(상대)는 뒷줄 → 앞줄, 아래(나)는 앞줄 → 뒷줄 — 앞줄끼리 가운데에서 마주 본다
   const row = (side: 0 | 1) => {
-    const list: Snap[] = shown[side];
+    const all: Snap[] = shown[side];
+    const front = all.filter((u) => !u.back);
+    const back = all.filter((u) => u.back);
+    const top = side !== viewSide;
+    const lines = top ? [back, front] : [front, back];
     return (
-      <div className="flex min-h-[6.5rem] flex-wrap items-center justify-center gap-x-3 gap-y-3 px-1 py-2 sm:min-h-[7.5rem]">
-        {list.length === 0 && <span className="text-xs text-white/40">— 비었음 —</span>}
+      <div className="flex flex-col">
+        {all.length === 0 && <span className="py-6 text-center text-xs text-white/40">— 비었음 —</span>}
+        {lines.map((list, li) => list.length > 0 && subRow(list, (top ? li === 0 : li === 1) ? "back" : "front", li))}
+      </div>
+    );
+  };
+  const subRow = (list: Snap[], kind: "front" | "back", key: number) => {
+    return (
+      <div key={key} className={`relative flex min-h-[6.5rem] flex-wrap items-center justify-center gap-x-3 gap-y-3 px-1 py-2 sm:min-h-[7.5rem] ${kind === "back" ? "bg-sky-500/[0.04]" : ""}`}>
+        <span className="pointer-events-none absolute left-1.5 top-1 text-[9px] font-bold text-white/30">{kind === "back" ? "🏹 뒷줄" : "🛡️ 앞줄"}</span>
         {list.map((u) => (
           <div key={u.uid} className="relative">
             <div data-uid={u.uid} className="will-change-transform">
