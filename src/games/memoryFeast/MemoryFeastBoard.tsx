@@ -5,6 +5,7 @@ import Tooltip from "@/components/Tooltip";
 import RulebookModal from "./RulebookModal";
 import {
   DIFFICULTY_CONFIG,
+  MAX_TOLERANCE,
   isPlateInPlay,
   other,
   plateTotal,
@@ -224,6 +225,7 @@ export default function MemoryFeastBoard({
     return () => window.clearInterval(interval);
   }, [state.guessSeq, state.phase, cfg.timeLimitMs]);
 
+  const tolerance = state.tolerance ?? 0;
   const myTurnToPlace = state.phase === "placement" && state.activePlacer === viewerRole;
   const myTurnToGuess = state.phase === "open" && state.activeGuesser === viewerRole;
 
@@ -270,10 +272,10 @@ export default function MemoryFeastBoard({
       state.endReason === "penalty" && winner
         ? `${names[other(winner)]}님의 매칭 실패 벌점이 임계치에 도달했습니다.`
         : !winner
-          ? "더 맞힐 접시 쌍이 없고, 점수와 벌점까지 같아 무승부입니다."
+          ? `한 끗 차이(±${MAX_TOLERANCE})까지 더 맞힐 쌍이 없고, 점수와 벌점까지 같아 무승부입니다.`
           : score.p1 === score.p2
             ? `점수가 같아 벌점이 더 적은 쪽이 이겼습니다 (벌점 ${penalties[winner]} : ${penalties[other(winner)]}).`
-            : "더 맞힐 접시 쌍이 남지 않아 점수로 결판났습니다.";
+            : `한 끗 차이(±${MAX_TOLERANCE})까지 더 맞힐 접시 쌍이 남지 않아 점수로 결판났습니다.`;
     return (
       <div className={`${TABLE_PANEL} flex flex-col items-center gap-6 p-10 text-center`}>
         <TableTexture />
@@ -303,7 +305,9 @@ export default function MemoryFeastBoard({
           <span>
             {state.phase === "placement"
               ? `배치 ${state.round}/${cfg.totalRounds}라운드`
-              : "오픈(맞히기) 단계"}
+              : tolerance > 0
+                ? `오픈 · 한 끗 차이 ±${tolerance} 단계`
+                : "오픈(맞히기) 단계"}
           </span>
           <div className="flex flex-wrap items-center gap-1.5">
             <SuiteSoundHud suite={getMemoryFeastSound} icon="🍽️" label="Masquerade Banquet" preview="match" />
@@ -312,6 +316,16 @@ export default function MemoryFeastBoard({
         </div>
 
         {connectionBanner}
+
+        {state.phase === "open" && tolerance > 0 && (
+          <div
+            key={tolerance}
+            className="rounded-xl border border-amber-300/40 bg-amber-400/10 px-3 py-2 text-center text-xs text-amber-100"
+          >
+            🔔 <span className="font-bold">한 끗 차이 ±{tolerance} 단계</span> — 이제 총합이 {tolerance}까지 달라도 짝으로
+            인정돼요. 단계가 바뀔 땐 점수가 뒤진 쪽부터 맞혀요.
+          </div>
+        )}
 
         <div className="flex gap-3">
           <ScoreBar label={`${names.p1} 점수`} value={state.score.p1} max={scoreMax} accent="#f43f5e" />
@@ -374,7 +388,7 @@ export default function MemoryFeastBoard({
           ) : myTurnToGuess ? (
             <div className="flex flex-col items-center gap-2">
               <p className="text-sm text-white/70">
-                접시 2개를 골라 맞혀보세요 ({selected.length}/2 선택됨)
+                접시 2개를 골라 맞혀보세요{tolerance > 0 ? ` (총합 차이 ±${tolerance}까지 인정)` : ""} ({selected.length}/2 선택됨)
               </p>
               <button
                 disabled={selected.length !== 2}

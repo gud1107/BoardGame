@@ -1,7 +1,7 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { DIFFICULTY_CONFIG, DIFFICULTY_LABEL, DIFFICULTY_ORDER, tokensPerPlayer } from "./engine";
+import { DIFFICULTY_CONFIG, DIFFICULTY_LABEL, DIFFICULTY_ORDER, MAX_TOLERANCE, tokensPerPlayer } from "./engine";
 
 export default function RulebookModal({ onClose }: { onClose: () => void }) {
   return (
@@ -36,10 +36,23 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
 
         <section>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">
+            한 끗 차이 단계
+          </h3>
+          <p className="text-white/70">
+            총합이 같은 쌍이 더 없으면 바로 끝나지 않고 <span className="text-amber-300">한 끗 차이 단계</span>로
+            넘어갑니다. 먼저 총합 차이 <span className="text-amber-300">±1</span>까지, 그래도 없으면{" "}
+            <span className="text-amber-300">±{MAX_TOLERANCE}</span>까지 짝으로 인정합니다. 단계가 바뀔 때는{" "}
+            <span className="text-sky-300">점수가 뒤진 사람</span>(동점이면 기다리던 사람)이 먼저 맞힙니다 — 연속
+            턴으로 판이 한 번에 쓸려도 역전 기회가 남습니다.
+          </p>
+        </section>
+
+        <section>
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">
             승리 / 패배 조건
           </h3>
           <p className="text-white/70">
-            총합이 같은 접시 쌍이 판에 더 남지 않으면 게임이 끝나고,{" "}
+            ±{MAX_TOLERANCE} 단계까지 짝이 하나도 남지 않으면 게임이 끝나고,{" "}
             <span className="text-emerald-300">점수가 높은 쪽</span>이 승리합니다(점수가 같으면 벌점이
             적은 쪽, 그것도 같으면 무승부). 매칭 실패 벌점이 난이도별 임계치 이상 쌓이면 즉시 패배합니다. 오픈 단계 제한
             시간을 넘기면 자동으로 1회 실패 처리됩니다.

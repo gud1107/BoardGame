@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   DIFFICULTY_CONFIG,
+  MAX_TOLERANCE,
+  botBeliefTotals,
+  botRecallChance,
   applyAction,
   chooseBotAction,
   getValidMoves,
@@ -99,7 +102,7 @@ describe("placement phase", () => {
     expect(plateTotal(state.plates[0])).toBe(tokensPerPlayer("easy"));
   });
 
-  it("ends right away on a draw when placement leaves no two plates with the same total", () => {
+  it("opens straight into the ±1 stage when placement leaves no two plates with the same total", () => {
     const cfg = DIFFICULTY_CONFIG.easy;
     let state = startGame("easy");
     // p1 spreads over plates 0..4 (totals 1..5), p2 stacks everything on plate 11 (15) — all distinct.
@@ -107,9 +110,21 @@ describe("placement phase", () => {
       state = placeToken(state, r);
       state = placeToken(state, 11);
     }
-    expect(state.phase).toBe("match-end");
-    expect(state.endReason).toBe("score");
-    expect(state.winner).toBeNull();
+    expect(state.phase).toBe("open");
+    expect(state.tolerance).toBe(1);
+    expect(state.activeGuesser).toBe("p1");
+  });
+
+  it("logs every placement in order (what bots remember from)", () => {
+    let state = startGame("easy");
+    state = placeToken(state, 3);
+    state = placeToken(state, 7);
+    state = placeToken(state, 3);
+    expect(state.placementLog.map((f) => [f.seat, f.plateIndex, f.amount])).toEqual([
+      ["p1", 3, 1],
+      ["p2", 7, 1],
+      ["p1", 3, 2],
+    ]);
   });
 });
 
@@ -134,6 +149,80 @@ function openBoard(totals: number[]): MemoryFeastState {
     plates: base.plates.map((p, i) => ({ ...p, p1Count: totals[i] ?? 0 })),
   };
 }
+
+describe("한 끗 차이 stages", () => {
+  it("widens to ±1 once exact pairs run out and hands the turn to whoever trails", () => {
+    let state = openBoard([3, 3, 6, 7, 20]);
+    state = { ...state, score: { p1: 0, p2: 10 } };
+    state = guess(state, 0, 1); // p1 takes the 3s (6 points) — still behind 6:10, no exact pair left
+    expect(state.phase).toBe("open");
+    expect(state.tolerance).toBe(1);
+    expect(state.activeGuesser).toBe("p1");
+  });
+
+  it("on a tied score the new stage goes to the player who was waiting", () => {
+    let state = openBoard([3, 3, 6, 7, 20]);
+    state = guess(state, 0, 1); // p1 6 : p2 0 -> p2 trails
+    expect(state.activeGuesser).toBe("p2");
+    const tied = guess({ ...openBoard([3, 3, 6, 7, 20]), score: { p1: 0, p2: 6 } }, 0, 1);
+    expect(tied.activeGuesser).toBe("p2");
+  });
+
+  it("in the ±1 stage totals one apart score as a pair", () => {
+    let state = { ...openBoard([6, 7, 20]), tolerance: 1 };
+    state = guess(state, 0, 1);
+    expect(state.score.p1).toBe(13);
+    expect(state.phase).toBe("match-end"); // lone 20 left
+  });
+
+  it("skips straight to ±2 when nothing is within ±1, and ends only when ±2 has nothing either", () => {
+    let state = openBoard([3, 3, 6, 8]);
+    state = guess(state, 0, 1);
+    expect(state.tolerance).toBe(2);
+    state = openBoard([3, 3, 6, 9]);
+    state = guess(state, 0, 1);
+    expect(state.phase).toBe("match-end");
+    expect(state.endReason).toBe("score");
+    expect(hasRemainingPair(state.plates, MAX_TOLERANCE)).toBe(false);
+  });
+
+  it("a ±2-apart guess still fails in the exact stage", () => {
+    const state = guess(openBoard([3, 3, 6, 8]), 2, 3);
+    expect(state.penalties.p1).toBe(1);
+  });
+});
+
+describe("bot memory", () => {
+  it("a bot never reads the true board — forgotten opponent placements are missing from its belief", () => {
+    const cfg = DIFFICULTY_CONFIG.hard;
+    let state = startGame("hard");
+    for (let r = 0; r < cfg.totalRounds; r++) {
+      state = placeToken(state, r); // p1
+      state = placeToken(state, r + 10); // p2
+    }
+    const truth = state.plates.map(plateTotal);
+    const lv1 = botBeliefTotals(state, "p2", 1);
+    // Own plates are always exact; at 20% recall at least one of p1's nine placements is forgotten.
+    for (let r = 0; r < cfg.totalRounds; r++) expect(lv1[r + 10]).toBe(truth[r + 10]);
+    expect(lv1.some((v, i) => v !== truth[i])).toBe(true);
+    // Memory is stable between calls (no flicker turn to turn).
+    expect(botBeliefTotals(state, "p2", 1)).toEqual(lv1);
+  });
+
+  it("a plate the bot opened itself is known exactly", () => {
+    const base = openBoard([3, 5, 5, 3]);
+    const state = { ...base, plates: base.plates.map((p, i) => (i < 2 ? { ...p, revealedTo: { p1: false, p2: true } } : p)) };
+    const belief = botBeliefTotals(state, "p2", 1);
+    expect(belief[0]).toBe(3);
+    expect(belief[1]).toBe(5);
+  });
+
+  it("recall rises with level", () => {
+    expect(botRecallChance(1)).toBeLessThan(botRecallChance(5));
+    expect(botRecallChance(5)).toBeLessThan(botRecallChance(10));
+    expect(botRecallChance(10)).toBeLessThan(1);
+  });
+});
 
 describe("open (matching) phase", () => {
   it("a successful match claims both plates, scores every token on them and grants another turn", () => {

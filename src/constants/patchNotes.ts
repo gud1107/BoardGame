@@ -58,6 +58,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.62.0",
+    releaseDate: "2026-10-16",
+    title: "🍽️ 기억의 만찬 — 한 끗 차이 단계 + 사람처럼 잊는 봇",
+    changes: [
+      { game: "memory-feast", type: "FEAT", desc: "🔔 한 끗 차이 단계 — 같은 쌍이 떨어져도 바로 끝나지 않고 총합 ±1 → ±2까지 짝으로 인정, 점수가 뒤진 쪽부터 맞혀요" },
+      { game: "memory-feast", type: "IMPROVE", desc: "🤖 봇이 더는 접시의 실제 값을 보지 않아요 — 본 것만 기억하고 레벨에 따라 잊어버려서 훨씬 덜 강해졌어요" },
+    ],
+  },
+  {
     version: "v1.61.0",
     releaseDate: "2026-10-15",
     title: "🏰 랜덤 합성 디펜스 — 새 타워 3종·새 몬스터 2종·전체 상향",

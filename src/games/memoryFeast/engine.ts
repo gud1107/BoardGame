@@ -32,6 +32,12 @@
  *    plates used to count as a free, endless "match".
  *  - Placement (all rounds) completes fully before the open/guessing phase
  *    begins — the two phases never interleave.
+ *  - "한 끗 차이" stages (2026-10-16): when no exact pair is left, the match
+ *    no longer ends on the spot (players found that anticlimactic — it could
+ *    even end before a single guess). Instead the matching tolerance widens
+ *    by one (totals within ±1, then ±2 count as a pair) and the turn goes to
+ *    whoever is behind on points. Only once no pair is left even at
+ *    `MAX_TOLERANCE` is the match decided on score.
  *
  * Derived (not in the source doc, filled in for a clean digital adaptation):
  *  - One round's entire token allotment goes onto a single chosen plate
@@ -127,14 +133,19 @@ export function isPlateInPlay(plate: PlateState): boolean {
   return plate.claimedBy === null && plateTotal(plate) > 0;
 }
 
-/** Whether at least one scorable pair is still on the board — the match ends once this turns false. */
-export function hasRemainingPair(plates: PlateState[]): boolean {
-  const seen = new Set<number>();
-  for (const plate of plates) {
-    if (!isPlateInPlay(plate)) continue;
-    const total = plateTotal(plate);
-    if (seen.has(total)) return true;
-    seen.add(total);
+/** Widest "한 끗 차이" stage: totals up to this far apart still count as a pair. */
+export const MAX_TOLERANCE = 2;
+
+/** Whether two totals count as a pair at the given tolerance (0 = exact). */
+export function totalsMatch(a: number, b: number, tolerance = 0): boolean {
+  return Math.abs(a - b) <= tolerance;
+}
+
+/** Whether at least one scorable pair is still on the board at this tolerance. */
+export function hasRemainingPair(plates: PlateState[], tolerance = 0): boolean {
+  const totals = plates.filter(isPlateInPlay).map(plateTotal).sort((a, b) => a - b);
+  for (let i = 1; i < totals.length; i++) {
+    if (totalsMatch(totals[i - 1], totals[i], tolerance)) return true;
   }
   return false;
 }
@@ -169,6 +180,10 @@ export interface MemoryFeastState {
   flashSeq: number;
   /** Bumped on every resolved guess/timeout — lets the UI restart its per-turn countdown even across a "연속 턴" (same guesser again after a success). */
   guessSeq: number;
+  /** Current "한 끗 차이" stage: plates whose totals differ by at most this much are a pair (0 = exact). */
+  tolerance: number;
+  /** Every placement in order — lets bots remember (or forget) what they saw instead of reading the true board. */
+  placementLog: PlacementFlash[];
   /** Null while playing, and also on a drawn "score" ending. */
   winner: Seat | null;
   endReason: EndReason;
@@ -189,6 +204,8 @@ export function startGame(difficulty: Difficulty): MemoryFeastState {
     lastFlash: null,
     flashSeq: 0,
     guessSeq: 0,
+    tolerance: 0,
+    placementLog: [],
     winner: null,
     endReason: null,
   };
@@ -201,6 +218,26 @@ function endOnScore(state: MemoryFeastState): MemoryFeastState {
   if (score.p1 !== score.p2) winner = score.p1 > score.p2 ? "p1" : "p2";
   else if (penalties.p1 !== penalties.p2) winner = penalties.p1 < penalties.p2 ? "p1" : "p2";
   return { ...state, phase: "match-end", winner, endReason: "score", activeGuesser: null };
+}
+
+/**
+ * Called whenever the board may have run out of pairs at the current
+ * tolerance: widens the tolerance (handing the turn to whoever trails on
+ * points, `tieTurn` on a tie) until a pair exists, or ends on score once
+ * even `MAX_TOLERANCE` has nothing left.
+ */
+function advanceStageOrEnd(state: MemoryFeastState, tieTurn: Seat): MemoryFeastState {
+  if (hasRemainingPair(state.plates, state.tolerance)) return state;
+  let tolerance = state.tolerance;
+  while (tolerance < MAX_TOLERANCE) {
+    tolerance++;
+    if (hasRemainingPair(state.plates, tolerance)) {
+      const { score } = state;
+      const trailing: Seat = score.p1 === score.p2 ? tieTurn : score.p1 < score.p2 ? "p1" : "p2";
+      return { ...state, tolerance, activeGuesser: trailing };
+    }
+  }
+  return endOnScore({ ...state, tolerance });
 }
 
 function seatKey(seat: Seat): "p1Count" | "p2Count" {
@@ -217,12 +254,13 @@ export function placeToken(state: MemoryFeastState, plateIndex: number): MemoryF
   const plates = state.plates.map((p, i) => (i === plateIndex ? { ...p, [key]: p[key] + amount } : p));
   const flashSeq = state.flashSeq + 1;
   const lastFlash: PlacementFlash = { seat: active, plateIndex, amount, seq: flashSeq };
+  const placementLog = [...(state.placementLog ?? []), lastFlash];
 
   const { totalRounds } = DIFFICULTY_CONFIG[state.difficulty];
 
   if (state.placerTurn === 0) {
     // p1 just placed; p2 goes next, same round.
-    return { ...state, plates, lastFlash, flashSeq, placerTurn: 1, activePlacer: other(active) };
+    return { ...state, plates, lastFlash, flashSeq, placementLog, placerTurn: 1, activePlacer: other(active) };
   }
 
   // p2 just placed; round is complete.
@@ -232,18 +270,21 @@ export function placeToken(state: MemoryFeastState, plateIndex: number): MemoryF
       plates,
       lastFlash,
       flashSeq,
+      placementLog,
       placerTurn: 0,
       activePlacer: null,
       phase: "open",
       activeGuesser: "p1",
+      tolerance: 0,
     };
-    return hasRemainingPair(plates) ? opened : endOnScore(opened);
+    return advanceStageOrEnd(opened, "p1");
   }
   return {
     ...state,
     plates,
     lastFlash,
     flashSeq,
+    placementLog,
     round: state.round + 1,
     placerTurn: 0,
     activePlacer: "p1",
@@ -272,12 +313,14 @@ export function guess(state: MemoryFeastState, plateA: number, plateB: number): 
   const totalB = plateTotal(state.plates[plateB]);
   const guessSeq = state.guessSeq + 1;
 
-  if (totalA === totalB) {
+  const tolerance = state.tolerance ?? 0;
+  if (totalsMatch(totalA, totalB, tolerance)) {
     const plates = claimForGuesser(state.plates, plateA, plateB, guesser);
     const score = { ...state.score, [guesser]: state.score[guesser] + totalA + totalB };
-    const next = { ...state, plates, score, guessSeq };
-    // Match success grants an extra (연속) turn — same guesser continues — unless the board has no pairs left.
-    return hasRemainingPair(plates) ? next : endOnScore(next);
+    const next = { ...state, plates, score, guessSeq, tolerance };
+    // Match success grants an extra (연속) turn — same guesser continues — unless this stage has no pairs left,
+    // in which case the next 한 끗 차이 stage opens (trailing player first; on a tie the other player, who's been waiting).
+    return advanceStageOrEnd(next, other(guesser));
   }
 
   // Failed match: only the guesser personally learns the true values.
@@ -398,24 +441,58 @@ function scorePlacement(state: MemoryFeastState, seat: Seat, plateIndex: number,
 }
 
 /**
- * Guessing heuristic: the bot reasons over the TRUE board state (same trust
- * trade-off as every other lockstep-game bot here, e.g. hanamikoji) — an
- * actual match scores far above any non-match, and among non-matches a
- * closer total is still mildly preferred (a more "informative" reveal).
- * Levels 1-10's built-in mistake-rate/tie-margin curve (`pickByLevel`) is
- * what makes weaker bots miss matches a real human with imperfect memory
- * would also miss — this module doesn't need its own separate noise model.
+ * Chance a bot of this level still remembers one opponent placement flash
+ * when the guessing starts. Before 2026-10-16 bots read the TRUE board, so
+ * even a sloppy bot never "forgot" anything and Lv.10 swept the board —
+ * players found it far too strong. Now a bot only knows what a person
+ * sitting there could know.
  */
-function scoreGuess(state: MemoryFeastState, plateA: number, plateB: number): number {
-  const totalA = plateTotal(state.plates[plateA]);
-  const totalB = plateTotal(state.plates[plateB]);
-  if (totalA === totalB) return 1000 + totalA;
+export function botRecallChance(level: BotLevel): number {
+  const l = Math.min(10, Math.max(1, Math.round(level)));
+  return RECALL_MIN + ((RECALL_MAX - RECALL_MIN) * (l - 1)) / 9;
+}
+const RECALL_MIN = 0.2;
+const RECALL_MAX = 0.6;
+
+/** Stable 0..1 hash so a bot's memory of one flash doesn't flicker between turns (it isn't re-rolled every move). */
+function recallRoll(flash: PlacementFlash, seat: Seat): number {
+  let h = Math.imul(flash.seq, 0x9e3779b1) ^ Math.imul(flash.plateIndex + 1, 0x85ebca6b) ^ (seat === "p1" ? 0x5bd1e995 : 0x1b873593);
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
+  h = Math.imul(h ^ (h >>> 12), 0x297a2d39);
+  return ((h ^ (h >>> 15)) >>> 0) / 4294967296;
+}
+
+/**
+ * What `seat` believes each plate's total is: its own tokens (always known)
+ * plus the opponent placements it remembers — or the exact total for a
+ * plate it has opened itself. Forgotten placements simply aren't counted,
+ * so a forgetful bot really does make wrong guesses.
+ */
+export function botBeliefTotals(state: MemoryFeastState, seat: Seat, level: BotLevel): number[] {
+  const opp = other(seat);
+  const recall = botRecallChance(level);
+  const believed = state.plates.map((p) => (seat === "p1" ? p.p1Count : p.p2Count));
+  for (const flash of state.placementLog ?? []) {
+    if (flash.seat === opp && recallRoll(flash, seat) < recall) believed[flash.plateIndex] += flash.amount;
+  }
+  return state.plates.map((p, i) => (p.revealedTo[seat] ? plateTotal(p) : believed[i]));
+}
+
+/**
+ * Guessing heuristic over the bot's BELIEVED totals: a (believed) match
+ * scores far above any non-match, and among non-matches a closer total is
+ * still mildly preferred. `pickByLevel`'s noise curve adds slips on top.
+ */
+function scoreGuess(believed: number[], tolerance: number, plateA: number, plateB: number): number {
+  const totalA = believed[plateA];
+  const totalB = believed[plateB];
+  if (totalsMatch(totalA, totalB, tolerance)) return 1000 + totalA + totalB;
   return -Math.abs(totalA - totalB);
 }
 
-function scoreMove(state: MemoryFeastState, seat: Seat, move: EngineAction, level: BotLevel): number {
+function scoreMove(state: MemoryFeastState, seat: Seat, move: EngineAction, level: BotLevel, believed: number[]): number {
   if (move.type === "place") return scorePlacement(state, seat, move.plateIndex, level);
-  if (move.type === "guess") return scoreGuess(state, move.plateA, move.plateB);
+  if (move.type === "guess") return scoreGuess(believed, state.tolerance ?? 0, move.plateA, move.plateB);
   return 0;
 }
 
@@ -427,6 +504,7 @@ export function chooseBotAction(
 ): EngineAction | null {
   const moves = getValidMoves(state, seat);
   if (moves.length === 0) return null;
-  const scored = moves.map((move) => ({ move, score: scoreMove(state, seat, move, level) }));
+  const believed = state.phase === "open" ? botBeliefTotals(state, seat, level) : [];
+  const scored = moves.map((move) => ({ move, score: scoreMove(state, seat, move, level, believed) }));
   return pickByLevel(scored, level, rng);
 }
