@@ -5,7 +5,7 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber"
 import * as THREE from "three";
 import type { Snap } from "../combat";
 import { unitDef } from "../units";
-import { manaTexture, popupTexture, statTexture, tagTexture, woodTexture } from "./textures";
+import { manaTexture, popupTexture, rowLabelTexture, statTexture, tagTexture, woodTexture } from "./textures";
 import { skillOf } from "../skills";
 import { CLASSES, TRIBES } from "../units";
 import Figure, { type FigureAct } from "./figures";
@@ -917,10 +917,17 @@ function Scene({ units, mode, apiRef, selected, onPick, onGrab, insert, quality,
       {!centerAvatar &&
         (mode === "shop" ? [1] : [1, -1]).flatMap((sign) =>
           [false, true].map((back) => (
-            <mesh key={`${sign}${back}`} position={[0, 0.006, rowZ(mode, back, sign)]} rotation={[-Math.PI / 2, 0, 0]}>
-              <planeGeometry args={[compact ? 5 : 7.8, mode === "shop" ? 1.1 : 1.15]} />
-              <meshBasicMaterial color={back ? "#38bdf8" : "#f87171"} transparent opacity={0.14} depthWrite={false} toneMapped={false} />
-            </mesh>
+            <group key={`${sign}${back}`}>
+              <mesh position={[0, 0.006, rowZ(mode, back, sign)]} rotation={[-Math.PI / 2, 0, 0]}>
+                <planeGeometry args={[compact ? 5 : 7.8, mode === "shop" ? 1.1 : 1.15]} />
+                <meshBasicMaterial color={back ? "#38bdf8" : "#f87171"} transparent opacity={0.14} depthWrite={false} toneMapped={false} />
+              </mesh>
+              {/* 글자 이름표: 넓은 화면은 구역 바깥 왼쪽, 좁은 화면은 구역 왼쪽 아래 귀퉁이 바닥 */}
+              <mesh position={[compact ? -1.95 : -4.5, 0.008, rowZ(mode, back, sign) + (compact ? 0.38 : 0)]} rotation={[-Math.PI / 2, 0, 0]}>
+                <planeGeometry args={compact ? [0.95, 0.285] : [1.2, 0.36]} />
+                <meshBasicMaterial map={rowLabelTexture(back ? "🏹 뒷줄" : "🛡️ 앞줄", back ? "#38bdf8" : "#f87171")} transparent depthWrite={false} toneMapped={false} />
+              </mesh>
+            </group>
           )),
         )}
       {units.map((u) => (

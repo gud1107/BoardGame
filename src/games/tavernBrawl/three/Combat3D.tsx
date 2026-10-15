@@ -9,6 +9,7 @@ import { attackStyle } from "../attackStyle";
 import { getTavernBrawlSound } from "../tavernBrawlBgm";
 import Arena3D, { type ArenaApi, type ArenaUnit } from "./Arena3D";
 import AbilityFeed, { type FeedItem } from "../AbilityFeed";
+import { ReachHintBanner, useReachHint } from "../ReachHint";
 import type { EmoteSlot } from "../emotes";
 
 /**
@@ -53,6 +54,7 @@ export default function Combat3D({
 }) {
   const frames = useMemo(() => simulateCombat(combat.sideA, combat.sideB, combat.seed, true).frames, [combat]);
   const [idx, setIdx] = useState(0);
+  const reachHint = useReachHint(frames, idx);
   const [impacted, setImpacted] = useState(false);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   /** 승리 연출이 끝났는지 — 끝나기 전엔 진 쪽 체력을 피해 전 값으로 보여 준다 */
@@ -376,6 +378,7 @@ export default function Combat3D({
         </span>
       </div>
       <AbilityFeed items={feed} />
+      <ReachHintBanner kind={reachHint} />
       {attackerName && (
         <div className="pointer-events-none absolute bottom-9 left-1/2 -translate-x-1/2">
           <span key={idx} className={`tb-banner whitespace-nowrap rounded-full px-3 py-0.5 text-[11px] font-semibold text-white ${ev.t === "skill" ? (ev.side === viewSide ? "bg-sky-700/90" : "bg-fuchsia-900/85") : ev.t === "attack" && ev.side === viewSide ? "bg-emerald-900/80" : "bg-rose-900/80"}`}>

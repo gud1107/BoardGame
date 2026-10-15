@@ -1215,7 +1215,7 @@ function ShopView({
         <div
           key={rowKey}
           data-drop={rowKey}
-          className={`relative flex min-h-[6rem] flex-wrap items-center gap-x-3 gap-y-3 rounded-xl px-1 pb-1 pt-6 sm:min-h-[7rem] ${back ? "bg-sky-500/5" : "bg-rose-500/5"} ${hoverDrop === rowKey ? "outline-2 outline-dashed outline-emerald-300" : ""}`}
+          className={`relative flex flex-wrap items-center gap-x-3 gap-y-3 rounded-xl px-1 pb-1 pt-6 ${list.length || canPlace ? "min-h-[6rem] sm:min-h-[7rem]" : "min-h-0 pb-2"} ${back ? "bg-sky-500/5" : "bg-rose-500/5"} ${hoverDrop === rowKey ? "outline-2 outline-dashed outline-emerald-300" : ""}`}
         >
           <span className={`pointer-events-none absolute left-2 top-0.5 text-[10px] font-bold ${back ? "text-sky-200/80 light:text-sky-700" : "text-rose-200/80 light:text-rose-700"}`}>
             {back ? "🏹 뒷줄 — 원거리·암살자만 닿아요" : "🛡️ 앞줄 — 근접 공격을 먼저 받아요"}

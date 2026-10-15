@@ -205,6 +205,33 @@ export function popupTexture(text: string, color: string): { tex: THREE.CanvasTe
   return { tex: t, aspect: W / H };
 }
 
+const rowLabelCache = new Map<string, THREE.CanvasTexture>();
+/** 탁자 바닥에 눕혀 놓는 줄 이름표("🛡️ 앞줄" / "🏹 뒷줄") — 색 말고 글자로도 줄을 구분(색각 이상 대비) */
+export function rowLabelTexture(text: string, color: string): THREE.CanvasTexture {
+  const key = `${text}:${color}`;
+  const hit = rowLabelCache.get(key);
+  if (hit) return hit;
+  const c = document.createElement("canvas");
+  c.width = 320;
+  c.height = 96;
+  const g = c.getContext("2d")!;
+  g.fillStyle = "rgba(12,10,9,0.55)";
+  g.beginPath();
+  g.roundRect(4, 8, 312, 80, 40);
+  g.fill();
+  g.lineWidth = 5;
+  g.strokeStyle = color;
+  g.stroke();
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.font = "900 50px 'Pretendard','Malgun Gothic',sans-serif";
+  g.fillStyle = "#fafaf9";
+  g.fillText(text, 160, 50);
+  const t = finish(c);
+  rowLabelCache.set(key, t);
+  return t;
+}
+
 let woodTex: THREE.CanvasTexture | null = null;
 /** 여관 탁자 나뭇결 */
 export function woodTexture(): THREE.CanvasTexture {

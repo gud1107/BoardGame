@@ -16,6 +16,7 @@ import { chooseBotAction } from "./bot";
 import { playBotGame } from "./sim";
 import { TRIBE_ORDER, unitDef, type HeroId } from "./units";
 import { TRIBES_PER_GAME } from "./engine";
+import { reachHintFor } from "./ReachHint";
 
 let n = 0;
 const unit = (defId: string, patch: Partial<UnitInstance> = {}): UnitInstance => ({ ...baseInstance(defId, false, `u${n++}`), ...patch });
@@ -116,6 +117,22 @@ describe("combat", () => {
     const r = simulateCombat(side([unit("u_crow", { uid: "a", hp: 60 })]), side([unit("k_squire", { uid: "f", hp: 60 }), unit("n_merc", { uid: "b", back: true, hp: 60, atk: 1 })]), 5, true);
     const first = r.frames.find((f) => f.ev.t === "attack" && f.ev.from === "a");
     expect(first && first.ev.t === "attack" ? first.ev.to : null).toBe("b");
+  });
+
+  it("첫 판 힌트: 근접이 앞줄을 치면 melee, 원거리가 뒷줄을 쏘면 ranged", () => {
+    const enemy = () => side([unit("k_squire", { uid: "f", hp: 60, kw: [] }), unit("n_merc", { uid: "b", back: true, hp: 60 })]);
+    const melee = simulateCombat(side([unit("b_dog", { uid: "m", hp: 60 })]), enemy(), 3, true);
+    const kinds = melee.frames.map((f, i) => reachHintFor(i > 0 ? melee.frames[i - 1] : null, f)).filter(Boolean);
+    expect(kinds).toContain("melee");
+    const seen = new Set<string>();
+    for (let seed = 1; seed < 30; seed++) {
+      const r = simulateCombat(side([unit("b_hunter", { uid: "r", hp: 60 })]), enemy(), seed, true);
+      r.frames.forEach((f, i) => {
+        const k = reachHintFor(i > 0 ? r.frames[i - 1] : null, f);
+        if (k) seen.add(k);
+      });
+    }
+    expect(seen.has("ranged")).toBe(true);
   });
 
   it("PLAY 기본 줄: 궁수·마법사·성직자는 뒷줄, 보드는 앞줄 → 뒷줄 순", () => {

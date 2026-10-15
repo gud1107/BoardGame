@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { simulateCombat, type AbilityNote, type Frame, type Snap } from "./combat";
 import { attackStyle, type AttackKind } from "./attackStyle";
 import AbilityFeed, { type FeedItem } from "./AbilityFeed";
+import { ReachHintBanner, useReachHint } from "./ReachHint";
 import { EmoteBubble, type EmoteSlot } from "./emotes";
 import type { CombatRecord } from "./engine";
 import { HERO_BY_ID } from "./units";
@@ -82,6 +83,7 @@ export default function CombatReplay({
 }) {
   const frames = useMemo(() => simulateCombat(combat.sideA, combat.sideB, combat.seed, true).frames, [combat]);
   const [idx, setIdx] = useState(0);
+  const reachHint = useReachHint(frames, idx);
   /** 공격 프레임에서 충돌이 일어났는지 — 그 전엔 맞기 전 체력을 보여 준다 */
   const [impacted, setImpacted] = useState(false);
   const [struck, setStruck] = useState(false);
@@ -599,6 +601,7 @@ export default function CombatReplay({
         </span>
       </div>
       <AbilityFeed items={feed} />
+      <ReachHintBanner kind={reachHint} />
       <div ref={arenaRef} className="relative">
         {row(enemySide)}
         <div className="relative flex h-8 items-center justify-center">
