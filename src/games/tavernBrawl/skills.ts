@@ -2,10 +2,13 @@ import { unitDef, type ClassId } from "./units";
 
 /**
  * 직업 스킬 — 롤토체스처럼 "기력"이 가득 차면 자기 공격 차례에 스킬을 먼저 쓰고 이어서 공격한다.
- * 기력: 공격할 때 +1, 피해를 받고 살아남으면 +1(보호막에 막히면 0). 스킬을 쓰면 0으로.
+ * 기력: 전투 시작 1칸(MANA_RULES.start), 공격할 때 +1, 피해를 받고 살아남으면 +1(보호막에 막히면 0). 스킬을 쓰면 0으로.
  * 위력 p = 유닛 등급(황금이면 ×2). 토큰(직업 없음)은 스킬이 없다.
  * 수치는 balance.sim.test.ts 자가대전으로 확인 — 바꾸면 룰북 §9.5-1 표도 같이 고칠 것.
  */
+
+/** 기력 규칙(룰북 §9.5-1) — 전투 시작 기력과 사건별 증가량 */
+export const MANA_RULES = { start: 1, attack: 1, hit: 1, allyDeath: 0 };
 
 export interface SkillDef {
   name: string;

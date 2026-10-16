@@ -1,6 +1,6 @@
 import { seededRng } from "@/lib/rng";
 import { KEYWORDS, unitDef, type ClassId, type Effect, type HeroId, type Keyword, type Tribe } from "./units";
-import { skillOf, skillPower } from "./skills";
+import { MANA_RULES, skillOf, skillPower } from "./skills";
 
 /**
  * 여관 난투 전투 시뮬레이터 — 순수 함수. 같은 (보드A, 보드B, 영웅, 시드) → 항상 같은 결과·같은 프레임.
@@ -185,12 +185,18 @@ export function reachable<T extends { defId: string; back?: boolean }>(attacker:
   return front.length ? front : back;
 }
 
+/** 전투 시작 기력(직업 없는 토큰은 0) */
+function startMana(defId: string): number {
+  const sk = skillOf(defId);
+  return sk ? Math.min(sk.mana, MANA_RULES.start) : 0;
+}
+
 export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, record = false): CombatResult {
   const rng = seededRng(seed);
   const pick = <T,>(arr: T[]): T => arr[Math.floor(rng() * arr.length)];
   const sides: [CU[], CU[]] = [
-    normalizeRows(a.board).map((u) => ({ ...u, kw: [...u.kw], poisoned: false, attacked: false, mana: 0 })),
-    normalizeRows(b.board).map((u) => ({ ...u, kw: [...u.kw], poisoned: false, attacked: false, mana: 0 })),
+    normalizeRows(a.board).map((u) => ({ ...u, kw: [...u.kw], poisoned: false, attacked: false, mana: startMana(u.defId) })),
+    normalizeRows(b.board).map((u) => ({ ...u, kw: [...u.kw], poisoned: false, attacked: false, mana: startMana(u.defId) })),
   ];
   const heroes = [a.hero, b.hero] as const;
   const counts = [tribeCounts(a.board), tribeCounts(b.board)];
@@ -241,12 +247,12 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
     u.hp -= amount;
     hurt.add(u);
     if (poison) u.poisoned = true;
-    if (u.hp > 0 && !u.poisoned) gainMana(u);
+    if (u.hp > 0 && !u.poisoned) gainMana(u, MANA_RULES.hit);
   }
 
-  function gainMana(u: CU) {
+  function gainMana(u: CU, n: number) {
     const sk = skillOf(u.defId);
-    if (sk) u.mana = Math.min(sk.mana, u.mana + 1);
+    if (sk && n > 0) u.mana = Math.min(sk.mana, u.mana + n);
   }
 
   function targetsFor(side: 0 | 1, source: CU | null, target: string, tribe?: Tribe): CU[] {
@@ -408,6 +414,8 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
         // 아군 사망 반응
         for (const ally of sides[d.side]) {
           if (ally.hp <= 0) continue;
+          // 아군이 쓰러지면 남은 아군 기력 +(MANA_RULES.allyDeath)
+          if (!isDead(ally)) gainMana(ally, MANA_RULES.allyDeath);
           const ad = unitDef(ally.defId);
           if (ad.onAllyDeath) {
             runEffects(d.side, ally, ad.onAllyDeath, ally.golden, 0);
@@ -703,7 +711,7 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
       skillBonus = 0;
       for (const s of splash) damage(s, attacker.atk, atkPoison, attacker);
       if (!sneaky) damage(attacker, defender.atk, hasKw(defender, "poison"), defender);
-      if (!isDead(attacker)) gainMana(attacker);
+      if (!isDead(attacker)) gainMana(attacker, MANA_RULES.attack);
       push({ t: "attack", side: turn, from: attacker.uid, to: defender.uid, splash: splash.map((s) => s.uid) });
       processDeaths(turn === 0 ? [0, 1] : [1, 0]);
     }
