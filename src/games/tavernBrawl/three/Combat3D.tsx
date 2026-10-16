@@ -9,7 +9,7 @@ import { attackStyle } from "../attackStyle";
 import { getTavernBrawlSound } from "../tavernBrawlBgm";
 import Arena3D, { type ArenaApi, type ArenaUnit } from "./Arena3D";
 import AbilityFeed, { type FeedItem } from "../AbilityFeed";
-import { ReachHintBanner, useReachHint } from "../ReachHint";
+import { HINT_HOLD_MS, ReachHintBanner, useReachHint } from "../ReachHint";
 import type { EmoteSlot } from "../emotes";
 
 /**
@@ -55,6 +55,8 @@ export default function Combat3D({
   const frames = useMemo(() => simulateCombat(combat.sideA, combat.sideB, combat.seed, true).frames, [combat]);
   const [idx, setIdx] = useState(0);
   const reachHint = useReachHint(frames, idx);
+  // 힌트가 막 뜬 프레임은 읽을 틈을 주려고 조금 더 머문다(타이머가 다시 걸려도 그 프레임 길이 + 0.5초)
+  const holdMs = reachHint && reachHint.at === idx ? HINT_HOLD_MS : 0;
   const [impacted, setImpacted] = useState(false);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   /** 승리 연출이 끝났는지 — 끝나기 전엔 진 쪽 체력을 피해 전 값으로 보여 준다 */
@@ -95,9 +97,9 @@ export default function Combat3D({
     const t = window.setTimeout(() => {
       setImpacted(false);
       setIdx((i) => Math.min(frames.length - 1, i + 1));
-    }, STEP_MS[frames[idx].ev.t] / speed);
+    }, STEP_MS[frames[idx].ev.t] / speed + holdMs);
     return () => window.clearTimeout(t);
-  }, [idx, frames, speed, ready]);
+  }, [idx, frames, speed, holdMs, ready]);
 
   const frame = frames[idx];
   const prev = idx > 0 ? frames[idx - 1] : null;
@@ -378,7 +380,7 @@ export default function Combat3D({
         </span>
       </div>
       <AbilityFeed items={feed} />
-      <ReachHintBanner kind={reachHint} />
+      <ReachHintBanner kind={reachHint?.kind ?? null} />
       {attackerName && (
         <div className="pointer-events-none absolute bottom-9 left-1/2 -translate-x-1/2">
           <span key={idx} className={`tb-banner whitespace-nowrap rounded-full px-3 py-0.5 text-[11px] font-semibold text-white ${ev.t === "skill" ? (ev.side === viewSide ? "bg-sky-700/90" : "bg-fuchsia-900/85") : ev.t === "attack" && ev.side === viewSide ? "bg-emerald-900/80" : "bg-rose-900/80"}`}>

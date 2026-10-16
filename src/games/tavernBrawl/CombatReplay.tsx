@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { simulateCombat, type AbilityNote, type Frame, type Snap } from "./combat";
 import { attackStyle, type AttackKind } from "./attackStyle";
 import AbilityFeed, { type FeedItem } from "./AbilityFeed";
-import { ReachHintBanner, useReachHint } from "./ReachHint";
+import { HINT_HOLD_MS, HINT_KIND_COUNT, ReachHintBanner, useReachHint } from "./ReachHint";
 import { EmoteBubble, type EmoteSlot } from "./emotes";
 import type { CombatRecord } from "./engine";
 import { HERO_BY_ID } from "./units";
@@ -30,7 +30,8 @@ export const IMPACT_AT = 0.42;
 
 export function replayDurationMs(c: CombatRecord): number {
   const frames = simulateCombat(c.sideA, c.sideB, c.seed, true).frames;
-  return frames.reduce((a, f) => a + STEP_MS[f.ev.t], 0);
+  // 첫 판 힌트(종류마다 한 전투 1번)가 뜨면 그 프레임이 HINT_HOLD_MS씩 더 머문다 — 최대치를 미리 더해 둔다
+  return frames.reduce((a, f) => a + STEP_MS[f.ev.t], 0) + HINT_KIND_COUNT * HINT_HOLD_MS;
 }
 
 type Fx =
@@ -84,6 +85,8 @@ export default function CombatReplay({
   const frames = useMemo(() => simulateCombat(combat.sideA, combat.sideB, combat.seed, true).frames, [combat]);
   const [idx, setIdx] = useState(0);
   const reachHint = useReachHint(frames, idx);
+  // 힌트가 막 뜬 프레임은 읽을 틈을 주려고 조금 더 머문다(타이머가 다시 걸려도 그 프레임 길이 + 0.5초)
+  const holdMs = reachHint && reachHint.at === idx ? HINT_HOLD_MS : 0;
   /** 공격 프레임에서 충돌이 일어났는지 — 그 전엔 맞기 전 체력을 보여 준다 */
   const [impacted, setImpacted] = useState(false);
   const [struck, setStruck] = useState(false);
@@ -125,9 +128,9 @@ export default function CombatReplay({
     const t = window.setTimeout(() => {
       setImpacted(false);
       setIdx((i) => Math.min(frames.length - 1, i + 1));
-    }, STEP_MS[frames[idx].ev.t] / speed);
+    }, STEP_MS[frames[idx].ev.t] / speed + holdMs);
     return () => window.clearTimeout(t);
-  }, [idx, frames, speed]);
+  }, [idx, frames, speed, holdMs]);
 
   const el = useCallback((uid: string) => arenaRef.current?.querySelector<HTMLElement>(`[data-uid="${uid}"]`) ?? null, []);
   const center = useCallback((node: HTMLElement) => {
@@ -601,7 +604,7 @@ export default function CombatReplay({
         </span>
       </div>
       <AbilityFeed items={feed} />
-      <ReachHintBanner kind={reachHint} />
+      <ReachHintBanner kind={reachHint?.kind ?? null} />
       <div ref={arenaRef} className="relative">
         {row(enemySide)}
         <div className="relative flex h-8 items-center justify-center">

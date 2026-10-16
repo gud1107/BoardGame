@@ -135,6 +135,13 @@ describe("combat", () => {
     expect(seen.has("ranged")).toBe(true);
   });
 
+  it("첫 판 힌트: 상대가 전원 뒷줄이면 근접 공격에 emptyFront", () => {
+    const r = simulateCombat(side([unit("b_dog", { uid: "m", hp: 60 })]), side([unit("n_merc", { uid: "b", back: true, hp: 60 })]), 4, true);
+    const kinds = r.frames.map((f, i) => reachHintFor(i > 0 ? r.frames[i - 1] : null, f)).filter(Boolean);
+    expect(kinds).toContain("emptyFront");
+    expect(kinds).not.toContain("melee");
+  });
+
   it("PLAY 기본 줄: 궁수·마법사·성직자는 뒷줄, 보드는 앞줄 → 뒷줄 순", () => {
     expect(normalizeRows([{ back: true, n: 1 }, { n: 2 }, { back: true, n: 3 }, { n: 4 }]).map((u) => u.n)).toEqual([2, 4, 1, 3]);
     expect(defaultBack("b_hunter")).toBe(true);
