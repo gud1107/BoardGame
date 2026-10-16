@@ -100,16 +100,50 @@ export const DIFFICULTY_CONFIG: Record<Difficulty, DifficultyConfig> = {
 
 export const DIFFICULTY_ORDER: Difficulty[] = ["easy", "normal", "hard"];
 
+/**
+ * How many tokens one placement drops (2026-10-17):
+ *  - "single": always 1 token, on a bigger board with more rounds — you
+ *    memorize WHERE the opponent went (and how often), not ever-growing
+ *    amounts. Players found the growing amounts piled up too fast.
+ *  - "growing": the original rule — round R drops R tokens.
+ */
+export type TokenMode = "single" | "growing";
+
+export const TOKEN_MODE_ORDER: TokenMode[] = ["single", "growing"];
+
+export const TOKEN_MODE_LABEL: Record<TokenMode, string> = {
+  single: "1개씩",
+  growing: "늘어나는 토큰 (원작)",
+};
+
+/** Board size / round count for "single" mode — everything else follows the difficulty. Tuned by self-play (see HANDOFF 2026-10-17). */
+const SINGLE_LAYOUT: Record<Difficulty, Pick<DifficultyConfig, "plateCount" | "totalRounds">> = {
+  easy: { plateCount: 16, totalRounds: 12 },
+  normal: { plateCount: 20, totalRounds: 16 },
+  hard: { plateCount: 25, totalRounds: 20 },
+};
+
+/** The effective config for a difficulty + token mode (a missing mode = an older "growing" state). */
+export function configFor(difficulty: Difficulty, mode: TokenMode = "growing"): DifficultyConfig {
+  const base = DIFFICULTY_CONFIG[difficulty];
+  return mode === "single" ? { ...base, ...SINGLE_LAYOUT[difficulty] } : base;
+}
+
+/** Tokens dropped by one placement in the given round. */
+export function placementAmount(mode: TokenMode | undefined, round: number): number {
+  return mode === "single" ? 1 : round;
+}
+
 export const DIFFICULTY_LABEL: Record<Difficulty, string> = {
   easy: "쉬움",
   normal: "보통",
   hard: "어려움 (원작)",
 };
 
-/** Sum of 1..totalRounds — every token a player will place over the whole placement phase. */
-export function tokensPerPlayer(difficulty: Difficulty): number {
-  const { totalRounds } = DIFFICULTY_CONFIG[difficulty];
-  return (totalRounds * (totalRounds + 1)) / 2;
+/** Every token a player will place over the whole placement phase. */
+export function tokensPerPlayer(difficulty: Difficulty, mode: TokenMode = "growing"): number {
+  const { totalRounds } = configFor(difficulty, mode);
+  return mode === "single" ? totalRounds : (totalRounds * (totalRounds + 1)) / 2;
 }
 
 export interface PlateState {
@@ -165,6 +199,8 @@ export type EndReason = "score" | "penalty" | null;
 
 export interface MemoryFeastState {
   difficulty: Difficulty;
+  /** Optional only so states from before 2026-10-17 (always "growing") still load. */
+  tokenMode?: TokenMode;
   phase: GamePhase;
   plates: PlateState[];
   /** Current placement round, 1-indexed — also this round's per-plate token amount. Meaningless once phase leaves "placement". */
@@ -189,10 +225,11 @@ export interface MemoryFeastState {
   endReason: EndReason;
 }
 
-export function startGame(difficulty: Difficulty): MemoryFeastState {
-  const { plateCount } = DIFFICULTY_CONFIG[difficulty];
+export function startGame(difficulty: Difficulty, tokenMode: TokenMode = "growing"): MemoryFeastState {
+  const { plateCount } = configFor(difficulty, tokenMode);
   return {
     difficulty,
+    tokenMode,
     phase: "placement",
     plates: Array.from({ length: plateCount }, emptyPlate),
     round: 1,
@@ -248,7 +285,7 @@ export function placeToken(state: MemoryFeastState, plateIndex: number): MemoryF
   if (state.phase !== "placement" || !state.activePlacer) return state;
   if (plateIndex < 0 || plateIndex >= state.plates.length) return state;
   const active = state.activePlacer;
-  const amount = state.round;
+  const amount = placementAmount(state.tokenMode, state.round);
   const key = seatKey(active);
 
   const plates = state.plates.map((p, i) => (i === plateIndex ? { ...p, [key]: p[key] + amount } : p));
@@ -256,7 +293,7 @@ export function placeToken(state: MemoryFeastState, plateIndex: number): MemoryF
   const lastFlash: PlacementFlash = { seat: active, plateIndex, amount, seq: flashSeq };
   const placementLog = [...(state.placementLog ?? []), lastFlash];
 
-  const { totalRounds } = DIFFICULTY_CONFIG[state.difficulty];
+  const { totalRounds } = configFor(state.difficulty, state.tokenMode);
 
   if (state.placerTurn === 0) {
     // p1 just placed; p2 goes next, same round.
@@ -326,7 +363,7 @@ export function guess(state: MemoryFeastState, plateA: number, plateB: number): 
   // Failed match: only the guesser personally learns the true values.
   const plates = revealBoth(state.plates, plateA, plateB, guesser);
   const penalties = { ...state.penalties, [guesser]: state.penalties[guesser] + 1 };
-  const { penaltyLossThreshold } = DIFFICULTY_CONFIG[state.difficulty];
+  const { penaltyLossThreshold } = configFor(state.difficulty, state.tokenMode);
   if (penalties[guesser] >= penaltyLossThreshold) {
     return {
       ...state,
@@ -348,7 +385,7 @@ export function timeoutFail(state: MemoryFeastState): MemoryFeastState {
   const guesser = state.activeGuesser;
   const guessSeq = state.guessSeq + 1;
   const penalties = { ...state.penalties, [guesser]: state.penalties[guesser] + 1 };
-  const { penaltyLossThreshold } = DIFFICULTY_CONFIG[state.difficulty];
+  const { penaltyLossThreshold } = configFor(state.difficulty, state.tokenMode);
   if (penalties[guesser] >= penaltyLossThreshold) {
     return {
       ...state,
@@ -447,12 +484,16 @@ function scorePlacement(state: MemoryFeastState, seat: Seat, plateIndex: number,
  * players found it far too strong. Now a bot only knows what a person
  * sitting there could know.
  */
-export function botRecallChance(level: BotLevel): number {
+export function botRecallChance(level: BotLevel, mode: TokenMode = "growing"): number {
   const l = Math.min(10, Math.max(1, Math.round(level)));
-  return RECALL_MIN + ((RECALL_MAX - RECALL_MIN) * (l - 1)) / 9;
+  const [min, max] = RECALL_RANGE[mode];
+  return min + ((max - min) * (l - 1)) / 9;
 }
-const RECALL_MIN = 0.2;
-const RECALL_MAX = 0.6;
+/** "single" spreads many 1-token flashes over a bigger board, so a narrow range made every level play alike — it needs a wider spread to keep Lv.1 and Lv.10 distinct. */
+const RECALL_RANGE: Record<TokenMode, [number, number]> = {
+  growing: [0.2, 0.6],
+  single: [0.1, 0.8],
+};
 
 /** Stable 0..1 hash so a bot's memory of one flash doesn't flicker between turns (it isn't re-rolled every move). */
 function recallRoll(flash: PlacementFlash, seat: Seat): number {
@@ -470,12 +511,13 @@ function recallRoll(flash: PlacementFlash, seat: Seat): number {
  */
 export function botBeliefTotals(state: MemoryFeastState, seat: Seat, level: BotLevel): number[] {
   const opp = other(seat);
-  const recall = botRecallChance(level);
+  const recall = botRecallChance(level, state.tokenMode);
   const believed = state.plates.map((p) => (seat === "p1" ? p.p1Count : p.p2Count));
   for (const flash of state.placementLog ?? []) {
     if (flash.seat === opp && recallRoll(flash, seat) < recall) believed[flash.plateIndex] += flash.amount;
   }
-  return state.plates.map((p, i) => (p.revealedTo[seat] ? plateTotal(p) : believed[i]));
+  // A plate still in play is visibly non-empty, so a person would never believe 0 for it.
+  return state.plates.map((p, i) => (p.revealedTo[seat] ? plateTotal(p) : isPlateInPlay(p) ? Math.max(1, believed[i]) : believed[i]));
 }
 
 /**

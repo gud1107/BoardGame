@@ -1,7 +1,7 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { DIFFICULTY_CONFIG, DIFFICULTY_LABEL, DIFFICULTY_ORDER, MAX_TOLERANCE, tokensPerPlayer } from "./engine";
+import { DIFFICULTY_LABEL, DIFFICULTY_ORDER, MAX_TOLERANCE, configFor, tokensPerPlayer } from "./engine";
 
 export default function RulebookModal({ onClose }: { onClose: () => void }) {
   return (
@@ -12,8 +12,10 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
             배치 단계
           </h3>
           <p className="text-white/70">
-            두 사람은 같은 접시 보드를 공유합니다. 라운드 N에는 그 라운드의 토큰 N개를 접시 하나에
-            전부 올립니다(p1 먼저, p2가 이어서). <span className="text-amber-300">내가 놓은 개수는
+            두 사람은 같은 접시 보드를 공유합니다. 방을 만들 때 토큰 방식을 고릅니다 —{" "}
+            <span className="text-amber-300">1개씩</span>(기본: 매 라운드 토큰 1개, 접시와 라운드가 더 많음) 또는{" "}
+            <span className="text-amber-300">늘어나는 토큰</span>(원작: 라운드 N에 토큰 N개). 그 라운드의 토큰을 접시 하나에
+            올립니다(p1 먼저, p2가 이어서). <span className="text-amber-300">내가 놓은 개수는
             항상 보이지만</span>, 상대가 놓는 순간은 짧게만 보여지고 이후 다시 가려집니다 — 그
             개수를 기억해둬야 합니다. 같은 접시에 여러 라운드에 걸쳐 계속 쌓일 수 있고, 총합은
             따로 알려주지 않습니다.
@@ -65,13 +67,18 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           </h3>
           <div className="grid gap-2 sm:grid-cols-3">
             {DIFFICULTY_ORDER.map((d) => {
-              const cfg = DIFFICULTY_CONFIG[d];
+              const single = configFor(d, "single");
+              const cfg = configFor(d, "growing");
               return (
                 <div key={d} className="rounded-xl border border-white/10 bg-white/5 p-3">
                   <p className="mb-1 font-medium text-white">{DIFFICULTY_LABEL[d]}</p>
                   <ul className="space-y-0.5 text-xs text-white/60">
-                    <li>접시 {cfg.plateCount}개 · {cfg.totalRounds}라운드</li>
-                    <li>1인당 토큰 {tokensPerPlayer(d)}개</li>
+                    <li>
+                      1개씩: 접시 {single.plateCount}개 · {single.totalRounds}라운드 (토큰 {tokensPerPlayer(d, "single")}개)
+                    </li>
+                    <li>
+                      원작: 접시 {cfg.plateCount}개 · {cfg.totalRounds}라운드 (토큰 {tokensPerPlayer(d)}개)
+                    </li>
                     <li>제한시간 {Math.round(cfg.timeLimitMs / 1000)}초</li>
                     <li>벌점 패배 {cfg.penaltyLossThreshold}회</li>
                     {cfg.allowMemoPad && <li className="text-amber-300">개인 메모장 사용 가능</li>}

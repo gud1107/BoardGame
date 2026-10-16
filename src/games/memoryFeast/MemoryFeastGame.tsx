@@ -12,15 +12,18 @@ import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
 import {
-  DIFFICULTY_CONFIG,
   DIFFICULTY_LABEL,
   DIFFICULTY_ORDER,
+  TOKEN_MODE_LABEL,
+  TOKEN_MODE_ORDER,
   applyAction,
+  configFor,
   chooseBotAction,
   memoryFeastCurrentActor,
   other,
   startGame,
   type Difficulty,
+  type TokenMode,
   type EngineAction,
   type MemoryFeastState,
   type Seat,
@@ -107,6 +110,7 @@ export default function MemoryFeastGame({ onComplete }: PlayableGameProps) {
   const [codeInput, setCodeInput] = useState(roomFromUrl ?? "");
   const [formError, setFormError] = useState<string | null>(null);
   const [difficulty, setDifficulty] = useState<Difficulty>("normal");
+  const [tokenMode, setTokenMode] = useState<TokenMode>("single");
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [myRole, setMyRole] = useState<Seat | null>(null);
@@ -241,6 +245,8 @@ export default function MemoryFeastGame({ onComplete }: PlayableGameProps) {
 
     channel.on("broadcast", { event: "game-start" }, ({ payload }) => {
       const gameDifficulty = (payload?.difficulty as Difficulty | undefined) ?? "normal";
+      // Older clients don't send a mode — they only know the original growing rule.
+      const gameTokenMode: TokenMode = payload?.tokenMode === "single" ? "single" : "growing";
       const roles = (payload?.botRoles as Seat[] | undefined) ?? [];
       const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
       botRolesRef.current = roles;
@@ -249,7 +255,7 @@ export default function MemoryFeastGame({ onComplete }: PlayableGameProps) {
       setBotLevels(levels);
       botTakeoverRef.current = INITIAL_BOT_TAKEOVER_STATE;
       setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
-      setGameState(startGame(gameDifficulty));
+      setGameState(startGame(gameDifficulty, gameTokenMode));
       setFinalResult(null);
       setPhase("playing");
     });
@@ -393,11 +399,12 @@ export default function MemoryFeastGame({ onComplete }: PlayableGameProps) {
       event: "game-start",
       payload: {
         difficulty,
+        tokenMode,
         botRoles: botRolesRef.current,
         botLevels: botLevelsRef.current,
       },
     });
-  }, [difficulty]);
+  }, [difficulty, tokenMode]);
 
   useEffect(() => {
     if (phase !== "waiting" || myRole !== "p1" || startSentRef.current) return;
@@ -557,7 +564,7 @@ export default function MemoryFeastGame({ onComplete }: PlayableGameProps) {
   useEffect(() => {
     if (phase !== "playing" || !gameState || !myRole) return;
     if (gameState.phase !== "open" || gameState.activeGuesser !== myRole) return;
-    const limitMs = DIFFICULTY_CONFIG[gameState.difficulty].timeLimitMs;
+    const limitMs = configFor(gameState.difficulty, gameState.tokenMode).timeLimitMs;
     const timer = window.setTimeout(() => {
       channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action: { type: "timeout-fail" } } });
     }, limitMs);
@@ -803,9 +810,28 @@ export default function MemoryFeastGame({ onComplete }: PlayableGameProps) {
                 </button>
               ))}
             </div>
+            토큰 방식
+            <div className="flex gap-1.5">
+              {TOKEN_MODE_ORDER.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setTokenMode(m)}
+                  aria-pressed={tokenMode === m}
+                  className={`flex-1 rounded-lg border py-2 text-xs font-semibold transition ${
+                    tokenMode === m
+                      ? "border-rose-400 bg-rose-500/20 text-rose-100"
+                      : "border-white/10 bg-white/5 text-white/60 hover:border-white/25"
+                  }`}
+                >
+                  {TOKEN_MODE_LABEL[m]}
+                </button>
+              ))}
+            </div>
             <p className="text-[11px] text-white/40">
-              접시 {DIFFICULTY_CONFIG[difficulty].plateCount}개 · {DIFFICULTY_CONFIG[difficulty].totalRounds}라운드
-              · 제한시간 {Math.round(DIFFICULTY_CONFIG[difficulty].timeLimitMs / 1000)}초
+              {tokenMode === "single" ? "매 라운드 토큰 1개" : "라운드 N마다 토큰 N개"} · 접시{" "}
+              {configFor(difficulty, tokenMode).plateCount}개 · {configFor(difficulty, tokenMode).totalRounds}라운드 ·
+              제한시간 {Math.round(configFor(difficulty, tokenMode).timeLimitMs / 1000)}초
             </p>
           </div>
         )}
@@ -846,7 +872,8 @@ export default function MemoryFeastGame({ onComplete }: PlayableGameProps) {
             </button>
             {isHost && (
               <p className="text-xs text-white/40">
-                난이도: <span className="font-semibold text-rose-300">{DIFFICULTY_LABEL[difficulty]}</span>
+                난이도: <span className="font-semibold text-rose-300">{DIFFICULTY_LABEL[difficulty]}</span> · 토큰:{" "}
+                <span className="font-semibold text-rose-300">{TOKEN_MODE_LABEL[tokenMode]}</span>
               </p>
             )}
             <div className="mt-2 flex flex-col gap-1.5">

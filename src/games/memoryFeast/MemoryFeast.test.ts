@@ -4,6 +4,7 @@ import {
   MAX_TOLERANCE,
   botBeliefTotals,
   botRecallChance,
+  configFor,
   applyAction,
   chooseBotAction,
   getValidMoves,
@@ -20,6 +21,7 @@ import {
   type EngineAction,
   type MemoryFeastState,
   type Seat,
+  type TokenMode,
 } from "./engine";
 
 describe("startGame (setup)", () => {
@@ -149,6 +151,36 @@ function openBoard(totals: number[]): MemoryFeastState {
     plates: base.plates.map((p, i) => ({ ...p, p1Count: totals[i] ?? 0 })),
   };
 }
+
+describe("token mode", () => {
+  it("'single' drops exactly 1 token every round on a bigger board", () => {
+    const cfg = configFor("easy", "single");
+    let state = startGame("easy", "single");
+    expect(state.plates).toHaveLength(cfg.plateCount);
+    expect(cfg.plateCount).toBeGreaterThan(DIFFICULTY_CONFIG.easy.plateCount);
+    for (let r = 0; r < cfg.totalRounds; r++) {
+      state = placeToken(state, 0);
+      state = placeToken(state, 1);
+    }
+    expect(state.plates[0].p1Count).toBe(cfg.totalRounds);
+    expect(state.placementLog.every((f) => f.amount === 1)).toBe(true);
+    expect(tokensPerPlayer("easy", "single")).toBe(cfg.totalRounds);
+    expect(state.phase).not.toBe("placement");
+  });
+
+  it("defaults to the original growing amounts (older states without a mode keep working)", () => {
+    let state = startGame("easy");
+    expect(state.tokenMode).toBe("growing");
+    state = placeToken(placeToken(state, 0), 1);
+    const legacy = { ...state, tokenMode: undefined };
+    expect(placeToken(legacy, 2).plates[2].p1Count).toBe(2);
+  });
+
+  it("bots in 'single' mode still span a wider recall range from Lv.1 to Lv.10", () => {
+    expect(botRecallChance(1, "single")).toBeLessThan(botRecallChance(1));
+    expect(botRecallChance(10, "single")).toBeGreaterThan(botRecallChance(10));
+  });
+});
 
 describe("한 끗 차이 stages", () => {
   it("widens to ±1 once exact pairs run out and hands the turn to whoever trails", () => {
@@ -380,9 +412,9 @@ function seededRng(seed: number): () => number {
   return () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;
 }
 
-function playFullBotGame(difficulty: Difficulty, levelOf: (seat: Seat) => number, seed: number): MemoryFeastState {
+function playFullBotGame(difficulty: Difficulty, levelOf: (seat: Seat) => number, seed: number, mode: TokenMode = "growing"): MemoryFeastState {
   const rng = seededRng(seed);
-  let state = startGame(difficulty);
+  let state = startGame(difficulty, mode);
   let guard = 0;
   while (state.phase !== "match-end" && guard < 5000) {
     guard++;
@@ -405,6 +437,15 @@ describe("Level 1-10 풀 시뮬레이션 (버그 없이 match-end까지 완주)"
       }
     });
   }
+
+  it("completes 'single'-mode matches on every difficulty", () => {
+    for (const difficulty of ["easy", "normal", "hard"] as Difficulty[]) {
+      for (let seed = 1; seed <= 10; seed++) {
+        const state = playFullBotGame(difficulty, (seat) => (seat === "p1" ? 3 : 8), seed, "single");
+        expect(state.phase).toBe("match-end");
+      }
+    }
+  });
 
   it("also completes mixed Level 1 / Level 10 hard matches (no crash, no infinite loop)", () => {
     for (let seed = 1; seed <= 20; seed++) {

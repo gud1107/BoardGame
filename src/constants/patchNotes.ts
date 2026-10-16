@@ -58,6 +58,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.63.0",
+    releaseDate: "2026-10-17",
+    title: "🍽️ 기억의 만찬 — 토큰 1개씩 모드",
+    changes: [
+      { game: "memory-feast", type: "FEAT", desc: "🪙 토큰 방식 선택 — 기본 '1개씩'(매 라운드 1개, 접시 16~25개·12~20라운드), 원작의 늘어나는 토큰도 그대로 선택 가능" },
+    ],
+  },
+  {
     version: "v1.62.0",
     releaseDate: "2026-10-16",
     title: "🍽️ 기억의 만찬 — 한 끗 차이 단계 + 사람처럼 잊는 봇",

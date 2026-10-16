@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import Tooltip from "@/components/Tooltip";
 import RulebookModal from "./RulebookModal";
 import {
-  DIFFICULTY_CONFIG,
   MAX_TOLERANCE,
+  configFor,
+  placementAmount,
   isPlateInPlay,
   other,
   plateTotal,
@@ -171,7 +172,7 @@ export default function MemoryFeastBoard({
 }: MemoryFeastBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const opponentRole = other(viewerRole);
-  const cfg = DIFFICULTY_CONFIG[state.difficulty];
+  const cfg = configFor(state.difficulty, state.tokenMode);
   // Masquerade Banquet sound suite (memoryFeastSound.ts) — state-diff cues heard by both players.
   useSoundCues(state, getMemoryFeastSound, memoryFeastSoundCues);
   useSuiteBgm(getMemoryFeastSound, state.phase !== "match-end", state.phase === "open" ? 1 : 0);
@@ -379,7 +380,7 @@ export default function MemoryFeastBoard({
           {state.phase === "placement" ? (
             myTurnToPlace ? (
               <p className="text-sm text-white/70">
-                내 차례예요 — 이번 라운드 토큰 <span className="font-bold text-amber-300">{state.round}개</span>를
+                내 차례예요 — 이번 라운드 토큰 <span className="font-bold text-amber-300">{placementAmount(state.tokenMode, state.round)}개</span>를
                 올릴 접시를 골라주세요.
               </p>
             ) : (
