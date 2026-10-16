@@ -204,7 +204,7 @@ export function UnitDetail({ unit }: { unit: CardUnit }) {
       )}
       {skill && (
         <p className="break-keep text-[11px] text-sky-200/70 light:text-sky-800/80">
-          {unit.mana !== undefined ? `🔷 지금 기력 ${unit.mana}/${skill.mana} · ` : ""}전투마다 기력 {MANA_RULES.start}칸 채워진 채 시작, 공격할 때·맞고 버틸 때 +1씩 — 가득 차면 자기 차례에 스킬
+          {unit.mana !== undefined ? `🔷 지금 기력 ${unit.mana}/${skill.mana} · ` : ""}전투마다 기력 {MANA_RULES.start}칸 채워진 채 시작, 공격할 때·맞고 버틸 때 +1씩, 뒷줄은 아군이 공격할 때마다 +1 — 가득 차면 자기 차례에 스킬(전투당 {MANA_RULES.maxCasts}번까지)
         </p>
       )}
       {unit.kw.filter((k) => !d.keywords.includes(k)).length > 0 && (

@@ -869,8 +869,14 @@ export function ManaPips({ u }: { u: Snap }) {
   const sk = skillOf(u.defId);
   if (!sk || u.mana === undefined) return null;
   const full = u.mana >= sk.mana;
+  if ((u.casts ?? 0) >= MANA_RULES.maxCasts)
+    return (
+      <div className="mt-1 text-center text-[9px] font-bold text-white/40" title={`이번 전투에서 스킬을 ${MANA_RULES.maxCasts}번 다 썼어요`}>
+        ⚡ 스킬 다 씀
+      </div>
+    );
   return (
-    <div className="mt-1 flex justify-center gap-0.5" title={`기력 ${u.mana}/${sk.mana} — 전투 시작 때 ${MANA_RULES.start}칸 채워진 채 시작, 공격할 때·맞고 버틸 때 +1. 가득 차면 ${sk.emoji} ${sk.name}`}>
+    <div className="mt-1 flex justify-center gap-0.5" title={`기력 ${u.mana}/${sk.mana} — 전투 시작 때 ${MANA_RULES.start}칸 채워진 채 시작, 공격할 때·맞고 버틸 때 +1, 뒷줄은 아군이 공격할 때마다 +1. 가득 차면 ${sk.emoji} ${sk.name}(전투당 ${MANA_RULES.maxCasts}번까지)`}>
       {Array.from({ length: sk.mana }, (_, i) => (
         <span
           key={i}

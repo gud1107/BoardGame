@@ -142,6 +142,31 @@ describe("combat", () => {
     expect(kinds).not.toContain("melee");
   });
 
+  it("소환사 정령은 보드 7칸이 꽉 차도 나온다", () => {
+    const seven = Array.from({ length: 7 }, (_, i) => unit("b_rabbit", { uid: `r${i}`, hp: 80, atk: 1 }));
+    const r = simulateCombat(side(seven), side([unit("k_squire", { uid: "t", hp: 400, atk: 0, kw: [] })]), 2, true);
+    const spirits = r.frames.filter((f) => f.ev.t === "skill").length;
+    expect(spirits).toBeGreaterThan(0);
+    expect(Math.max(...r.frames.map((f) => f.sides[0].length))).toBeGreaterThan(7);
+  });
+
+  it("스킬은 유닛마다 전투당 2번까지, 회복끼리 300번 상한까지 버티지 않는다", () => {
+    const a = [unit("k_guardian", { uid: "c1", hp: 30, atk: 1, back: true }), unit("k_squire", { uid: "f1", hp: 30, atk: 1, kw: [] })];
+    const b = [unit("k_guardian", { uid: "c2", hp: 30, atk: 1, back: true }), unit("k_squire", { uid: "f2", hp: 30, atk: 1, kw: [] })];
+    const r = simulateCombat(side(a), side(b), 9, true);
+    const per = new Map<string, number>();
+    for (const f of r.frames) if (f.ev.t === "skill") per.set(f.ev.uid, (per.get(f.ev.uid) ?? 0) + 1);
+    for (const n of per.values()) expect(n).toBeLessThanOrEqual(2);
+  });
+
+  it("뒷줄 유닛은 아군이 공격할 때마다 기력이 오른다", () => {
+    const r = simulateCombat(side([unit("b_dog", { uid: "f", hp: 60 }), unit("b_hunter", { uid: "b", hp: 60, back: true })]), side([unit("k_squire", { uid: "e", hp: 200, atk: 0, kw: [] })]), 1, true);
+    const firstFront = r.frames.findIndex((f) => f.ev.t === "attack" && f.ev.from === "f");
+    const before = r.frames[firstFront - 1].sides[0].find((u) => u.uid === "b")!.mana!;
+    const after = r.frames[firstFront].sides[0].find((u) => u.uid === "b")!.mana!;
+    expect(after).toBe(before + 1);
+  });
+
   it("PLAY 기본 줄: 궁수·마법사·성직자는 뒷줄, 보드는 앞줄 → 뒷줄 순", () => {
     expect(normalizeRows([{ back: true, n: 1 }, { n: 2 }, { back: true, n: 3 }, { n: 4 }]).map((u) => u.n)).toEqual([2, 4, 1, 3]);
     expect(defaultBack("b_hunter")).toBe(true);

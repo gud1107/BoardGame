@@ -40,6 +40,8 @@ export interface Snap {
   /** 전투 중 기력(상점 보드엔 없음) */
   mana?: number;
   back?: boolean;
+  /** 이번 전투에서 쓴 스킬 수 */
+  casts?: number;
 }
 
 /** 능력 발동 알림(재생 화면 하이라이트용). label = 짧은 이름, text = 효과 설명 */
@@ -96,6 +98,8 @@ interface CU extends UnitInstance {
   poisoned: boolean;
   attacked: boolean;
   mana: number;
+  /** 이번 전투에서 쓴 스킬 수(MANA_RULES.maxCasts까지) */
+  casts?: number;
 }
 
 export function tribeOf(defId: string): Tribe | null {
@@ -156,7 +160,7 @@ function removeKw(u: { kw: Keyword[] }, k: Keyword) {
 }
 
 function snap(list: CU[]): Snap[] {
-  return list.map((u) => ({ uid: u.uid, defId: u.defId, atk: u.atk, hp: u.hp, golden: u.golden, kw: [...u.kw], mana: u.mana, back: !!u.back }));
+  return list.map((u) => ({ uid: u.uid, defId: u.defId, atk: u.atk, hp: u.hp, golden: u.golden, kw: [...u.kw], mana: u.mana, back: !!u.back, casts: u.casts ?? 0 }));
 }
 
 /** 원거리 직업 — 줄과 상관없이 아무 적이나 공격 */
@@ -286,8 +290,9 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
     return byLevel(lv, 2, 3, 5);
   }
 
-  function summon(side: 0 | 1, defId: string, golden: boolean, at: number, back = false): CU | null {
-    if (sides[side].length >= 7) return null;
+  /** noCap: 소환사 스킬 정령은 보드 7칸 제한 없이 나온다 */
+  function summon(side: 0 | 1, defId: string, golden: boolean, at: number, back = false, noCap = false): CU | null {
+    if (!noCap && sides[side].length >= 7) return null;
     const inst = baseInstance(defId, golden, `s${side}-${summonN++}`);
     const cu: CU = { ...inst, poisoned: false, attacked: false, mana: 0, back };
     if (tribeOf(defId) === "beast") {
@@ -435,8 +440,9 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
   function castSkill(side: 0 | 1, u: CU): number | null {
     const cls = classOf(u.defId);
     const sk = skillOf(u.defId);
-    if (!cls || !sk || u.mana < sk.mana) return null;
+    if (!cls || !sk || u.mana < sk.mana || (u.casts ?? 0) >= MANA_RULES.maxCasts) return null;
     u.mana = 0;
+    u.casts = (u.casts ?? 0) + 1;
     const p = skillPower(u.defId, u.golden);
     const enemy = (1 - side) as 0 | 1;
     const foes = () => sides[enemy].filter((x) => !isDead(x));
@@ -496,7 +502,7 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
         targets.push(u);
         break;
       case "summoner": {
-        const sp = summon(side, "t_spirit", false, sides[side].indexOf(u) + 1, !!u.back);
+        const sp = summon(side, "t_spirit", false, sides[side].indexOf(u) + 1, !!u.back, true);
         if (sp) {
           sp.atk = p;
           sp.hp = p;
@@ -711,7 +717,9 @@ export function simulateCombat(a: CombatSide, b: CombatSide, seed: number, recor
       skillBonus = 0;
       for (const s of splash) damage(s, attacker.atk, atkPoison, attacker);
       if (!sneaky) damage(attacker, defender.atk, hasKw(defender, "poison"), defender);
-      if (!isDead(attacker)) gainMana(attacker, MANA_RULES.attack);
+      if (!isDead(attacker)) gainMana(attacker, attacker.back ? MANA_RULES.backAttack : MANA_RULES.attack);
+      // 뒷줄 기력 회복: 내 편 다른 유닛이 공격할 때마다 살아 있는 뒷줄 유닛 기력 +backPassive
+      if (MANA_RULES.backPassive) for (const u of sides[turn]) if (u !== attacker && u.back && !isDead(u)) gainMana(u, MANA_RULES.backPassive);
       push({ t: "attack", side: turn, from: attacker.uid, to: defender.uid, splash: splash.map((s) => s.uid) });
       processDeaths(turn === 0 ? [0, 1] : [1, 0]);
     }

@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { Snap } from "../combat";
 import { unitDef } from "../units";
 import { manaTexture, popupTexture, rowLabelTexture, statTexture, tagTexture, woodTexture } from "./textures";
-import { skillOf } from "../skills";
+import { MANA_RULES, skillOf } from "../skills";
 import { CLASSES, TRIBES } from "../units";
 import Figure, { type FigureAct } from "./figures";
 import { StyleFxLayer, fxLife, type StyleFxInput, type StyleFxItem } from "./StyleFx";
@@ -75,10 +75,11 @@ function rowZ(mode: "shop" | "combat", back: boolean, sign: number): number {
   return (back ? 2.3 : 0.95) * sign;
 }
 
-/** 한 줄 안 가로 배치 — 좁은 화면에서 4명이 넘으면 간격을 줄이고 지그재그로 엇갈려 겹침을 줄인다 */
+/** 한 줄 안 가로 배치 — 좁은 화면 5명+, 넓은 화면 8명+면 간격을 줄이고 지그재그로 엇갈려 겹침을 줄인다 */
 function rowSlots(n: number, compact: boolean): { x: number; dz: number }[] {
-  const crowded = compact && n > 4;
-  const sp = crowded ? 4.4 / (n - 1) : SP;
+  // 소환사 정령은 7칸을 넘겨 나올 수 있다 — 넓은 화면도 8명부터 간격을 줄인다
+  const crowded = compact ? n > 4 : n > 7;
+  const sp = crowded ? (compact ? 4.4 : 7.2) / (n - 1) : SP;
   return Array.from({ length: n }, (_, i) => ({ x: (i - (n - 1) / 2) * sp, dz: crowded ? (i % 2 ? 0.24 : -0.24) : 0 }));
 }
 
@@ -188,7 +189,8 @@ function TokenImpl({
   const hpTex = useMemo(() => statTexture(Math.max(0, u.hp), "hp", u.hp > d.hp * m), [u.hp, d.hp, m]);
   // 기력 칸(전투만, 직업 있는 유닛만) — 가득 차면 다음 차례에 스킬
   const maxMana = skillOf(u.defId)?.mana ?? 0;
-  const manaTex = useMemo(() => (u.mana === undefined || !maxMana ? null : manaTexture(u.mana, maxMana)), [u.mana, maxMana]);
+  const spent = (u.casts ?? 0) >= MANA_RULES.maxCasts;
+  const manaTex = useMemo(() => (u.mana === undefined || !maxMana ? null : manaTexture(spent ? 0 : u.mana, maxMana, spent)), [u.mana, maxMana, spent]);
 
   useFrame(() => {
     const g = group.current;
