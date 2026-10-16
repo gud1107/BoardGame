@@ -169,6 +169,25 @@ export default function CombatReplay({
     [],
   );
 
+  // 힌트로 멈춘 0.5초: 공격자 → 대상 노란 조준선을 두 번 깜빡이고 대상에 표적 고리 — "일부러 멈췄다"를 보여 준다
+  useEffect(() => {
+    if (!reachHint || reachHint.at !== idx) return;
+    const ev = frames[idx]?.ev;
+    if (ev?.t !== "attack") return;
+    const blink = HINT_HOLD_MS / 2;
+    const timers = [0, 1].map((k) =>
+      window.setTimeout(() => {
+        const a = el(ev.from);
+        const b = el(ev.to);
+        if (!a || !b) return;
+        const ac = center(a);
+        const tc = center(b);
+        addFx([{ kind: "aim", x: ac.x, y: ac.y, tx: tc.x, ty: tc.y, color: "#fde047", dur: blink * 0.85 }, { kind: "ring", x: tc.x, y: tc.y, color: "#fde047" }], blink + 150);
+      }, STEP_MS.attack / speed + k * blink),
+    );
+    return () => timers.forEach((t) => window.clearTimeout(t));
+  }, [reachHint, idx, frames, speed, el, center, addFx]);
+
   /** 맞은 유닛들: 번쩍 + 흔들림 + 숫자 + 파편 */
   const hitUnits = useCallback(
     (before: Frame, after: Frame, targets: string[], big: boolean) => {
@@ -604,7 +623,7 @@ export default function CombatReplay({
         </span>
       </div>
       <AbilityFeed items={feed} />
-      <ReachHintBanner kind={reachHint?.kind ?? null} />
+      <ReachHintBanner kind={reachHint?.kind ?? null} at="bottom" />
       <div ref={arenaRef} className="relative">
         {row(enemySide)}
         <div className="relative flex h-8 items-center justify-center">

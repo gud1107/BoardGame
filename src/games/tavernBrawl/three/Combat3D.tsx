@@ -68,6 +68,21 @@ export default function Combat3D({
     return () => window.clearTimeout(t);
   }, []);
   const api = useRef<ArenaApi | null>(null);
+
+  // 힌트로 멈춘 0.5초: 공격자 → 대상 노란 조준선 두 번 깜빡임 + 대상 표적 고리
+  useEffect(() => {
+    if (!ready || !reachHint || reachHint.at !== idx) return;
+    const ev = frames[idx]?.ev;
+    if (ev?.t !== "attack") return;
+    const blink = HINT_HOLD_MS / 2;
+    const timers = [0, 1].map((k) =>
+      window.setTimeout(() => {
+        api.current?.aim(ev.from, ev.to, blink * 0.85, "#fde047", false);
+        api.current?.ring(ev.to, "#fde047", 1.3);
+      }, STEP_MS.attack / speed + k * blink),
+    );
+    return () => timers.forEach((t) => window.clearTimeout(t));
+  }, [ready, reachHint, idx, frames, speed]);
   const finishedRef = useRef(false);
   const feedSeq = useRef(0);
   const onFinishedRef = useRef(onFinished);

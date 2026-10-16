@@ -95,11 +95,12 @@ export function useReachHint(frames: Frame[], idx: number, enabled = true): { ki
   return hint;
 }
 
-export function ReachHintBanner({ kind }: { kind: ReachHintKind | null }) {
+/** at: 2D는 아래(설명 대상인 상대 뒷줄을 가리지 않게), 3D는 위 */
+export function ReachHintBanner({ kind, at = "top" }: { kind: ReachHintKind | null; at?: "top" | "bottom" }) {
   if (!kind) return null;
   const t = TEXT[kind];
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-10 z-30 flex justify-center px-3">
+    <div className={`pointer-events-none absolute inset-x-0 z-[60] flex justify-center px-3 ${at === "top" ? "top-10" : "bottom-10"}`}>
       <div key={kind} className="tb-pop flex max-w-sm items-start gap-2 rounded-2xl border-2 border-yellow-300/80 bg-stone-950/95 px-3 py-2 shadow-[0_0_20px_rgba(250,204,21,0.35)]">
         <span className="text-2xl leading-none">{t.icon}</span>
         <span className="flex flex-col gap-0.5">
