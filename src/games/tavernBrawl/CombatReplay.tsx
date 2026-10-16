@@ -9,7 +9,7 @@ import { EmoteBubble, type EmoteSlot } from "./emotes";
 import type { CombatRecord } from "./engine";
 import { HERO_BY_ID } from "./units";
 import UnitCard from "./UnitCard";
-import { skillOf } from "./skills";
+import { MANA_RULES, skillOf } from "./skills";
 import { getTavernBrawlSound } from "./tavernBrawlBgm";
 
 /**
@@ -870,7 +870,7 @@ export function ManaPips({ u }: { u: Snap }) {
   if (!sk || u.mana === undefined) return null;
   const full = u.mana >= sk.mana;
   return (
-    <div className="mt-1 flex justify-center gap-0.5" title={`기력 ${u.mana}/${sk.mana} — 가득 차면 ${sk.emoji} ${sk.name}`}>
+    <div className="mt-1 flex justify-center gap-0.5" title={`기력 ${u.mana}/${sk.mana} — 전투 시작 때 ${MANA_RULES.start}칸 채워진 채 시작, 공격할 때·맞고 버틸 때 +1. 가득 차면 ${sk.emoji} ${sk.name}`}>
       {Array.from({ length: sk.mana }, (_, i) => (
         <span
           key={i}

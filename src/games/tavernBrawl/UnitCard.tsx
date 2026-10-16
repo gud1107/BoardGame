@@ -3,7 +3,7 @@
 import type { Keyword } from "./units";
 import { CLASSES, KEYWORDS, TRIBES, unitDef } from "./units";
 import { AbilityText } from "./AbilityFeed";
-import { skillOf, skillPower } from "./skills";
+import { MANA_RULES, skillOf, skillPower } from "./skills";
 import { unitTip } from "./UnitTooltip";
 import { useRef } from "react";
 
@@ -13,6 +13,8 @@ export interface CardUnit {
   hp: number;
   golden: boolean;
   kw: Keyword[];
+  /** 전투 중 기력(설명창에 "지금 기력" 표시) */
+  mana?: number;
 }
 
 const TIER_BG = ["", "from-slate-600 to-slate-800", "from-emerald-600 to-emerald-900", "from-sky-600 to-sky-900", "from-violet-600 to-violet-900", "from-amber-500 to-orange-800", "from-rose-500 to-rose-900"];
@@ -198,6 +200,11 @@ export function UnitDetail({ unit }: { unit: CardUnit }) {
       {skill && (
         <p className="break-keep text-sky-300 light:text-sky-700">
           ⚡ 스킬 {skill.emoji} {skill.name} (기력 {skill.mana}): {skill.text(skillPower(unit.defId, unit.golden))}
+        </p>
+      )}
+      {skill && (
+        <p className="break-keep text-[11px] text-sky-200/70 light:text-sky-800/80">
+          {unit.mana !== undefined ? `🔷 지금 기력 ${unit.mana}/${skill.mana} · ` : ""}전투마다 기력 {MANA_RULES.start}칸 채워진 채 시작, 공격할 때·맞고 버틸 때 +1씩 — 가득 차면 자기 차례에 스킬
         </p>
       )}
       {unit.kw.filter((k) => !d.keywords.includes(k)).length > 0 && (

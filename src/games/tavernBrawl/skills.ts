@@ -27,7 +27,7 @@ export const SKILLS: Record<ClassId, SkillDef> = {
   ranger: { name: "화살 비", emoji: "🌧️", mana: 3, text: (p) => `모든 적에게 피해 ${Math.ceil(p / 2)}` },
   cleric: { name: "성스러운 빛", emoji: "✨", mana: 3, text: (p) => `체력이 가장 낮은 아군 +0/+${2 * p}, 보호막` },
   berserker: { name: "피의 광란", emoji: "🩸", mana: 2, text: (p) => `자신 +${p}/+${p}` },
-  summoner: { name: "정령 부르기", emoji: "🌀", mana: 4, text: (p) => `${p}/${p} 소환 정령을 옆에 부름` },
+  summoner: { name: "정령 부르기", emoji: "🌀", mana: 3, text: (p) => `${p}/${p} 소환 정령을 옆에 부름` },
   plunderer: { name: "약탈", emoji: "💰", mana: 3, text: (p) => `무작위 적 공격력 −${p}, 자신 공격력 +${p}` },
 };
 
