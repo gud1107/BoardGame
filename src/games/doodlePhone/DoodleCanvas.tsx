@@ -26,6 +26,7 @@ import {
   type ShapeKind,
 } from "./drawing";
 import { readClipboard, writeClipboard } from "./clipboard";
+import { STAMPS, STAMP_SIZES, stampOps, type StampId } from "./stamps";
 import { getDoodlePhoneSound } from "./doodlePhoneSound";
 import DrawingView from "./DrawingView";
 import { ONION_OPACITY } from "./modes";
@@ -108,7 +109,7 @@ export interface DoodleCanvasHandle {
   editOps(edit: (ops: readonly DrawOp[]) => readonly DrawOp[]): boolean;
 }
 
-type Tool = "pen" | "line" | "rect" | "ellipse" | "fill" | "eraser" | "select" | "picker";
+type Tool = "pen" | "line" | "rect" | "ellipse" | "fill" | "eraser" | "select" | "picker" | "stamp";
 
 const PIXEL_SCALE = 2;
 /** Skip pointer samples closer than this (logical px) — keeps payloads small without visible loss. */
@@ -206,6 +207,9 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
   const [size, setSize] = useState(1);
   const [opacity, setOpacity] = useState(MAX_OPACITY);
   const [filledShape, setFilledShape] = useState(false);
+  /** 🔷 도장: which shape one tap stamps, and how big (STAMP_SIZES index). */
+  const [stampId, setStampId] = useState<StampId>("square");
+  const [stampSize, setStampSize] = useState(1);
   // Mirrors of the refs that the toolbar renders from.
   const [history, setHistory] = useState({ undo: 0, redo: 0, ink: 0, count: 0 });
   /** Mirror of the selection for the toolbar: how many, and whether it's a single resizable shape. */
@@ -658,6 +662,10 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
       commitOp(op);
       return;
     }
+    if (tool === "stamp") {
+      commitEdit([...opsRef.current, ...stampOps(stampId, p, STAMP_SIZES[stampSize].px, { color, sizeIndex: size, opacity, filled: filledShape })], []);
+      return;
+    }
     const shape = SHAPE_OF[tool];
     gestureRef.current = shape
       ? { kind: "shape", shape, from: p, to: p, color, size, opacity, filled: filledShape }
@@ -914,13 +922,41 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
                   {label}
                 </button>
               ))}
-              {(tool === "rect" || tool === "ellipse") && (
+              {(tool === "rect" || tool === "ellipse" || tool === "stamp") && (
                 <label className="flex items-center gap-1 whitespace-nowrap text-white/80 light:text-slate-700">
                   <input type="checkbox" checked={filledShape} onChange={(e) => setFilledShape(e.target.checked)} className="accent-fuchsia-500" />
                   도형 속 채우기
                 </label>
               )}
               {SHAPE_OF[tool] && tool !== "line" && <span className="text-white/40 light:text-slate-400">Shift = 정사각형·정원</span>}
+            </div>
+          )}
+
+          {tool === "stamp" && (
+            <div className="flex flex-col gap-1.5 rounded-lg border border-fuchsia-400/20 bg-fuchsia-500/5 p-1.5 light:border-fuchsia-200 light:bg-fuchsia-50/60">
+              <div className="grid grid-cols-8 gap-1">
+                {STAMPS.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    title={s.label}
+                    aria-label={`도장 ${s.label}`}
+                    aria-pressed={stampId === s.id}
+                    onClick={() => setStampId(s.id)}
+                    className={`flex h-9 items-center justify-center rounded-md border text-base ${stampId === s.id ? active : idle}`}
+                  >
+                    {s.icon}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-white/60 light:text-slate-500">
+                {STAMP_SIZES.map((sz, i) => (
+                  <button key={sz.label} type="button" aria-pressed={stampSize === i} onClick={() => setStampSize(i)} className={`rounded-md border px-2 py-0.5 ${stampSize === i ? active : idle}`}>
+                    {sz.label}
+                  </button>
+                ))}
+                <span>🔷 그림판을 누르면 그 자리에 “{STAMPS.find((s) => s.id === stampId)?.label}” 찍기 · 지금 색·굵기·농도 그대로</span>
+              </div>
             </div>
           )}
 
@@ -956,6 +992,16 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
               className={`flex h-8 items-center gap-1 rounded-md border px-2 ${tool === "picker" ? active : idle}`}
             >
               💧 스포이드
+            </button>
+            <button
+              type="button"
+              title="도장 (한 번 눌러 정사각형·원·별 같은 모양 찍기)"
+              aria-label="도장 (한 번 눌러 모양 찍기)"
+              aria-pressed={tool === "stamp"}
+              onClick={() => chooseTool("stamp")}
+              className={`flex h-8 items-center gap-1 rounded-md border px-2 ${tool === "stamp" ? active : idle}`}
+            >
+              🔷 도장
             </button>
             {recentColors.map((hex) => (
               <button

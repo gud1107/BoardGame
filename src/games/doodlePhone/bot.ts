@@ -405,12 +405,13 @@ export function addToDrawing(base: Drawing, rng: () => number, level: BotLevel):
 // ---------------------------------------------------------------------------
 
 /**
- * Opacity the bot stamps on the scenery it adds to an animation frame. It
- * looks the same as 100%, but it tells the next bot "this is the background —
- * leave it where it is" so only the subject walks. The worst a human picking
- * 99% on the slider gets is their stroke staying put, never lost.
+ * Opacity of the scenery added to animation frames (by bots and the 🌄
+ * button). Faint on purpose, so the hand-drawn subject stays the star of the
+ * flipbook instead of the auto background. The value also tells the next bot
+ * "this is the background — leave it where it is", and it's off the opacity
+ * slider's 5% grid, so a person's own strokes can't be mistaken for it.
  */
-export const SCENERY_ALPHA = 99;
+export const SCENERY_ALPHA = 47;
 
 export function isSceneryOp(op: DrawOp): boolean {
   return "a" in op && op.a === SCENERY_ALPHA;
@@ -520,9 +521,22 @@ function shuffled<T>(items: readonly T[], seedHash: number): T[] {
   return out;
 }
 
+/** Names for the 🌄 picker, in SCENE_STAGES order. */
+const SCENE_LABELS: readonly (readonly string[])[] = [
+  ["🟩 땅", "☀️ 해", "☁️ 구름", "🐦 새", "🌸 꽃", "🌱 풀", "☁️ 구름 하나 더", "🐦 새 한 마리 더"],
+  ["🌈 무지개", "🌧️ 비", "⭐ 별", "🦋 나비", "🌳 덤불", "🪨 조약돌"],
+];
+
+interface NamedPiece {
+  readonly draw: ScenePiece;
+  readonly label: string;
+}
+
+const NAMED_STAGES: readonly (readonly NamedPiece[])[] = SCENE_STAGES.map((stage, s) => stage.map((draw, i) => ({ draw, label: SCENE_LABELS[s][i] })));
+
 /** Scenery order for an album: the ground first, the rest of stage 1 shuffled, then stage 2 shuffled. */
-function sceneOrder(seed: number, album: number): ScenePiece[] {
-  const [first, second] = SCENE_STAGES;
+function sceneOrder(seed: number, album: number): NamedPiece[] {
+  const [first, second] = NAMED_STAGES;
   const h = albumHash(seed, album);
   return [first[0], ...shuffled(first.slice(1), h), ...shuffled(second, (h ^ 0x51ed27) >>> 0)];
 }
@@ -562,15 +576,25 @@ function clearanceShift(b: Bounds, avoid: Bounds | null): number | null {
  * same piece to the same frame.
  */
 export function scenePieceFor(seed: number, album: number, frame: number, rng: () => number, level: BotLevel = 7, avoid: Bounds | null = null): DrawOp[] {
+  return sceneChoicesFor(seed, album, frame, rng, level, avoid, 1)[0]?.ops ?? [];
+}
+
+/**
+ * The 🌄 picker: this frame's piece (what a bot would add) plus the next
+ * ones in the album's order, so a person chooses their own background
+ * instead of always getting the bot's. Same placement rules as above.
+ */
+export function sceneChoicesFor(seed: number, album: number, frame: number, rng: () => number, level: BotLevel = 7, avoid: Bounds | null = null, count = 3): { label: string; ops: DrawOp[] }[] {
   const steady = () => 0.5; // no wobble — just to measure where a piece lands
   const placeable = sceneOrder(seed, album).flatMap((piece) => {
-    const b = unionBounds(piece(steady, 0));
+    const b = unionBounds(piece.draw(steady, 0));
     const dy = b ? clearanceShift(b, avoid) : 0;
     return dy === null ? [] : [{ piece, dy }];
   });
-  const chosen = placeable[frame - 2];
-  if (!chosen) return [];
-  return chosen.piece(rng, wobbleFor(level)).map((op) => ({ ...translateOp(op, 0, chosen.dy), a: SCENERY_ALPHA }) as DrawOp);
+  return placeable.slice(frame - 2, frame - 2 + count).map(({ piece, dy }) => ({
+    label: piece.label,
+    ops: piece.draw(rng, wobbleFor(level)).map((op) => ({ ...translateOp(op, 0, dy), a: SCENERY_ALPHA }) as DrawOp),
+  }));
 }
 
 /** The ops still visible (after the last clear-all). */
@@ -603,6 +627,16 @@ function scaleOps(ops: readonly DrawOp[], k: number, pivot: Point): DrawOp[] {
 }
 
 /**
+ * Whether rising `raised` px between two frames looks like a hop worth landing
+ * from. A bigger lift is someone moving the subject on purpose (flying it up,
+ * putting it on a roof…) — the next frame carries on from there instead of
+ * yanking it back down.
+ */
+function isHop(raised: number): boolean {
+  return raised >= FRAME_HOP_Y / 2 && raised <= FRAME_HOP_Y * 1.5;
+}
+
+/**
  * Where the subject goes next, from where it was in the last two frames — a
  * human who dragged it somewhere new is continued from there, not snapped
  * back to a precomputed path. It keeps the last frame's walking direction
@@ -621,7 +655,7 @@ function nextPosition(prev: Bounds, prev2: Bounds | null, size: { w: number; h: 
 
   let bottom = prev.maxY;
   if (frame % 2 === 0) bottom -= FRAME_HOP_Y;
-  else if (prev2 && prev.maxY <= prev2.maxY - FRAME_HOP_Y / 2) bottom = prev2.maxY; // land from last frame's hop
+  else if (prev2 && isHop(prev2.maxY - prev.maxY)) bottom = prev2.maxY; // land from last frame's hop
   const y = Math.min(CANVAS_H - FRAME_MARGIN - size.h, Math.max(FRAME_MARGIN, bottom - size.h));
   return { x, y };
 }

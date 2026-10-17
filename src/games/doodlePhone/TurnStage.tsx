@@ -5,7 +5,7 @@ import { isBlankDrawing, type Drawing, type DrawOp } from "./drawing";
 import { getDoodlePhoneSound } from "./doodlePhoneSound";
 import DoodleCanvas, { type DoodleCanvasHandle } from "./DoodleCanvas";
 import DrawingView from "./DrawingView";
-import { isSceneryOp, nextAnimationFrame, scenePieceFor } from "./bot";
+import { isSceneryOp, nextAnimationFrame, sceneChoicesFor } from "./bot";
 import { unionBounds } from "./editing";
 import { seededRng } from "@/lib/rng";
 import {
@@ -270,6 +270,8 @@ function TurnComposer({
         </div>
       ) : (
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-2">
+          {/* Above the sheet, not by the submit button — a stray tap on a phone mustn't send the frame. */}
+          {reference === "onion" && <AnimationHelpers state={state} seat={seat} turn={turn} previous={previousDrawing} canvasRef={canvasRef} disabled={sent} />}
           <DoodleCanvas
             ref={canvasRef}
             disabled={sent}
@@ -280,7 +282,6 @@ function TurnComposer({
             onionDrawing={reference === "onion" && ghostFrames ? previousDrawing : null}
             matchKey={state.seed}
           />
-          {reference === "onion" && <AnimationHelpers state={state} seat={seat} turn={turn} previous={previousDrawing} canvasRef={canvasRef} disabled={sent} />}
           <button
             type="button"
             onClick={() => submit(false)}
@@ -301,9 +302,10 @@ const fuchsiaHint = `${hintBox} border-fuchsia-400/20 bg-fuchsia-500/10 text-fuc
 /**
  * Animation mode: the two moves a bot makes each frame, one tap each for
  * people — so a human frame can grow the background just like a bot frame
- * does (bot.ts `nextAnimationFrame` / `scenePieceFor`), instead of bot frames
- * looking like the only ones with effort in the showcase. Both are ordinary
- * undoable edits on the canvas.
+ * (bot.ts `nextAnimationFrame` / `sceneChoicesFor`). The background is the
+ * person's pick out of three, not the bot's piece, and it's drawn faint like
+ * all scenery, so the hand-drawn subject stays the point of the frame. Both
+ * are ordinary undoable edits on the canvas.
  */
 function AnimationHelpers({
   state,
@@ -321,12 +323,13 @@ function AnimationHelpers({
   disabled: boolean;
 }) {
   const album = albumFor(state.playerCount, seat, turn);
-  const [sceneryAdded, setSceneryAdded] = useState(false);
+  const [added, setAdded] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  // Same piece a bot would draw on this frame (fixed wobble seed), kept clear of where the subject is now.
-  const pieceFor = (ops: readonly DrawOp[]) =>
-    scenePieceFor(state.seed, album, turn, seededRng(state.seed + album * 31 + turn), 7, unionBounds(ops.filter((op) => !isSceneryOp(op))));
-  const [hasPiece] = useState(() => pieceFor(previous?.ops ?? []).length > 0);
+  // Fixed wobble seed so the pieces don't reshuffle on re-render; kept clear of where the subject is.
+  const choicesFor = (ops: readonly DrawOp[]) =>
+    sceneChoicesFor(state.seed, album, turn, seededRng(state.seed + album * 31 + turn), 7, unionBounds(ops.filter((op) => !isSceneryOp(op))));
+  const [labels] = useState(() => choicesFor(previous?.ops ?? []).map((c) => c.label));
 
   function step() {
     const before = turn > 2 ? shownPageAt(state, album, turn - 2) : null;
@@ -342,28 +345,47 @@ function AnimationHelpers({
     setNotice(ok === false ? "잉크가 부족해서 움직일 수 없어요" : null);
   }
 
-  function addScenery() {
-    // Behind everything still visible: right after the last "전체 지우기".
+  function addScenery(label: string) {
+    // Behind everything still visible: right after the last "전체 지우기". Re-placed
+    // against the canvas as it is now, in case the subject was moved meanwhile.
     const ok = canvasRef.current?.editOps((ops) => {
       const floor = ops.findLastIndex((op) => op.k === "x") + 1;
-      return [...ops.slice(0, floor), ...pieceFor(ops.slice(floor)), ...ops.slice(floor)];
+      const choices = choicesFor(ops.slice(floor));
+      const piece = (choices.find((c) => c.label === label) ?? choices[0])?.ops ?? [];
+      return [...ops.slice(0, floor), ...piece, ...ops.slice(floor)];
     });
-    if (ok) setSceneryAdded(true);
+    if (ok) setAdded(label);
+    setPicking(false);
     setNotice(ok === false ? "잉크가 부족해서 배경을 더할 수 없어요" : null);
   }
 
   const chip =
-    "rounded-full border border-fuchsia-400/30 bg-fuchsia-500/10 px-3 py-1.5 text-xs font-bold text-fuchsia-100 transition hover:bg-fuchsia-500/20 disabled:opacity-40 light:border-fuchsia-200 light:bg-fuchsia-50 light:text-fuchsia-800";
+    "min-h-9 rounded-full border border-fuchsia-400/30 bg-fuchsia-500/10 px-3 py-1.5 text-xs font-bold text-fuchsia-100 transition hover:bg-fuchsia-500/20 disabled:opacity-40 light:border-fuchsia-200 light:bg-fuchsia-50 light:text-fuchsia-800";
   return (
     <div className="flex flex-wrap items-center gap-2">
       <button type="button" className={chip} disabled={disabled} onClick={step} title="앞 프레임에서 이어지게 주인공을 한 걸음 옮겨요 (되돌리기 가능)">
         🏃 한 걸음 움직이기
       </button>
-      {hasPiece && (
-        <button type="button" className={chip} disabled={disabled || sceneryAdded} onClick={addScenery} title="이번 프레임의 배경을 한 조각 더해요 — 다음 프레임에도 그대로 남아요">
-          {sceneryAdded ? "🌄 배경 추가됨" : "🌄 배경 한 조각 더하기"}
-        </button>
-      )}
+      {labels.length > 0 &&
+        (added ? (
+          <span className="text-xs text-fuchsia-200/80 light:text-fuchsia-700">🌄 {added} 추가됨 (되돌리기로 취소)</span>
+        ) : picking ? (
+          <>
+            <span className="text-xs text-white/60 light:text-slate-500">배경 고르기:</span>
+            {labels.map((label) => (
+              <button key={label} type="button" className={chip} disabled={disabled} onClick={() => addScenery(label)}>
+                {label}
+              </button>
+            ))}
+            <button type="button" className="min-h-9 px-2 text-xs text-white/50 light:text-slate-400" onClick={() => setPicking(false)}>
+              취소
+            </button>
+          </>
+        ) : (
+          <button type="button" className={chip} disabled={disabled} onClick={() => setPicking(true)} title="배경을 한 조각 골라 더해요 — 연하게 그려지고 다음 프레임에도 남아요">
+            🌄 배경 한 조각 더하기
+          </button>
+        ))}
       {notice && <span className="text-[11px] text-amber-300 light:text-amber-700">{notice}</span>}
     </div>
   );

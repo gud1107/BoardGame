@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { seededRng, shuffle } from "@/lib/rng";
-import { SCENERY_ALPHA, SCENE_PIECE_COUNT, addToDrawing, chooseBotAction, isSceneryOp, nextAnimationFrame, scenePieceFor, getValidMoves, guessFromDrawing, botDrawingFor, inkByColor, nextBotActor, redrawDrawing } from "./bot";
+import { SCENERY_ALPHA, SCENE_PIECE_COUNT, addToDrawing, chooseBotAction, isSceneryOp, nextAnimationFrame, sceneChoicesFor, scenePieceFor, getValidMoves, guessFromDrawing, botDrawingFor, inkByColor, nextBotActor, redrawDrawing } from "./bot";
 import {
   EMPTY_DRAWING,
   MAX_DRAWING_CHARS,
@@ -46,6 +46,7 @@ import {
 import { FALLBACK_PROMPTS } from "./prompts";
 import { ChunkAssembler, splitIntoChunks } from "./syncChunks";
 import { readClipboard, resetClipboardMemory, writeClipboard } from "./clipboard";
+import { STAMPS, STAMP_SIZES, stampOps } from "./stamps";
 import { boxFrom, handleAt, handlesFor, hitTest, hitsOp, opsInBox, pasteOps, reorderOps, resizeShape, restyleOps, translateGroup, translateOp, unionBounds } from "./editing";
 import { CHORDS, LOOP_STEPS, STEPS_PER_BAR, lofiEventsAt, midiToHz } from "./lofiPattern";
 import { GAME_MODES, ICEBREAKER_QUESTIONS, icebreakerQuestion, openingChoices, sanitizeOptions, turnKindFor, turnSecondsFor, type GameMode } from "./modes";
@@ -537,6 +538,30 @@ describe("game modes (modes.ts, rulebook §9)", () => {
     expect(scenePieceFor(4, 2, 2 + SCENE_PIECE_COUNT, seededRng(1))).toEqual([]);
   });
 
+  it("doesn't yank a subject a person lifted on purpose back down, but still lands a real hop", () => {
+    const at = (x: number, y: number) => ({ v: 1 as const, ops: [strokeOp(1, 2, [{ x, y }, { x: x + 60, y }, { x: x + 60, y: y + 60 }])] });
+    const lifted = nextAnimationFrame(at(100, 40), { seed: 9, album: 0, frame: 5, prev: at(100, 40), prev2: at(74, 200), addScenery: false }, seededRng(1), 10);
+    expect(unionBounds(lifted.ops)!.minY).toBe(40); // flown up 160px by a person → carries on up there
+    const hopped = nextAnimationFrame(at(100, 184), { seed: 9, album: 0, frame: 5, prev: at(100, 184), prev2: at(74, 200), addScenery: false }, seededRng(1), 10);
+    expect(unionBounds(hopped.ops)!.minY).toBe(200); // a 16px hop lands
+  });
+
+  it("offers three named background pieces, the first being the bot's, drawn faint", () => {
+    expect((SCENERY_ALPHA - 10) % 5).not.toBe(0); // off the opacity slider's grid → a person's strokes never count as scenery
+    expect(SCENERY_ALPHA).toBeLessThan(60);
+    for (let album = 0; album < 6; album++) {
+      const choices = sceneChoicesFor(11, album, 3, seededRng(album));
+      expect(choices).toHaveLength(3);
+      expect(new Set(choices.map((c) => c.label)).size).toBe(3);
+      for (const c of choices) {
+        expect(c.label).toMatch(/\S/);
+        expect(c.ops.every((op) => "a" in op && op.a === SCENERY_ALPHA)).toBe(true);
+      }
+      expect(choices[0].ops).toEqual(scenePieceFor(11, album, 3, seededRng(album)));
+    }
+    expect(sceneChoicesFor(11, 0, 1 + SCENE_PIECE_COUNT, seededRng(1))).toHaveLength(1); // only the last one left
+  });
+
   it("gives icebreaker albums a deterministic question and bots answer it", () => {
     const s = startGame(4, 77, { mode: "ICEBREAKER" });
     expect(icebreakerQuestion(77, 2)).toBe(icebreakerQuestion(77, 2));
@@ -811,5 +836,47 @@ describe("cross-turn clipboard (clipboard.ts)", () => {
     expect(readClipboard(1)).toEqual([]);
     writeClipboard(1, [{ k: "r", c: 99, w: 1, p: [0, 0, 1, 1] } as unknown as DrawOp]);
     expect(readClipboard(1)).toEqual([]);
+  });
+});
+
+describe("one-tap stamps (stamps.ts)", () => {
+  const style = { color: 5, sizeIndex: 1, opacity: 100, filled: false };
+
+  it("stamps every shape as a valid drawing centred on the tap", () => {
+    expect(new Set(STAMPS.map((s) => s.id)).size).toBe(STAMPS.length);
+    expect(STAMPS.length).toBeGreaterThanOrEqual(14);
+    for (const stamp of STAMPS) {
+      for (const filled of [false, true]) {
+        const ops = stampOps(stamp.id, { x: 240, y: 180 }, STAMP_SIZES[1].px, { ...style, filled });
+        expect(isValidDrawing({ v: 1, ops })).toBe(true);
+        const b = unionBounds(ops)!;
+        expect(Math.abs((b.minX + b.maxX) / 2 - 240)).toBeLessThan(20);
+        expect(Math.abs((b.minY + b.maxY) / 2 - 180)).toBeLessThan(20);
+        expect(Math.max(b.maxX - b.minX, b.maxY - b.minY)).toBeLessThanOrEqual(STAMP_SIZES[1].px + 1);
+        // Polylines are closed, and their fill point lands inside the outline's box.
+        const outline = ops[0];
+        if (outline.k === "s") {
+          const pts = decodePoints(outline.p);
+          expect(pts[pts.length - 1]).toEqual(pts[0]);
+          if (filled) {
+            const fill = ops[1];
+            expect(fill?.k).toBe("f");
+            if (fill?.k === "f") expect(fill.x > b.minX && fill.x < b.maxX && fill.y > b.minY && fill.y < b.maxY).toBe(true);
+          }
+        }
+      }
+    }
+  });
+
+  it("makes squares and circles real shapes (resizable with the select tool) with exact proportions", () => {
+    const [square] = stampOps("square", { x: 200, y: 150 }, 100, style);
+    expect(square).toMatchObject({ k: "r", p: [150, 100, 250, 200] });
+    const [circle] = stampOps("circle", { x: 200, y: 150 }, 100, { ...style, filled: true });
+    expect(circle).toMatchObject({ k: "e", p: [150, 100, 250, 200], f: 1 });
+  });
+
+  it("slides a stamp near the edge back onto the sheet instead of cutting it", () => {
+    const [square] = stampOps("square", { x: 2, y: 358 }, 170, style);
+    expect(square).toMatchObject({ k: "r", p: [0, 190, 170, 360] });
   });
 });
