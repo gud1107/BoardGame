@@ -602,6 +602,34 @@ function makePairings(st: GameState): { pairs: [Seat, Seat][]; leftover: Seat | 
   return best;
 }
 
+/** 짝 없는 좌석이 만날 유령의 주인. 상점 단계 내내 바뀌지 않는 값으로만 정한다. */
+function ghostOwnerFor(st: GameState, leftover: Seat): Seat | null {
+  if (st.ghost && st.ghost.seat !== leftover) return st.ghost.seat;
+  const others = st.seats.map((s, i) => (s.alive && i !== leftover ? i : -1)).filter((i) => i >= 0);
+  return others.length > 0 ? others[Math.floor(seededRng(mix(st.seed, st.round, 55))() * others.length)] : null;
+}
+
+/**
+ * 상점 단계에서 이번 라운드 전투 대진 미리보기. 대진은 시드·라운드·생존자·최근 상대로만 정해지고
+ * 이 값들은 상점 중에 안 바뀌므로 resolveShop의 실제 대진과 똑같다.
+ * opp[seat] = 상대 좌석, 유령이면 -1 (ghostOf = 유령 주인).
+ */
+export function upcomingMatchups(state: GameState): { opp: Record<number, Seat>; ghostOf: Seat | null } | null {
+  if (state.phase !== "shop") return null;
+  const { pairs, leftover } = makePairings(state);
+  const opp: Record<number, Seat> = {};
+  for (const [x, y] of pairs) {
+    opp[x] = y;
+    opp[y] = x;
+  }
+  let ghostOf: Seat | null = null;
+  if (leftover !== null) {
+    ghostOf = ghostOwnerFor(state, leftover);
+    if (ghostOf !== null) opp[leftover] = -1;
+  }
+  return { opp, ghostOf };
+}
+
 function sideOf(s: SeatState): CombatSide {
   return { board: structuredClone(s.board), hero: s.hero, tier: s.tier };
 }
@@ -682,18 +710,9 @@ function resolveShop(st: GameState): GameState {
   });
 
   if (leftover !== null) {
-    let ghostSide: CombatSide | null = null;
-    let ghostOf: Seat | null = null;
-    if (st.ghost && st.ghost.seat !== leftover) {
-      ghostSide = structuredClone(st.ghost.side);
-      ghostOf = st.ghost.seat;
-    } else {
-      const others = st.seats.map((s, i) => (s.alive && i !== leftover ? i : -1)).filter((i) => i >= 0);
-      if (others.length > 0) {
-        ghostOf = others[Math.floor(seededRng(mix(st.seed, st.round, 55))() * others.length)];
-        ghostSide = sideOf(st.seats[ghostOf]);
-      }
-    }
+    const ghostOf = ghostOwnerFor(st, leftover);
+    const ghostSide: CombatSide | null =
+      ghostOf === null ? null : st.ghost && st.ghost.seat === ghostOf ? structuredClone(st.ghost.side) : sideOf(st.seats[ghostOf]);
     if (ghostSide && ghostOf !== null) {
       const sideA = sideOf(st.seats[leftover]);
       const seed = mix(st.seed, st.round, pairs.length, 7);

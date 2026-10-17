@@ -12,6 +12,7 @@ import {
   combatFor,
   roundGold,
   sellValue,
+  upcomingMatchups,
   upgradeCost,
   type CombatRecord,
   type EngineAction,
@@ -103,6 +104,7 @@ function PlayersPanel({
   connectedSeats,
   onInspect,
   emotes,
+  foe,
 }: {
   state: GameState;
   viewerSeat: Seat;
@@ -110,6 +112,7 @@ function PlayersPanel({
   connectedSeats: Set<Seat>;
   onInspect: (seat: Seat) => void;
   emotes: Record<Seat, EmoteSlot>;
+  foe: Foe | null;
 }) {
   const order = state.seats.map((s, i) => ({ s, i })).sort((a, b) => Number(b.s.alive) - Number(a.s.alive) || b.s.hp - a.s.hp || (a.s.place ?? 0) - (b.s.place ?? 0));
   const max = state.options.startHp;
@@ -131,8 +134,9 @@ function PlayersPanel({
             key={i}
             type="button"
             onClick={() => onInspect(i)}
-            className={`flex items-center gap-2 rounded-xl px-2 py-1 text-left text-xs transition hover:bg-white/5 ${i === viewerSeat ? "bg-amber-400/10 ring-1 ring-amber-400/40" : ""} ${!s.alive ? "opacity-50" : ""}`}
+            className={`relative flex items-center gap-2 rounded-xl px-2 py-1 text-left text-xs transition hover:bg-white/5 ${i === viewerSeat ? "bg-amber-400/10 ring-1 ring-amber-400/40" : ""} ${foe?.seat === i ? "tb-foe-glow bg-rose-500/15 ring-2 ring-rose-400" : ""} ${!s.alive ? "opacity-50" : ""}`}
           >
+            {foe?.seat === i && <FoeTag ghost={foe.ghost} className="absolute -top-2 right-1" />}
             <span className="text-lg">{hero?.emoji ?? "❔"}</span>
             <span className="min-w-0 flex-1">
               <span className="flex items-center gap-1">
@@ -248,6 +252,64 @@ function InspectModal({
 }
 
 /** 좁은 화면용 손님 띠 — 누르면 그 사람 보드(넓은 화면은 오른쪽 손님 목록) */
+/** 이번 라운드 내 전투 상대. ghost면 seat는 유령의 주인. */
+type Foe = { seat: Seat; ghost: boolean };
+
+const FOE_CSS = `
+@keyframes tb-foe-glow { 0%,100% { box-shadow: 0 0 0 0 rgba(251,113,133,.55), 0 0 10px rgba(251,113,133,.35) } 50% { box-shadow: 0 0 0 3px rgba(251,113,133,.25), 0 0 22px rgba(251,113,133,.7) } }
+@keyframes tb-foe-in { from { opacity: 0; transform: translateY(-6px) scale(.97) } to { opacity: 1; transform: none } }
+.tb-foe-glow { animation: tb-foe-glow 1.6s ease-in-out infinite; }
+.tb-foe-in { animation: tb-foe-in .45s ease-out both; }
+@media (prefers-reduced-motion: reduce) { .tb-foe-glow, .tb-foe-in { animation: none; } }
+`;
+
+function FoeTag({ ghost, className = "" }: { ghost: boolean; className?: string }) {
+  return (
+    <span className={`rounded-full bg-rose-600 px-1.5 py-px text-[9px] font-black text-white shadow ${className}`}>{ghost ? "👻 다음 상대(유령)" : "⚔️ 다음 상대"}</span>
+  );
+}
+
+/** 상점 단계: 이번 전투 상대를 크게 보여 준다. 누르면 그 사람 보드(최근 전투 보드). */
+function NextFoeBanner({ state, foe, names, onInspect }: { state: GameState; foe: Foe; names: Record<Seat, string>; onInspect: (seat: Seat) => void }) {
+  const s = state.seats[foe.seat];
+  const hero = s.hero ? HERO_BY_ID[s.hero] : null;
+  const name = names[foe.seat] ?? `${foe.seat + 1}번`;
+  const max = state.options.startHp;
+  return (
+    <button
+      type="button"
+      onClick={() => onInspect(foe.seat)}
+      className="tb-foe-in tb-foe-glow flex w-full items-center gap-3 rounded-xl border-2 border-rose-400 bg-gradient-to-r from-rose-900/80 via-rose-800/50 to-black/40 px-3 py-2 text-left transition hover:brightness-110 light:from-rose-100 light:via-rose-50 light:to-white"
+      title="누르면 상대 보드(최근 전투) 보기"
+    >
+      <span className="text-center text-[11px] font-black leading-tight tracking-wider text-rose-200 light:text-rose-700">
+        {state.round}R
+        <br />
+        다음 상대
+      </span>
+      <span className="text-3xl leading-none">{foe.ghost ? "👻" : (hero?.emoji ?? "❔")}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-black text-white light:text-slate-900">
+          {foe.ghost ? `${name}의 유령` : name}
+          {hero && !foe.ghost && <span className="ml-1.5 text-xs font-semibold text-rose-100/80 light:text-rose-700">{hero.name}</span>}
+        </span>
+        <span className="block text-[11px] text-rose-100/80 light:text-slate-600">
+          {foe.ghost ? (
+            "짝이 안 맞아 이 사람의 유령 보드와 싸워요"
+          ) : (
+            <>
+              ❤️ {Math.max(0, s.hp)}/{max} · 🏠{s.tier}등급
+              {s.lastResult ? ` · 지난 전투 ${s.lastResult === "win" ? "승" : s.lastResult === "loss" ? "패" : "무"}` : ""}
+              {s.winStreak >= 2 ? ` · 🔥${s.winStreak}연승` : ""}
+            </>
+          )}
+        </span>
+      </span>
+      <span className="shrink-0 rounded-lg bg-black/30 px-2 py-1 text-[11px] font-bold text-rose-100 light:bg-rose-100 light:text-rose-700">🔍 보드</span>
+    </button>
+  );
+}
+
 /** 준비 완료 여부 배지 — 색만이 아니라 글자로도 구분 */
 function ReadyPill({ ready }: { ready: boolean }) {
   return ready ? (
@@ -257,7 +319,7 @@ function ReadyPill({ ready }: { ready: boolean }) {
   );
 }
 
-function PlayerStrip({ state, viewerSeat, names, onInspect }: { state: GameState; viewerSeat: Seat; names: Record<Seat, string>; onInspect: (seat: Seat) => void }) {
+function PlayerStrip({ state, viewerSeat, names, onInspect, foe }: { state: GameState; viewerSeat: Seat; names: Record<Seat, string>; onInspect: (seat: Seat) => void; foe: Foe | null }) {
   const max = state.options.startHp;
   return (
     <div className="flex gap-1.5 overflow-x-auto pb-1 lg:hidden">
@@ -268,9 +330,10 @@ function PlayerStrip({ state, viewerSeat, names, onInspect }: { state: GameState
             key={i}
             type="button"
             onClick={() => onInspect(i as Seat)}
-            className={`flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${i === viewerSeat ? "border-amber-400/70 bg-amber-400/15" : "border-white/15 bg-black/30"} ${s.alive ? "" : "opacity-45"}`}
-            title="누르면 보드 보기"
+            className={`flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${foe?.seat === i ? "tb-foe-glow border-rose-400 bg-rose-500/20" : i === viewerSeat ? "border-amber-400/70 bg-amber-400/15" : "border-white/15 bg-black/30"} ${s.alive ? "" : "opacity-45"}`}
+            title={foe?.seat === i ? (foe.ghost ? "다음 상대: 이 사람의 유령" : "다음 상대") : "누르면 보드 보기"}
           >
+            {foe?.seat === i && <span className="font-black text-rose-200 light:text-rose-700">{foe.ghost ? "👻" : "⚔️"}</span>}
             <span className="text-base leading-none">{hero?.emoji ?? "❔"}</span>
             <span className="max-w-[4.5rem] truncate font-semibold text-white/90 light:text-slate-800">{names[i] ?? `${i + 1}번`}</span>
             <span className={`font-black tabular-nums ${s.hp > max / 2 ? "text-emerald-300" : s.hp > max / 5 ? "text-amber-300" : "text-rose-300"}`}>{s.alive ? s.hp : "💀"}</span>
@@ -368,6 +431,15 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
     }
   };
   const [inspect, setInspect] = useState<Seat | null>(null);
+  // 상점 단계에서 이번 전투 상대 미리보기(대진은 상점 시작 때 이미 정해져 있다)
+  const foe = useMemo<Foe | null>(() => {
+    if (!me.alive) return null;
+    const m = upcomingMatchups(state);
+    const o = m?.opp[viewerSeat];
+    if (!m || o === undefined) return null;
+    if (o === -1) return m.ghostOf === null ? null : { seat: m.ghostOf, ghost: true };
+    return { seat: o, ghost: false };
+  }, [state, viewerSeat, me.alive]);
   // 전투 통계: 내 전투 재생이 끝나면 잠깐(auto) 뜨고, 헤더 📊로 열고 닫는다
   const [statsView, setStatsView] = useState<{ round: number; auto: boolean } | null>(null);
   const [endedRound, setEndedRound] = useState(0);
@@ -505,7 +577,7 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
 
   let body: React.ReactNode;
   if (state.phase === "heroPick") body = <HeroPick state={state} viewerSeat={viewerSeat} names={names} onAction={onAction} view={view} quality={quality} />;
-  else if (state.phase === "shop" && me.alive) body = <ShopView state={state} viewerSeat={viewerSeat} names={names} onAction={onAction} view={view} quality={quality} myEmote={emotes[viewerSeat]} />;
+  else if (state.phase === "shop" && me.alive) body = <ShopView state={state} viewerSeat={viewerSeat} names={names} foe={foe} onInspect={setInspect} onAction={onAction} view={view} quality={quality} myEmote={emotes[viewerSeat]} />;
   else if (state.phase === "shop") body = <Spectator state={state} viewerSeat={viewerSeat} />;
   else if (state.phase === "combat") body = <CombatView key={state.round} onMyCombatEnded={onMyCombatEnded} state={state} viewerSeat={viewerSeat} names={names} onAction={onAction} view={view} quality={quality} emotes={emotes} />;
   else body = <Standings state={state} viewerSeat={viewerSeat} names={names} onGameEnd={onGameEnd} rankResult={rankResult} />;
@@ -537,6 +609,7 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
           onClose={closeStats}
         />
       )}
+      <style>{FOE_CSS}</style>
       {header}
       {(state.phase === "shop" || state.phase === "heroPick") && (
         <PhaseTimer deadlineMs={deadlineMs} totalMs={totalMs} nowMs={nowMs} label={state.phase === "shop" ? "상점 시간" : "영웅 고르기"}
@@ -546,12 +619,12 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
       <div className={`grid gap-3 lg:grid-cols-[1fr_17rem] ${tracker ? "xl:grid-cols-[15rem_1fr_17rem]" : ""}`}>
         {tracker && <div className="relative z-40 hidden xl:block">{tracker("column")}</div>}
         <div className="min-w-0">
-          {(state.phase === "shop" || state.phase === "combat") && <PlayerStrip state={state} viewerSeat={viewerSeat} names={names} onInspect={setInspect} />}
+          {(state.phase === "shop" || state.phase === "combat") && <PlayerStrip state={state} viewerSeat={viewerSeat} names={names} onInspect={setInspect} foe={state.phase === "shop" ? foe : null} />}
           {tracker && <div className="mb-2 xl:hidden">{tracker("strip")}</div>}
           {body}
         </div>
         {state.phase !== "heroPick" && state.phase !== "ended" && (
-          <PlayersPanel state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} onInspect={setInspect} emotes={emotes} />
+          <PlayersPanel state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} onInspect={setInspect} emotes={emotes} foe={state.phase === "shop" ? foe : null} />
         )}
       </div>
       {rules && <RulebookModal onClose={() => setRules(false)} />}
@@ -772,6 +845,8 @@ function ShopView({
   state,
   viewerSeat,
   names,
+  foe,
+  onInspect,
   onAction,
   view,
   quality,
@@ -780,6 +855,8 @@ function ShopView({
   state: GameState;
   viewerSeat: Seat;
   names: Record<Seat, string>;
+  foe: Foe | null;
+  onInspect: (seat: Seat) => void;
   onAction: (a: EngineAction) => void;
   view: View;
   quality: "high" | "low";
@@ -1117,6 +1194,7 @@ function ShopView({
           </button>
         )}
       </div>
+      {foe && <NextFoeBanner key={state.round} state={state} foe={foe} names={names} onInspect={onInspect} />}
       <ReadyStatus state={state} viewerSeat={viewerSeat} names={names} />
       {targeting && (
         <p className="rounded-xl bg-yellow-300/15 px-3 py-1.5 text-xs text-yellow-100 light:text-amber-800">

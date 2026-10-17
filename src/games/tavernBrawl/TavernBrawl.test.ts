@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import { baseInstance, defaultBack, normalizeRows, simulateCombat, type CombatSide, type UnitInstance } from "./combat";
 import {
   applyAction,
+  combatFor,
   computeRankings,
   effectivePool,
   getValidMoves,
   pendingSeats,
   startGame,
   totalCopies,
+  upcomingMatchups,
   winnerSeats,
   type EngineAction,
   type GameState,
@@ -292,6 +294,26 @@ describe("shop", () => {
 });
 
 describe("rounds", () => {
+  it("upcomingMatchups during shop matches the combats that actually happen (incl. ghost)", () => {
+    for (const n of [2, 3, 5, 8]) {
+      for (const seed of [3, 11, 29]) {
+        let st = pickHeroes(startGame(n, seed));
+        for (let round = 1; round <= 6 && st.phase === "shop"; round++) {
+          const m = upcomingMatchups(st)!;
+          const alive = st.seats.map((s, i) => (s.alive ? i : -1)).filter((i) => i >= 0);
+          for (let seat = 0; seat < n; seat++) if (st.seats[seat].alive) st = applyAction(st, chooseBotAction(st, seat, 5)!);
+          expect(st.phase).toBe("combat");
+          for (const seat of alive) {
+            const c = combatFor(st, seat)!;
+            const real = c.b === -1 ? -1 : c.a === seat ? c.b : c.a;
+            expect(m.opp[seat]).toBe(real);
+            if (real === -1) expect(m.ghostOf).toBe(c.ghostOf);
+          }
+          for (const seat of alive) st = applyAction(st, { type: "COMBAT_DONE", seat, round: st.round });
+        }
+      }
+    }
+  });
   it("UNREADY cancels ready and reopens the shop until everyone is ready", () => {
     let st = pickHeroes(startGame(3, 7));
     expect(applyAction(st, { type: "UNREADY", seat: 0, round: 1 })).toBe(st); // 준비 안 했으면 무시
