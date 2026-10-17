@@ -77,6 +77,7 @@ import * as audio from "./mergeDefenseAudio";
 import RulebookModal from "./RulebookModal";
 import MapIntro from "./MapIntro";
 import GemGuide from "./GemGuide";
+import EventLog, { TowerName, type LogEntry } from "./EventLog";
 import { AUTO_DEFAULT, AUTO_PRESET_NAME_MAX, autoPresetLink, describeAutoConfig, sameAutoConfig, upsertAutoPreset, type AutoConfig, type AutoPreset } from "./autoSettings";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
@@ -334,6 +335,12 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   const dropTargetRef = useRef<number | null>(null);
   const dragFromRef = useRef<number | null>(null);
   const [banner, setBanner] = useState<Banner | null>(null);
+  /** Every banner also lands here — on phones the side log is the only place they show. */
+  const [eventLog, setEventLog] = useState<LogEntry[]>([]);
+  const waveRef = useRef(state.wave);
+  useEffect(() => {
+    waveRef.current = state.wave;
+  }, [state.wave]);
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const bannerKey = useRef(0);
   const [goldPop, setGoldPop] = useState<GoldPop | null>(null);
@@ -447,7 +454,9 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
 
   function showBanner(b: Omit<Banner, "key">) {
     bannerKey.current += 1;
-    setBanner({ ...b, key: bannerKey.current });
+    const key = bannerKey.current;
+    setBanner({ ...b, key });
+    setEventLog((l) => [...l, { ...b, key, wave: waveRef.current }].slice(-40));
   }
 
   // New state → spawn FX + sounds from what changed.
@@ -1055,6 +1064,8 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   }, [mySeat]);
 
   const interactive = me.alive && state.phase === "playing" && resolvedView === mySeat;
+  /** A selected own unit → a big 판매 button sits right next to 소환. */
+  const sellable = interactive && selectedUnit != null;
 
   function toLogical(e: React.PointerEvent<HTMLCanvasElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -1226,14 +1237,26 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           </button>
           {onToggleAuto && (
             <span className="relative">
-              <button
-                onClick={() => setAutoMenuOpen((o) => !o)}
-                aria-expanded={autoMenuOpen}
-                title="🤖 자동 모드: AI가 내 보드를 대신 운영해요 — 무엇을 맡길지 고를 수 있어요"
-                className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${autoPlay ? "border-sky-300/70 bg-sky-500/30 text-sky-50 light:border-sky-400 light:bg-sky-50 light:text-sky-700" : "border-white/15 hover:border-white/30 light:border-slate-300"}`}
-              >
-                🤖<span className="hidden sm:inline"> 자동</span> {autoPlay ? (autoPartial ? "부분" : "ON") : "OFF"}
-              </button>
+              {/* One tap toggles; the ▾ beside it opens what 자동 is allowed to do. */}
+              <span className={`inline-flex overflow-hidden rounded-full border text-[11px] font-bold ${autoPlay ? "border-sky-300/70 bg-sky-500/30 text-sky-50 light:border-sky-400 light:bg-sky-50 light:text-sky-700" : "border-white/15 hover:border-white/30 light:border-slate-300"}`}>
+                <button
+                  onClick={onToggleAuto}
+                  aria-pressed={autoPlay}
+                  title={autoPlay ? "🤖 자동 켜짐 — 한 번 누르면 꺼져요" : "🤖 자동 꺼짐 — 한 번 누르면 AI가 내 보드를 대신 운영해요"}
+                  className="py-0.5 pr-1 pl-2"
+                >
+                  🤖<span className="hidden sm:inline"> 자동</span> {autoPlay ? (autoPartial ? "부분" : "ON") : "OFF"}
+                </button>
+                <button
+                  onClick={() => setAutoMenuOpen((o) => !o)}
+                  aria-expanded={autoMenuOpen}
+                  aria-label="자동 모드 설정"
+                  title="자동 설정 — 무엇을 맡길지 고르기"
+                  className="border-l border-white/20 py-0.5 light:border-slate-300 pr-1.5 pl-1 opacity-80"
+                >
+                  ▾
+                </button>
+              </span>
               {autoMenuOpen && (
                 <div className="absolute top-7 left-0 z-30 flex w-52 flex-col gap-1 rounded-xl border border-white/15 bg-slate-900/95 p-2 text-[12px] whitespace-normal text-white shadow-xl light:border-slate-200 light:bg-white light:text-slate-800">
                   <button
@@ -1607,13 +1630,14 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
             );
           })()}
         {banner && (
-          <div key={banner.key} className="pointer-events-none absolute inset-x-0 top-[38%] flex justify-center px-4">
+          <div key={banner.key} className="pointer-events-none absolute inset-x-0 top-[38%] hidden justify-center px-4 sm:flex">
             <div className={`animate-[md-pop_0.35s_ease-out] rounded-2xl border px-4 py-2 text-center shadow-lg backdrop-blur-sm ${bannerTone[banner.tone]}`}>
               <p className="text-base font-black sm:text-lg">{banner.text}</p>
               {banner.sub && <p className="text-[11px] opacity-80">{banner.sub}</p>}
             </div>
           </div>
         )}
+        <EventLog entries={eventLog} />
       </div>
 
       {/* My stats */}
@@ -1674,8 +1698,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
       <p className="min-h-[1rem] text-center text-xs text-white/70 light:text-slate-600">
         {selectedUnit ? (
           <>
-            <span style={{ color: GRADE_COLORS[selectedUnit.grade] }}>{GRADE_NAMES[selectedUnit.grade]}</span> {UNITS[selectedUnit.kind].emoji}{" "}
-            {UNITS[selectedUnit.kind].name} — {UNITS[selectedUnit.kind].desc}
+            <span style={{ color: GRADE_COLORS[selectedUnit.grade] }}>{GRADE_NAMES[selectedUnit.grade]}</span> <TowerName kind={selectedUnit.kind} /> — {UNITS[selectedUnit.kind].desc}
             {selectedUnit.grade < MAX_GRADE ? " · 같은 유닛을 눌러 합성 · 빈 칸을 눌러 이동" : " · 최고 등급 · 빈 칸을 눌러 이동"}
             {(() => {
               const st = unitStats(selectedUnit, me);
@@ -1699,26 +1722,6 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
                       </span>
                     );
                   })}
-                  {interactive && selected !== null && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (sellArm === selected) {
-                          onAction({ type: "sell", slot: selected });
-                          setSelected(null);
-                          setSellArm(null);
-                          return;
-                        }
-                        const slot = selected;
-                        setSellArm(slot);
-                        window.setTimeout(() => setSellArm((a) => (a === slot ? null : a)), 2500);
-                      }}
-                      title={`골드로 쓴 금액(🪙${selectedUnit.paid ?? 0})의 80%를 돌려받아요 · 보석으로 뽑은 몫은 환급 없음 · 강화 레벨은 그대로`}
-                      className={`rounded-full px-2.5 py-0.5 font-bold ${sellArm === selected ? "bg-rose-600 text-white motion-safe:animate-pulse" : "bg-yellow-500/25 text-yellow-100 light:bg-yellow-100 light:text-yellow-800"}`}
-                    >
-                      {sellArm === selected ? `정말 판매? +🪙${sellValue(selectedUnit)}` : `💰 판매 +🪙${sellValue(selectedUnit)}`}
-                    </button>
-                  )}
                 </span>
               );
             })()}
@@ -1731,7 +1734,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
       </p>
 
       {/* Actions — a usable button gets a white ring + soft pulse so it's obvious at a glance. */}
-      <div className="grid grid-cols-[2fr_1fr_1fr] gap-2">
+      <div className={`grid gap-2 ${sellable ? "grid-cols-[1.25fr_1.25fr_1fr_1fr]" : "grid-cols-[2fr_1fr_1fr]"}`}>
         <button
           disabled={!canSummon}
           onClick={() => buildSlot !== null && onAction({ type: "summon", slot: buildSlot })}
@@ -1740,6 +1743,34 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           🎲 소환 <span className="font-mono">🪙{cost}</span>
           <span className="block text-[10px] font-semibold">{freeSlots === 0 ? "자리 없음 — 합성하세요" : buildSlot === null ? "빈 칸을 먼저 선택" : "선택한 칸에 건설"}</span>
         </button>
+        {sellable && selectedUnit && (
+          <button
+            type="button"
+            onClick={() => {
+              if (sellArm === selected) {
+                onAction({ type: "sell", slot: selected! });
+                setSelected(null);
+                setSellArm(null);
+                return;
+              }
+              const slot = selected;
+              setSellArm(slot);
+              window.setTimeout(() => setSellArm((a) => (a === slot ? null : a)), 2500);
+            }}
+            title={`골드로 쓴 금액(🪙${selectedUnit.paid ?? 0})의 80%를 돌려받아요 · 💎도박으로 뽑은 몫은 환급 없음 · 강화 레벨은 그대로`}
+            className={`rounded-xl py-3 text-sm font-black text-white transition active:translate-y-0.5 active:shadow-none ${
+              sellArm === selected
+                ? "bg-gradient-to-b from-rose-500 to-red-700 shadow-[0_4px_0_#7f1d1d] motion-safe:animate-pulse"
+                : "bg-gradient-to-b from-yellow-400 to-amber-600 shadow-[0_4px_0_#92400e]"
+            }`}
+          >
+            <span className="block whitespace-nowrap">{sellArm === selected ? "정말 판매?" : "💰 판매"}</span>
+            <span className="block font-mono whitespace-nowrap">+🪙{sellValue(selectedUnit)}</span>
+            <span className="block text-[10px] leading-tight font-semibold break-keep opacity-90">
+              {sellArm === selected ? "한 번 더 누르기" : (selectedUnit.paid ?? 0) === 0 ? "💎도박 유닛 환급 없음" : "쓴 골드 80%"}
+            </span>
+          </button>
+        )}
         <button
           disabled={!canGamble}
           title={`💎 도박 확률 — ${GAMBLE_ODDS_TEXT}`}
@@ -1758,7 +1789,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           }}
           className={`rounded-xl bg-gradient-to-b from-fuchsia-400 to-purple-700 py-3 text-xs font-black text-white shadow-[0_4px_0_#581c87] transition active:translate-y-0.5 active:shadow-none disabled:opacity-40 ${canMergeNow ? READY_RING : ""}`}
         >
-          🔀 합성 <span className="rounded bg-emerald-400/90 px-1 text-[10px] text-emerald-950">무료</span>
+          🔀 합성 <span className="rounded bg-emerald-400/90 px-1 text-[10px] whitespace-nowrap text-emerald-950">무료</span>
           <span className="block text-[10px] font-semibold opacity-80">{pairs.length}쌍 가능</span>
         </button>
       </div>
@@ -1784,9 +1815,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
                 </span>
               )}
               <span className="text-base leading-none">{UNITS[kind].emoji}</span>
-              <span className="max-w-full truncate text-[11px] leading-tight font-black" style={{ color: UNITS[kind].color }}>
-                {UNITS[kind].name}
-              </span>
+              <TowerName kind={kind} emoji={false} className="my-0.5 max-w-full truncate text-[11px] leading-tight" />
               <span className="text-[10px] font-bold">Lv.{level}</span>
               <span className="font-mono text-[10px] opacity-70">{maxed ? "MAX" : `🪙${price}`}</span>
             </button>
@@ -1796,13 +1825,13 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
 
       <p className="-mt-0.5 text-center text-[10px] break-keep text-white/50 light:text-slate-500">
         ⚔️ 물리:{" "}
-        {UNIT_KINDS.filter((k) => UNITS[k].dmgType === "physical")
-          .map((k) => `${UNITS[k].emoji} ${UNITS[k].name}`)
-          .join(" · ")}{" "}
+        {UNIT_KINDS.filter((k) => UNITS[k].dmgType === "physical").map((k) => (
+          <TowerName key={k} kind={k} className="mx-0.5 text-[10px]" />
+        ))}{" "}
         (방어력에 막힘) &nbsp;|&nbsp; ✨ 마법:{" "}
-        {UNIT_KINDS.filter((k) => UNITS[k].dmgType === "magic")
-          .map((k) => `${UNITS[k].emoji} ${UNITS[k].name}`)
-          .join(" · ")}{" "}
+        {UNIT_KINDS.filter((k) => UNITS[k].dmgType === "magic").map((k) => (
+          <TowerName key={k} kind={k} className="mx-0.5 text-[10px]" />
+        ))}{" "}
         (마법 저항에 막힘)
       </p>
 
