@@ -142,6 +142,8 @@ export type EngineAction =
   | { type: "HERO_POWER"; seat: Seat; round: number; target?: string }
   | { type: "DISCOVER"; seat: Seat; round: number; pick: number }
   | { type: "READY"; seat: Seat; round: number }
+  /** 준비 완료 취소 — 모두가 준비해 상점이 끝나기 전까지만 */
+  | { type: "UNREADY"; seat: Seat; round: number }
   | { type: "BATCH"; seat: Seat; round: number; actions: EngineAction[] }
   | { type: "COMBAT_DONE"; seat: Seat; round: number }
   | { type: "TIMEOUT"; stage: number };
@@ -458,6 +460,11 @@ function applyShopAction(st: GameState, s: SeatState, a: SeatAction): boolean {
     if (s.ready) return false;
     while (s.discover.length > 0) applyShopAction(st, s, { type: "DISCOVER", seat, round: a.round, pick: 0 });
     s.ready = true;
+    return true;
+  }
+  if (a.type === "UNREADY") {
+    if (!s.ready) return false;
+    s.ready = false;
     return true;
   }
   if (s.ready) return false;

@@ -292,6 +292,20 @@ describe("shop", () => {
 });
 
 describe("rounds", () => {
+  it("UNREADY cancels ready and reopens the shop until everyone is ready", () => {
+    let st = pickHeroes(startGame(3, 7));
+    expect(applyAction(st, { type: "UNREADY", seat: 0, round: 1 })).toBe(st); // 준비 안 했으면 무시
+    st = applyAction(st, { type: "READY", seat: 0, round: 1 });
+    expect(st.seats[0].ready).toBe(true);
+    expect(applyAction(st, { type: "REROLL", seat: 0, round: 1 })).toBe(st); // 준비 중엔 상점 잠김
+    st = applyAction(st, { type: "UNREADY", seat: 0, round: 1 });
+    expect(st.seats[0].ready).toBe(false);
+    expect(pendingSeats(st)).toEqual([0, 1, 2]);
+    expect(applyAction(st, { type: "REROLL", seat: 0, round: 1 })).not.toBe(st);
+    for (let seat = 0; seat < 3; seat++) st = applyAction(st, { type: "READY", seat, round: 1 });
+    expect(st.phase).toBe("combat");
+    expect(applyAction(st, { type: "UNREADY", seat: 0, round: 1 })).toBe(st); // 전투 시작 뒤엔 못 물림
+  });
   it("everyone ready → combat → everyone done → next shop with more gold", () => {
     let st = pickHeroes(startGame(4, 41));
     for (let seat = 0; seat < 4; seat++) st = applyAction(st, { type: "READY", seat, round: 1 });

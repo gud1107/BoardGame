@@ -118,7 +118,14 @@ function PlayersPanel({
       <p className={LABEL}>🍻 손님들 (누르면 그 사람 보드)</p>
       {order.map(({ s, i }) => {
         const hero = s.hero ? HERO_BY_ID[s.hero] : null;
-        const status = !s.alive ? `💀 ${s.place}위` : state.phase === "shop" ? (s.ready ? "✅" : "🤔") : state.phase === "heroPick" ? (s.hero ? "✅" : "🤔") : "";
+        const done = state.phase === "shop" ? s.ready : state.phase === "heroPick" ? s.hero !== null : null;
+        const status = !s.alive ? (
+          `💀 ${s.place}위`
+        ) : done === null ? (
+          ""
+        ) : (
+          <ReadyPill ready={done} />
+        );
         return (
           <button
             key={i}
@@ -241,6 +248,15 @@ function InspectModal({
 }
 
 /** 좁은 화면용 손님 띠 — 누르면 그 사람 보드(넓은 화면은 오른쪽 손님 목록) */
+/** 준비 완료 여부 배지 — 색만이 아니라 글자로도 구분 */
+function ReadyPill({ ready }: { ready: boolean }) {
+  return ready ? (
+    <span className="rounded-full bg-emerald-500/20 px-1.5 py-px text-[10px] font-bold text-emerald-200 ring-1 ring-emerald-400/50 light:text-emerald-700">✅ 준비</span>
+  ) : (
+    <span className="tb-tm-pulse inline-block rounded-full bg-amber-500/15 px-1.5 py-px text-[10px] font-bold text-amber-200 ring-1 ring-amber-400/50 light:text-amber-700">⏳ 고민 중</span>
+  );
+}
+
 function PlayerStrip({ state, viewerSeat, names, onInspect }: { state: GameState; viewerSeat: Seat; names: Record<Seat, string>; onInspect: (seat: Seat) => void }) {
   const max = state.options.startHp;
   return (
@@ -258,6 +274,7 @@ function PlayerStrip({ state, viewerSeat, names, onInspect }: { state: GameState
             <span className="text-base leading-none">{hero?.emoji ?? "❔"}</span>
             <span className="max-w-[4.5rem] truncate font-semibold text-white/90 light:text-slate-800">{names[i] ?? `${i + 1}번`}</span>
             <span className={`font-black tabular-nums ${s.hp > max / 2 ? "text-emerald-300" : s.hp > max / 5 ? "text-amber-300" : "text-rose-300"}`}>{s.alive ? s.hp : "💀"}</span>
+            {state.phase === "shop" && s.alive && <span title={s.ready ? "준비 완료" : "아직 준비 안 함"}>{s.ready ? "✅" : "⏳"}</span>}
           </button>
         );
       })}
@@ -488,7 +505,7 @@ export default function TavernBrawlBoard({ state, viewerSeat, names, connectedSe
 
   let body: React.ReactNode;
   if (state.phase === "heroPick") body = <HeroPick state={state} viewerSeat={viewerSeat} names={names} onAction={onAction} view={view} quality={quality} />;
-  else if (state.phase === "shop" && me.alive) body = <ShopView state={state} viewerSeat={viewerSeat} onAction={onAction} view={view} quality={quality} myEmote={emotes[viewerSeat]} />;
+  else if (state.phase === "shop" && me.alive) body = <ShopView state={state} viewerSeat={viewerSeat} names={names} onAction={onAction} view={view} quality={quality} myEmote={emotes[viewerSeat]} />;
   else if (state.phase === "shop") body = <Spectator state={state} viewerSeat={viewerSeat} />;
   else if (state.phase === "combat") body = <CombatView key={state.round} onMyCombatEnded={onMyCombatEnded} state={state} viewerSeat={viewerSeat} names={names} onAction={onAction} view={view} quality={quality} emotes={emotes} />;
   else body = <Standings state={state} viewerSeat={viewerSeat} names={names} onGameEnd={onGameEnd} rankResult={rankResult} />;
@@ -754,6 +771,7 @@ function UpgradePanel({ tier, cost, base, gold, onUpgrade }: { tier: number; cos
 function ShopView({
   state,
   viewerSeat,
+  names,
   onAction,
   view,
   quality,
@@ -761,6 +779,7 @@ function ShopView({
 }: {
   state: GameState;
   viewerSeat: Seat;
+  names: Record<Seat, string>;
   onAction: (a: EngineAction) => void;
   view: View;
   quality: "high" | "low";
@@ -858,6 +877,10 @@ function ShopView({
   }, [boardKey]);
 
   const send = (a: EngineAction, sound?: string) => {
+    if (me.ready && a.type !== "UNREADY") {
+      showToast("✅ 준비 완료 상태", "상점·보드를 고치려면 먼저 「준비 해제」를 누르세요");
+      return;
+    }
     if (sound) sfx(sound);
     onAction(a);
   };
@@ -1077,13 +1100,24 @@ function ShopView({
             {hero.emoji} {hero.power} {hero.cost === null ? "(지속)" : me.powerUsed ? "✓" : `🪙${hero.cost}`}
           </button>
         )}
-        <button
-          onClick={() => send({ type: "READY", seat: viewerSeat, round }, "ready")}
-          className={`${BTN_GREEN} ml-auto px-4`}
-        >
-          ⚔️ 준비 완료
-        </button>
+        {me.ready ? (
+          <button
+            onClick={() => send({ type: "UNREADY", seat: viewerSeat, round }, "freeze")}
+            className={`${BTN} ml-auto border-2 border-emerald-400 bg-emerald-900/60 px-4 text-emerald-100 shadow-[0_0_12px_rgba(52,211,153,0.45)] hover:bg-emerald-800/70 light:bg-emerald-50 light:text-emerald-800`}
+            title="눌러서 준비를 취소하고 다시 상점을 볼 수 있어요"
+          >
+            ✅ 준비됨 <span className="ml-1 text-xs font-semibold opacity-80">· 해제</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => send({ type: "READY", seat: viewerSeat, round }, "ready")}
+            className={`${BTN_GREEN} ml-auto px-4`}
+          >
+            ⚔️ 준비 완료
+          </button>
+        )}
       </div>
+      <ReadyStatus state={state} viewerSeat={viewerSeat} names={names} />
       {targeting && (
         <p className="rounded-xl bg-yellow-300/15 px-3 py-1.5 text-xs text-yellow-100 light:text-amber-800">
           🧙 마력을 불어넣을 보드 유닛을 누르세요.{" "}
@@ -1426,6 +1460,35 @@ function DiscoverModal({ options, onPick }: { options: string[]; onPick: (i: num
           이걸로!
         </button>
       </div>
+    </div>
+  );
+}
+
+/** 상점 단계: 내 준비 상태 + 아직 준비 안 한 손님 이름 */
+function ReadyStatus({ state, viewerSeat, names }: { state: GameState; viewerSeat: Seat; names: Record<Seat, string> }) {
+  const me = state.seats[viewerSeat];
+  const alive = state.seats.map((s, i) => ({ s, i })).filter(({ s }) => s.alive);
+  const waiting = alive.filter(({ s, i }) => !s.ready && i !== viewerSeat);
+  const readyCount = alive.filter(({ s }) => s.ready).length;
+  return (
+    <div
+      className={`flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl px-3 py-1.5 text-xs ${me.ready ? "bg-emerald-500/15 text-emerald-100 ring-1 ring-emerald-400/40 light:text-emerald-800" : "bg-black/25 text-white/75 light:bg-amber-50 light:text-slate-700"}`}
+    >
+      <span className="font-bold">
+        {me.ready ? "✅ 준비 완료! 상점이 잠겼어요" : "🛒 상점 보는 중"} · 준비 {readyCount}/{alive.length}
+      </span>
+      {waiting.length > 0 ? (
+        <span className="flex flex-wrap items-center gap-1">
+          <span className="opacity-75">⏳ 아직:</span>
+          {waiting.map(({ i }) => (
+            <span key={i} className="max-w-[7rem] truncate rounded-full bg-amber-500/20 px-2 py-px font-semibold text-amber-100 ring-1 ring-amber-400/40 light:text-amber-800">
+              {names[i] ?? `${i + 1}번`}
+            </span>
+          ))}
+        </span>
+      ) : (
+        !me.ready && <span className="font-semibold text-amber-200 light:text-amber-700">다른 손님은 모두 준비했어요 — 내가 누르면 전투 시작!</span>
+      )}
     </div>
   );
 }
