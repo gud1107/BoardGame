@@ -338,6 +338,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   /** Every banner also lands here — on phones the side log is the only place they show. */
   const [eventLog, setEventLog] = useState<LogEntry[]>([]);
   const waveRef = useRef(state.wave);
+  const lastBuzzRef = useRef(0);
   useEffect(() => {
     waveRef.current = state.wave;
   }, [state.wave]);
@@ -456,6 +457,12 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
     bannerKey.current += 1;
     const key = bannerKey.current;
     setBanner({ ...b, key });
+    // Sound-off players still feel a boss coming: one short buzz on phones that support it.
+    // (at most once per 8s — a boss wave's preview and arrival come ~5s apart).
+    if (b.tone === "boss" && typeof navigator !== "undefined" && Date.now() - lastBuzzRef.current > 8000) {
+      lastBuzzRef.current = Date.now();
+      navigator.vibrate?.([60, 40, 60]);
+    }
     setEventLog((l) => [...l, { ...b, key, wave: waveRef.current }].slice(-40));
   }
 
@@ -729,7 +736,9 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
       if (ev.type === "hire") {
         const what = `${HIRES[ev.mob].emoji} ${HIRES[ev.mob].name}`;
         if (ev.to === mySeat) {
-          showBanner({ text: `👾 ${names[ev.seat] ?? "상대"}님이 ${what}을(를) 보냈어요!`, sub: HIRES[ev.mob].desc, tone: "danger" });
+          // A bought 전쟁군주 is a boss-level threat → same boss tone (phone strip + board glow) as a boss wave.
+          if (ev.mob === "warlord") showBanner({ text: `👹 ${names[ev.seat] ?? "상대"}님이 전쟁군주를 보냈어요!`, sub: HIRES.warlord.desc, tone: "boss" });
+          else showBanner({ text: `👾 ${names[ev.seat] ?? "상대"}님이 ${what}을(를) 보냈어요!`, sub: HIRES[ev.mob].desc, tone: "danger" });
           if (audible) audio.playEliteIncoming();
         } else if (ev.seat === mySeat) {
           showBanner({ text: `👾 ${what} → ${names[ev.to] ?? "상대"}`, sub: ev.income ? `💰 웨이브 수입 +${ev.income} (매 웨이브 +${state.boards[mySeat]?.income ?? 0})` : undefined, tone: "good" });
@@ -1636,6 +1645,10 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
               {banner.sub && <p className="text-[11px] opacity-80">{banner.sub}</p>}
             </div>
           </div>
+        )}
+        {/* Boss-level news also lights the board frame, so it reads without sound and without the banner. */}
+        {banner?.tone === "boss" && (
+          <div key={`glow-${banner.key}`} className="pointer-events-none absolute inset-0 rounded-2xl ring-4 ring-amber-400/80 shadow-[inset_0_0_24px_rgba(168,85,247,0.55)] motion-safe:animate-pulse" />
         )}
         {/* Phones: only boss-wave news stays on the board, as a thin one-line strip at the bottom edge (clear of the 📜 tab). */}
         {banner?.tone === "boss" && (
