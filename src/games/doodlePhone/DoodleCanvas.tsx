@@ -123,6 +123,8 @@ const MAX_RECENT_COLORS = 6;
 /** Undo depth (op-list snapshots). */
 const MAX_HISTORY = 60;
 const MAX_ZOOM = 4;
+/** localStorage flag: the stamp row's swipe hint has been shown on this browser. */
+const STAMP_HINT_KEY = "doodle-phone:stamp-swipe-hint";
 
 const SHAPE_OF: Partial<Record<Tool, ShapeKind>> = { line: "l", rect: "r", ellipse: "e" };
 /** "연하게" preset — sketch/underdrawing strength. */
@@ -210,6 +212,30 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
   /** 🔷 도장: which shape one tap stamps, and how big (STAMP_SIZES index). */
   const [stampId, setStampId] = useState<StampId>("square");
   const [stampSize, setStampSize] = useState(1);
+  /** The phone stamp row scrolls sideways; these drive its edge fade and the first-time swipe hint. */
+  const stampRowRef = useRef<HTMLDivElement | null>(null);
+  const [stampRowAtEnd, setStampRowAtEnd] = useState(false);
+
+  // First time the stamp tool opens on this browser (and the row actually overflows):
+  // nudge the row sideways and back, so people learn there are more shapes off-screen.
+  useEffect(() => {
+    if (tool !== "stamp") return;
+    const row = stampRowRef.current;
+    if (!row || row.scrollWidth <= row.clientWidth + 4) return;
+    try {
+      if (localStorage.getItem(STAMP_HINT_KEY)) return;
+      localStorage.setItem(STAMP_HINT_KEY, "1");
+    } catch {
+      return; // no storage → no way to show it only once; skip rather than nag every time
+    }
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const out = window.setTimeout(() => row.scrollTo({ left: Math.min(96, row.scrollWidth - row.clientWidth), behavior: "smooth" }), 250);
+    const back = window.setTimeout(() => row.scrollTo({ left: 0, behavior: "smooth" }), 1050);
+    return () => {
+      window.clearTimeout(out);
+      window.clearTimeout(back);
+    };
+  }, [tool]);
   // Mirrors of the refs that the toolbar renders from.
   const [history, setHistory] = useState({ undo: 0, redo: 0, ink: 0, count: 0 });
   /** Mirror of the selection for the toolbar: how many, and whether it's a single resizable shape. */
@@ -936,7 +962,15 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
             // Phones: one swipeable row (sizes + shapes) so the palette and the submit button
             // don't drop a whole screen lower while the stamp tool is on. Wider screens: a grid.
             <div className="flex flex-col gap-1 rounded-lg border border-fuchsia-400/20 bg-fuchsia-500/5 p-1 light:border-fuchsia-200 light:bg-fuchsia-50/60 sm:gap-1.5 sm:p-1.5">
-              <div className="flex flex-nowrap items-center gap-1 overflow-x-auto [scrollbar-width:none] sm:grid sm:grid-cols-8 [&::-webkit-scrollbar]:hidden">
+              <div className="relative">
+              <div
+                ref={stampRowRef}
+                onScroll={(e) => {
+                  const row = e.currentTarget;
+                  setStampRowAtEnd(row.scrollLeft + row.clientWidth >= row.scrollWidth - 2);
+                }}
+                className="flex flex-nowrap items-center gap-1 overflow-x-auto [scrollbar-width:none] sm:grid sm:grid-cols-8 [&::-webkit-scrollbar]:hidden"
+              >
                 <button
                   type="button"
                   title={`크기: ${STAMP_SIZES[stampSize].label} (눌러서 바꾸기)`}
@@ -959,6 +993,11 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
                     {s.icon}
                   </button>
                 ))}
+              </div>
+              {/* "More this way" fade on the right edge until the row is scrolled to its end (phones only). */}
+              {!stampRowAtEnd && (
+                <span className="pointer-events-none absolute inset-y-0 right-0 w-10 rounded-r-md bg-gradient-to-r from-transparent to-black/60 sm:hidden light:to-white/90" aria-hidden />
+              )}
               </div>
               <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-white/60 light:text-slate-500">
                 <span className="hidden items-center gap-1.5 sm:flex">
