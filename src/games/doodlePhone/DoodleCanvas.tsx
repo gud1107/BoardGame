@@ -933,8 +933,19 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
           )}
 
           {tool === "stamp" && (
-            <div className="flex flex-col gap-1.5 rounded-lg border border-fuchsia-400/20 bg-fuchsia-500/5 p-1.5 light:border-fuchsia-200 light:bg-fuchsia-50/60">
-              <div className="grid grid-cols-8 gap-1">
+            // Phones: one swipeable row (sizes + shapes) so the palette and the submit button
+            // don't drop a whole screen lower while the stamp tool is on. Wider screens: a grid.
+            <div className="flex flex-col gap-1 rounded-lg border border-fuchsia-400/20 bg-fuchsia-500/5 p-1 light:border-fuchsia-200 light:bg-fuchsia-50/60 sm:gap-1.5 sm:p-1.5">
+              <div className="flex flex-nowrap items-center gap-1 overflow-x-auto [scrollbar-width:none] sm:grid sm:grid-cols-8 [&::-webkit-scrollbar]:hidden">
+                <button
+                  type="button"
+                  title={`크기: ${STAMP_SIZES[stampSize].label} (눌러서 바꾸기)`}
+                  aria-label={`도장 크기 ${STAMP_SIZES[stampSize].label}, 눌러서 바꾸기`}
+                  onClick={() => setStampSize((stampSize + 1) % STAMP_SIZES.length)}
+                  className={`h-9 shrink-0 rounded-md border px-2 text-[11px] font-bold sm:hidden ${active}`}
+                >
+                  {STAMP_SIZES[stampSize].label}
+                </button>
                 {STAMPS.map((s) => (
                   <button
                     key={s.id}
@@ -943,19 +954,24 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
                     aria-label={`도장 ${s.label}`}
                     aria-pressed={stampId === s.id}
                     onClick={() => setStampId(s.id)}
-                    className={`flex h-9 items-center justify-center rounded-md border text-base ${stampId === s.id ? active : idle}`}
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md border text-base sm:w-auto ${stampId === s.id ? active : idle}`}
                   >
                     {s.icon}
                   </button>
                 ))}
               </div>
               <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-white/60 light:text-slate-500">
-                {STAMP_SIZES.map((sz, i) => (
-                  <button key={sz.label} type="button" aria-pressed={stampSize === i} onClick={() => setStampSize(i)} className={`rounded-md border px-2 py-0.5 ${stampSize === i ? active : idle}`}>
-                    {sz.label}
-                  </button>
-                ))}
-                <span>🔷 그림판을 누르면 그 자리에 “{STAMPS.find((s) => s.id === stampId)?.label}” 찍기 · 지금 색·굵기·농도 그대로</span>
+                <span className="hidden items-center gap-1.5 sm:flex">
+                  {STAMP_SIZES.map((sz, i) => (
+                    <button key={sz.label} type="button" aria-pressed={stampSize === i} onClick={() => setStampSize(i)} className={`rounded-md border px-2 py-0.5 ${stampSize === i ? active : idle}`}>
+                      {sz.label}
+                    </button>
+                  ))}
+                </span>
+                <span>
+                  🔷 누르면 “{STAMPS.find((s) => s.id === stampId)?.label}” 찍기<span className="hidden sm:inline"> · 지금 색·굵기·농도 그대로</span>
+                  <span className="sm:hidden"> · 옆으로 밀면 더 있어요</span>
+                </span>
               </div>
             </div>
           )}
