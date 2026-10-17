@@ -123,8 +123,13 @@ const MAX_RECENT_COLORS = 6;
 /** Undo depth (op-list snapshots). */
 const MAX_HISTORY = 60;
 const MAX_ZOOM = 4;
-/** localStorage flag: the stamp row's swipe hint has been shown on this browser. */
-const STAMP_HINT_KEY = "doodle-phone:stamp-swipe-hint";
+/**
+ * Match (seed) whose stamp-row swipe hint already played on this page. Once
+ * per match rather than once per browser: a shared phone or PC-bang machine
+ * would otherwise only ever show it to whoever played first. Module memory
+ * outlives the per-turn canvas remounts; a reload simply shows it again.
+ */
+let stampHintShownFor: number | null = null;
 
 const SHAPE_OF: Partial<Record<Tool, ShapeKind>> = { line: "l", rect: "r", ellipse: "e" };
 /** "연하게" preset — sketch/underdrawing strength. */
@@ -216,18 +221,14 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
   const stampRowRef = useRef<HTMLDivElement | null>(null);
   const [stampRowAtEnd, setStampRowAtEnd] = useState(false);
 
-  // First time the stamp tool opens on this browser (and the row actually overflows):
+  // First time the stamp tool opens in this match (and the row actually overflows):
   // nudge the row sideways and back, so people learn there are more shapes off-screen.
   useEffect(() => {
     if (tool !== "stamp") return;
     const row = stampRowRef.current;
     if (!row || row.scrollWidth <= row.clientWidth + 4) return;
-    try {
-      if (localStorage.getItem(STAMP_HINT_KEY)) return;
-      localStorage.setItem(STAMP_HINT_KEY, "1");
-    } catch {
-      return; // no storage → no way to show it only once; skip rather than nag every time
-    }
+    if (stampHintShownFor === matchKey) return;
+    stampHintShownFor = matchKey;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const out = window.setTimeout(() => row.scrollTo({ left: Math.min(96, row.scrollWidth - row.clientWidth), behavior: "smooth" }), 250);
     const back = window.setTimeout(() => row.scrollTo({ left: 0, behavior: "smooth" }), 1050);
@@ -235,7 +236,7 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
       window.clearTimeout(out);
       window.clearTimeout(back);
     };
-  }, [tool]);
+  }, [tool, matchKey]);
   // Mirrors of the refs that the toolbar renders from.
   const [history, setHistory] = useState({ undo: 0, redo: 0, ink: 0, count: 0 });
   /** Mirror of the selection for the toolbar: how many, and whether it's a single resizable shape. */
@@ -782,7 +783,8 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
     };
   });
 
-  const toolButton = "flex h-9 w-7 shrink-0 items-center justify-center rounded-lg border text-sm transition disabled:opacity-40 sm:w-9";
+  // Phones: grid cells (w-full, ≥40px wide); sm+: fixed 36px squares in one row.
+  const toolButton = "flex h-9 w-full shrink-0 items-center justify-center rounded-lg border text-sm transition disabled:opacity-40 sm:w-9";
   const idle = "border-white/10 bg-white/5 text-white/80 hover:border-white/30 light:border-slate-200 light:bg-white light:text-slate-700";
   const active = "border-fuchsia-400 bg-fuchsia-500/25 text-white light:bg-fuchsia-50 light:text-fuchsia-800";
   const tools = blind ? TOOLS.filter((t) => t.id !== "select") : TOOLS;
@@ -827,7 +829,9 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
 
       {!disabled && (
         <div className="flex flex-col gap-2 rounded-xl border border-white/10 bg-black/20 p-2 light:border-slate-200 light:bg-slate-50">
-          <div className="flex flex-nowrap items-center gap-0.5 overflow-x-auto [scrollbar-width:none] sm:gap-1.5 [&::-webkit-scrollbar]:hidden">
+          {/* Phones: a 6-column grid in two rows — 28px buttons squeezed into one scrolling
+              row put 펜/직선 a mis-tap apart and hid 🗑️/굵기 off-screen at 320px. */}
+          <div className="grid grid-cols-6 gap-1 sm:flex sm:flex-nowrap sm:items-center sm:gap-1.5 sm:overflow-x-auto sm:[scrollbar-width:none] sm:[&::-webkit-scrollbar]:hidden">
             {tools.map((t) => (
               <button key={t.id} type="button" title={t.label} aria-label={t.label} aria-pressed={tool === t.id} onClick={() => chooseTool(t.id)} className={`${toolButton} ${tool === t.id ? active : idle}`}>
                 {t.icon}
@@ -851,7 +855,7 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
             )}
             <span className="mx-0.5 hidden h-6 w-px shrink-0 bg-white/10 sm:block light:bg-slate-200" />
             {/* Phones: one button cycling through the sizes keeps the row to a single line. */}
-            <span className="shrink-0 sm:hidden">
+            <span className="sm:hidden">
               <button
                 type="button"
                 title={`굵기 ${size + 1}/${BRUSH_SIZES.length} (눌러서 바꾸기)`}
