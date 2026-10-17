@@ -912,6 +912,25 @@ export function slotAtPoint(x: number, y: number): number | null {
 // Economy / balance formulas.
 // ---------------------------------------------------------------------------
 
+/**
+ * 초반 짝 보정: through `untilWave`, a 소환 has `chance` to roll the kind of a
+ * same-grade unit already on the board that has no partner yet — 10 kinds made
+ * first pairs slow (naive play: first merge ~28s → ~37s, 18% had none by W2);
+ * 0.15 brings it back to the 8-kind feel (~28s, merges by W5 3.3 → 4.0).
+ * Mutable for sims.
+ */
+export const EARLY_PAIR = { untilWave: 5, chance: 0.15 };
+
+function summonKind(s: MergeDefenseState, board: Board, grade: number): UnitKind {
+  if (s.wave <= EARLY_PAIR.untilWave && rand(s) < EARLY_PAIR.chance) {
+    const count = new Map<UnitKind, number>();
+    for (const u of board.units) if (u && u.grade === grade) count.set(u.kind, (count.get(u.kind) ?? 0) + 1);
+    const lonely = UNIT_KINDS.filter((k) => (count.get(k) ?? 0) % 2 === 1);
+    if (lonely.length) return pick(s, lonely);
+  }
+  return pick(s, UNIT_KINDS);
+}
+
 export function summonCost(board: Board): number {
   return 20 + board.summons * 2;
 }
@@ -1171,7 +1190,7 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
     const slot = action.slot ?? pick(s, emptySlots(board));
     const lucky = rand(s) < 0.06;
     const grade = lucky ? 2 : 1;
-    board.units[slot] = { kind: pick(s, UNIT_KINDS), grade, cd: 0, paid };
+    board.units[slot] = { kind: summonKind(s, board, grade), grade, cd: 0, paid };
     pushEvent(s, { seat, type: "summon", slot, grade, lucky });
     return s;
   }

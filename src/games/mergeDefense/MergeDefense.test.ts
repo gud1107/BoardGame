@@ -12,6 +12,7 @@ import {
   STUN_GUARD,
   unitSkills,
   sanctuaryHaste,
+  EARLY_PAIR,
   liberateSpeed,
   wisdomCrit,
   SHAMAN_HEAL,
@@ -740,6 +741,31 @@ describe("merge defense engine", () => {
     expect(wise[0]).toBe(0);
     expect(wise[1]).toBeCloseTo(SKILL.wisdom.mythicChance);
     expect(wise[far]).toBe(0);
+  });
+
+  it("초반 짝 보정: early summons can lean toward a lonely unit's kind, and stop after the early waves", () => {
+    const chance = EARLY_PAIR.chance;
+    EARLY_PAIR.chance = 1;
+    let kinds = new Set<string>();
+    for (let seed = 1; seed <= 20; seed++) {
+      let s = startGame(2, seed);
+      s.boards[0].units[0] = { kind: "thinker", grade: 1, cd: 0 };
+      s.boards[0].units[1] = { kind: "archer", grade: 1, cd: 0 };
+      s.boards[0].units[2] = { kind: "archer", grade: 1, cd: 0 };
+      s = applyAction(s, 0, { type: "summon", slot: 5 });
+      const u = s.boards[0].units[5]!;
+      if (u.grade === 1) kinds.add(u.kind);
+    }
+    expect([...kinds]).toEqual(["thinker"]);
+    kinds = new Set<string>();
+    for (let seed = 1; seed <= 20; seed++) {
+      let s = { ...startGame(2, seed), wave: EARLY_PAIR.untilWave + 1 };
+      s.boards[0].units[0] = { kind: "thinker", grade: 1, cd: 0 };
+      s = applyAction(s, 0, { type: "summon", slot: 5 });
+      kinds.add(s.boards[0].units[5]!.kind);
+    }
+    EARLY_PAIR.chance = chance;
+    expect(kinds.size).toBeGreaterThan(1);
   });
 
   it("gamble odds add up to 100%", () => {
