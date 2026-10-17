@@ -67,6 +67,7 @@ export default function CombatReplay({
   emotes,
   onFinished,
   onEnded,
+  skipToEnd,
 }: {
   combat: CombatRecord;
   /** 아래쪽(내 쪽)에 보일 편 */
@@ -81,14 +82,19 @@ export default function CombatReplay({
   onFinished?: () => void;
   /** 마지막(결과) 프레임에 닿고 잠시 뒤 — 전투 통계를 띄우는 데 쓴다 */
   onEnded?: () => void;
+  /** 건너뛰기: 곧장 결과 프레임으로 */
+  skipToEnd?: boolean;
 }) {
   const frames = useMemo(() => simulateCombat(combat.sideA, combat.sideB, combat.seed, true).frames, [combat]);
-  const [idx, setIdx] = useState(0);
+  const [idxState, setIdx] = useState(0);
+  // 건너뛰면 곧장 결과 프레임
+  const idx = skipToEnd ? frames.length - 1 : idxState;
   const reachHint = useReachHint(frames, idx);
   // 힌트가 막 뜬 프레임은 읽을 틈을 주려고 조금 더 머문다(타이머가 다시 걸려도 그 프레임 길이 + 0.5초)
   const holdMs = reachHint && reachHint.at === idx ? HINT_HOLD_MS : 0;
   /** 공격 프레임에서 충돌이 일어났는지 — 그 전엔 맞기 전 체력을 보여 준다 */
-  const [impacted, setImpacted] = useState(false);
+  const [impactedState, setImpacted] = useState(false);
+  const impacted = impactedState || !!skipToEnd;
   const [struck, setStruck] = useState(false);
   const topBadge = useRef<HTMLSpanElement>(null);
   const bottomBadge = useRef<HTMLSpanElement>(null);
@@ -118,12 +124,13 @@ export default function CombatReplay({
   // 다음 프레임으로
   useEffect(() => {
     if (idx >= frames.length - 1) {
-      if (!finishedRef.current) {
+      if (finishedRef.current) return;
+      // 표시는 타이머가 실제로 돈 뒤에 — 배속 변경 등으로 정리되면 다시 걸리게
+      const t = window.setTimeout(() => {
         finishedRef.current = true;
-        const t = window.setTimeout(() => onFinishedRef.current?.(), STEP_MS.end / speed);
-        return () => window.clearTimeout(t);
-      }
-      return;
+        onFinishedRef.current?.();
+      }, STEP_MS.end / speed);
+      return () => window.clearTimeout(t);
     }
     const t = window.setTimeout(() => {
       setImpacted(false);

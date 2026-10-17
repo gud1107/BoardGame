@@ -1631,13 +1631,33 @@ function CombatView({
   const [watch, setWatch] = useState(() => (mine ? state.combats.indexOf(mine) : 0));
   const [speed, setSpeed] = useState(1);
   const c = state.combats[watch] ?? state.combats[0];
-  const doneSentRef = useRef(false);
+  // 재생이 끝나거나(자동) ⏭를 누르면 COMBAT_DONE. 엔진이 중복을 무시하므로, 방송이 유실돼
+  // 아직 반영 안 됐으면 다시 눌러도 다시 보내고, 잠시 뒤 스스로도 몇 번 다시 보낸다.
+  const [doneSent, setDoneSent] = useState(false);
+  const [skipped, setSkipped] = useState(false);
+  const sendDone = () => onAction({ type: "COMBAT_DONE", seat: viewerSeat, round: state.round });
   const finishMine = () => {
-    if (doneSentRef.current || !me.inCombat || me.combatDone) return;
-    doneSentRef.current = true;
-    onAction({ type: "COMBAT_DONE", seat: viewerSeat, round: state.round });
+    if (!me.inCombat || me.combatDone || doneSent) return;
+    setDoneSent(true);
+    sendDone();
   };
-  const waitingFor = useMemo(() => state.seats.filter((s) => s.inCombat && !s.combatDone).length, [state.seats]);
+  const skipMine = () => {
+    setSkipped(true);
+    if (!me.inCombat || me.combatDone) return;
+    setDoneSent(true);
+    sendDone();
+  };
+  const stillWaiting = doneSent && me.inCombat && !me.combatDone;
+  useEffect(() => {
+    if (!stillWaiting) return;
+    let tries = 0;
+    const t = window.setInterval(() => {
+      if (++tries > 5) window.clearInterval(t);
+      else onAction({ type: "COMBAT_DONE", seat: viewerSeat, round: state.round });
+    }, 2500);
+    return () => window.clearInterval(t);
+  }, [stillWaiting, onAction, viewerSeat, state.round]);
+  const watching = useMemo(() => state.seats.flatMap((s, i) => (s.inCombat && !s.combatDone && i !== viewerSeat ? [i] : [])), [state.seats, viewerSeat]);
   if (!c) return null;
   const isMine = mine !== null && c === mine;
   const viewSide = isMine ? sideOfSeat(c, viewerSeat) : 0;
@@ -1667,9 +1687,9 @@ function CombatView({
         </button>
       </div>
       {view === "3d" ? (
-        <Combat3D key={`${state.round}-${watch}`} combat={c} viewSide={viewSide} names={shownNames} speed={speed} sound={isMine} quality={quality} hp={hpPair} emotes={emotePair} controllable={isMine} onFinished={isMine ? finishMine : undefined} onEnded={isMine ? onMyCombatEnded : undefined} />
+        <Combat3D key={`${state.round}-${watch}`} combat={c} viewSide={viewSide} names={shownNames} speed={speed} sound={isMine} quality={quality} hp={hpPair} emotes={emotePair} controllable={isMine} onFinished={isMine ? finishMine : undefined} onEnded={isMine ? onMyCombatEnded : undefined} skipToEnd={isMine && skipped} />
       ) : (
-        <CombatReplay key={`${state.round}-${watch}`} combat={c} viewSide={viewSide} names={shownNames} speed={speed} sound={isMine} hp={hpPair} emotes={emotePair} onFinished={isMine ? finishMine : undefined} onEnded={isMine ? onMyCombatEnded : undefined} />
+        <CombatReplay key={`${state.round}-${watch}`} combat={c} viewSide={viewSide} names={shownNames} speed={speed} sound={isMine} hp={hpPair} emotes={emotePair} onFinished={isMine ? finishMine : undefined} onEnded={isMine ? onMyCombatEnded : undefined} skipToEnd={isMine && skipped} />
       )}
       {state.eliminatedThisRound.length > 0 && (
         <p className="rounded-xl bg-rose-500/15 px-3 py-1.5 text-center text-xs text-rose-200 light:text-rose-700">
@@ -1677,12 +1697,20 @@ function CombatView({
         </p>
       )}
       <div className="flex items-center justify-center gap-2 text-xs text-white/50 light:text-slate-500">
-        {me.inCombat && !me.combatDone ? (
-          <button onClick={finishMine} className={BTN_DARK}>
+        {me.inCombat && !me.combatDone && !doneSent ? (
+          <button onClick={skipMine} className={BTN_DARK}>
             ⏭ 결과 보고 다음으로
           </button>
+        ) : stillWaiting ? (
+          <button onClick={() => { setSkipped(true); sendDone(); }} className={`${BTN_DARK} opacity-80`} title="반영이 늦으면 다시 눌러도 돼요">
+            ⏳ 넘기는 중… (다시 누르기)
+          </button>
+        ) : watching.length > 0 ? (
+          <span className="text-center">
+            ✅ 다 봤어요 · ⏳ <b className="text-white/80 light:text-slate-700">{watching.map((s) => names[s] ?? `${s + 1}번`).join(", ")}</b>님이 아직 전투를 보는 중 — 다 보면 다음 상점이 열려요
+          </span>
         ) : (
-          <span>다음 상점까지 {waitingFor}명이 전투를 보는 중…</span>
+          <span>다음 상점을 여는 중…</span>
         )}
       </div>
     </div>
