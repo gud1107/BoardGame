@@ -907,7 +907,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   // Clear banners after a moment.
   useEffect(() => {
     if (!banner) return;
-    const t = window.setTimeout(() => setBanner((b) => (b?.key === banner.key ? null : b)), banner.tone === "boss" ? 2600 : 1900);
+    const t = window.setTimeout(() => setBanner((b) => (b?.key === banner.key ? null : b)), banner.tone === "boss" ? 3500 : 1900);
     return () => window.clearTimeout(t);
   }, [banner]);
 
@@ -1635,6 +1635,16 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
               <p className="text-base font-black sm:text-lg">{banner.text}</p>
               {banner.sub && <p className="text-[11px] opacity-80">{banner.sub}</p>}
             </div>
+          </div>
+        )}
+        {/* Phones: only boss-wave news stays on the board, as a thin one-line strip at the bottom edge (clear of the 📜 tab). */}
+        {banner?.tone === "boss" && (
+          <div
+            key={`boss-${banner.key}`}
+            className="pointer-events-none absolute bottom-2 left-2 right-12 flex items-center gap-1 truncate rounded-lg border border-amber-300/50 bg-gradient-to-r from-purple-800/75 to-amber-700/70 px-2 py-0.5 text-[10px] leading-tight text-amber-50 shadow sm:hidden"
+          >
+            <b className="shrink-0">{banner.text}</b>
+            {banner.sub && <span className="truncate opacity-85">· {banner.sub}</span>}
           </div>
         )}
         <EventLog entries={eventLog} />
