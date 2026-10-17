@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { seededRng, shuffle } from "@/lib/rng";
-import { addToDrawing, chooseBotAction, getValidMoves, guessFromDrawing, botDrawingFor, inkByColor, nextBotActor, redrawDrawing } from "./bot";
+import { SCENERY_ALPHA, addToDrawing, chooseBotAction, isSceneryOp, nextAnimationFrame, getValidMoves, guessFromDrawing, botDrawingFor, inkByColor, nextBotActor, redrawDrawing } from "./bot";
 import {
   EMPTY_DRAWING,
   MAX_DRAWING_CHARS,
@@ -425,6 +425,54 @@ describe("game modes (modes.ts, rulebook §9)", () => {
     expect(next.ops.length).toBe(frame.ops.length);
     expect(next).not.toEqual(frame);
     expect(isValidDrawing(next)).toBe(true);
+  });
+
+  it("animation bots keep drawing: the subject walks/hops each frame and the background grows", () => {
+    const n = 8;
+    let s = startGame(n, 42, { mode: "ANIMATION" });
+    const bots = new Set(Array.from({ length: n }, (_, i) => i));
+    for (let guard = 0; guard < 200; guard++) {
+      const seat = nextBotActor(s, bots);
+      if (seat === null) break;
+      s = applyAction(s, chooseBotAction(s, seat, 10, seededRng(guard + 1))!);
+    }
+    for (let album = 0; album < n; album++) {
+      const frames = albumDrawings(s, album);
+      expect(frames).toHaveLength(n);
+      let lastAt = "";
+      let lastScenery = -1;
+      frames.forEach((frame, i) => {
+        expect(isValidDrawing(frame)).toBe(true);
+        const b = unionBounds(frame.ops.filter((op) => !isSceneryOp(op)))!;
+        const at = `${b.minX},${b.minY}`;
+        expect(at).not.toBe(lastAt); // moved every frame (walk, or at least hop at a wall)
+        const scenery = frame.ops.filter(isSceneryOp).length;
+        if (i > 0) expect(scenery).toBeGreaterThan(lastScenery); // a new background piece every frame
+        lastAt = at;
+        lastScenery = scenery;
+      });
+    }
+  });
+
+  it("animation frames leave the background in place and work on a human's own first frame", () => {
+    const human = { v: 1 as const, ops: [strokeOp(1, 2, [{ x: 200, y: 150 }, { x: 260, y: 150 }, { x: 260, y: 210 }])] };
+    const scenery = { ...strokeOp(10, 2, [{ x: 0, y: 340 }, { x: 480, y: 340 }]), a: SCENERY_ALPHA };
+    const prev = { v: 1 as const, ops: [scenery, ...human.ops] };
+    const next = nextAnimationFrame(prev, { seed: 1, album: 0, frame: 3, firstFrame: human, addScenery: true }, seededRng(5), 10);
+    expect(next.ops[0]).toEqual(scenery);
+    expect(next.ops.filter(isSceneryOp).length).toBeGreaterThan(1);
+    const before = unionBounds(human.ops)!;
+    const after = unionBounds(next.ops.filter((op) => !isSceneryOp(op)))!;
+    expect(Math.abs(after.minX - before.minX)).toBeGreaterThan(30); // two frames' worth of walking
+    // Bots never break the chain with an unrelated scribble, even on a "mistake".
+    let st = startGame(4, 3, { mode: "ANIMATION" });
+    for (let seat = 0; seat < 4; seat++) st = applyAction(st, { type: "SUBMIT_DRAWING", seat, turn: 1, drawing: human });
+    const moves = getValidMoves(st, 3, 1, seededRng(2));
+    expect(moves).toHaveLength(2);
+    for (const move of moves) {
+      expect(move).toMatchObject({ type: "SUBMIT_DRAWING", turn: 2 });
+      if (move.type === "SUBMIT_DRAWING") expect(move.drawing.ops.filter((op) => !isSceneryOp(op))).toHaveLength(1);
+    }
   });
 
   it("gives icebreaker albums a deterministic question and bots answer it", () => {
