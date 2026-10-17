@@ -100,6 +100,12 @@ import {
 
 export interface DoodleCanvasHandle {
   getDrawing(): Drawing;
+  /**
+   * Replaces this player's ops with `edit(ops)` as one undoable step (the
+   * selection is cleared). False if it would overflow the ink cap. Used by
+   * the animation helpers ("🏃 한 걸음", "🌄 배경 한 조각").
+   */
+  editOps(edit: (ops: readonly DrawOp[]) => readonly DrawOp[]): boolean;
 }
 
 type Tool = "pen" | "line" | "rect" | "ellipse" | "fill" | "eraser" | "select" | "picker";
@@ -285,7 +291,14 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
     commitOp(op);
   }, [commitOp, select]);
 
-  useImperativeHandle(ref, () => ({ getDrawing: () => currentDrawing() }), [currentDrawing]);
+  // No deps: editOps must reach this render's commitEdit (a plain function).
+  useImperativeHandle(ref, () => ({
+    getDrawing: () => currentDrawing(),
+    editOps: (edit) => {
+      gestureRef.current = null;
+      return commitEdit(edit(opsRef.current), []);
+    },
+  }));
 
   useEffect(() => {
     if (disabled || !allowUndo) return;

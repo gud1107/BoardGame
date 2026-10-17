@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { seededRng, shuffle } from "@/lib/rng";
-import { SCENERY_ALPHA, addToDrawing, chooseBotAction, isSceneryOp, nextAnimationFrame, getValidMoves, guessFromDrawing, botDrawingFor, inkByColor, nextBotActor, redrawDrawing } from "./bot";
+import { SCENERY_ALPHA, SCENE_PIECE_COUNT, addToDrawing, chooseBotAction, isSceneryOp, nextAnimationFrame, scenePieceFor, getValidMoves, guessFromDrawing, botDrawingFor, inkByColor, nextBotActor, redrawDrawing } from "./bot";
 import {
   EMPTY_DRAWING,
   MAX_DRAWING_CHARS,
@@ -427,8 +427,9 @@ describe("game modes (modes.ts, rulebook §9)", () => {
     expect(isValidDrawing(next)).toBe(true);
   });
 
-  it("animation bots keep drawing: the subject walks/hops each frame and the background grows", () => {
-    const n = 8;
+  it("animation bots keep drawing: the subject walks/hops each frame and the background grows to the last frame", () => {
+    expect(SCENE_PIECE_COUNT).toBeGreaterThanOrEqual(13); // a 14-player album gets a new piece every frame
+    const n = 14;
     let s = startGame(n, 42, { mode: "ANIMATION" });
     const bots = new Set(Array.from({ length: n }, (_, i) => i));
     for (let guard = 0; guard < 200; guard++) {
@@ -441,16 +442,22 @@ describe("game modes (modes.ts, rulebook §9)", () => {
       expect(frames).toHaveLength(n);
       let lastAt = "";
       let lastScenery = -1;
+      let grew = 0;
       frames.forEach((frame, i) => {
         expect(isValidDrawing(frame)).toBe(true);
         const b = unionBounds(frame.ops.filter((op) => !isSceneryOp(op)))!;
         const at = `${b.minX},${b.minY}`;
         expect(at).not.toBe(lastAt); // moved every frame (walk, or at least hop at a wall)
         const scenery = frame.ops.filter(isSceneryOp).length;
-        if (i > 0) expect(scenery).toBeGreaterThan(lastScenery); // a new background piece every frame
+        if (i > 0) expect(scenery).toBeGreaterThanOrEqual(lastScenery); // background only grows
+        if (i > 0) grew += scenery > lastScenery ? 1 : 0;
         lastAt = at;
         lastScenery = scenery;
       });
+      // Most frames add a piece (pieces crossing the subject's walking band are skipped).
+      expect(grew).toBeGreaterThanOrEqual(n / 2);
+      // …including late in a long album, past the first stage.
+      expect(frames[n - 1].ops.filter(isSceneryOp).length).toBeGreaterThan(frames[9].ops.filter(isSceneryOp).length);
     }
   });
 
@@ -458,12 +465,12 @@ describe("game modes (modes.ts, rulebook §9)", () => {
     const human = { v: 1 as const, ops: [strokeOp(1, 2, [{ x: 200, y: 150 }, { x: 260, y: 150 }, { x: 260, y: 210 }])] };
     const scenery = { ...strokeOp(10, 2, [{ x: 0, y: 340 }, { x: 480, y: 340 }]), a: SCENERY_ALPHA };
     const prev = { v: 1 as const, ops: [scenery, ...human.ops] };
-    const next = nextAnimationFrame(prev, { seed: 1, album: 0, frame: 3, firstFrame: human, addScenery: true }, seededRng(5), 10);
+    const next = nextAnimationFrame(prev, { seed: 1, album: 0, frame: 3, prev, prev2: null, addScenery: true }, seededRng(5), 10);
     expect(next.ops[0]).toEqual(scenery);
     expect(next.ops.filter(isSceneryOp).length).toBeGreaterThan(1);
     const before = unionBounds(human.ops)!;
     const after = unionBounds(next.ops.filter((op) => !isSceneryOp(op)))!;
-    expect(Math.abs(after.minX - before.minX)).toBeGreaterThan(30); // two frames' worth of walking
+    expect(Math.abs(after.minX - before.minX)).toBe(26); // one step
     // Bots never break the chain with an unrelated scribble, even on a "mistake".
     let st = startGame(4, 3, { mode: "ANIMATION" });
     for (let seat = 0; seat < 4; seat++) st = applyAction(st, { type: "SUBMIT_DRAWING", seat, turn: 1, drawing: human });
@@ -473,6 +480,61 @@ describe("game modes (modes.ts, rulebook §9)", () => {
       expect(move).toMatchObject({ type: "SUBMIT_DRAWING", turn: 2 });
       if (move.type === "SUBMIT_DRAWING") expect(move.drawing.ops.filter((op) => !isSceneryOp(op))).toHaveLength(1);
     }
+  });
+
+  it("animation bots carry on from where a human moved the subject, in the direction it was moved", () => {
+    const at = (x: number, y = 150) => ({ v: 1 as const, ops: [strokeOp(1, 2, [{ x, y }, { x: x + 60, y }, { x: x + 60, y: y + 60 }])] });
+    // Frame 2 walked right to 230; the human dragged frame 3 far left to 60.
+    const next = nextAnimationFrame(at(60), { seed: 9, album: 0, frame: 4, prev: at(60), prev2: at(230), addScenery: false }, seededRng(1), 10);
+    const b = unionBounds(next.ops)!;
+    expect(b.minX).toBe(60 - 26); // continues from 60, heading left — no snap back to 230+
+    expect(b.minY).toBe(150 - 16); // even frame hops
+    // Odd frame after a hop lands back on the old ground line.
+    const landed = unionBounds(nextAnimationFrame(at(100, 134), { seed: 9, album: 0, frame: 5, prev: at(100, 134), prev2: at(74, 150), addScenery: false }, seededRng(1), 10).ops)!;
+    expect(landed).toMatchObject({ minX: 126, minY: 150 });
+    // The human "🏃 한 걸음" button is idempotent: the target comes from prev/prev2, not from the canvas.
+    const once = nextAnimationFrame(at(100), { seed: 9, album: 0, frame: 3, prev: at(100), prev2: at(74), addScenery: false }, seededRng(1), 10);
+    const twice = nextAnimationFrame(once, { seed: 9, album: 0, frame: 3, prev: at(100), prev2: at(74), addScenery: false }, seededRng(1), 10);
+    expect(twice).toEqual(once);
+  });
+
+  it("shrinks a frame-filling subject once so it has room to walk, keeping closed outlines closed", () => {
+    const ring = [{ x: 3, y: 4 }, { x: 477, y: 4 }, { x: 477, y: 355 }, { x: 3, y: 355 }, { x: 3, y: 4 }];
+    const big = { v: 1 as const, ops: [strokeOp(1, 2, ring), fillOp(5, { x: 240, y: 180 })] };
+    const next = nextAnimationFrame(big, { seed: 2, album: 1, frame: 2, prev: big, prev2: null, addScenery: false }, seededRng(1), 10);
+    expect(isValidDrawing(next)).toBe(true);
+    const b = unionBounds(next.ops)!;
+    expect(b.maxX - b.minX).toBeLessThanOrEqual(480 - 12 - 78);
+    const stroke = next.ops[0];
+    if (stroke.k !== "s") throw new Error("expected the ring stroke first");
+    const pts = decodePoints(stroke.p);
+    expect(pts[pts.length - 1]).toEqual(pts[0]); // still closed → the fill can't leak
+    const fill = next.ops[1];
+    if (fill.k !== "f") throw new Error("expected the fill second");
+    expect(fill.x).toBeGreaterThan(b.minX);
+    expect(fill.x).toBeLessThan(b.maxX);
+    // Already small enough → the next frame doesn't shrink it again.
+    const after = nextAnimationFrame(next, { seed: 2, album: 1, frame: 3, prev: next, prev2: big, addScenery: false }, seededRng(1), 10);
+    const b2 = unionBounds(after.ops)!;
+    expect(b2.maxX - b2.minX).toBe(b.maxX - b.minX);
+    // Scenery stays out of the subject's band, and ground pieces never float up into the sky.
+    for (let frame = 2; frame <= 14; frame++) {
+      const withScene = nextAnimationFrame(next, { seed: 2, album: 1, frame, prev: next, prev2: null, addScenery: true }, seededRng(frame), 10);
+      const sub = unionBounds(withScene.ops.filter((op) => !isSceneryOp(op)))!;
+      const scene = unionBounds(withScene.ops.filter(isSceneryOp));
+      if (scene) expect(scene.maxY < sub.minY || scene.minY > sub.maxY).toBe(true);
+      for (const op of withScene.ops.filter(isSceneryOp)) {
+        const ob = unionBounds([op])!;
+        if (ob.maxX - ob.minX > 400) expect(ob.minY).toBeGreaterThan(180); // the full-width ground line stays low (or is left out)
+      }
+    }
+  });
+
+  it("hands the human button the same scenery piece a bot would draw for that frame", () => {
+    const piece = scenePieceFor(4, 2, 2, seededRng(1));
+    expect(piece.length).toBeGreaterThan(0);
+    expect(piece.every(isSceneryOp)).toBe(true);
+    expect(scenePieceFor(4, 2, 2 + SCENE_PIECE_COUNT, seededRng(1))).toEqual([]);
   });
 
   it("gives icebreaker albums a deterministic question and bots answer it", () => {

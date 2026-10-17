@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { isBlankDrawing, type Drawing } from "./drawing";
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { isBlankDrawing, type Drawing, type DrawOp } from "./drawing";
 import { getDoodlePhoneSound } from "./doodlePhoneSound";
 import DoodleCanvas, { type DoodleCanvasHandle } from "./DoodleCanvas";
 import DrawingView from "./DrawingView";
+import { isSceneryOp, nextAnimationFrame, scenePieceFor } from "./bot";
+import { unionBounds } from "./editing";
+import { seededRng } from "@/lib/rng";
 import {
   TEXT_MAX_CHARS,
   TEXT_MIN_CHARS,
@@ -13,6 +16,7 @@ import {
   hasSubmitted,
   isValidText,
   promptFor,
+  shownPageAt,
   slotFor,
   textLength,
   turnDurationMs,
@@ -276,6 +280,7 @@ function TurnComposer({
             onionDrawing={reference === "onion" && ghostFrames ? previousDrawing : null}
             matchKey={state.seed}
           />
+          {reference === "onion" && <AnimationHelpers state={state} seat={seat} turn={turn} previous={previousDrawing} canvasRef={canvasRef} disabled={sent} />}
           <button
             type="button"
             onClick={() => submit(false)}
@@ -292,6 +297,77 @@ function TurnComposer({
 
 const hintBox = "rounded-2xl border px-4 py-3 text-sm";
 const fuchsiaHint = `${hintBox} border-fuchsia-400/20 bg-fuchsia-500/10 text-fuchsia-100 light:border-fuchsia-200 light:bg-fuchsia-50 light:text-fuchsia-800`;
+
+/**
+ * Animation mode: the two moves a bot makes each frame, one tap each for
+ * people — so a human frame can grow the background just like a bot frame
+ * does (bot.ts `nextAnimationFrame` / `scenePieceFor`), instead of bot frames
+ * looking like the only ones with effort in the showcase. Both are ordinary
+ * undoable edits on the canvas.
+ */
+function AnimationHelpers({
+  state,
+  seat,
+  turn,
+  previous,
+  canvasRef,
+  disabled,
+}: {
+  state: DoodlePhoneState;
+  seat: SeatIndex;
+  turn: number;
+  previous: Drawing | null;
+  canvasRef: RefObject<DoodleCanvasHandle | null>;
+  disabled: boolean;
+}) {
+  const album = albumFor(state.playerCount, seat, turn);
+  const [sceneryAdded, setSceneryAdded] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  // Same piece a bot would draw on this frame (fixed wobble seed), kept clear of where the subject is now.
+  const pieceFor = (ops: readonly DrawOp[]) =>
+    scenePieceFor(state.seed, album, turn, seededRng(state.seed + album * 31 + turn), 7, unionBounds(ops.filter((op) => !isSceneryOp(op))));
+  const [hasPiece] = useState(() => pieceFor(previous?.ops ?? []).length > 0);
+
+  function step() {
+    const before = turn > 2 ? shownPageAt(state, album, turn - 2) : null;
+    const ok = canvasRef.current?.editOps(
+      (ops) =>
+        nextAnimationFrame(
+          { v: 1, ops: [...ops] },
+          { seed: state.seed, album, frame: turn, prev: previous, prev2: before?.kind === "drawing" ? before.drawing : null, addScenery: false },
+          Math.random,
+          7,
+        ).ops,
+    );
+    setNotice(ok === false ? "잉크가 부족해서 움직일 수 없어요" : null);
+  }
+
+  function addScenery() {
+    // Behind everything still visible: right after the last "전체 지우기".
+    const ok = canvasRef.current?.editOps((ops) => {
+      const floor = ops.findLastIndex((op) => op.k === "x") + 1;
+      return [...ops.slice(0, floor), ...pieceFor(ops.slice(floor)), ...ops.slice(floor)];
+    });
+    if (ok) setSceneryAdded(true);
+    setNotice(ok === false ? "잉크가 부족해서 배경을 더할 수 없어요" : null);
+  }
+
+  const chip =
+    "rounded-full border border-fuchsia-400/30 bg-fuchsia-500/10 px-3 py-1.5 text-xs font-bold text-fuchsia-100 transition hover:bg-fuchsia-500/20 disabled:opacity-40 light:border-fuchsia-200 light:bg-fuchsia-50 light:text-fuchsia-800";
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button type="button" className={chip} disabled={disabled} onClick={step} title="앞 프레임에서 이어지게 주인공을 한 걸음 옮겨요 (되돌리기 가능)">
+        🏃 한 걸음 움직이기
+      </button>
+      {hasPiece && (
+        <button type="button" className={chip} disabled={disabled || sceneryAdded} onClick={addScenery} title="이번 프레임의 배경을 한 조각 더해요 — 다음 프레임에도 그대로 남아요">
+          {sceneryAdded ? "🌄 배경 추가됨" : "🌄 배경 한 조각 더하기"}
+        </button>
+      )}
+      {notice && <span className="text-[11px] text-amber-300 light:text-amber-700">{notice}</span>}
+    </div>
+  );
+}
 
 function PromptPanel({
   state,

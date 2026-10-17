@@ -14,8 +14,8 @@
  *
  * - Mode-specific drawing turns (see modes.ts `DrawingReference`): copy /
  *   memory → redraw the previous picture by hand (wobblier at low levels);
- *   onion → `nextAnimationFrame`: the subject walks/hops along a path
- *   anchored on frame 1 and one new piece of background is added per frame;
+ *   onion → `nextAnimationFrame`: the subject walks/hops
+ *   on from where the last frame left it and one piece of background is added per frame;
  *   base → keep the picture and add a small doodle of its own.
  * - Icebreaker: a canned answer per question.
  * - Theme packs: on turn 1 the bot picks one of the album's offered keywords
@@ -26,7 +26,7 @@
  */
 
 import { botTier, pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
-import { CANVAS_H, CANVAS_W, EMPTY_DRAWING, MAX_DRAWING_CHARS, decodePoints, isBlankDrawing, isShapeOp, nearestPaletteIndex, opAlpha, serializedLength, shapeOp, strokeOp, type DrawOp, type Drawing, type Point } from "./drawing";
+import { CANVAS_H, CANVAS_W, EMPTY_DRAWING, MAX_DRAWING_CHARS, clampToCanvas, decodePoints, encodePoints, isBlankDrawing, isShapeOp, nearestPaletteIndex, opAlpha, serializedLength, shapeOp, strokeOp, type DrawOp, type Drawing, type Point } from "./drawing";
 import {
   TEXT_MAX_CHARS,
   albumFor,
@@ -40,7 +40,7 @@ import {
   type EngineAction,
   type SeatIndex,
 } from "./engine";
-import { translateOp, unionBounds } from "./editing";
+import { translateOp, unionBounds, type Bounds } from "./editing";
 import { ICEBREAKER_QUESTIONS, drawingReferenceFor, icebreakerQuestion, inspirationWord, openingChoices } from "./modes";
 import { BOT_OPENING_PROMPTS, FALLBACK_PROMPTS } from "./prompts";
 
@@ -420,6 +420,9 @@ export function isSceneryOp(op: DrawOp): boolean {
 const FRAME_STEP_X = 26;
 const FRAME_HOP_Y = 16;
 const FRAME_MARGIN = 6;
+/** Free run the subject needs to walk at all; a wider subject is shrunk once to get this much room. */
+const MIN_WALK_ROOM = 3 * FRAME_STEP_X;
+const SHRINK_TO_ROOM = 120;
 
 type ScenePiece = (rng: () => number, wobble: number) => DrawOp[];
 
@@ -428,39 +431,75 @@ const wavyLine = (y: number, color: number, sizeIndex: number, rng: () => number
 
 const disc = (cx: number, cy: number, r: number, color: number): DrawOp => shapeOp("e", color, 0, { x: cx - r, y: cy - r }, { x: cx + r, y: cy + r }, { filled: true });
 
-/** Background pieces, one added per frame. Fixed spots around the edges so they rarely sit under the subject. */
-const SCENE_PIECES: readonly ScenePiece[] = [
-  // ground
-  (rng, w) => [wavyLine(344, C.green, 2, rng, w)],
-  // sun
-  (rng, w) => {
-    const pen = new Pen({ x: 400, y: 8, size: 70 }, rng, w);
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
-      pen.line(pts(50 + Math.cos(a) * 30, 50 + Math.sin(a) * 30, 50 + Math.cos(a) * 46, 50 + Math.sin(a) * 46), C.orange, 2);
-    }
-    return [disc(435, 43, 16, C.amber), ...pen.ops];
-  },
-  // cloud
-  (rng, w) => new Pen({ x: 20, y: 14, size: 80 }, rng, w).ellipse(30, 40, 18, 14, C.blue, 2).ellipse(52, 32, 22, 18, C.blue, 2).ellipse(74, 42, 18, 13, C.blue, 2).ops,
-  // bird
-  (rng, w) => new Pen({ x: 190, y: 16, size: 40 }, rng, w).line(pts(10, 50, 30, 36, 50, 52, 70, 36, 90, 50), C.black, 2).ops,
-  // flower
-  (rng, w) => {
-    const pen = new Pen({ x: 14, y: 270, size: 70 }, rng, w).line(pts(50, 40, 50, 100), C.forest, 2);
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * Math.PI * 2;
-      pen.circle(50 + Math.cos(a) * 12, 30 + Math.sin(a) * 12, 8, C.pink, 2);
-    }
-    return [...pen.ops, disc(49, 291, 5, C.amber)];
-  },
-  // grass tufts on the ground line
-  (rng, w) =>
-    [70, 190, 300, 420].flatMap((x) => new Pen({ x: x - 14, y: 318, size: 28 }, rng, w).line(pts(50, 92, 20, 30), C.green, 2).line(pts(50, 92, 50, 10), C.green, 2).line(pts(50, 92, 80, 30), C.green, 2).ops),
-  // second cloud
-  (rng, w) => new Pen({ x: 270, y: 30, size: 60 }, rng, w).ellipse(32, 40, 18, 13, C.cyan, 2).ellipse(58, 36, 22, 16, C.cyan, 2).ops,
-  // second bird
-  (rng, w) => new Pen({ x: 330, y: 4, size: 30 }, rng, w).line(pts(10, 50, 30, 36, 50, 52, 70, 36, 90, 50), C.black, 2).ops,
+const starPoints = (cx: number, cy: number, r: number): Point[] =>
+  Array.from({ length: 11 }, (_, i) => {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const rr = i % 2 === 0 ? r : r * 0.45;
+    return { x: cx + Math.cos(a) * rr, y: cy + Math.sin(a) * rr };
+  });
+
+/**
+ * Background pieces in two stages, one added per frame: stage 1 sets the
+ * scene (ground first), stage 2 dresses it up (rainbow, rain, stars…) so long
+ * albums (10+ players) keep growing to the last frame. Fixed spots around the
+ * edges so they rarely sit under the subject — and they're drawn behind it.
+ */
+const SCENE_STAGES: readonly (readonly ScenePiece[])[] = [
+  [
+    // ground
+    (rng, w) => [wavyLine(344, C.green, 2, rng, w)],
+    // sun
+    (rng, w) => {
+      const pen = new Pen({ x: 400, y: 8, size: 70 }, rng, w);
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        pen.line(pts(50 + Math.cos(a) * 30, 50 + Math.sin(a) * 30, 50 + Math.cos(a) * 46, 50 + Math.sin(a) * 46), C.orange, 2);
+      }
+      return [disc(435, 43, 16, C.amber), ...pen.ops];
+    },
+    // cloud
+    (rng, w) => new Pen({ x: 20, y: 14, size: 80 }, rng, w).ellipse(30, 40, 18, 14, C.blue, 2).ellipse(52, 32, 22, 18, C.blue, 2).ellipse(74, 42, 18, 13, C.blue, 2).ops,
+    // bird
+    (rng, w) => new Pen({ x: 190, y: 16, size: 40 }, rng, w).line(pts(10, 50, 30, 36, 50, 52, 70, 36, 90, 50), C.black, 2).ops,
+    // flower
+    (rng, w) => {
+      const pen = new Pen({ x: 14, y: 270, size: 70 }, rng, w).line(pts(50, 40, 50, 100), C.forest, 2);
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2;
+        pen.circle(50 + Math.cos(a) * 12, 30 + Math.sin(a) * 12, 8, C.pink, 2);
+      }
+      return [...pen.ops, disc(49, 291, 5, C.amber)];
+    },
+    // grass tufts on the ground line
+    (rng, w) =>
+      [70, 190, 300, 420].flatMap((x) => new Pen({ x: x - 14, y: 318, size: 28 }, rng, w).line(pts(50, 92, 20, 30), C.green, 2).line(pts(50, 92, 50, 10), C.green, 2).line(pts(50, 92, 80, 30), C.green, 2).ops),
+    // second cloud
+    (rng, w) => new Pen({ x: 270, y: 30, size: 60 }, rng, w).ellipse(32, 40, 18, 13, C.cyan, 2).ellipse(58, 36, 22, 16, C.cyan, 2).ops,
+    // second bird
+    (rng, w) => new Pen({ x: 330, y: 4, size: 30 }, rng, w).line(pts(10, 50, 30, 36, 50, 52, 70, 36, 90, 50), C.black, 2).ops,
+  ],
+  [
+    // rainbow
+    (rng, w) => {
+      const pen = new Pen({ x: 130, y: -10, size: 180 }, rng, w);
+      [C.red, C.orange, C.amber, C.green, C.blue, C.violet].forEach((color, i) => pen.ellipse(50, 50, 44 - i * 3, 30 - i * 3, color, 2, Math.PI, Math.PI * 2));
+      return pen.ops;
+    },
+    // rain under the first cloud
+    (rng, w) => {
+      const pen = new Pen({ x: 20, y: 60, size: 90 }, rng, w);
+      for (const [x, y] of [[20, 20], [40, 34], [60, 18], [80, 32], [30, 56], [70, 54]]) pen.line(pts(x, y, x - 3, y + 12), C.blue, 1);
+      return pen.ops;
+    },
+    // stars
+    () => [strokeOp(C.amber, 1, starPoints(130, 76, 9)), strokeOp(C.amber, 1, starPoints(262, 64, 7)), strokeOp(C.amber, 1, starPoints(372, 104, 8))],
+    // butterfly by the flower
+    (rng, w) => new Pen({ x: 96, y: 262, size: 36 }, rng, w).ellipse(32, 40, 18, 22, C.violet, 2).ellipse(68, 40, 18, 22, C.violet, 2).line(pts(50, 22, 50, 66), C.black, 2).ops,
+    // bush on the right
+    (rng, w) => new Pen({ x: 404, y: 290, size: 70 }, rng, w).ellipse(30, 66, 22, 18, C.forest, 2).ellipse(56, 58, 24, 22, C.forest, 2).ellipse(80, 68, 18, 14, C.forest, 2).ops,
+    // pebbles on the ground
+    (rng, w) => new Pen({ x: 220, y: 320, size: 60 }, rng, w).ellipse(30, 40, 10, 6, C.gray, 2).ellipse(52, 42, 7, 5, C.gray, 2).ellipse(70, 38, 9, 6, C.gray, 2).ops,
+  ],
 ];
 
 /** Small deterministic hash so every bot continuing the same album tells the same story. */
@@ -470,25 +509,68 @@ function albumHash(seed: number, album: number): number {
   return (h ^ (h >>> 12)) >>> 0;
 }
 
-/** Scenery order for an album: the ground first, the rest shuffled per album. */
-function sceneOrder(seed: number, album: number): number[] {
-  const rest = SCENE_PIECES.map((_, i) => i).slice(1);
-  let h = albumHash(seed, album);
-  for (let i = rest.length - 1; i > 0; i--) {
+function shuffled<T>(items: readonly T[], seedHash: number): T[] {
+  const out = [...items];
+  let h = seedHash;
+  for (let i = out.length - 1; i > 0; i--) {
     h = Math.imul(h ^ (h >>> 13), 0x5bd1e995) >>> 0;
     const j = h % (i + 1);
-    [rest[i], rest[j]] = [rest[j], rest[i]];
+    [out[i], out[j]] = [out[j], out[i]];
   }
-  return [0, ...rest];
+  return out;
 }
 
-/** Triangle wave: `start` walked `travel` px, bouncing between lo and hi. */
-function bounce(start: number, travel: number, lo: number, hi: number): number {
-  const span = hi - lo;
-  if (span <= 0) return start;
-  const period = span * 2;
-  const m = ((((start - lo + travel) % period) + period) % period);
-  return lo + (m <= span ? m : period - m);
+/** Scenery order for an album: the ground first, the rest of stage 1 shuffled, then stage 2 shuffled. */
+function sceneOrder(seed: number, album: number): ScenePiece[] {
+  const [first, second] = SCENE_STAGES;
+  const h = albumHash(seed, album);
+  return [first[0], ...shuffled(first.slice(1), h), ...shuffled(second, (h ^ 0x51ed27) >>> 0)];
+}
+
+/** Scenery pieces an album can collect (one per frame from frame 2) — enough for a 14-player album. */
+export const SCENE_PIECE_COUNT = SCENE_STAGES.reduce((n, stage) => n + stage.length, 0);
+
+/** Gap kept between scenery and the subject's walking band (covers the hop). */
+const SCENERY_GAP = FRAME_HOP_Y + 4;
+
+/**
+ * How far to slide `b` vertically to keep it out of `avoid` (the band the
+ * subject walks in): 0 if already clear, else up into the sky or down toward
+ * the ground (ground-level pieces only go down) — null if neither fits.
+ */
+function clearanceShift(b: Bounds, avoid: Bounds | null): number | null {
+  if (!avoid) return 0;
+  const top = avoid.minY - SCENERY_GAP;
+  const bottom = avoid.maxY + SCENERY_GAP;
+  if (b.maxY < top || b.minY > bottom) return 0;
+  const up = top - b.maxY;
+  // Ground-level pieces (ground line, grass, flowers…) never float up into the sky.
+  if (b.minY < CANVAS_H / 2 && b.minY + up >= 0) return up;
+  const down = bottom - b.minY;
+  if (b.maxY + down <= CANVAS_H) return down;
+  return null;
+}
+
+/**
+ * This frame's background piece, tagged as scenery — empty once they're all
+ * out. Scenery is drawn first, so a line through the subject would split its
+ * flood fills (a rainbow through a car left the body half-painted): a piece
+ * that would cross `avoid` (where the subject walks) slides up into the sky or
+ * down toward the ground, and one with no room either way drops out of the
+ * running order. Frame 2 gets the first remaining piece, frame 3 the next…
+ * Shared by the bot and the human "🌄 배경 한 조각" button, so both add the
+ * same piece to the same frame.
+ */
+export function scenePieceFor(seed: number, album: number, frame: number, rng: () => number, level: BotLevel = 7, avoid: Bounds | null = null): DrawOp[] {
+  const steady = () => 0.5; // no wobble — just to measure where a piece lands
+  const placeable = sceneOrder(seed, album).flatMap((piece) => {
+    const b = unionBounds(piece(steady, 0));
+    const dy = b ? clearanceShift(b, avoid) : 0;
+    return dy === null ? [] : [{ piece, dy }];
+  });
+  const chosen = placeable[frame - 2];
+  if (!chosen) return [];
+  return chosen.piece(rng, wobbleFor(level)).map((op) => ({ ...translateOp(op, 0, chosen.dy), a: SCENERY_ALPHA }) as DrawOp);
 }
 
 /** The ops still visible (after the last clear-all). */
@@ -497,55 +579,100 @@ function visibleOps(drawing: Drawing): DrawOp[] {
   return drawing.ops.slice(lastClear + 1);
 }
 
+function subjectBounds(drawing: Drawing | null): Bounds | null {
+  return drawing ? unionBounds(visibleOps(drawing).filter((op) => !isSceneryOp(op))) : null;
+}
+
+/** Scales ops by `k` around `pivot`. Absolute points are rounded (not deltas), so closed outlines stay closed and fills don't leak. */
+function scaleOps(ops: readonly DrawOp[], k: number, pivot: Point): DrawOp[] {
+  const at = (p: Point): Point => ({ x: pivot.x + (p.x - pivot.x) * k, y: pivot.y + (p.y - pivot.y) * k });
+  return ops.map((op): DrawOp => {
+    if (op.k === "x") return op;
+    if (op.k === "f") {
+      const p = at(op);
+      return { ...op, x: clampX(p.x), y: clampY(p.y) };
+    }
+    if (isShapeOp(op)) {
+      const [x1, y1, x2, y2] = op.p;
+      const a = clampToCanvas(at({ x: x1, y: y1 }));
+      const b = clampToCanvas(at({ x: x2, y: y2 }));
+      return { ...op, p: [a.x, a.y, b.x, b.y] };
+    }
+    return { ...op, p: encodePoints(decodePoints(op.p).map(at)) };
+  });
+}
+
 /**
- * Animation mode: the next frame of `previous`, which is frame `frame - 1` of
- * the album. The subject (everything but the bot's scenery) walks along a
- * bouncing path with a little hop on every other frame; with `addScenery` the bot also draws one new
- * piece of background (ground, sun, cloud, bird…) that stays put from then on,
- * so the scene keeps growing as the album goes round.
+ * Where the subject goes next, from where it was in the last two frames — a
+ * human who dragged it somewhere new is continued from there, not snapped
+ * back to a precomputed path. It keeps the last frame's walking direction
+ * (bouncing off the edges; the album's default before it has moved), hops up
+ * on even frames and lands back on odd ones.
+ */
+function nextPosition(prev: Bounds, prev2: Bounds | null, size: { w: number; h: number }, frame: number, defaultDir: number): Point {
+  const moved = prev2 ? prev.minX - prev2.minX : 0;
+  const dir = Math.abs(moved) >= 2 ? Math.sign(moved) : defaultDir;
+  const lo = FRAME_MARGIN;
+  const hi = Math.max(lo, CANVAS_W - FRAME_MARGIN - size.w);
+  let x = prev.minX + dir * FRAME_STEP_X;
+  if (x > hi) x = 2 * hi - x;
+  if (x < lo) x = 2 * lo - x;
+  x = Math.min(hi, Math.max(lo, x));
+
+  let bottom = prev.maxY;
+  if (frame % 2 === 0) bottom -= FRAME_HOP_Y;
+  else if (prev2 && prev.maxY <= prev2.maxY - FRAME_HOP_Y / 2) bottom = prev2.maxY; // land from last frame's hop
+  const y = Math.min(CANVAS_H - FRAME_MARGIN - size.h, Math.max(FRAME_MARGIN, bottom - size.h));
+  return { x, y };
+}
+
+/**
+ * Animation mode: frame `frame` of an album. `current` is what gets moved —
+ * the previous frame for a bot, or the canvas so far for the human "🏃 한
+ * 걸음" button — while `prev`/`prev2` (frames frame-1 and frame-2) decide
+ * where it goes, so pressing the button twice doesn't walk twice.
  *
- * The path is anchored on the album's first frame (`firstFrame`), not on the
- * previous one, so every bot and every human in between agrees on where the
- * subject should be — no wall-jitter when two bots disagree about direction.
+ * The subject (everything but the scenery) slides without hand wobble:
+ * re-jittering every frame random-walks the outlines until a gap opens and
+ * the next flood fill leaks (a car turned its window's color by frame 5). A
+ * subject too big to walk or hop is shrunk once around its bottom-centre.
+ * With `addScenery`, this frame's background piece is drawn behind it.
  */
 export function nextAnimationFrame(
-  previous: Drawing,
-  opts: { seed: number; album: number; frame: number; firstFrame: Drawing | null; addScenery: boolean },
+  current: Drawing,
+  opts: { seed: number; album: number; frame: number; prev: Drawing | null; prev2: Drawing | null; addScenery: boolean },
   rng: () => number,
   level: BotLevel,
 ): Drawing {
-  const ops = visibleOps(previous);
+  const ops = visibleOps(current);
   const scenery = ops.filter(isSceneryOp);
-  const subject = ops.filter((op) => !isSceneryOp(op));
-  const now = unionBounds(subject);
-  const wobble = wobbleFor(level);
+  let subject: readonly DrawOp[] = ops.filter((op) => !isSceneryOp(op));
+  let now = unionBounds(subject);
 
-  let moved: readonly DrawOp[] = subject;
   if (now) {
-    const width = now.maxX - now.minX;
-    const height = now.maxY - now.minY;
-    const origin = (opts.firstFrame && unionBounds(visibleOps(opts.firstFrame).filter((op) => !isSceneryOp(op)))) || now;
-    const dir = albumHash(opts.seed, opts.album) % 2 === 0 ? 1 : -1;
-    const targetX = bounce(origin.minX, dir * FRAME_STEP_X * (opts.frame - 1), FRAME_MARGIN, CANVAS_W - FRAME_MARGIN - width);
-    const hop = opts.frame % 2 === 0 ? Math.min(FRAME_HOP_Y, Math.max(0, origin.minY - FRAME_MARGIN)) : 0;
-    const targetY = Math.min(CANVAS_H - FRAME_MARGIN - height, Math.max(FRAME_MARGIN, origin.minY - hop));
-    const dx = Math.round(targetX - now.minX);
-    const dy = Math.round(targetY - now.minY);
-    // A clean slide, no hand wobble: re-jittering every frame random-walks the
-    // outlines until a gap opens and the next flood fill leaks (the car turned
-    // the window's color by frame 5). dx/dy keep the whole subject on the sheet,
-    // so translateOp's per-op clamp never kicks in and nothing gets squashed.
-    moved = subject.map((op) => (op.k === "f" ? { ...op, x: clampX(op.x + dx), y: clampY(op.y + dy) } : translateOp(op, dx, dy)));
+    const maxW = CANVAS_W - 2 * FRAME_MARGIN - MIN_WALK_ROOM;
+    const maxH = CANVAS_H - 2 * FRAME_MARGIN - FRAME_HOP_Y;
+    const w = now.maxX - now.minX;
+    const h = now.maxY - now.minY;
+    if (w > maxW || h > maxH) {
+      const k = Math.min((CANVAS_W - 2 * FRAME_MARGIN - SHRINK_TO_ROOM) / w, (maxH - FRAME_HOP_Y) / h, 1);
+      subject = scaleOps(subject, k, { x: (now.minX + now.maxX) / 2, y: now.maxY });
+      now = unionBounds(subject) ?? now;
+    }
+    const prev = subjectBounds(opts.prev) ?? now;
+    const size = { w: now.maxX - now.minX, h: now.maxY - now.minY };
+    const target = nextPosition(prev, subjectBounds(opts.prev2), size, opts.frame, albumHash(opts.seed, opts.album) % 2 === 0 ? 1 : -1);
+    const dx = Math.round(target.x - now.minX);
+    const dy = Math.round(target.y - now.minY);
+    // dx/dy keep the whole subject on the sheet, so translateOp's per-op clamp never squashes anything.
+    subject = subject.map((op) => (op.k === "f" ? { ...op, x: clampX(op.x + dx), y: clampY(op.y + dy) } : translateOp(op, dx, dy)));
   }
 
-  const order = sceneOrder(opts.seed, opts.album);
-  const piece = opts.addScenery ? order[opts.frame - 2] : undefined;
-  const added = piece === undefined ? [] : SCENE_PIECES[piece](rng, wobble).map((op) => ({ ...op, a: SCENERY_ALPHA }) as DrawOp);
-
-  const withScene: Drawing = { v: 1, ops: [...scenery, ...added, ...moved] };
+  const added = opts.addScenery ? scenePieceFor(opts.seed, opts.album, opts.frame, rng, level, unionBounds(subject)) : [];
+  const withScene: Drawing = { v: 1, ops: [...scenery, ...added, ...subject] };
   if (serializedLength(withScene) <= MAX_DRAWING_CHARS) return withScene;
-  const plain: Drawing = { v: 1, ops: [...scenery, ...moved] };
-  return serializedLength(plain) <= MAX_DRAWING_CHARS ? plain : previous;
+  const plain: Drawing = { v: 1, ops: [...scenery, ...subject] };
+  return serializedLength(plain) <= MAX_DRAWING_CHARS ? plain : current;
 }
 
 const clampX = (x: number) => Math.round(Math.min(CANVAS_W, Math.max(0, x)));
@@ -709,9 +836,9 @@ function candidates(state: DoodlePhoneState, seat: SeatIndex, level: BotLevel, r
     case "onion": {
       // Even the "mistake" keeps the animation going — it just forgets to add to the background.
       const previous = prompt?.kind === "drawing" ? prompt.drawing : EMPTY_DRAWING;
-      const first = shownPageAt(state, album, 1);
-      const frameOpts = { seed: state.seed, album, frame: turn, firstFrame: first?.kind === "drawing" ? first.drawing : null };
       if (isBlankDrawing(previous)) return [scribble, drawing(drawTemplates([TEMPLATES[Math.floor(rng() * TEMPLATES.length)]], rng, level), 1)];
+      const before = turn > 2 ? shownPageAt(state, album, turn - 2) : null;
+      const frameOpts = { seed: state.seed, album, frame: turn, prev: previous, prev2: before?.kind === "drawing" ? before.drawing : null };
       return [drawing(nextAnimationFrame(previous, { ...frameOpts, addScenery: false }, rng, level), 0), drawing(nextAnimationFrame(previous, { ...frameOpts, addScenery: true }, rng, level), 1)];
     }
     case "base":
