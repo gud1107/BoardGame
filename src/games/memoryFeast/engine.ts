@@ -28,8 +28,11 @@
  *    whole stock). Without that loophole, all disjoint equal pairs together
  *    hold only ~half of the two players' combined tokens, so emptying your
  *    own stock is structurally impossible.
- *  - Empty plates (total 0) can't be guessed in the open phase — two empty
- *    plates used to count as a free, endless "match".
+ *  - Empty plates (total 0) never form a pair — two empty plates used to
+ *    count as a free, endless "match". Since 2026-10-18 they stay covered and
+ *    pickable like any other plate (a guess including one simply fails):
+ *    marking them "빈 접시" leaked which untouched plates the opponent had
+ *    used, so in 1-token mode you could pair them without remembering a thing.
  *  - Placement (all rounds) completes fully before the open/guessing phase
  *    begins — the two phases never interleave.
  *  - "한 끗 차이" stages (2026-10-16): when no exact pair is left, the match
@@ -120,7 +123,7 @@ export const TOKEN_MODE_LABEL: Record<TokenMode, string> = {
 const SINGLE_LAYOUT: Record<Difficulty, Pick<DifficultyConfig, "plateCount" | "totalRounds">> = {
   easy: { plateCount: 16, totalRounds: 12 },
   normal: { plateCount: 20, totalRounds: 16 },
-  hard: { plateCount: 25, totalRounds: 20 },
+  hard: { plateCount: 25, totalRounds: 16 },
 };
 
 /** The effective config for a difficulty + token mode (a missing mode = an older "growing" state). */
@@ -162,9 +165,14 @@ export function plateTotal(plate: PlateState): number {
   return plate.p1Count + plate.p2Count;
 }
 
-/** Whether a plate can still be picked in the open phase: unclaimed and not empty. */
+/** Whether a plate still counts toward a possible pair: unclaimed and not empty. */
 export function isPlateInPlay(plate: PlateState): boolean {
   return plate.claimedBy === null && plateTotal(plate) > 0;
+}
+
+/** Whether a plate can be picked in the open phase — any unclaimed plate, empty or not (emptiness stays hidden). */
+export function isPlateSelectable(plate: PlateState): boolean {
+  return plate.claimedBy === null;
 }
 
 /** Widest "한 끗 차이" stage: totals up to this far apart still count as a pair. */
@@ -343,7 +351,7 @@ export function guess(state: MemoryFeastState, plateA: number, plateB: number): 
   if (plateA === plateB) return state;
   const count = state.plates.length;
   if (plateA < 0 || plateA >= count || plateB < 0 || plateB >= count) return state;
-  if (!isPlateInPlay(state.plates[plateA]) || !isPlateInPlay(state.plates[plateB])) return state;
+  if (!isPlateSelectable(state.plates[plateA]) || !isPlateSelectable(state.plates[plateB])) return state;
 
   const guesser = state.activeGuesser;
   const totalA = plateTotal(state.plates[plateA]);
@@ -351,7 +359,7 @@ export function guess(state: MemoryFeastState, plateA: number, plateB: number): 
   const guessSeq = state.guessSeq + 1;
 
   const tolerance = state.tolerance ?? 0;
-  if (totalsMatch(totalA, totalB, tolerance)) {
+  if (totalA > 0 && totalB > 0 && totalsMatch(totalA, totalB, tolerance)) {
     const plates = claimForGuesser(state.plates, plateA, plateB, guesser);
     const score = { ...state.score, [guesser]: state.score[guesser] + totalA + totalB };
     const next = { ...state, plates, score, guessSeq, tolerance };
@@ -438,7 +446,7 @@ export function memoryFeastCurrentActor(state: MemoryFeastState): Seat | null {
 // AI bot support (ARCHITECTURE.md §7) — getValidMoves + chooseBotAction.
 // ---------------------------------------------------------------------------
 
-import { botTier, pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
+import { pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
 
 /** All unordered pairs of plate indices [0, count). */
 function platePairs(count: number): [number, number][] {
@@ -457,24 +465,40 @@ export function getValidMoves(state: MemoryFeastState, seat: Seat): EngineAction
   if (state.phase === "open") {
     if (state.activeGuesser !== seat) return [];
     return platePairs(state.plates.length)
-      .filter(([a, b]) => isPlateInPlay(state.plates[a]) && isPlateInPlay(state.plates[b]))
+      .filter(([a, b]) => isPlateSelectable(state.plates[a]) && isPlateSelectable(state.plates[b]))
       .map(([a, b]) => ({ type: "guess", plateA: a, plateB: b }) as EngineAction);
   }
   return [];
 }
 
 /**
- * Placement heuristic: novice/core bots mostly avoid piling onto a plate
- * they've already used a lot (spreads their own risk thin, harder for the
- * opponent to memorize a single hot spot) — expert bots weigh this more
- * strongly. The Level 1-10 noise curve (`pickByLevel`) is what actually
- * turns this into "sometimes plays badly at low levels".
+ * Placement style (2026-10-18): the old heuristic always spread onto the
+ * plate it had used least, which read as mechanical and, in 1-token mode,
+ * filled the board with total-1 plates. Now it mixes like a person does —
+ * sometimes stacking onto its own plate, sometimes joining a plate the
+ * opponent used (so the opponent must recall both halves), otherwise a
+ * fresh random plate. Placement isn't where skill shows, so this is the
+ * same for every level.
  */
-function scorePlacement(state: MemoryFeastState, seat: Seat, plateIndex: number, level: BotLevel): number {
-  const plate = state.plates[plateIndex];
-  const selfSoFar = seat === "p1" ? plate.p1Count : plate.p2Count;
-  const weight = botTier(level) === "expert" ? 1.5 : 1;
-  return -selfSoFar * weight;
+const STACK_OWN_CHANCE = 0.35;
+const JOIN_OPPONENT_CHANCE = 0.2;
+
+function choosePlacement(state: MemoryFeastState, seat: Seat, rng: () => number): EngineAction {
+  const mine: number[] = [];
+  const theirs: number[] = [];
+  state.plates.forEach((p, i) => {
+    if ((seat === "p1" ? p.p1Count : p.p2Count) > 0) mine.push(i);
+  });
+  for (const flash of state.placementLog ?? []) {
+    if (flash.seat !== seat && !theirs.includes(flash.plateIndex)) theirs.push(flash.plateIndex);
+  }
+  const pickFrom = (list: number[]) => list[Math.floor(rng() * list.length)];
+  const roll = rng();
+  let plateIndex: number;
+  if (mine.length && roll < STACK_OWN_CHANCE) plateIndex = pickFrom(mine);
+  else if (theirs.length && roll < STACK_OWN_CHANCE + JOIN_OPPONENT_CHANCE) plateIndex = pickFrom(theirs);
+  else plateIndex = Math.floor(rng() * state.plates.length);
+  return { type: "place", plateIndex };
 }
 
 /**
@@ -516,8 +540,7 @@ export function botBeliefTotals(state: MemoryFeastState, seat: Seat, level: BotL
   for (const flash of state.placementLog ?? []) {
     if (flash.seat === opp && recallRoll(flash, seat) < recall) believed[flash.plateIndex] += flash.amount;
   }
-  // A plate still in play is visibly non-empty, so a person would never believe 0 for it.
-  return state.plates.map((p, i) => (p.revealedTo[seat] ? plateTotal(p) : isPlateInPlay(p) ? Math.max(1, believed[i]) : believed[i]));
+  return state.plates.map((p, i) => (p.revealedTo[seat] ? plateTotal(p) : believed[i]));
 }
 
 /**
@@ -528,12 +551,13 @@ export function botBeliefTotals(state: MemoryFeastState, seat: Seat, level: BotL
 function scoreGuess(believed: number[], tolerance: number, plateA: number, plateB: number): number {
   const totalA = believed[plateA];
   const totalB = believed[plateB];
+  // A plate believed empty can never pair — steer well clear of it.
+  if (totalA === 0 || totalB === 0) return -500;
   if (totalsMatch(totalA, totalB, tolerance)) return 1000 + totalA + totalB;
   return -Math.abs(totalA - totalB);
 }
 
-function scoreMove(state: MemoryFeastState, seat: Seat, move: EngineAction, level: BotLevel, believed: number[]): number {
-  if (move.type === "place") return scorePlacement(state, seat, move.plateIndex, level);
+function scoreMove(state: MemoryFeastState, move: EngineAction, believed: number[]): number {
   if (move.type === "guess") return scoreGuess(believed, state.tolerance ?? 0, move.plateA, move.plateB);
   return 0;
 }
@@ -546,7 +570,8 @@ export function chooseBotAction(
 ): EngineAction | null {
   const moves = getValidMoves(state, seat);
   if (moves.length === 0) return null;
-  const believed = state.phase === "open" ? botBeliefTotals(state, seat, level) : [];
-  const scored = moves.map((move) => ({ move, score: scoreMove(state, seat, move, level, believed) }));
+  if (state.phase === "placement") return choosePlacement(state, seat, rng);
+  const believed = botBeliefTotals(state, seat, level);
+  const scored = moves.map((move) => ({ move, score: scoreMove(state, move, believed) }));
   return pickByLevel(scored, level, rng);
 }

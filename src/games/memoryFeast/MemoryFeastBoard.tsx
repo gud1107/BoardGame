@@ -7,7 +7,6 @@ import {
   MAX_TOLERANCE,
   configFor,
   placementAmount,
-  isPlateInPlay,
   other,
   plateTotal,
   type EngineAction,
@@ -83,38 +82,23 @@ function PlateTile({
   selected: boolean;
   flashing: boolean;
   flashAmount: number | null;
-  /** Open phase only: a plate someone already claimed, or an empty one — neither can be picked. */
-  outOfPlay: { kind: "claimed"; ownerName: string; mine: boolean } | { kind: "empty" } | null;
+  /** Open phase only: a plate someone already claimed — it can't be picked. */
+  outOfPlay: { ownerName: string; mine: boolean } | null;
   onClick: () => void;
 }) {
   if (outOfPlay) {
-    const claimed = outOfPlay.kind === "claimed";
     return (
-      <Tooltip
-        text={
-          claimed
-            ? `접시 ${index + 1} · ${outOfPlay.ownerName}님이 가져감 (${total}개)`
-            : `접시 ${index + 1} · 빈 접시 (고를 수 없음)`
-        }
-      >
+      <Tooltip text={`접시 ${index + 1} · ${outOfPlay.ownerName}님이 가져감 (${total}개)`}>
         <div
           className={`relative flex aspect-square w-full flex-col items-center justify-center gap-0.5 rounded-xl border-2 border-dashed text-xs font-semibold ${
-            claimed
-              ? outOfPlay.mine
-                ? "border-emerald-400/30 bg-emerald-500/5 text-emerald-200/70"
-                : "border-rose-400/30 bg-rose-500/5 text-rose-200/70"
-              : "border-white/5 bg-transparent text-white/20"
+            outOfPlay.mine
+              ? "border-emerald-400/30 bg-emerald-500/5 text-emerald-200/70"
+              : "border-rose-400/30 bg-rose-500/5 text-rose-200/70"
           }`}
         >
           <span className="absolute left-1 top-1 text-[9px] text-white/20">{index + 1}</span>
-          {claimed ? (
-            <>
-              <span className="text-lg leading-none">{total}</span>
-              <span className="max-w-full truncate px-1 text-[9px] font-normal">{outOfPlay.ownerName}</span>
-            </>
-          ) : (
-            <span className="text-[10px] font-normal">빈 접시</span>
-          )}
+          <span className="text-lg leading-none">{total}</span>
+          <span className="max-w-full truncate px-1 text-[9px] font-normal">{outOfPlay.ownerName}</span>
         </div>
       </Tooltip>
     );
@@ -352,12 +336,11 @@ export default function MemoryFeastBoard({
             const selfCount = viewerRole === "p1" ? plate.p1Count : plate.p2Count;
             const flashing =
               visibleFlashSeq !== null && state.lastFlash?.seq === visibleFlashSeq && state.lastFlash?.plateIndex === i;
+            // Empty plates are NOT marked: that leaked where the opponent had (not) placed.
             const outOfPlay =
-              state.phase !== "open" || isPlateInPlay(plate)
-                ? null
-                : plate.claimedBy
-                  ? { kind: "claimed" as const, ownerName: names[plate.claimedBy], mine: plate.claimedBy === viewerRole }
-                  : { kind: "empty" as const };
+              state.phase === "open" && plate.claimedBy
+                ? { ownerName: names[plate.claimedBy], mine: plate.claimedBy === viewerRole }
+                : null;
             return (
               <PlateTile
                 key={i}

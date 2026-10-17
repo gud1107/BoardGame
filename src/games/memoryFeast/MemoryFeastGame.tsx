@@ -73,7 +73,22 @@ type Occupant = {
   role: Seat;
   name: string;
   playerId?: string;
+  /** Rules version this client runs (`MEMORY_FEAST_PROTOCOL`); missing = a tab opened before 2026-10-18. */
+  proto?: number;
 };
+
+/**
+ * Bumped whenever a rule change would make two clients replay the same
+ * actions differently (lockstep desync). A tab left open from before an
+ * update keeps the old engine, so the host won't start against an older
+ * guest and both sides are told to refresh. 2 = token modes, 한 끗 차이
+ * stages, hidden empty plates.
+ */
+const MEMORY_FEAST_PROTOCOL = 2;
+
+function isOutdated(o: Occupant | undefined): boolean {
+  return !!o && (o.proto ?? 0) < MEMORY_FEAST_PROTOCOL;
+}
 type Phase =
   | "choose"
   | "enter-name"
@@ -370,7 +385,7 @@ export default function MemoryFeastGame({ onComplete }: PlayableGameProps) {
 
     channel.subscribe(async (status) => {
       if (status === "SUBSCRIBED") {
-        await channel.track({ deviceId, role: myRole, name: myName, playerId: myPlayerId } satisfies Occupant);
+        await channel.track({ deviceId, role: myRole, name: myName, playerId: myPlayerId, proto: MEMORY_FEAST_PROTOCOL } satisfies Occupant);
         requestStateSync();
         setPhase((p) => (p === "connecting" ? "waiting" : p));
       } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
@@ -410,7 +425,7 @@ export default function MemoryFeastGame({ onComplete }: PlayableGameProps) {
     if (phase !== "waiting" || myRole !== "p1" || startSentRef.current) return;
     const hasP1 = occupants.some((o) => o.role === "p1");
     const hasP2 = occupants.some((o) => o.role === "p2") || botRoles.includes("p2");
-    if (hasP1 && hasP2) sendGameStart();
+    if (hasP1 && hasP2 && !isOutdated(occupants.find((o) => o.role === "p2"))) sendGameStart();
   }, [occupants, phase, myRole, botRoles, sendGameStart]);
 
   const addBot = useCallback(
@@ -518,6 +533,9 @@ export default function MemoryFeastGame({ onComplete }: PlayableGameProps) {
     botSeats: allBotRoleSet,
     chooseAction,
     dispatch: handleAction,
+    // 1-token boards mean many placements — keep the bot's half of them brisk.
+    minDelayMs: gameState?.phase === "placement" ? 250 : 500,
+    maxDelayMs: gameState?.phase === "placement" ? 650 : 1500,
   });
 
   // "무응답(idle)" takeover trigger — same 45s polling pattern as every
@@ -620,6 +638,7 @@ export default function MemoryFeastGame({ onComplete }: PlayableGameProps) {
   }
 
   function handleRematch() {
+    if (isOutdated(occupants.find((o) => o.role === "p2"))) return;
     sendGameStart();
   }
 
@@ -876,6 +895,16 @@ export default function MemoryFeastGame({ onComplete }: PlayableGameProps) {
                 <span className="font-semibold text-rose-300">{TOKEN_MODE_LABEL[tokenMode]}</span>
               </p>
             )}
+            {(() => {
+              const stale = occupants.find((o) => o.role !== myRole && isOutdated(o));
+              if (!stale) return null;
+              return (
+                <p className="max-w-xs rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
+                  ⚠️ {stale.name}님 화면이 예전 버전이에요. {stale.role === "p1" ? "방장" : stale.name}님께 새로고침(F5)을
+                  부탁해 주세요{isHost ? " — 새로고침하면 자동으로 시작돼요." : "."}
+                </p>
+              );
+            })()}
             <div className="mt-2 flex flex-col gap-1.5">
               {(["p1", "p2"] as const).map((role) => {
                 const occ = occupants.find((o) => o.role === role);

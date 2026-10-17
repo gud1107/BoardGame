@@ -60,6 +60,16 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.64.0",
     releaseDate: "2026-10-18",
+    title: "🍽️ 기억의 만찬 — 빈 접시 숨김 · 사람 같은 봇 배치",
+    changes: [
+      { game: "memory-feast", type: "IMPROVE", desc: "🙈 빈 접시를 더는 표시하지 않아요 — 상대가 놓은 자리가 드러나던 문제 수정, 빈 접시가 섞이면 매칭 실패" },
+      { game: "memory-feast", type: "IMPROVE", desc: "🤖 봇이 쌓기·상대 접시 합류·새 접시를 섞어서 배치하고, 배치 차례는 더 빨리 둬요 · 어려움 1개씩은 16라운드로 단축" },
+      { game: "memory-feast", type: "FIX", desc: "업데이트 전 화면으로 들어온 상대가 있으면 게임을 시작하지 않고 새로고침 안내를 보여줘요(규칙이 어긋나는 문제 방지)" },
+    ],
+  },
+  {
+    version: "v1.64.0",
+    releaseDate: "2026-10-18",
     title: "🏰 랜덤 합성 디펜스 — 석상 타워 2종 + 모바일 알림 정리",
     changes: [
       { game: "merge-defense", type: "FEAT", desc: "🧱 설치 칸 확장 — 순환로·중앙 광장 15→20칸, 8자 교차로 12→16칸, 마름모 요새 13→20칸(칸 크기 조금 작게) · 몬스터 체력도 그만큼 강화" },

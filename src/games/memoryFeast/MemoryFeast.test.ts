@@ -224,6 +224,19 @@ describe("한 끗 차이 stages", () => {
   });
 });
 
+describe("bot placement", () => {
+  it("mixes stacking and fresh plates instead of always spreading", () => {
+    let seed = 5;
+    const rng = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+    let state = startGame("hard", "single");
+    while (state.phase === "placement") state = applyAction(state, chooseBotAction(state, state.activePlacer!, 5, rng)!);
+    const p1Plates = new Set(state.placementLog.filter((f) => f.seat === "p1").map((f) => f.plateIndex));
+    const p1Count = state.placementLog.filter((f) => f.seat === "p1").length;
+    expect(p1Plates.size).toBeLessThan(p1Count); // stacked at least once
+    expect(p1Plates.size).toBeGreaterThan(1);
+  });
+});
+
 describe("bot memory", () => {
   it("a bot never reads the true board — forgotten opponent placements are missing from its belief", () => {
     const cfg = DIFFICULTY_CONFIG.hard;
@@ -275,11 +288,21 @@ describe("open (matching) phase", () => {
     expect(getValidMoves(state, "p1")).not.toContainEqual({ type: "guess", plateA: 0, plateB: 1 });
   });
 
-  it("rejects guesses on empty plates (two empty plates used to be a free endless match)", () => {
+  it("empty plates stay pickable (emptiness is hidden) but never pair — two empties are a failed guess", () => {
     const state = openBoard([3, 3, 5, 5]); // plates 4.. are empty
-    expect(guess(state, 5, 6)).toBe(state);
-    expect(guess(state, 0, 6)).toBe(state);
-    expect(getValidMoves(state, "p1")).toHaveLength(6); // C(4,2) among the 4 non-empty plates
+    const n = state.plates.length;
+    expect(getValidMoves(state, "p1")).toHaveLength((n * (n - 1)) / 2);
+    const twoEmpty = guess(state, 5, 6);
+    expect(twoEmpty.penalties.p1).toBe(1);
+    expect(twoEmpty.score.p1).toBe(0);
+    expect(twoEmpty.activeGuesser).toBe("p2");
+    expect(twoEmpty.plates[5].revealedTo.p1).toBe(true);
+    expect(guess(state, 0, 6).penalties.p1).toBe(1);
+  });
+
+  it("an empty plate never pairs even inside a 한 끗 차이 stage", () => {
+    const state = { ...openBoard([1, 3, 3]), tolerance: 1 };
+    expect(guess(state, 0, 5).penalties.p1).toBe(1); // 1 vs 0 is within ±1, still a fail
   });
 
   it("ends on score once no pair is left — higher score wins", () => {
@@ -364,8 +387,9 @@ describe("getValidMoves (AI bot support)", () => {
     expect(getValidMoves(state, "p2")).toEqual([]);
   });
 
-  it("offers every unordered pair of in-play plates as a guess, only to the active guesser", () => {
-    const state = openBoard([1, 2, 3, 4, 4]);
+  it("offers every unordered pair of unclaimed plates as a guess, only to the active guesser", () => {
+    const base = openBoard([1, 2, 3, 4, 4]);
+    const state = { ...base, plates: base.plates.map((p, i) => (i >= 5 ? { ...p, claimedBy: "p2" as const } : p)) };
     expect(getValidMoves(state, "p1")).toHaveLength(10);
     expect(getValidMoves(state, "p2")).toEqual([]);
   });
