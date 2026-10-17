@@ -160,7 +160,7 @@ function PlayersPanel({
   );
 }
 
-/** 손님 보드 보기 — 나는 지금 보드, 다른 사람은 공개 정보(가장 최근 전투에 나온 보드)만. ◀ ▶로 다음 사람. */
+/** 손님 보드 보기 — 나는 지금 보드, 다른 사람은 가장 최근 전투에 나온 보드 + 지금 손패. ◀ ▶로 다음 사람. */
 function InspectModal({
   state,
   seat,
@@ -243,6 +243,23 @@ function InspectModal({
           {board.length === 0 && <p className="self-center text-xs text-white/40">보여 줄 유닛이 없어요</p>}
         </div>
         <FinalTraits board={board} />
+        {s.alive && (
+          <div className="mt-3 rounded-xl bg-black/25 p-2 light:bg-white">
+            <p className="flex items-center gap-1.5 text-xs font-bold text-white/75 light:text-slate-700">
+              🖐️ 지금 손패 {s.hand.length}/{HAND_MAX}
+              <span className="font-normal text-white/45 light:text-slate-500">· 아직 보드에 안 낸 카드</span>
+            </p>
+            {s.hand.length > 0 ? (
+              <div className="mt-2 flex flex-wrap justify-center gap-2">
+                {s.hand.map((u) => (
+                  <UnitCard key={u.uid} unit={u} size="sm" />
+                ))}
+              </div>
+            ) : (
+              <p className="mt-1 text-center text-[11px] text-white/40 light:text-slate-400">손패가 비어 있어요</p>
+            )}
+          </div>
+        )}
         <button onClick={onClose} className={`${BTN_DARK} mt-3 w-full`}>
           닫기
         </button>
@@ -953,6 +970,14 @@ function ShopView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boardKey]);
 
+  // 등급업 안내는 엔진이 실제로 받아들여 등급이 오른 뒤에만(누르기만 하고 안 된 경우 거짓 안내 방지)
+  const prevTierRef = useRef(me.tier);
+  useEffect(() => {
+    const before = prevTierRef.current;
+    prevTierRef.current = me.tier;
+    if (me.tier > before) showToast(`🏠 ${me.tier}등급 여관!`, `상점에 ${me.tier}등급 유닛까지 나와요 · 다음 새로고침부터 상점 칸 ${SHOP_SLOTS[me.tier]}칸`);
+  }, [me.tier]);
+
   const send = (a: EngineAction, sound?: string) => {
     if (me.ready && a.type !== "UNREADY") {
       showToast("✅ 준비 완료 상태", "상점·보드를 고치려면 먼저 「준비 해제」를 누르세요");
@@ -1157,10 +1182,7 @@ function ShopView({
           cost={cost}
           base={me.tier < 6 ? UPGRADE_BASE[me.tier + 1] - (me.hero === "architect" ? 2 : 0) : 0}
           gold={me.gold}
-          onUpgrade={() => {
-            send({ type: "UPGRADE", seat: viewerSeat, round }, "upgrade");
-            showToast(`🏠 ${me.tier + 1}등급 여관!`, `상점에 ${me.tier + 1}등급 유닛까지 나와요 · 다음 새로고침부터 상점 칸 ${SHOP_SLOTS[me.tier + 1]}칸`);
-          }}
+          onUpgrade={() => send({ type: "UPGRADE", seat: viewerSeat, round }, "upgrade")}
         />
         {hero && (
           <button

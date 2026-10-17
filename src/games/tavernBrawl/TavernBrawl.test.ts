@@ -294,6 +294,15 @@ describe("shop", () => {
 });
 
 describe("rounds", () => {
+  it("tier 3 → 4 upgrade with 9 gold at discounted cost 7 is accepted; blocked only while ready", () => {
+    let st = structuredClone(pickHeroes(startGame(3, 12345)));
+    Object.assign(st.seats[0], { tier: 3, gold: 9, upCost: 7, hero: "prophet" });
+    const up = applyAction(st, { type: "UPGRADE", seat: 0, round: st.round });
+    expect(up.seats[0].tier).toBe(4);
+    expect(up.seats[0].gold).toBe(2);
+    st = applyAction(st, { type: "READY", seat: 0, round: st.round });
+    expect(applyAction(st, { type: "UPGRADE", seat: 0, round: st.round })).toBe(st);
+  });
   it("upcomingMatchups during shop matches the combats that actually happen (incl. ghost)", () => {
     for (const n of [2, 3, 5, 8]) {
       for (const seed of [3, 11, 29]) {
