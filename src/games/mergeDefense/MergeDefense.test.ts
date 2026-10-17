@@ -783,13 +783,14 @@ describe("merge defense engine", () => {
       const m = MAPS[id];
       selectMap(id);
       m.slots.forEach(([x, y], i) => {
-        expect(x - 26).toBeGreaterThanOrEqual(0);
-        expect(y - 26).toBeGreaterThanOrEqual(0);
-        expect(x + 26).toBeLessThanOrEqual(400);
-        expect(y + 26).toBeLessThanOrEqual(280);
+        // Pad half-size 23 (CELL 54 − 8), clear of the road (half-width ~18) and of each other.
+        expect(x - 23).toBeGreaterThanOrEqual(0);
+        expect(y - 23).toBeGreaterThanOrEqual(0);
+        expect(x + 23).toBeLessThanOrEqual(400);
+        expect(y + 23).toBeLessThanOrEqual(280);
         const road = Math.min(...m.path.map((a, k) => segDist(x, y, a, m.path[(k + 1) % m.path.length])));
-        expect(road).toBeGreaterThanOrEqual(46);
-        m.slots.forEach(([x2, y2], j) => j > i && expect(Math.hypot(x2 - x, y2 - y)).toBeGreaterThanOrEqual(56));
+        expect(road).toBeGreaterThanOrEqual(41);
+        m.slots.forEach(([x2, y2], j) => j > i && expect(Math.hypot(x2 - x, y2 - y)).toBeGreaterThanOrEqual(50));
         expect(slotAtPoint(x + 10, y - 10)).toBe(i);
       });
       const [px, py] = m.path[0];
@@ -810,8 +811,8 @@ describe("merge defense engine", () => {
 
   it("rejects a pad index past this map's pads", () => {
     const s = startGame(2, 5, [], "survival", null, "normal", "figure8");
-    expect(applyAction(s, 0, { type: "summon", slot: 13 })).toBe(s);
-    expect(applyAction(s, 0, { type: "summon", slot: 11 })).not.toBe(s);
+    expect(applyAction(s, 0, { type: "summon", slot: 17 })).toBe(s);
+    expect(applyAction(s, 0, { type: "summon", slot: 15 })).not.toBe(s);
     selectMap("classic");
   });
 
@@ -1004,7 +1005,7 @@ describe("merge defense engine", () => {
     expect(first?.type).toBe("summon");
     expect(best?.type).toBe("summon");
     expect(first).not.toEqual(best);
-    s.boards[0].units = s.boards[0].units.map((_, i) => (i < 9 ? { kind: UNIT_KIND_LIST[i % 5], grade: 2 + Math.floor(i / 5), cd: 0 } : null));
-    expect(chooseBotAction(s, 0, botPlan(1).auto)).toBeNull(); // at its 9-unit cap, nothing to merge, no upgrades
+    s.boards[0].units = s.boards[0].units.map((_, i) => (i < 12 ? { kind: UNIT_KIND_LIST[i % 5], grade: 2 + Math.floor(i / 5), cd: 0 } : null));
+    expect(chooseBotAction(s, 0, botPlan(1).auto)).toBeNull(); // at its 12-unit cap, nothing to merge, no upgrades
   });
 });

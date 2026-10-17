@@ -26,8 +26,11 @@ export const TICKS_PER_SEC = 1000 / TICK_MS;
 /** Board geometry (logical units — the canvas scales this). */
 export const BOARD_W = 400;
 export const BOARD_H = 280;
-/** Build-pad pitch; pads are drawn CELL − 8 wide and tapped within ±(CELL − 8)/2. */
-export const CELL = 60;
+/**
+ * Build-pad pitch; pads are drawn CELL − 8 wide and tapped within ±(CELL − 8)/2.
+ * 60 → 54 (2026-10-18) so every map fits more pads for the 10 tower kinds.
+ */
+export const CELL = 54;
 
 /**
  * Maps — each one is a closed road (monsters loop it forever) plus its own
@@ -51,17 +54,19 @@ export interface MapDef {
   grass: readonly [string, string];
 }
 
-const GRID_5x3: [number, number][] = [];
-for (let r = 0; r < 3; r++) for (let c = 0; c < 5; c++) GRID_5x3.push([80 + c * 60, 80 + r * 60]);
+const GRID_5x4: [number, number][] = [];
+for (let r = 0; r < 4; r++) for (let c = 0; c < 5; c++) GRID_5x4.push([80 + c * 60, 64 + r * 51]);
+/** Four-way mirror of top-left-quadrant points (diamond corners). */
+const mirror4 = (pts: [number, number][]): [number, number][] => pts.flatMap(([x, y]) => [[x, y], [400 - x, y], [x, 280 - y], [400 - x, 280 - y]] as [number, number][]);
 
 export const MAPS: Record<MapId, MapDef> = {
   classic: {
     id: "classic",
     name: "순환로",
     emoji: "🔲",
-    desc: "길이 바깥을 한 바퀴 — 5×3 칸 15개",
+    desc: "길이 바깥을 한 바퀴 — 5×4 칸 20개",
     path: [[20, 20], [380, 20], [380, 260], [20, 260]],
-    slots: GRID_5x3,
+    slots: GRID_5x4,
     hp: 1,
     grass: ["#3f8a3a", "#1f4d24"],
   },
@@ -69,12 +74,13 @@ export const MAPS: Record<MapId, MapDef> = {
     id: "plaza",
     name: "중앙 광장",
     emoji: "⭕",
-    desc: "가운데 작은 고리를 칸 15개가 둘러싸요 — 짧은 길, 집중 사격",
+    desc: "가운데 작은 고리를 칸 20개가 둘러싸요 — 짧은 길, 집중 사격",
     path: [[120, 92], [280, 92], [280, 188], [120, 188]],
     slots: [
-      [40, 40], [104, 40], [168, 40], [232, 40], [296, 40], [360, 40],
-      [52, 140], [200, 140], [348, 140],
-      [40, 240], [104, 240], [168, 240], [232, 240], [296, 240], [360, 240],
+      [30, 36], [87, 36], [143, 36], [200, 36], [257, 36], [313, 36], [370, 36],
+      [40, 108], [170, 140], [230, 140], [360, 108],
+      [40, 172], [360, 172],
+      [30, 244], [87, 244], [143, 244], [200, 244], [257, 244], [313, 244], [370, 244],
     ],
     hp: 1.08,
     grass: ["#b59a5c", "#6b5530"],
@@ -83,27 +89,26 @@ export const MAPS: Record<MapId, MapDef> = {
     id: "figure8",
     name: "8자 교차로",
     emoji: "♾️",
-    desc: "길이 가운데서 엇갈려요 — 가장 긴 길, 칸 12개",
+    desc: "길이 가운데서 엇갈려요 — 가장 긴 길, 칸 16개",
     path: [[18, 18], [168, 18], [232, 262], [382, 262], [382, 18], [232, 18], [168, 262], [18, 262]],
     slots: [
-      [68, 72], [126, 72], [68, 140], [126, 140], [68, 208], [126, 208],
-      [274, 72], [332, 72], [274, 140], [332, 140], [274, 208], [332, 208],
+      [68, 59], [126, 59], [68, 113], [126, 113], [68, 167], [126, 167], [68, 221], [126, 221],
+      [274, 59], [332, 59], [274, 113], [332, 113], [274, 167], [332, 167], [274, 221], [332, 221],
     ],
-    hp: 0.7,
+    hp: 0.62,
     grass: ["#7a8a34", "#3b4a1c"],
   },
   diamond: {
     id: "diamond",
     name: "마름모 요새",
     emoji: "🔷",
-    desc: "대각선 길 안쪽 5칸 + 네 모서리 8칸 — 칸 13개",
+    desc: "대각선 길 안쪽 8칸 + 네 모서리 12칸 — 칸 20개",
     path: [[200, 14], [386, 140], [200, 266], [14, 140]],
     slots: [
-      [140, 140], [200, 140], [260, 140], [200, 82], [200, 198],
-      [34, 34], [94, 28], [306, 28], [366, 34],
-      [34, 246], [94, 252], [306, 252], [366, 246],
+      [175, 140], [225, 140], [131, 114], [131, 166], [269, 114], [269, 166], [200, 92], [200, 188],
+      ...mirror4([[28, 28], [84, 26], [24, 78]]),
     ],
-    hp: 0.66,
+    hp: 1.1,
     grass: ["#3a7f86", "#173c45"],
   },
 };
@@ -185,9 +190,9 @@ export function sanitizeAiLevel(v: unknown): AiLevel {
 export function botPlan(level: AiLevel | undefined): { every: number; auto: AutoOptions } {
   switch (sanitizeAiLevel(level)) {
     case 1:
-      return { every: 40, auto: { parts: new Set<AutoPart>(["build", "merge"]), placement: "worst", maxUnits: 9 } };
+      return { every: 40, auto: { parts: new Set<AutoPart>(["build", "merge"]), placement: "worst", maxUnits: 12 } };
     case 2:
-      return { every: 24, auto: { parts: new Set<AutoPart>(["build", "merge", "upgrade"]), placement: "middle", maxUnits: 12 } };
+      return { every: 24, auto: { parts: new Set<AutoPart>(["build", "merge", "upgrade"]), placement: "middle", maxUnits: 16 } };
     case 4:
       return { every: 7, auto: { sellForGamble: true, eagerUpgrade: true } };
     case 5:
@@ -946,10 +951,13 @@ export function upgradeCost(level: number): number {
  * they pushed bot medians W34 → ~W42), then → 1.17 with the 일반/희귀 skills
  * and boss 처형 (medians back to ~W32–37 across maps and modes). 10 kinds
  * (2026-10-18 statues) made pairs rarer again (2p W38 → W29) → 1.115/1.095
- * (2p W33, versus W28, 4p W38).
+ * (2p W33, versus W28, 4p W38). Then more pads per map (15 → 20, CELL 54)
+ * made boards much stronger (2p W34 → W43, diamond W52) → 1.14/1.125 with
+ * map hp classic 1 · plaza 1.08 · figure8 0.62 · diamond 1.1 (all 2p W33–34,
+ * versus W28, 4p W35, AI Lv1 W19 / Lv5 W43).
  * Exported as a mutable object so balance sims can sweep it.
  */
-export const WAVE_CURVE = { base: 66, growth: 1.115, knee: 15, late: 1.095 };
+export const WAVE_CURVE = { base: 66, growth: 1.14, knee: 15, late: 1.125 };
 export function waveHp(wave: number): number {
   const c = WAVE_CURVE;
   const early = Math.min(wave, c.knee) - 1;
