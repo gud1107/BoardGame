@@ -309,8 +309,8 @@ export const GAMBLE_ODDS: readonly { grade: number; pct: number }[] = [
 const MAX_EVENTS = 40;
 
 export type SeatIndex = number;
-export type UnitKind = "archer" | "mage" | "frost" | "thunder" | "poison" | "cannon" | "holy" | "wind";
-export const UNIT_KINDS: UnitKind[] = ["archer", "mage", "frost", "thunder", "poison", "cannon", "holy", "wind"];
+export type UnitKind = "archer" | "mage" | "frost" | "thunder" | "poison" | "cannon" | "holy" | "wind" | "liberty" | "thinker";
+export const UNIT_KINDS: UnitKind[] = ["archer", "mage", "frost", "thunder", "poison", "cannon", "holy", "wind", "liberty", "thinker"];
 
 export interface UnitDef {
   name: string;
@@ -339,6 +339,9 @@ export const UNITS: Record<UnitKind, UnitDef> = {
   cannon: { name: "대포", emoji: "💣", color: "#78716c", dmg: 20, interval: 36, range: 135, dmgType: "physical", desc: "느린 포격 · 주변 몬스터에 60% 폭발 피해" },
   holy: { name: "성기사", emoji: "☀️", color: "#fbbf24", dmg: 9, interval: 18, range: 130, dmgType: "magic", desc: "빛의 광선 · 큰 몬스터(탱커·정예·보스 등)에 피해 +40%" },
   wind: { name: "바람", emoji: "🌪️", color: "#5eead4", dmg: 6, interval: 9, range: 140, dmgType: "physical", desc: "아주 빠른 연타 · 빠른 몬스터에 피해 +30%" },
+  // 석상 타워 (2026-10-18): a torch-bearing copper goddess and a bronze thinker.
+  liberty: { name: "횃불의 여신", emoji: "🗽", color: "#0f9f8a", dmg: 11, interval: 24, range: 175, dmgType: "magic", desc: "가장 긴 사거리 · 횃불 광선에 맞으면 화상" },
+  thinker: { name: "사색의 석상", emoji: "🗿", color: "#9a6a3a", dmg: 38, interval: 46, range: 130, dmgType: "physical", desc: "느린 묵직한 한 방 · 사거리 안에서 체력이 가장 많은 몬스터를 노려요" },
 };
 
 /**
@@ -405,7 +408,15 @@ export type SkillId =
   | "gust"
   | "whirl"
   | "tornado"
-  | "gale";
+  | "gale"
+  | "torchlight"
+  | "beacon"
+  | "liberate"
+  | "freedom"
+  | "ponder"
+  | "insight"
+  | "epiphany"
+  | "wisdom";
 
 export interface SkillDef {
   kind: UnitKind;
@@ -455,6 +466,14 @@ export const SKILL = {
   whirl: { every: 4, max: 3, radius: 35, share: 0.6 },
   tornado: { every: 7, mythicEvery: 5, radius: 45, push: 28, ticks: 6 },
   gale: { wait: 0.8, mythicWait: 0.7 },
+  torchlight: { dpsOfDmg: 0.25, ticks: 40 },
+  beacon: { every: 5, max: 2, radius: 35, share: 0.5 },
+  liberate: { radius: 80, speed: 2, mythicSpeed: 3 },
+  freedom: { every: 6, mythicEvery: 4, radius: 50, mult: 1.5, slow: 0.2, ticks: 30 },
+  ponder: { every: 3, mult: 1.6 },
+  insight: { pierce: 0.4 },
+  epiphany: { every: 5, mythicEvery: 4, mult: 3, ticks: 12 },
+  wisdom: { radius: 80, chance: 0.05, mythicChance: 0.08 },
   corrode: { pct: 0.07, mythicPct: 0.12 },
 };
 export const STUN_GUARD = 20;
@@ -492,6 +511,14 @@ export const SKILLS: Record<SkillId, SkillDef> = {
   whirl: { kind: "wind", grade: 2, name: "회오리", emoji: "🌀", desc: "4번째 공격마다 주변 몬스터 3마리에게 60% 피해" },
   tornado: { kind: "wind", grade: 3, name: "토네이도", emoji: "🌪️", desc: "7번째 공격마다 주변(45) 몬스터를 크게 밀치고 0.3초 기절", mythic: "5번째마다" },
   gale: { kind: "wind", grade: 4, name: "질풍", emoji: "💨", desc: "공격 속도 +25%", mythic: "+43%" },
+  torchlight: { kind: "liberty", grade: 1, name: "횃불", emoji: "🔥", desc: "광선에 맞은 몬스터가 2초 동안 불타요(공격력의 25%/초, 마법)" },
+  beacon: { kind: "liberty", grade: 2, name: "등불", emoji: "🏮", desc: "5번째 공격마다 불꽃이 주변(35) 몬스터 2마리에게 50% 피해로 번져요" },
+  liberate: { kind: "liberty", grade: 3, name: "해방", emoji: "🔓", desc: "주변(80) 타워가 기절에서 2배 빨리 풀려나요(자신 포함)", mythic: "3배" },
+  freedom: { kind: "liberty", grade: 4, name: "자유의 불꽃", emoji: "🗽", desc: "6번째 공격마다 횃불을 높이 들어 주변(50) 몬스터 전부에게 150% 피해 + 1.5초 20% 둔화", mythic: "4번째마다" },
+  ponder: { kind: "thinker", grade: 1, name: "사색", emoji: "💭", desc: "3번째 공격마다 생각이 정리된 한 방 — 피해 ×1.6" },
+  insight: { kind: "thinker", grade: 2, name: "통찰", emoji: "👁️", desc: "약점을 꿰뚫어 방어력을 40% 무시해요" },
+  epiphany: { kind: "thinker", grade: 3, name: "깨달음", emoji: "💡", desc: "5번째 공격마다 피해 ×3 + 대상 0.6초 기절", mythic: "4번째마다" },
+  wisdom: { kind: "thinker", grade: 4, name: "지혜", emoji: "📜", desc: "주변(80) 다른 타워의 치명타 확률 +5%p", mythic: "+8%p" },
 };
 export const SKILL_IDS = Object.keys(SKILLS) as SkillId[];
 
@@ -509,6 +536,34 @@ export function sanctuaryHaste(board: Board): number[] {
     });
   });
   return out;
+}
+
+/** Per-slot strength of a nearby statue aura (`kind`'s skill from `grade`); `self` = the statue counts too. */
+function statueAura(board: Board, kind: UnitKind, grade: number, radius: number, base: number, mythicVal: number, self: boolean): number[] {
+  const out = board.units.map(() => 0);
+  board.units.forEach((u, i) => {
+    if (!u || u.kind !== kind || u.grade < grade) return;
+    const v = u.grade >= MAX_GRADE ? mythicVal : base;
+    const c = slotCenter(i);
+    board.units.forEach((w, j) => {
+      if (!w || (j === i && !self)) return;
+      const d = slotCenter(j);
+      if (Math.hypot(d.x - c.x, d.y - c.y) <= radius) out[j] = Math.max(out[j], v);
+    });
+  });
+  return out;
+}
+
+/** 해방: stun ticks each tower sheds per tick (1 = normal) from 영웅+ 횃불의 여신 nearby. */
+export function liberateSpeed(board: Board): number[] {
+  const L = SKILL.liberate;
+  return statueAura(board, "liberty", SKILLS.liberate.grade, L.radius, L.speed, L.mythicSpeed, true).map((v) => Math.max(1, v));
+}
+
+/** 지혜: extra crit chance per tower from 전설+ 사색의 석상 nearby (never from itself). */
+export function wisdomCrit(board: Board): number[] {
+  const W = SKILL.wisdom;
+  return statueAura(board, "thinker", SKILLS.wisdom.grade, W.radius, W.chance, W.mythicChance, false);
 }
 
 /** Skills this unit has unlocked (grade ≥ the skill's grade). */
@@ -870,10 +925,12 @@ export function upgradeCost(level: number): number {
  * game stops spiking (bot sim: median game ~9 → ~10.5 min, wider comeback
  * window). `late` went 1.12 → 1.15 with the 영웅/전설 tower skills (alone
  * they pushed bot medians W34 → ~W42), then → 1.17 with the 일반/희귀 skills
- * and boss 처형 (medians back to ~W32–37 across maps and modes).
+ * and boss 처형 (medians back to ~W32–37 across maps and modes). 10 kinds
+ * (2026-10-18 statues) made pairs rarer again (2p W38 → W29) → 1.115/1.095
+ * (2p W33, versus W28, 4p W38).
  * Exported as a mutable object so balance sims can sweep it.
  */
-export const WAVE_CURVE = { base: 66, growth: 1.13, knee: 15, late: 1.11 };
+export const WAVE_CURVE = { base: 66, growth: 1.115, knee: 15, late: 1.095 };
 export function waveHp(wave: number): number {
   const c = WAVE_CURVE;
   const early = Math.min(wave, c.knee) - 1;
@@ -971,7 +1028,7 @@ function emptyBoard(bot: boolean): Board {
     gold: START_GOLD,
     gems: START_GEMS,
     summons: 0,
-    upgrades: { archer: 0, mage: 0, frost: 0, thunder: 0, poison: 0, cannon: 0, holy: 0, wind: 0 },
+    upgrades: Object.fromEntries(UNIT_KINDS.map((k) => [k, 0])) as Record<UnitKind, number>,
     kills: 0,
     sendMeter: 0,
     alive: true,
@@ -1266,7 +1323,7 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
   }
 
   // upgrade
-  const level = cur.upgrades[action.kind];
+  const level = cur.upgrades[action.kind] ?? 0;
   if (level >= MAX_UPGRADE || cur.gold < upgradeCost(level)) return state;
   const s = cloneState(state);
   const board = s.boards[seat];
@@ -1433,10 +1490,11 @@ function roadGap(a: Mob, b: Mob): number {
 }
 
 /** Fires `unit`; returns the share of its interval to wait before the next shot (1 = normal). */
-function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, ordered: Mob[]): number {
-  const target = ordered[0];
+function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, ordered: Mob[], wisdom = 0): number {
+  // 사색의 석상 picks the toughest monster in reach; everyone else the one furthest along.
+  const target = unit.kind === "thinker" ? ordered.reduce((a, b) => (b.hp > a.hp ? b : a)) : ordered[0];
   const cs = critStats(board.focus ?? 0);
-  const crit = rand(s) < cs.chance;
+  const crit = rand(s) < cs.chance + wisdom;
   if (crit) {
     const chain = s.tick - (board.lastCritTick ?? -999) <= COMBO.gapTicks ? (board.critChain ?? 0) + 1 : 1;
     board.critChain = chain;
@@ -1693,6 +1751,50 @@ function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, or
       if (g >= 4) wait *= mythic ? SKILL.gale.mythicWait : SKILL.gale.wait;
       break;
     }
+    case "liberty": {
+      const burn = (m: Mob) => {
+        m.burnDps = Math.max(m.burnDps ?? 0, dmg * SKILL.torchlight.dpsOfDmg);
+        m.burnT = Math.max(m.burnT ?? 0, SKILL.torchlight.ticks);
+      };
+      damage(target, dmg, type);
+      burn(target);
+      if (g >= 2 && every(SKILL.beacon.every)) {
+        let n = 0;
+        for (const m of ordered) {
+          if (m === target || roadGap(m, target) > SKILL.beacon.radius) continue;
+          if (n++ >= SKILL.beacon.max) break;
+          damage(m, dmg * SKILL.beacon.share, type);
+          burn(m);
+          hits.push(m.id);
+        }
+        proc = "beacon";
+      }
+      if (g >= 4 && every(mythic ? SKILL.freedom.mythicEvery : SKILL.freedom.every)) {
+        const F = SKILL.freedom;
+        for (const m of ordered) {
+          if (roadGap(m, target) > F.radius) continue;
+          damage(m, dmg * F.mult, type);
+          slowMob(m, F.slow, F.ticks);
+          if (m !== target) hits.push(m.id);
+        }
+        proc = "freedom";
+      }
+      break;
+    }
+    case "thinker": {
+      let mult = 1;
+      if (every(SKILL.ponder.every)) {
+        mult = SKILL.ponder.mult;
+        proc = "ponder";
+      }
+      if (g >= 3 && every(mythic ? SKILL.epiphany.mythicEvery : SKILL.epiphany.every)) {
+        mult = SKILL.epiphany.mult;
+        stunMob(target, SKILL.epiphany.ticks);
+        proc = "epiphany";
+      }
+      damage(target, dmg * mult, type, g >= 2 ? SKILL.insight.pierce : 0);
+      break;
+    }
   }
   const pts: number[] = [];
   for (const id of hits) {
@@ -1822,10 +1924,12 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
     const ordered = board.mobs.filter((m) => m.hp > 0).sort((a, b) => b.trav - a.trav);
     const pos = ordered.map((m) => pathPoint(m.trav));
     const haste = sanctuaryHaste(board);
+    const freed = liberateSpeed(board);
+    const wise = wisdomCrit(board);
     board.units.forEach((unit, slot) => {
       if (!unit) return;
       if (unit.stun) {
-        unit.stun -= 1;
+        unit.stun = Math.max(0, unit.stun - freed[slot]);
         return;
       }
       if (unit.cd > 0) unit.cd -= 1;
@@ -1840,7 +1944,7 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
         if (dx * dx + dy * dy <= r2) inRange.push(m);
       });
       if (inRange.length === 0) return;
-      const wait = attack(s, board, slot, unit, inRange);
+      const wait = attack(s, board, slot, unit, inRange, wise[slot]);
       unit.cd = Math.max(1, Math.round(unitInterval(unit) * wait * (1 - haste[slot])));
     });
 
@@ -2125,7 +2229,7 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex, auto:
   for (const m of board.mobs) if (m.hp > 0) facing[m.kind] = (facing[m.kind] ?? 0) + 1;
   const def = defenceProfile(facing);
   for (const k of UNIT_KINDS) weight[k] *= 1 - (UNITS[k].dmgType === "physical" ? def.armor : def.resist);
-  const best = [...UNIT_KINDS].filter((k) => board.upgrades[k] < MAX_UPGRADE).sort((a, b) => weight[b] - weight[a])[0];
+  const best = [...UNIT_KINDS].filter((k) => (board.upgrades[k] ?? 0) < MAX_UPGRADE).sort((a, b) => weight[b] - weight[a])[0];
   if (ok("upgrade") && best && weight[best] > 0 && board.gold >= upgradeCost(board.upgrades[best]) && (free === 0 || !building || capped || auto.eagerUpgrade || board.gold >= cost + upgradeCost(board.upgrades[best]))) {
     return { type: "upgrade", kind: best };
   }

@@ -157,6 +157,10 @@ function passiveSkillFx(kind: UnitKind, grade: number, pts: number[]): SkillId[]
     if (grade >= 2) out.push("apshell");
   } else if (kind === "holy") {
     if (grade >= 2 && pts.length > 2) out.push("radiance");
+  } else if (kind === "liberty") {
+    out.push("torchlight");
+  } else if (kind === "thinker") {
+    if (grade >= 2) out.push("insight");
   }
   return out;
 }
@@ -167,12 +171,14 @@ const SKILL_SHAKE: Partial<Record<SkillId, [number, number]>> = {
   freeze: [1.2, 110],
   shock: [1.4, 120],
   concuss: [2.4, 160],
+  freedom: [2.2, 160],
+  epiphany: [2.6, 170],
   chainblast: [3, 200],
   judgment: [2, 160],
   tornado: [1.8, 220],
 };
 /** Procs worth a callout on an opponent's minimap (so you feel them getting strong). */
-const MINI_CALLOUT: ReadonlySet<SkillId> = new Set(["execute", "freeze", "shock", "shockwave", "concuss", "chainblast", "judgment", "tornado", "amplify"]);
+const MINI_CALLOUT: ReadonlySet<SkillId> = new Set(["execute", "freeze", "shock", "shockwave", "concuss", "chainblast", "judgment", "tornado", "amplify", "freedom", "epiphany"]);
 /** Slow motion: playback rate and peak zoom; each trigger sets its own length and tint. */
 const SLOWMO = { rate: 0.25, zoom: 0.14 };
 /** Crit combo callout (the chain itself is counted by the engine); shown from COMBO_MIN. */
@@ -205,6 +211,14 @@ function guideVisible(mode: GuideMode, wave: number): boolean {
 /** Attack range the guide assumes for a new build (grade-1 average). */
 const BUILD_RANGE = 140;
 const SKILL_COLOR: Record<SkillId, string> = {
+  torchlight: "#fb923c",
+  beacon: "#fdba74",
+  liberate: "#5eead4",
+  freedom: "#2dd4bf",
+  ponder: "#fde68a",
+  insight: "#e7e5e4",
+  epiphany: "#fde047",
+  wisdom: "#fbbf24",
   shrapnel: "#a8a29e",
   apshell: "#e7e5e4",
   concuss: "#fb923c",
@@ -1818,7 +1832,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
       </div>
 
       {/* Upgrades */}
-      <div className="grid grid-cols-4 gap-1.5">
+      <div className="grid grid-cols-5 gap-1">
         {UNIT_KINDS.map((kind) => {
           const level = me.upgrades[kind];
           const maxed = level >= MAX_UPGRADE;
@@ -1838,7 +1852,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
                 </span>
               )}
               <span className="text-base leading-none">{UNITS[kind].emoji}</span>
-              <TowerName kind={kind} emoji={false} className="my-0.5 max-w-full truncate text-[11px] leading-tight" />
+              <TowerName kind={kind} emoji={false} wrap className="my-0.5 max-w-full text-center text-[10px] leading-tight sm:text-[11px]" />
               <span className="text-[10px] font-bold">Lv.{level}</span>
               <span className="font-mono text-[10px] opacity-70">{maxed ? "MAX" : `🪙${price}`}</span>
             </button>

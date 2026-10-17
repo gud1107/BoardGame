@@ -94,11 +94,11 @@ function inkFor(hex: string): string {
 }
 
 /** Tower name as a solid chip in the tower's color — readable on both themes. */
-export function TowerName({ kind, emoji = true, className = "" }: { kind: UnitKind; emoji?: boolean; className?: string }) {
+export function TowerName({ kind, emoji = true, wrap = false, className = "" }: { kind: UnitKind; emoji?: boolean; wrap?: boolean; className?: string }) {
   const u = UNITS[kind];
   return (
     <span
-      className={`inline-block rounded-md px-1 font-black whitespace-nowrap shadow-[0_0_6px_rgba(0,0,0,0.35)] ${className}`}
+      className={`inline-block rounded-md px-1 font-black shadow-[0_0_6px_rgba(0,0,0,0.35)] ${wrap ? "break-keep" : "whitespace-nowrap"} ${className}`}
       style={{ background: u.color, color: inkFor(u.color) }}
     >
       {emoji ? `${u.emoji} ` : ""}

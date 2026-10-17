@@ -94,6 +94,9 @@ function board(mode: GameMode, map: MapId = "classic"): ReactNode {
   let s = startGame(4, 3, [1, 2, 3], mode, null, "hard", map);
   while (s.wave < 3) s = stepGame(s);
   s.boards[0].units[6] = { kind: "archer", grade: 3, cd: 0, stun: 30 };
+  // Statue towers in view so their art shows up in the screenshots.
+  s.boards[0].units[7] = { kind: "liberty", grade: 4, cd: 0 };
+  s.boards[0].units[8] = { kind: "thinker", grade: 5, cd: 0 };
   s.boards[0].gold = 340;
   // Where run.mjs taps for the monster-card screen (fractions of the main canvas).
   const mob = s.boards[0].mobs.find((m) => m.hp > 0);

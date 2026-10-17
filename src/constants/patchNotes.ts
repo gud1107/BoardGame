@@ -58,6 +58,17 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.64.0",
+    releaseDate: "2026-10-18",
+    title: "🏰 랜덤 합성 디펜스 — 석상 타워 2종 + 모바일 알림 정리",
+    changes: [
+      { game: "merge-defense", type: "FEAT", desc: "🗽 횃불의 여신(가장 긴 사거리·화상, 해방: 주변 기절 빨리 풀림)과 🗿 사색의 석상(튼튼한 몬스터 노림·묵직한 한 방, 지혜: 주변 치명타 +5%p) 추가" },
+      { game: "merge-defense", type: "IMPROVE", desc: "📜 모바일에서는 보드 가운데 알림 대신 옆의 접이식 알림 기록으로 — 보스 웨이브만 아래쪽 작은 띠 + 테두리 빛 + 진동" },
+      { game: "merge-defense", type: "IMPROVE", desc: "💰 유닛을 고르면 소환 옆에 큰 판매 버튼 — 도박으로 뽑은 유닛은 환급 0인 이유도 표시" },
+      { game: "merge-defense", type: "IMPROVE", desc: "🤖 자동 모드는 한 번 누르면 바로 켜기/끄기, 설정은 옆의 ▾ · 타워 이름을 타워 색 칩으로 강조" },
+    ],
+  },
+  {
     version: "v1.63.0",
     releaseDate: "2026-10-17",
     title: "🍽️ 기억의 만찬 — 토큰 1개씩 모드",

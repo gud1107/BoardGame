@@ -54,6 +54,12 @@ export const SKILL_FX_MS: Partial<Record<SkillId, number>> = {
   radiance: 420,
   apshell: 420,
   shrapnel: 500,
+  torchlight: 650,
+  beacon: 560,
+  freedom: 950,
+  ponder: 600,
+  insight: 420,
+  epiphany: 900,
 };
 
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
@@ -992,7 +998,139 @@ function drawPierce(ctx: Ctx, f: SkillFx, k: number) {
   ctx.shadowBlur = 0;
 }
 
+/** 등불: lantern sparks hop from the target to each monster the flame spreads to. */
+function drawBeacon(ctx: Ctx, f: SkillFx, k: number) {
+  const pts = pointsOf(f);
+  const [a] = pts;
+  glow(ctx, "#fb923c", 10);
+  for (let i = 1; i < pts.length; i++) {
+    const b = pts[i];
+    const t = easeOut(clamp01(k * 1.6));
+    const mx = (a.x + b.x) / 2;
+    const my = Math.min(a.y, b.y) - 14;
+    const x = (1 - t) * (1 - t) * a.x + 2 * (1 - t) * t * mx + t * t * b.x;
+    const y = (1 - t) * (1 - t) * a.y + 2 * (1 - t) * t * my + t * t * b.y;
+    ctx.globalAlpha = 1 - k;
+    ctx.fillStyle = "#fdba74";
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, Math.PI * 2);
+    ctx.fill();
+    burstDots(ctx, b.x, b.y, clamp01((k - 0.4) / 0.6), 6, 12, 1.6, "#fed7aa", f.seed + i);
+  }
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1 - k;
+  ctx.strokeStyle = "#fb923c";
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.arc(a.x, a.y, 6 + easeOut(k) * 14, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+/** 자유의 불꽃: a flame pillar rises from the target, then a teal-and-gold ring sweeps the area. */
+function drawFreedom(ctx: Ctx, f: SkillFx, k: number) {
+  const s = f.big ? 1.35 : 1;
+  const { x, y } = f;
+  const rise = clamp01(k / 0.35);
+  ctx.globalAlpha = Math.min(1, (1 - k) * 1.8);
+  const h = 70 * s * easeOut(rise);
+  const g = ctx.createLinearGradient(0, y, 0, y - h);
+  g.addColorStop(0, "rgba(255,247,237,0.95)");
+  g.addColorStop(0.4, "rgba(251,146,60,0.8)");
+  g.addColorStop(1, "rgba(234,88,12,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(x - 9 * s, y);
+  ctx.quadraticCurveTo(x - 4 * s, y - h * 0.6, x, y - h);
+  ctx.quadraticCurveTo(x + 4 * s, y - h * 0.6, x + 9 * s, y);
+  ctx.closePath();
+  ctx.fill();
+  const r = (10 + easeOut(clamp01((k - 0.15) / 0.85)) * 46) * s;
+  glow(ctx, "#2dd4bf", 14);
+  ctx.globalAlpha = 1 - k;
+  ctx.strokeStyle = "#5eead4";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.ellipse(x, y + 2, r, r * 0.5, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = "#fdba74";
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.ellipse(x, y + 2, r * 0.82, r * 0.41, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  burstDots(ctx, x, y - 10, k, 12, 34 * s, 1.8, "#fed7aa", f.seed, 30);
+}
+
+/** 사색: a thought bubble pops above the target as the heavy hit lands. */
+function drawPonder(ctx: Ctx, f: SkillFx, k: number) {
+  const { x, y } = f;
+  const t = easeOut(clamp01(k / 0.5));
+  ctx.globalAlpha = 1 - Math.max(0, k - 0.5) / 0.5;
+  ctx.fillStyle = "rgba(255,255,255,0.92)";
+  ctx.strokeStyle = "#78350f";
+  ctx.lineWidth = 1.2;
+  for (const [dx, dy, r] of [
+    [-6, -10, 1.6],
+    [-3, -16, 2.4],
+  ] as const) {
+    ctx.beginPath();
+    ctx.arc(x + dx, y + dy - t * 4, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.ellipse(x + 4, y - 27 - t * 6, 9 * t + 1, 6 * t + 1, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#b45309";
+  for (let i = -1; i <= 1; i++) {
+    ctx.beginPath();
+    ctx.arc(x + 4 + i * 3.4 * t, y - 27 - t * 6, 1.1 * t, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/** 깨달음: a flash of insight — golden rays burst from a lightbulb glint over the target. */
+function drawEpiphany(ctx: Ctx, f: SkillFx, k: number) {
+  const s = f.big ? 1.35 : 1;
+  const { x, y } = f;
+  const cy = y - 22 * s;
+  ctx.globalAlpha = 1 - k;
+  glow(ctx, "#fde047", 18);
+  ctx.strokeStyle = "#fde68a";
+  ctx.lineWidth = 2.2;
+  const len = (10 + easeOut(k) * 26) * s;
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2 + 0.2;
+    ctx.moveTo(x + Math.cos(a) * len * 0.45, cy + Math.sin(a) * len * 0.45);
+    ctx.lineTo(x + Math.cos(a) * len, cy + Math.sin(a) * len);
+  }
+  ctx.stroke();
+  // Bulb
+  ctx.fillStyle = "#fffbeb";
+  ctx.beginPath();
+  ctx.arc(x, cy, 5 * s * (k < 0.2 ? k / 0.2 : 1), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#a16207";
+  ctx.fillRect(x - 2.4 * s, cy + 4 * s, 4.8 * s, 3 * s);
+  ctx.shadowBlur = 0;
+  // Ground crack ring under the target
+  ctx.strokeStyle = "#b45309";
+  ctx.lineWidth = 2;
+  const r = (6 + easeOut(k) * 22) * s;
+  ctx.beginPath();
+  ctx.ellipse(x, y + 3, r, r * 0.4, 0, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
 const DRAW: Partial<Record<SkillId, (ctx: Ctx, f: SkillFx, k: number) => void>> = {
+  torchlight: drawBurn,
+  beacon: drawBeacon,
+  freedom: drawFreedom,
+  ponder: drawPonder,
+  insight: drawPierce,
+  epiphany: drawEpiphany,
   concuss: drawConcuss,
   chainblast: drawChainblast,
   judgment: drawJudgment,

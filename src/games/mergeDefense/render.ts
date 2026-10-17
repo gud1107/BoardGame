@@ -571,6 +571,12 @@ export function drawTower(ctx: Ctx, x: number, y: number, u: Unit, now: number, 
     case "wind":
       drawWind(ctx, now, firing, !!o.mini);
       break;
+    case "liberty":
+      drawLiberty(ctx, now, firing, !!o.mini, u.grade >= 3);
+      break;
+    case "thinker":
+      drawThinker(ctx, now, firing, !!o.mini, u.grade >= 4);
+      break;
   }
 
   // Mythic sparkles
@@ -956,6 +962,161 @@ function drawWind(ctx: Ctx, now: number, firing: boolean, mini: boolean) {
       ctx.beginPath();
       ctx.arc(0, -14, 10 + t * 10, -0.6 + i * Math.PI, 0.6 + i * Math.PI);
       ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+/** Dashed aura ring for the statues' support skills (해방 / 지혜). */
+function auraRing(ctx: Ctx, now: number, r: number, color: string) {
+  ctx.strokeStyle = rgba(color, 0.16 + 0.08 * Math.sin(now / 420));
+  ctx.lineWidth = 1.4;
+  ctx.setLineDash([3, 6]);
+  ctx.beginPath();
+  ctx.arc(0, -6, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawLiberty(ctx: Ctx, now: number, firing: boolean, mini: boolean, aura: boolean) {
+  // Verdigris copper goddess: draped robe, seven-ray crown, torch raised high, tablet on the left arm.
+  if (aura && !mini) auraRing(ctx, now, 80, "#2dd4bf");
+  const copper = ctx.createLinearGradient(-8, 0, 8, 0);
+  copper.addColorStop(0, "#2f7f6f");
+  copper.addColorStop(0.5, "#7fd1b9");
+  copper.addColorStop(1, "#1f5f54");
+  // Robe
+  ctx.fillStyle = copper;
+  ctx.beginPath();
+  ctx.moveTo(-8, 6);
+  ctx.quadraticCurveTo(-7, -6, -4, -13);
+  ctx.lineTo(4, -13);
+  ctx.quadraticCurveTo(7, -6, 8, 6);
+  ctx.closePath();
+  ctx.fill();
+  // Folds
+  ctx.strokeStyle = "rgba(15,60,52,0.55)";
+  ctx.lineWidth = 0.8;
+  for (const x of [-4, 0, 4]) {
+    ctx.beginPath();
+    ctx.moveTo(x * 0.6, -11);
+    ctx.quadraticCurveTo(x, -3, x * 1.4, 5);
+    ctx.stroke();
+  }
+  // Tablet (left arm)
+  ctx.fillStyle = "#5fb8a2";
+  roundRect(ctx, -9.5, -10, 4, 7, 1);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(15,60,52,0.6)";
+  ctx.stroke();
+  // Raised right arm + torch
+  ctx.strokeStyle = "#4fae98";
+  ctx.lineWidth = 2.6;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(3.5, -12);
+  ctx.lineTo(5.5, -24);
+  ctx.stroke();
+  ctx.fillStyle = "#c9a227";
+  roundRect(ctx, 4.3, -29, 2.6, 5, 0.8);
+  ctx.fill();
+  // Head + crown rays
+  ctx.fillStyle = "#6cc4ad";
+  ctx.beginPath();
+  ctx.arc(0, -16.5, 3.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#8be0c8";
+  ctx.lineWidth = 1.1;
+  for (let i = 0; i < 7; i++) {
+    const a = -Math.PI / 2 + (i - 3) * 0.32;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * 3.4, -16.5 + Math.sin(a) * 3.4);
+    ctx.lineTo(Math.cos(a) * 7, -16.5 + Math.sin(a) * 7);
+    ctx.stroke();
+  }
+  // Flame (flickers; flares when firing)
+  const flick = 1 + 0.15 * Math.sin(now / 70) + (firing ? 0.5 : 0);
+  if (!mini) {
+    ctx.shadowColor = "#fb923c";
+    ctx.shadowBlur = firing ? 16 : 8;
+  }
+  const fl = ctx.createRadialGradient(5.6, -31, 0.5, 5.6, -31, 5 * flick);
+  fl.addColorStop(0, "#fff7ed");
+  fl.addColorStop(0.4, "#fdba74");
+  fl.addColorStop(1, "rgba(234,88,12,0)");
+  ctx.fillStyle = fl;
+  ctx.beginPath();
+  ctx.moveTo(5.6, -31 - 6 * flick);
+  ctx.quadraticCurveTo(9 * flick * 0.7 + 3, -30, 5.6, -28);
+  ctx.quadraticCurveTo(2.2 - flick, -30, 5.6, -31 - 6 * flick);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(5.6, -30.5, 3 * flick, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+}
+
+function drawThinker(ctx: Ctx, now: number, firing: boolean, mini: boolean, aura: boolean) {
+  // Bronze figure hunched on a rock, chin on hand, lost in thought.
+  if (aura && !mini) auraRing(ctx, now, 80, "#fbbf24");
+  // Rock seat
+  ctx.fillStyle = "#57534e";
+  ctx.beginPath();
+  ctx.moveTo(-10, 6);
+  ctx.lineTo(-9, -2);
+  ctx.lineTo(-2, -4);
+  ctx.lineTo(4, -1);
+  ctx.lineTo(5, 6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.12)";
+  ctx.fillRect(-8, -2, 6, 1.4);
+  const bronze = ctx.createLinearGradient(-6, -20, 10, 6);
+  bronze.addColorStop(0, "#e0a96d");
+  bronze.addColorStop(0.5, "#a86b32");
+  bronze.addColorStop(1, "#5c3a1a");
+  ctx.fillStyle = bronze;
+  ctx.strokeStyle = bronze;
+  ctx.lineCap = "round";
+  // Torso leaning forward
+  ctx.beginPath();
+  ctx.moveTo(-6, -3);
+  ctx.quadraticCurveTo(-7, -12, -1, -15);
+  ctx.lineTo(3, -13);
+  ctx.quadraticCurveTo(1, -7, 1, -3);
+  ctx.closePath();
+  ctx.fill();
+  // Thigh + shin
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(-1, -3);
+  ctx.lineTo(8, -3.5);
+  ctx.lineTo(8.5, 5.5);
+  ctx.stroke();
+  // Arm: shoulder → elbow on knee → hand under chin
+  ctx.lineWidth = 2.6;
+  ctx.beginPath();
+  ctx.moveTo(1.5, -12.5);
+  ctx.lineTo(7, -5);
+  ctx.lineTo(5.5, -14.5);
+  ctx.stroke();
+  // Head, tipped down onto the hand
+  ctx.beginPath();
+  ctx.arc(4.2, -17.5, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,236,200,0.35)";
+  ctx.beginPath();
+  ctx.arc(3, -18.8, 1.4, 0, Math.PI * 2);
+  ctx.fill();
+  // Thought bubbles drift up; they glow when the idea lands (firing).
+  if (!mini) {
+    for (let i = 0; i < 3; i++) {
+      const t = (now / 1400 + i / 3) % 1;
+      ctx.globalAlpha = (firing ? 0.95 : 0.55) * (1 - t);
+      ctx.fillStyle = firing ? "#fde68a" : "#f5f5f4";
+      ctx.beginPath();
+      ctx.arc(8 + t * 5, -22 - t * 12, 1 + i * 0.8 + t, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.globalAlpha = 1;
   }
@@ -2536,6 +2697,65 @@ function drawShot(ctx: Ctx, f: Extract<Fx, { type: "shot" }>, k: number) {
         ctx.beginPath();
         ctx.moveTo(tx, ty);
         ctx.lineTo(f.pts[i], f.pts[i + 1]);
+        ctx.stroke();
+      }
+      break;
+    }
+    case "liberty": {
+      // A torch flame jet from the raised torch, with embers along it.
+      const sx = fx + 5.6;
+      const sy = fy - 31;
+      ctx.globalAlpha = 1 - k;
+      ctx.lineCap = "round";
+      ctx.strokeStyle = "rgba(251,146,60,0.55)";
+      ctx.lineWidth = width * 2.4 * (1 - k * 0.4);
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(tx, ty);
+      ctx.stroke();
+      ctx.strokeStyle = "#fff7ed";
+      ctx.lineWidth = width * 0.9;
+      ctx.stroke();
+      for (let i = 1; i <= 4; i++) {
+        const t = (i / 5 + k * 0.4) % 1;
+        ctx.fillStyle = i % 2 ? "#fdba74" : "#5eead4";
+        ctx.beginPath();
+        ctx.arc(sx + (tx - sx) * t + Math.sin(i * 7 + k * 9) * 2, sy + (ty - sy) * t - 2, 1.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      for (let i = 2; i < f.pts.length; i += 2) {
+        ctx.strokeStyle = "rgba(253,186,116,0.8)";
+        ctx.lineWidth = width * 0.8;
+        ctx.beginPath();
+        ctx.moveTo(tx, ty);
+        ctx.lineTo(f.pts[i], f.pts[i + 1]);
+        ctx.stroke();
+      }
+      break;
+    }
+    case "thinker": {
+      // A heavy bronze "idea" orb lobbed from the head, then a dull thud ring.
+      const t = Math.min(1, k * 1.6);
+      const sx = fx + 4;
+      const sy = fy - 18;
+      const x = sx + (tx - sx) * t;
+      const y = sy + (ty - sy) * t - Math.sin(t * Math.PI) * 18;
+      if (t < 1) {
+        const g = ctx.createRadialGradient(x - 1, y - 1, 0.5, x, y, 4 + f.grade * 0.6);
+        g.addColorStop(0, "#fde68a");
+        g.addColorStop(0.6, "#b45309");
+        g.addColorStop(1, "#451a03");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(x, y, 3.5 + f.grade * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        const r = (k - 0.62) / 0.38;
+        ctx.globalAlpha = Math.max(0, 1 - r);
+        ctx.strokeStyle = "#fbbf24";
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.arc(tx, ty, 6 + r * (10 + f.grade * 2), 0, Math.PI * 2);
         ctx.stroke();
       }
       break;

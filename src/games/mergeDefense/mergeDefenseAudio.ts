@@ -62,7 +62,7 @@ export function playSendUnit() {
 
 /** Peak gain at SFX slider = 1 and hit volume "보통" — deliberately far below the shared cues. */
 const HIT_LEVEL = 0.07;
-const HIT_KIND_GAP_MS: Record<UnitKind, number> = { archer: 110, mage: 160, frost: 150, thunder: 150, poison: 190, cannon: 220, holy: 150, wind: 120 };
+const HIT_KIND_GAP_MS: Record<UnitKind, number> = { archer: 110, mage: 160, frost: 150, thunder: 150, poison: 190, cannon: 220, holy: 150, wind: 120, liberty: 170, thinker: 260 };
 const HIT_GLOBAL_GAP_MS = 45;
 /** Opponent boards: much quieter, muffled, and sparser so they never mask your own board. */
 const FAR_LEVEL = 0.3;
@@ -270,6 +270,24 @@ export function playSkillProc(skill: SkillId) {
       // Choir-like chord swell.
       for (const f of [523, 659, 784, 1047]) tone(ctx, env(ctx, bus, 0.28, 0.02, 0.45), "triangle", f, f, 0.46);
       break;
+    case "beacon":
+      noise(ctx, buf, env(ctx, bus, 0.5, 0.01, 0.18), "bandpass", 1300, 1.2, 0.2);
+      tone(ctx, env(ctx, bus, 0.2, 0.01, 0.16), "sine", 660, 990, 0.18);
+      break;
+    case "freedom":
+      // Torch flare: a rising roar under a bright major triad.
+      noise(ctx, buf, env(ctx, bus, 0.8, 0.04, 0.4), "lowpass", 1600, 0.7, 0.45);
+      for (const f of [392, 494, 587]) tone(ctx, env(ctx, bus, 0.24, 0.03, 0.45), "triangle", f, f * 1.5, 0.46);
+      break;
+    case "ponder":
+      tone(ctx, env(ctx, bus, 0.35, 0.01, 0.25), "sine", 440, 660, 0.26);
+      break;
+    case "epiphany":
+      // "Aha!": bronze gong + a bright ping.
+      tone(ctx, env(ctx, bus, 0.9, 0.002, 0.5), "sine", 98, 92, 0.52);
+      tone(ctx, env(ctx, bus, 0.3, 0.002, 0.5), "triangle", 294, 290, 0.5);
+      tone(ctx, env(ctx, bus, 0.35, 0.01, 0.3), "sine", 1568, 2093, 0.3);
+      break;
     case "tornado":
       noise(ctx, buf, env(ctx, bus, 0.7, 0.05, 0.4), "bandpass", 700, 1.5, 0.45);
       tone(ctx, env(ctx, bus, 0.3, 0.05, 0.35), "sine", 300, 600, 0.38);
@@ -385,6 +403,19 @@ export function playTowerHit(kind: UnitKind, grade: number, far = false, crit = 
     case "wind": {
       // Quick airy "fwish".
       noise(ctx, buf, env(ctx, bus, 0.45, 0.004, 0.05), "bandpass", 1600 * p, 1.2, 0.07);
+      break;
+    }
+    case "liberty": {
+      // Torch "fwoomp": a soft flame rush with a low warm hum.
+      noise(ctx, buf, env(ctx, bus, 0.5, 0.01, 0.12), "lowpass", 1800 * p, 0.6, 0.14);
+      tone(ctx, env(ctx, bus, 0.22, 0.01, 0.1), "triangle", 220 * p, 330 * p, 0.12);
+      break;
+    }
+    case "thinker": {
+      // Deep bronze "dong" + stone thud.
+      tone(ctx, env(ctx, bus, 0.7, 0.002, 0.22), "sine", 110 * p, 82 * p, 0.24);
+      tone(ctx, env(ctx, bus, 0.2, 0.002, 0.3), "triangle", 330 * p, 320 * p, 0.3);
+      noise(ctx, buf, env(ctx, bus, 0.4, 0.002, 0.06), "lowpass", 500 * p, 0.8, 0.08);
       break;
     }
   }

@@ -12,6 +12,8 @@ import {
   STUN_GUARD,
   unitSkills,
   sanctuaryHaste,
+  liberateSpeed,
+  wisdomCrit,
   SHAMAN_HEAL,
   UNIT_KINDS,
   unitInterval,
@@ -58,7 +60,7 @@ import {
   type Mob,
 } from "./engine";
 
-const UNIT_KIND_LIST = ["archer", "mage", "frost", "thunder", "poison", "cannon", "holy", "wind"] as const;
+const UNIT_KIND_LIST = ["archer", "mage", "frost", "thunder", "poison", "cannon", "holy", "wind", "liberty", "thinker"] as const;
 
 /** One tower of `kind`/`grade` in pad 0 with hand-placed monsters parked next to it (prep phase over, no spawns yet). */
 function skillArena(kind: (typeof UNIT_KIND_LIST)[number], grade: number, mobs: { kind?: Mob["kind"]; hp: number; gap?: number }[]): MergeDefenseState {
@@ -714,6 +716,30 @@ describe("merge defense engine", () => {
     expect(haste[0]).toBe(0);
     expect(haste[1]).toBeGreaterThan(0);
     expect(haste[far]).toBe(0);
+  });
+
+  it("statue towers: 사색의 석상 aims at the toughest monster; 해방 frees stuns faster nearby; 지혜 adds crit to others only", () => {
+    let s = skillArena("thinker", 1, [{ hp: 100 }, { hp: 5000, gap: 6 }, { hp: 300, gap: 12 }]);
+    while (s.boards[0].shots.length === 0) s = stepGame(s);
+    expect(s.boards[0].shots[0].target).toBe(901);
+    // 횃불의 여신 burns what it hits.
+    let l = skillArena("liberty", 1, [{ hp: 1e9 }]);
+    while (l.boards[0].shots.length === 0) l = stepGame(l);
+    expect(l.boards[0].mobs[0].burnT ?? 0).toBeGreaterThan(0);
+    const b = startGame(2, 5);
+    b.boards[0].units[0] = { kind: "liberty", grade: 3, cd: 0 };
+    b.boards[0].units[1] = { kind: "archer", grade: 1, cd: 0 };
+    const far = b.boards[0].units.findIndex((_, i) => i > 1 && Math.hypot(slotCenter(i).x - slotCenter(0).x, slotCenter(i).y - slotCenter(0).y) > 120);
+    b.boards[0].units[far] = { kind: "archer", grade: 1, cd: 0 };
+    const freed = liberateSpeed(b.boards[0]);
+    expect(freed[0]).toBe(2);
+    expect(freed[1]).toBe(2);
+    expect(freed[far]).toBe(1);
+    b.boards[0].units[0] = { kind: "thinker", grade: 5, cd: 0 };
+    const wise = wisdomCrit(b.boards[0]);
+    expect(wise[0]).toBe(0);
+    expect(wise[1]).toBeCloseTo(SKILL.wisdom.mythicChance);
+    expect(wise[far]).toBe(0);
   });
 
   it("gamble odds add up to 100%", () => {
