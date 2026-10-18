@@ -106,6 +106,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "만든 습관", key: "habitsFormed", unit: "개" },
     { label: "붕괴 없는 일주일", key: "flawlessWeeks", flag: true },
   ],
+  "wobble-tower": [
+    { label: "빼기 성공", key: "pulls", unit: "번" },
+    { label: "🏅 마지막 건축가", key: "lastBuilder", unit: "번" },
+    { label: "완벽한 빼기", key: "perfectPulls", unit: "번" },
+    { label: "무너뜨리지 않음", key: "cleanGames", flag: true },
+  ],
   "word-tower": [
     { label: "라운드 1등", key: "roundWins", unit: "번" },
     { label: "최고 층수", key: "maxHeight", unit: "층" },
@@ -248,6 +254,11 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "glp-score", label: "한 판 최고 점수", num: "maxScore", format: "count", unit: "점" },
     { id: "glp-goals", label: "인생 목표 달성", num: "goalsMet", format: "count", unit: "번" },
     { id: "glp-habits", label: "만든 습관", num: "habitsFormed", format: "count", unit: "개" },
+  ],
+  "wobble-tower": [
+    { id: "wbt-pulls", label: "빼기 성공", num: "pulls", format: "count", unit: "번" },
+    { id: "wbt-builder", label: "마지막 건축가", num: "lastBuilder", format: "count", unit: "번" },
+    { id: "wbt-perfect", label: "완벽한 빼기", num: "perfectPulls", format: "count", unit: "번" },
   ],
   "word-tower": [
     { id: "wt-height", label: "한 라운드 최고 층수", num: "maxHeight", format: "count", unit: "층" },

@@ -123,6 +123,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "wobble-tower",
+    name: "와르르 타워",
+    nameEn: "Wobble Tower",
+    description:
+      "18층 3D 나무 탑에서 블록을 하나씩 빼서 꼭대기에 올리는 2~6인 균형 게임! 손잡이를 천천히 끌어야 블록이 빠지고, 서두르거나 걸린 채로 당기면 탑이 흔들려요. 탑을 무너뜨린 사람이 지고, 마지막으로 올린 사람이 🏅. 무너질 땐 블록이 물리 엔진으로 우르르 쏟아져요. 단판/3판, AI 봇 지원.",
+    players: { min: 2, max: 6 },
+    playTime: { minMinutes: 5, maxMinutes: 20 },
+    category: "party",
+    thumbnail: { emoji: "🪵", gradient: ["#d97706", "#1c0f08"] },
+    tags: ["젠가", "블록 쌓기", "블록쌓기", "균형", "손맛", "3D", "AI봇"],
+    genres: ["party", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "word-tower",
     name: "단어 마천루",
     nameEn: "Word Skyscraper",

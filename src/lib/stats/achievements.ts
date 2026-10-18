@@ -178,6 +178,13 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["habits-4", "🌱", "루틴 마스터", "수면이 아닌 습관 4개로 마무리", 4, k("maxHabits")],
     ["flawless-3", "🧘", "번아웃 제로", "붕괴 없이 일주일 3번", 3, k("flawlessWeeks")],
   ],
+  "wobble-tower": [
+    ["builder-1", "🏅", "마지막 건축가", "무너지기 직전에 마지막으로 올리기 1번", 1, k("lastBuilder")],
+    ["pulls-50", "🪵", "목수의 손", "빼기 성공 누적 50번", 50, k("pulls")],
+    ["perfect-10", "🧘", "숨 참고 쑥", "손놀림 95% 이상 빼기 10번", 10, k("perfectPulls")],
+    ["risky-15", "😰", "외줄 타기", "빈칸 있는 층에서 빼고 버티기 15번", 15, k("riskyPulls")],
+    ["tall-30", "🏗️", "하늘 찌르기", "탑을 30층 이상 쌓기", 30, k("maxLevels")],
+  ],
   "word-tower": [
     ["win-1", "🏙️", "첫 마천루", "라운드 1등 1번", 1, k("roundWins")],
     ["height-40", "🏗️", "초고층 건축가", "한 라운드 40층 이상", 40, k("maxHeight")],

@@ -52,10 +52,10 @@ describe("proceduralScore DSL", () => {
 });
 
 describe("game sound suites", () => {
-  it("finds all 30 suites", () => {
+  it("finds all 31 suites", () => {
     // 27 from the 2026-10-11 sound-suite pass + telepathy's BGM + tavern brawl.
-    // + word tower (단어 마천루).
-    expect(suites.length).toBe(30);
+    // + word tower (단어 마천루) + wobble tower (와르르 타워).
+    expect(suites.length).toBe(31);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

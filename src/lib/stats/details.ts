@@ -81,6 +81,13 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "붕괴 없는 일주일", value: (d) => n(d.flawlessWeeks) },
     { label: "약속 성사 / 기회 카드", value: (d) => `${n(d.matches)} / ${n(d.opportunities)}` },
   ],
+  "wobble-tower": [
+    { label: "빼기 성공 / 무너뜨림", value: (d) => `${n(d.pulls)} / ${n(d.collapses)}` },
+    { label: "🏅 마지막 건축가", value: (d) => n(d.lastBuilder) },
+    { label: "완벽한 빼기 (95%+)", value: (d) => n(d.perfectPulls) },
+    { label: "빈칸 층에서 버틴 빼기", value: (d) => n(d.riskyPulls) },
+    { label: "최고 층수 / 최고 손놀림", value: (d) => `${n(d.maxLevels)}층 / ${n(d.bestQuality)}%` },
+  ],
   "word-tower": [
     { label: "라운드 1등", value: (d) => n(d.roundWins) },
     { label: "최고 연승", value: (d) => n(d.bestStreak) },
