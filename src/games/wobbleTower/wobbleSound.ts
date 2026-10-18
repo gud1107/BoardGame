@@ -42,6 +42,8 @@ const SFX = {
     { wave: "noise", at: 0.05, dur: 1.4, peak: 0.12, attack: 0.05, filter: { type: "lowpass", freq: 2200, to: 300 } },
     ...[0, 0.12, 0.2, 0.33, 0.41, 0.55, 0.62, 0.8, 0.95, 1.15].map((at, i) => ({ inst: "woodblock", note: ["C5", "G4", "E5", "D5", "A4", "F5", "C5", "G5", "E4", "D5"][i], at, gain: 0.6 - i * 0.04 })),
   ],
+  react: [fx.pop(520, 980, 0.1)],
+  blow: [fx.whoosh(300, 1100, 0.6, 0.12), { wave: "noise", dur: 0.7, peak: 0.06, attack: 0.15, filter: { type: "lowpass", freq: 900, to: 400 } }],
   turn: [{ inst: "kalimba", note: "D5", dur: 0.4 }, { inst: "kalimba", note: "A5", at: 0.1, dur: 0.6 }],
   lose: [...fx.arp("vibes", ["A4", "F4", "D4"], 0.14, 0.7, 0.8), { inst: "upright", note: "D2", at: 0.4, dur: 1 }],
   builder: [...fx.arp("kalimba", ["D5", "F5", "A5", "D6"], 0.08, 0.6), ...fx.chord("vibes", ["D5", "F5", "A5"], 1.2, 0.7, 0.32)],

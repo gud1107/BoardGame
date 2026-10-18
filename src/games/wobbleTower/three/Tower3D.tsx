@@ -76,6 +76,8 @@ export interface TowerSceneProps {
   onImpact?: (strength: number) => void;
   onCreak?: (strength: number) => void;
   onFps?: (fps: number) => void;
+  /** Bumped by every 💨 from a spectator — a puff of wind (display only). */
+  gust?: MutableRefObject<number>;
 }
 
 type Pose = { p: [number, number, number]; q: [number, number, number, number] };
@@ -152,6 +154,7 @@ function Tower(props: TowerSceneProps) {
   const hitbox = useRef<THREE.Mesh>(null);
   const finger = useRef<THREE.Group>(null);
   const smoother = useRef<LiveSmoother | null>(null);
+  const gustSeen = useRef<number | null>(null);
 
   useEffect(() => {
     // fetch the physics chunk early so a collapse never waits on the network
@@ -215,6 +218,19 @@ function Tower(props: TowerSceneProps) {
         };
         if (lastEvent.kind === "pull" && lastEvent.timeout) sw.addRattle(0.6);
       }
+    }
+
+    // ---- 💨 a spectator blew on the tower
+    const g = props.gust?.current ?? 0;
+    if (gustSeen.current === null) gustSeen.current = g;
+    else if (g !== gustSeen.current) {
+      const n = g - gustSeen.current;
+      gustSeen.current = g;
+      for (let i = 0; i < Math.min(3, n); i++) {
+        const ang = Math.random() * Math.PI * 2;
+        sw.kick(Math.cos(ang) * 0.016, Math.sin(ang) * 0.016);
+      }
+      sw.addRattle(0.25);
     }
 
     // ---- live drag (mine or someone else's)

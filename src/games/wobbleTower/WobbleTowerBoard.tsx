@@ -26,6 +26,7 @@ import RulebookModal from "./RulebookModal";
 import { webglAvailable } from "./three/webgl";
 import type { LivePull } from "./three/Tower3D";
 import { getWobbleSound, wobbleCues } from "./wobbleSound";
+import { predictionPoints, REACTION_EMOJI, REACTION_TTL_MS, REACTIONS, type Prediction, type PredictionBoard, type Reaction, type ReactionKind } from "./reactions";
 
 const Loading3D = () => <div className="flex h-full items-center justify-center bg-[#160f0a] text-xs text-amber-200/60">🪵 탑 세우는 중…</div>;
 const Tower3D = dynamic(() => import("./three/Tower3D"), { ssr: false, loading: Loading3D });
@@ -50,6 +51,16 @@ interface Props {
   onLive: (l: LivePull) => void;
   onAction: (a: EngineAction) => void;
   onGameEnd: () => void;
+  /** Spectator layer (reactions.ts). */
+  reactions: Reaction[];
+  predictions: PredictionBoard;
+  /** The current pull has visibly started — no more calls. */
+  predictLocked: boolean;
+  seer: Record<number, number>;
+  /** Bumped on every 💨 — the 3D tower takes a puff of wind. */
+  gust: MutableRefObject<number>;
+  onReact: (kind: ReactionKind) => void;
+  onPredict: (pick: Prediction) => void;
 }
 
 function loadQuality(): "high" | "low" {
@@ -303,9 +314,132 @@ function Tower2D({ state, legal, selected, onSelect }: { state: WobbleTowerState
   );
 }
 
+/* ── 관전: 예측 · 리액션 ──────────────────────────────────────── */
+
+function SpectatorPanel({
+  state,
+  viewerSeat,
+  names,
+  activeName,
+  activeIsBot,
+  predictions,
+  predictLocked,
+  onPredict,
+  onReact,
+}: {
+  state: WobbleTowerState;
+  viewerSeat: Seat;
+  names: Record<Seat, string>;
+  activeName: string;
+  activeIsBot: boolean;
+  predictions: PredictionBoard;
+  predictLocked: boolean;
+  onPredict: (pick: Prediction) => void;
+  onReact: (kind: ReactionKind) => void;
+}) {
+  const board = predictions.turn === state.turn ? predictions.picks : {};
+  const mine = board[viewerSeat];
+  const count = (pick: Prediction) => Object.values(board).filter((v) => v === pick).length;
+  const who = (pick: Prediction) =>
+    Object.entries(board)
+      .filter(([, v]) => v === pick)
+      .map(([seat]) => (Number(seat) === viewerSeat ? "나" : (names[Number(seat)] ?? "")))
+      .join(", ");
+  const canCall = state.phase === "pull" && !predictLocked;
+  const btn = (pick: Prediction, label: string, tone: string) => (
+    <button
+      type="button"
+      disabled={!canCall && mine !== pick}
+      onClick={() => onPredict(pick)}
+      title={who(pick)}
+      className={`flex min-w-0 flex-1 flex-col items-center rounded-xl border px-2 py-1.5 text-sm font-bold transition disabled:opacity-40 ${mine === pick ? tone : "border-white/15 text-white/75 hover:border-white/30 light:border-slate-300 light:text-slate-700"}`}
+    >
+      <span>{label}</span>
+      <span className="text-[11px] font-normal opacity-80">{count(pick)}명{mine === pick ? " · 내 예측" : ""}</span>
+    </button>
+  );
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-center text-xs text-white/60 light:text-slate-500">
+        {activeIsBot ? "🤖 " : ""}
+        {activeName}님이 {state.phase === "pull" ? "블록을 빼고" : state.phase === "place" ? "블록을 올리고" : "기다리고"} 있어요
+      </p>
+      {state.phase === "pull" && (
+        <div className="flex flex-col gap-1">
+          <span className="text-[11px] font-bold text-violet-200 light:text-violet-700">🔮 이번 빼기는? {predictLocked ? "(당기기 시작 — 마감)" : "맞히면 +1, 무너짐을 맞히면 +2"}</span>
+          <div className="flex gap-2">
+            {btn("stand", "🙂 버틴다", "border-emerald-400 bg-emerald-500/20 text-emerald-100 light:text-emerald-800")}
+            {btn("fall", "💥 무너진다", "border-rose-400 bg-rose-500/20 text-rose-100 light:text-rose-800")}
+          </div>
+        </div>
+      )}
+      <ReactionBar onReact={onReact} allowBlow={state.phase === "pull" && state.activeSeat !== viewerSeat} />
+    </div>
+  );
+}
+
+function ReactionBar({ onReact, allowBlow }: { onReact: (kind: ReactionKind) => void; allowBlow: boolean }) {
+  return (
+    <div className="flex flex-wrap justify-center gap-1.5">
+      {REACTIONS.filter((r) => r.kind !== "blow" || allowBlow).map((r) => (
+        <button
+          key={r.kind}
+          type="button"
+          onClick={() => onReact(r.kind)}
+          aria-label={r.label}
+          title={r.kind === "blow" ? "입김 — 차례마다 한 번, 모두의 화면에서 탑이 살짝 흔들려요(판정엔 영향 없음)" : r.label}
+          className="flex h-10 min-w-10 items-center justify-center gap-1 rounded-full border border-white/15 bg-white/[0.04] px-2.5 text-lg transition hover:scale-110 hover:border-white/30 active:scale-95 light:border-slate-300 light:bg-white"
+        >
+          {r.emoji}
+          {r.kind === "blow" && <span className="text-[11px] text-white/60 light:text-slate-500">입김</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Reactions float up over the stage from each sender's column. */
+function ReactionLayer({ reactions, names, playerCount, viewerSeat, nowMs }: { reactions: Reaction[]; names: Record<Seat, string>; playerCount: number; viewerSeat: Seat; nowMs: number }) {
+  const shown = reactions.filter((r) => nowMs - r.at < REACTION_TTL_MS);
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      <style>{`@keyframes wbt-float{0%{transform:translate(-50%,0) scale(.6);opacity:0}12%{transform:translate(-50%,-14px) scale(1.15);opacity:1}75%{opacity:1}100%{transform:translate(-50%,-150px) scale(1);opacity:0}}`}</style>
+      {shown.map((r) => {
+        const x = 10 + (playerCount > 1 ? r.seat / (playerCount - 1) : 0.5) * 80;
+        return (
+          <div key={r.id} className="absolute bottom-6 flex flex-col items-center" style={{ left: `${x}%`, animation: `wbt-float ${REACTION_TTL_MS}ms ease-out forwards` }}>
+            <span className="text-4xl drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]">{REACTION_EMOJI[r.kind]}</span>
+            <span className="max-w-24 truncate rounded-full bg-black/60 px-2 text-[10px] font-bold text-white">{r.seat === viewerSeat ? "나" : (names[r.seat] ?? "")}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ── 보드 ─────────────────────────────────────────────────── */
 
-export default function WobbleTowerBoard({ state, viewerSeat, names, connectedSeats, botSeats, canDrive, deadlineMs, nowMs, live, onLive, onAction, onGameEnd }: Props) {
+export default function WobbleTowerBoard({
+  state,
+  viewerSeat,
+  names,
+  connectedSeats,
+  botSeats,
+  canDrive,
+  deadlineMs,
+  nowMs,
+  live,
+  onLive,
+  onAction,
+  onGameEnd,
+  reactions,
+  predictions,
+  predictLocked,
+  seer,
+  gust,
+  onReact,
+  onPredict,
+}: Props) {
   const [canWebgl] = useState(webglAvailable);
   const [quality, setQuality] = useState<"high" | "low">(loadQuality);
   const [rules, setRules] = useState(false);
@@ -403,6 +537,11 @@ export default function WobbleTowerBoard({ state, viewerSeat, names, connectedSe
   const activeName = names[state.activeSeat] ?? `${state.activeSeat + 1}번`;
   const activeIsBot = botSeats.has(state.activeSeat);
   const rec = state.history[state.history.length - 1];
+  // 🔮 my call on the pull that just landed
+  const lastPull = state.lastEvent?.kind === "pull" ? state.lastEvent : null;
+  const myCall = lastPull && predictions.turn === lastPull.turn ? predictions.picks[viewerSeat] : undefined;
+  const myCallPts = myCall && lastPull ? predictionPoints(myCall, lastPull.collapsed) : 0;
+  const topSeer = Object.entries(seer).sort((a, b) => b[1] - a[1])[0];
   const fragileLabel = fragility > 1 ? "💀 아슬아슬" : fragility > 0.6 ? "😰 불안해요" : fragility > 0.3 ? "😬 조금 흔들려요" : "😌 튼튼해요";
 
   const selectedBlock = selected ? state.levels[selected.level]?.slots[selected.slot] : null;
@@ -466,9 +605,16 @@ export default function WobbleTowerBoard({ state, viewerSeat, names, connectedSe
             onImpact={onImpact}
             onCreak={onCreak}
             onFps={onFps}
+            gust={gust}
           />
         ) : (
           <Tower2D state={state} legal={legal} selected={selected} onSelect={select} />
+        )}
+        <ReactionLayer reactions={reactions} names={names} playerCount={state.playerCount} viewerSeat={viewerSeat} nowMs={nowMs} />
+        {myCall && lastPull && state.turn === lastPull.turn + 1 && (
+          <span className={`pointer-events-none absolute top-11 left-2 rounded-full px-3 py-1 text-xs font-black ${myCallPts > 0 ? "bg-violet-500/90 text-white" : "bg-black/60 text-white/70"}`}>
+            🔮 {myCallPts > 0 ? `예측 적중 +${myCallPts}` : "예측 빗나감"}
+          </span>
         )}
         {/* 차례 띠 */}
         {(state.phase === "pull" || state.phase === "place") && (
@@ -534,20 +680,32 @@ export default function WobbleTowerBoard({ state, viewerSeat, names, connectedSe
         </div>
       )}
       {!myTurn && (state.phase === "pull" || state.phase === "place") && (
-        <div className={`${PANEL} text-center text-sm text-white/60 light:text-slate-500`}>
-          {activeIsBot ? "🤖 " : ""}
-          {activeName}님이 {state.phase === "pull" ? "블록을 빼고" : "블록을 올리고"} 있어요… 숨죽이고 지켜보세요.
+        <div className={PANEL}>
+          <SpectatorPanel
+            state={state}
+            viewerSeat={viewerSeat}
+            names={names}
+            activeName={activeName}
+            activeIsBot={activeIsBot}
+            predictions={predictions}
+            predictLocked={predictLocked}
+            onPredict={onPredict}
+            onReact={onReact}
+          />
         </div>
       )}
       {state.phase === "collapsed" && (
-        <div className={`${PANEL} flex items-center justify-between gap-2 text-sm text-white/70 light:text-slate-600`}>
-          <span>{state.round + 1 >= state.options.rounds ? "곧 최종 결과가 나와요" : "곧 새 탑으로 다음 판을 시작해요"}</span>
-          <button type="button" onClick={() => onAction({ type: "next" })} className={PRIMARY}>
-            {state.round + 1 >= state.options.rounds ? "결과 보기" : "다음 판"}
-          </button>
+        <div className={`${PANEL} flex flex-col gap-2`}>
+          <div className="flex items-center justify-between gap-2 text-sm text-white/70 light:text-slate-600">
+            <span>{state.round + 1 >= state.options.rounds ? "곧 최종 결과가 나와요" : "곧 새 탑으로 다음 판을 시작해요"}</span>
+            <button type="button" onClick={() => onAction({ type: "next" })} className={PRIMARY}>
+              {state.round + 1 >= state.options.rounds ? "결과 보기" : "다음 판"}
+            </button>
+          </div>
+          <ReactionBar onReact={onReact} allowBlow={false} />
         </div>
       )}
-      {state.phase === "ended" && <FinalPanel state={state} viewerSeat={viewerSeat} names={names} onGameEnd={onGameEnd} />}
+      {state.phase === "ended" && <FinalPanel state={state} viewerSeat={viewerSeat} names={names} seer={seer} onGameEnd={onGameEnd} />}
 
       {/* 점수판 */}
       {state.phase !== "ended" && (
@@ -562,6 +720,7 @@ export default function WobbleTowerBoard({ state, viewerSeat, names, connectedSe
               </span>
               <span className="font-bold text-amber-200 tabular-nums light:text-amber-700">{state.scores[s]}점</span>
               {state.collapses[s] > 0 && <span className="text-rose-300 light:text-rose-600">💥{state.collapses[s]}</span>}
+              {(seer[s] ?? 0) > 0 && <span className="text-violet-300 light:text-violet-700">🔮{seer[s]}</span>}
             </div>
           ))}
         </div>
@@ -569,13 +728,18 @@ export default function WobbleTowerBoard({ state, viewerSeat, names, connectedSe
 
       {state.levels.length > START_LEVELS + 6 && state.phase === "pull" && <p className="text-center text-[11px] text-white/40 light:text-slate-400">탑이 {state.levels.length}층까지 올라갔어요 — 높을수록 조금씩 더 위험해요.</p>}
 
+      {topSeer && topSeer[1] > 0 && state.phase !== "ended" && (
+        <p className="text-center text-[11px] text-violet-200/70 light:text-violet-700">🔮 지금 최고의 예언가: {Number(topSeer[0]) === viewerSeat ? "나" : names[Number(topSeer[0])]} ({topSeer[1]}점) — 남의 차례엔 버틴다/무너진다를 찍어 보세요</p>
+      )}
+
       {rules && <RulebookModal onClose={() => setRules(false)} />}
     </div>
   );
 }
 
-function FinalPanel({ state, viewerSeat, names, onGameEnd }: { state: WobbleTowerState; viewerSeat: Seat; names: Record<Seat, string>; onGameEnd: () => void }) {
+function FinalPanel({ state, viewerSeat, names, seer, onGameEnd }: { state: WobbleTowerState; viewerSeat: Seat; names: Record<Seat, string>; seer: Record<number, number>; onGameEnd: () => void }) {
   const rankings = computeRankings(state);
+  const best = Object.entries(seer).sort((a, b) => b[1] - a[1])[0];
   return (
     <div className={`${PANEL} flex flex-col gap-3`}>
       <h3 className="text-center text-lg font-black text-white light:text-slate-900">🪵 최종 결과</h3>
@@ -590,6 +754,11 @@ function FinalPanel({ state, viewerSeat, names, onGameEnd }: { state: WobbleTowe
           </li>
         ))}
       </ol>
+      {best && best[1] > 0 && (
+        <p className="text-center text-sm text-violet-200 light:text-violet-700">
+          🔮 최고의 예언가 <b>{Number(best[0]) === viewerSeat ? "나" : names[Number(best[0])]}</b> ({best[1]}점)
+        </p>
+      )}
       <button onClick={onGameEnd} className={`${PRIMARY} self-center px-6`}>
         결과 확인
       </button>

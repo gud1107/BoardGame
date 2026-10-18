@@ -57,6 +57,15 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         </section>
 
         <section>
+          <h3 className={H3}>남의 차례에는</h3>
+          <ul className={LIST}>
+            <li><b>🔮 버틴다 / 무너진다</b>를 찍어요 — 당기기 시작하면 마감. 버틴다 적중 +1, 무너짐 적중 +2 (승패와 별개인 예언 점수).</li>
+            <li>👏 😱 🤫 😂 🙏 리액션이 이름과 함께 무대 위로 떠올라요.</li>
+            <li><b>💨 입김</b> — 차례마다 한 번, 모두의 화면에서 탑이 살짝 흔들려요. 판정에는 영향 없어요.</li>
+          </ul>
+        </section>
+
+        <section>
           <h3 className={H3}>시간</h3>
           <ul className={LIST}>
             <li>빼기 {PULL_TIMEOUT_MS / 1000}초를 넘기면 &ldquo;떨리는 손&rdquo; — 가장 안전해 보이는 블록을 손놀림 {Math.round(TIMEOUT_QUALITY * 100)}%로 자동으로 빼요.</li>

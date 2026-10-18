@@ -22,6 +22,7 @@ import {
 import { PullTracker, pullFeel } from "./pull";
 import { TowerSway, bendOffset } from "./three/sway";
 import { LiveSmoother } from "./three/liveSmooth";
+import { botPrediction, predictionPoints, sanitizePrediction, sanitizeReaction } from "./reactions";
 import { wobbleTowerStatDetails } from "./stats";
 
 const full = (): Level => ({ slots: [{ id: 0, loose: 0.5 }, { id: 1, loose: 0.5 }, { id: 2, loose: 0.5 }] });
@@ -323,5 +324,32 @@ describe("§11 remote drag smoothing", () => {
     let shown = 0;
     for (let ms = 117; ms < 600; ms += 17) shown = sm.update({ ...base, progress: 0.4, stuck: true, at: 100 }, ms, 1 / 60).progress;
     expect(shown).toBeLessThanOrEqual(0.4 + 1e-9);
+  });
+});
+
+describe("§12.5 spectator layer", () => {
+  it("validates reactions and predictions from the wire", () => {
+    expect(sanitizeReaction({ seat: 1, kind: "cheer", id: "a" }, 4)).toEqual({ seat: 1, kind: "cheer", id: "a" });
+    expect(sanitizeReaction({ seat: 4, kind: "cheer", id: "a" }, 4)).toBeNull();
+    expect(sanitizeReaction({ seat: 1, kind: "bomb", id: "a" }, 4)).toBeNull();
+    expect(sanitizePrediction({ seat: 0, turn: 3, pick: "fall" }, 2)).toEqual({ seat: 0, turn: 3, pick: "fall" });
+    expect(sanitizePrediction({ seat: 0, turn: 3, pick: "maybe" }, 2)).toBeNull();
+  });
+
+  it("scores calls: stand +1, a called collapse +2, wrong 0", () => {
+    expect(predictionPoints("stand", false)).toBe(1);
+    expect(predictionPoints("fall", true)).toBe(2);
+    expect(predictionPoints("stand", true)).toBe(0);
+    expect(predictionPoints("fall", false)).toBe(0);
+  });
+
+  it("bots call collapse more on a shakier tower", () => {
+    const rate = (inst: number) => {
+      const rng = seededRng(9);
+      let f = 0;
+      for (let i = 0; i < 2000; i++) if (botPrediction(inst, rng) === "fall") f++;
+      return f / 2000;
+    };
+    expect(rate(1.5)).toBeGreaterThan(rate(0.1) * 3);
   });
 });

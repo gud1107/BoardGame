@@ -152,6 +152,7 @@ export const ROOM_RULEBOOK_SUMMARIES: Record<string, RoomRulebookSummary> = {
       "🧱 가장자리 하나만 남기는 빼기는 두는 순간 무너져요",
       "⏱️ 빼기 40초·올리기 20초를 넘기면 자동 처리(떨리는 손 = 손놀림 35%)",
       "🏆 방장이 단판/3판 선택 — 다음 판은 직전 패자부터",
+      "🔮 남의 차례엔 버틴다/무너진다 예측(예언 점수) · 👏😱 리액션 · 💨 입김(화면만 흔들림)",
     ],
   },
   "word-tower": {

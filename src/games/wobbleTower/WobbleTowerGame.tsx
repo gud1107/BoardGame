@@ -17,6 +17,7 @@ import {
   computeRankings,
   currentActor,
   DEFAULT_OPTIONS,
+  instability,
   MAX_PLAYERS,
   MIN_PLAYERS,
   PLACE_TIMEOUT_MS,
@@ -56,6 +57,18 @@ import ChatDrawer from "@/components/chat/ChatDrawer";
 import { selfResult } from "@/games/shared/selfResult";
 import { wobbleTowerStatDetails } from "./stats";
 import { getWobbleSound } from "./wobbleSound";
+import {
+  botPrediction,
+  predictionPoints,
+  REACT_COOLDOWN_MS,
+  REACTION_TTL_MS,
+  sanitizePrediction,
+  sanitizeReaction,
+  type Prediction,
+  type PredictionBoard,
+  type Reaction,
+  type ReactionKind,
+} from "./reactions";
 
 /**
  * Online-room entry point for 와르르 타워 — the same lockstep room pattern as
@@ -174,6 +187,23 @@ export default function WobbleTowerGame({ onComplete }: PlayableGameProps) {
   const liveRef = useRef<LivePull | null>(null);
   const liveSentRef = useRef(0);
 
+  // Spectator layer (reactions.ts): floating emotes, 💨 gusts, 🔮 버틴다/무너진다 calls.
+  const [reactions, setReactions] = useState<Reaction[]>([]);
+  const EMPTY_BOARD: PredictionBoard = { turn: -1, picks: {} };
+  const [predictions, setPredictions] = useState<PredictionBoard>(EMPTY_BOARD);
+  const predictionsRef = useRef<PredictionBoard>(EMPTY_BOARD);
+  /** Turn whose pull has visibly started — calls close then. */
+  const [predictLockTurn, setPredictLockTurn] = useState<number | null>(null);
+  const predictLockRef = useRef<number | null>(null);
+  const [seer, setSeer] = useState<Record<number, number>>({});
+  const seerRef = useRef<Record<number, number>>({});
+  const gustRef = useRef(0);
+  const lastReactAtRef = useRef(0);
+  const blowTurnRef = useRef<number | null>(null);
+  const scoredTurnRef = useRef<number | null>(null);
+  const reactedEventRef = useRef<number | null>(null);
+  const botPlanRef = useRef<{ turn: number; due: { seat: number; at: number; what: "predict" | ReactionKind }[] }>({ turn: -1, due: [] });
+
   const channelRef = useRef<RealtimeChannel | null>(null);
   function requestStateSync() {
     const channel = channelRef.current;
@@ -260,7 +290,42 @@ export default function WobbleTowerGame({ onComplete }: PlayableGameProps) {
       const state = gameStateRef.current;
       if (!state || state.activeSeat !== seat) return;
       const l = sanitizeLive(payload?.live);
-      if (l && l.turn === state.turn) liveRef.current = l;
+      if (l && l.turn === state.turn) {
+        liveRef.current = l;
+        if (l.progress > 0.04 && predictLockRef.current !== l.turn) {
+          predictLockRef.current = l.turn;
+          setPredictLockTurn(l.turn);
+        }
+      }
+    });
+
+    channel.on("broadcast", { event: "react" }, ({ payload }) => {
+      const r = sanitizeReaction(payload, playerCountRef.current);
+      if (!r) return;
+      if (r.kind === "blow") gustRef.current += 1;
+      getWobbleSound().play(r.kind === "blow" ? "blow" : "react");
+      const now = Date.now();
+      setReactions((prev) => [...prev.filter((x) => now - x.at < REACTION_TTL_MS && x.id !== r.id), { ...r, at: now }].slice(-14));
+    });
+
+    channel.on("broadcast", { event: "predict" }, ({ payload }) => {
+      const pr = sanitizePrediction(payload, playerCountRef.current);
+      const st = gameStateRef.current;
+      if (!pr || !st || st.turn !== pr.turn || st.phase !== "pull" || st.activeSeat === pr.seat) return;
+      const cur = predictionsRef.current.turn === pr.turn ? predictionsRef.current : { turn: pr.turn, picks: {} };
+      const next: PredictionBoard = { turn: pr.turn, picks: { ...cur.picks, [pr.seat]: pr.pick } };
+      predictionsRef.current = next;
+      setPredictions(next);
+    });
+
+    channel.on("broadcast", { event: "seer" }, ({ payload }) => {
+      const seat = payload?.seat;
+      const score = payload?.score;
+      if (typeof seat !== "number" || !Number.isInteger(seat) || seat < 0 || seat >= playerCountRef.current) return;
+      if (typeof score !== "number" || !Number.isFinite(score) || score < 0 || score > 10_000) return;
+      const next = { ...seerRef.current, [seat]: Math.max(seerRef.current[seat] ?? 0, Math.round(score)) };
+      seerRef.current = next;
+      setSeer(next);
     });
 
     channel.on("broadcast", { event: "game-start" }, ({ payload }) => {
@@ -277,6 +342,11 @@ export default function WobbleTowerGame({ onComplete }: PlayableGameProps) {
       botTakeoverRef.current = INITIAL_BOT_TAKEOVER_STATE;
       setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
       liveRef.current = null;
+      predictionsRef.current = { turn: -1, picks: {} };
+      setPredictions({ turn: -1, picks: {} });
+      seerRef.current = {};
+      setSeer({});
+      setReactions([]);
       setGameState(startGame(playerCount, seed, options));
       setFinalResult(null);
       setPhase("playing");
@@ -332,7 +402,7 @@ export default function WobbleTowerGame({ onComplete }: PlayableGameProps) {
         channel.send({
           type: "broadcast",
           event: "state-sync",
-          payload: { state: gameStateRef.current, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current, botTakeover: botTakeoverRef.current },
+          payload: { state: gameStateRef.current, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current, botTakeover: botTakeoverRef.current, seer: seerRef.current },
         });
       } else if (isHost) {
         channel.send({ type: "broadcast", event: "bot-roster", payload: { botSeats: botSeatsRef.current, botLevels: botLevelsRef.current } });
@@ -351,6 +421,13 @@ export default function WobbleTowerGame({ onComplete }: PlayableGameProps) {
       setBotLevels(levels);
       botTakeoverRef.current = takeover;
       setBotTakeover(takeover);
+      const seerSync = payload?.seer as Record<number, number> | undefined;
+      if (seerSync && typeof seerSync === "object") {
+        const merged = { ...seerRef.current };
+        for (const [k, v] of Object.entries(seerSync)) if (typeof v === "number" && Number.isFinite(v)) merged[Number(k)] = Math.max(merged[Number(k)] ?? 0, Math.round(v));
+        seerRef.current = merged;
+        setSeer(merged);
+      }
       // never rewind: a slower sync must not undo actions this client already applied
       setGameState((prev) => (prev && prev.seed === state.seed && prev.turn > state.turn ? prev : state));
       setFinalResult(null);
@@ -559,6 +636,28 @@ export default function WobbleTowerGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({ type: "broadcast", event: "live", payload: { seat: mySeatRef.current, live: { turn, level, slot, progress, strain, stuck, jerked, sign, hand } } });
   }, []);
 
+  const sendReaction = useCallback((kind: ReactionKind) => {
+    const seat = mySeatRef.current;
+    const st = gameStateRef.current;
+    if (seat === null || !st) return;
+    const now = Date.now();
+    if (now - lastReactAtRef.current < REACT_COOLDOWN_MS) return;
+    if (kind === "blow") {
+      // one puff per turn, and never at your own tower
+      if (blowTurnRef.current === st.turn || st.activeSeat === seat || st.phase !== "pull") return;
+      blowTurnRef.current = st.turn;
+    }
+    lastReactAtRef.current = now;
+    channelRef.current?.send({ type: "broadcast", event: "react", payload: { seat, kind, id: uuid() } });
+  }, []);
+
+  const sendPrediction = useCallback((pick: Prediction) => {
+    const seat = mySeatRef.current;
+    const st = gameStateRef.current;
+    if (seat === null || !st || st.phase !== "pull" || st.activeSeat === seat || predictLockRef.current === st.turn) return;
+    channelRef.current?.send({ type: "broadcast", event: "predict", payload: { seat, turn: st.turn, pick } });
+  }, []);
+
   const sendChatMessage = useCallback(
     (rawBody: string): SendResult => {
       const now = Date.now();
@@ -638,6 +737,59 @@ export default function WobbleTowerGame({ onComplete }: PlayableGameProps) {
         if (now - seen.at >= limit + 800 && timeoutSentRef.current !== state.turn) {
           timeoutSentRef.current = state.turn;
           handleAction({ type: "timeout", seat: state.activeSeat, turn: state.turn });
+        }
+      }
+
+      // 🔮 score calls once the pull lands: mine here, bots' on the driving client (reactions.ts)
+      const ev = state.lastEvent;
+      if (ev && ev.kind === "pull" && scoredTurnRef.current !== ev.turn) {
+        scoredTurnRef.current = ev.turn;
+        const board = predictionsRef.current;
+        if (board.turn === ev.turn) {
+          const scoreFor = (seat: number) => {
+            const pick = board.picks[seat];
+            if (!pick) return;
+            const pts = predictionPoints(pick, ev.collapsed);
+            if (pts <= 0) return;
+            channelRef.current?.send({ type: "broadcast", event: "seer", payload: { seat, score: (seerRef.current[seat] ?? 0) + pts } });
+          };
+          if (mySeatRef.current !== null) scoreFor(mySeatRef.current);
+          if (canDriveRef.current) for (const b of allBotSeatsRef.current) scoreFor(b);
+        }
+      }
+      // bots watch too: a call and maybe a reaction each pull, and they react to how it went
+      if (canDriveRef.current && allBotSeatsRef.current.size > 0) {
+        const plan = botPlanRef.current;
+        if (state.phase === "pull" && plan.turn !== state.turn) {
+          const fragility = instability(state.levels, state.sway);
+          const due: typeof plan.due = [];
+          for (const b of allBotSeatsRef.current) {
+            if (b === state.activeSeat || b >= state.playerCount) continue;
+            due.push({ seat: b, at: now + 500 + Math.random() * 1100, what: "predict" });
+            if (Math.random() < 0.22) due.push({ seat: b, at: now + 900 + Math.random() * 2500, what: fragility > 0.6 ? (Math.random() < 0.5 ? "pray" : "shh") : "cheer" });
+          }
+          botPlanRef.current = { turn: state.turn, due };
+        }
+        const keep: typeof plan.due = [];
+        for (const d of botPlanRef.current.due) {
+          if (d.at > now) {
+            keep.push(d);
+            continue;
+          }
+          if (d.what === "predict") {
+            if (state.phase === "pull" && state.turn === botPlanRef.current.turn && predictLockRef.current !== state.turn)
+              channelRef.current?.send({ type: "broadcast", event: "predict", payload: { seat: d.seat, turn: state.turn, pick: botPrediction(instability(state.levels, state.sway), Math.random) } });
+          } else channelRef.current?.send({ type: "broadcast", event: "react", payload: { seat: d.seat, kind: d.what, id: uuid() } });
+        }
+        botPlanRef.current.due = keep;
+        if (ev && reactedEventRef.current !== ev.turn) {
+          reactedEventRef.current = ev.turn;
+          const shaky = ev.kind === "pull" && !ev.collapsed && ev.quality < 0.55;
+          for (const b of allBotSeatsRef.current) {
+            if (b === ev.seat || b >= state.playerCount) continue;
+            const kind: ReactionKind | null = ev.collapsed ? (Math.random() < 0.6 ? "laugh" : "gasp") : shaky && Math.random() < 0.35 ? "gasp" : null;
+            if (kind && Math.random() < (ev.collapsed ? 0.6 : 1)) botPlanRef.current.due.push({ seat: b, at: now + 400 + Math.random() * 1600, what: kind });
+          }
         }
       }
 
@@ -1024,6 +1176,13 @@ export default function WobbleTowerGame({ onComplete }: PlayableGameProps) {
           onLive={handleLive}
           onAction={handleAction}
           onGameEnd={handleGameEnd}
+          reactions={reactions}
+          predictions={predictions}
+          predictLocked={predictLockTurn === gameState.turn}
+          seer={seer}
+          gust={gustRef}
+          onReact={sendReaction}
+          onPredict={sendPrediction}
         />
         <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
       </>,

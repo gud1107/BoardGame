@@ -64,6 +64,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     changes: [
       { game: "wobble-tower", type: "FEAT", desc: "신규 게임 🪵 와르르 타워 — 18층 3D 나무 탑에서 블록을 빼서 꼭대기에 올리는 2~6인 균형 게임, 무너뜨린 사람이 패배 · AI 봇과 바로" },
       { game: "wobble-tower", type: "FEAT", desc: "✋ 탑의 블록을 직접 잡고 당기거나 밀어서 빼는 손맛 — 빠르면 긴장도↑, 🔒 걸리면 기다리기, 남이 빼는 모습도 실시간으로" },
+      { game: "wobble-tower", type: "FEAT", desc: "👀 남의 차례에도 할 일 — 🔮 버틴다/무너진다 예측(예언 점수), 👏😱🤫😂🙏 리액션, 💨 입김으로 탑 흔들기(화면만), 봇도 함께 관전" },
       { game: "wobble-tower", type: "IMPROVE", desc: "📡 남이 빼는 블록이 뚝뚝 끊기지 않게 — 받은 움직임 사이를 부드럽게 이어 그리고, 잠깐 늦으면 직전 속도로 이어가요" },
       { game: "wobble-tower", type: "FEAT", desc: "🌊 층마다 휘며 흔들리는 탑, 상할수록 크게 숨쉬고 무너질 땐 물리 엔진으로 블록이 우르르 · 단판/3판, 🏅 마지막 건축가" },
     ],
