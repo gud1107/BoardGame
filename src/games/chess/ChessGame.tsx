@@ -166,7 +166,9 @@ export default function ChessGame({ onComplete }: PlayableGameProps) {
     phaseRef.current = phase;
   }, [phase]);
   const lastActorRef = useRef<{ actor: Seat | null; since: number }>({ actor: null, since: 0 });
-  const IDLE_VOTE_THRESHOLD_MS = 45_000;
+  // §19: a clocked game already punishes stalling (the clock runs out), so the
+  // idle vote is only for 무제한 games — and long, since thinking is normal in chess.
+  const IDLE_VOTE_THRESHOLD_MS = 180_000;
   const occupantsRef = useRef<Occupant[]>([]);
   useEffect(() => {
     occupantsRef.current = occupants;
@@ -548,7 +550,7 @@ export default function ChessGame({ onComplete }: PlayableGameProps) {
         lastActorRef.current = { actor, since: Date.now() };
         return;
       }
-      if (actor === null) return;
+      if (actor === null || state.clock) return;
       if (botRolesRef.current.includes(actor)) return;
       if (activeVoteFor(botTakeoverRef.current, actor) || isSeatTakenOver(botTakeoverRef.current, actor)) return;
       if (Date.now() - lastActorRef.current.since < IDLE_VOTE_THRESHOLD_MS) return;
