@@ -60,7 +60,7 @@ function loadQuality(): "high" | "low" {
   }
 }
 
-/* ── 당기기 막대 ───────────────────────────────────────────── */
+/* ── 빼기: 3D에서 블록을 직접 잡아 끌기 (WebGL 없으면 막대) ─────────── */
 
 interface PullView {
   hand: number;
@@ -71,11 +71,21 @@ interface PullView {
   done: boolean;
 }
 
+/** Where my finger is — written by the board from the 3D drag (or the 2D slider), read by the pull loop. */
+export interface HandState {
+  hand: number;
+  sign: number;
+}
+
 function PullControl({
   turn,
   coord,
   difficulty,
   seed,
+  handRef,
+  grabbed,
+  slider,
+  onSliderHand,
   onLive,
   onDone,
 }: {
@@ -83,20 +93,26 @@ function PullControl({
   coord: Coord;
   difficulty: number;
   seed: number;
+  handRef: MutableRefObject<HandState>;
+  /** The 3D block has been grabbed — start the pull clock. */
+  grabbed: boolean;
+  /** No WebGL: show the drag bar instead of grabbing the block. */
+  slider: boolean;
+  onSliderHand: (hand: number) => void;
   onLive: (l: LivePull) => void;
   onDone: (quality: number) => void;
 }) {
   const track = useRef<HTMLDivElement>(null);
   const tracker = useRef<PullTracker | null>(null);
-  const hand = useRef(0);
   const dragging = useRef(false);
   const lastT = useRef(0);
   const lastScrape = useRef(0);
   const wasStuck = useRef(false);
   const sentDone = useRef(false);
   const [view, setView] = useState<PullView>({ hand: 0, progress: 0, strain: 0, stuck: false, jerked: false, done: false });
+  const [sliderStarted, setSliderStarted] = useState(false);
+  const running = grabbed || sliderStarted;
 
-  const [running, setRunning] = useState(false);
   const onLiveRef = useRef(onLive);
   const onDoneRef = useRef(onDone);
   useEffect(() => {
@@ -104,19 +120,21 @@ function PullControl({
     onDoneRef.current = onDone;
   }, [onLive, onDone]);
 
-  // rAF loop while the pull is in progress (also runs while the hand rests, so a catch can release)
+  // rAF loop once the block is held (keeps running while the finger rests, so a catch can release)
   useEffect(() => {
     if (!running) return;
+    tracker.current ??= new PullTracker(pullFeel(difficulty, seed));
     let id = 0;
     lastT.current = performance.now();
     const frame = () => {
       const tr = tracker.current;
-      if (!tr) return;
+      if (!tr || tr.done) return;
       const now = performance.now();
       const dt = Math.min(0.1, (now - lastT.current) / 1000);
       lastT.current = now;
       const before = tr.progress;
-      tr.step(hand.current, dt);
+      const h = handRef.current;
+      tr.step(h.hand, dt);
       const sound = getWobbleSound();
       if (tr.stuck && !wasStuck.current) sound.play("stuck");
       wasStuck.current = tr.stuck;
@@ -124,8 +142,8 @@ function PullControl({
         lastScrape.current = now;
         sound.play("scrape", tr.strain);
       }
-      onLiveRef.current({ turn, level: coord.level, slot: coord.slot, progress: tr.progress, strain: tr.strain, stuck: tr.stuck, jerked: tr.jerked, at: now });
-      setView({ hand: hand.current, progress: tr.progress, strain: tr.strain, stuck: tr.stuck, jerked: tr.jerked, done: tr.done });
+      onLiveRef.current({ turn, level: coord.level, slot: coord.slot, progress: tr.progress, strain: tr.strain, stuck: tr.stuck, jerked: tr.jerked, sign: h.sign, hand: h.hand, at: now });
+      setView({ hand: h.hand, progress: tr.progress, strain: tr.strain, stuck: tr.stuck, jerked: tr.jerked, done: tr.done });
       if (tr.done) {
         if (!sentDone.current) {
           sentDone.current = true;
@@ -137,17 +155,13 @@ function PullControl({
     };
     id = window.requestAnimationFrame(frame);
     return () => window.cancelAnimationFrame(id);
-  }, [running, turn, coord.level, coord.slot]);
+  }, [running, turn, coord.level, coord.slot, difficulty, seed, handRef]);
 
   const handFrom = (clientX: number) => {
     const el = track.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    hand.current = Math.max(hand.current, Math.min(1, Math.max(0, (clientX - r.left - 18) / Math.max(1, r.width - 36))));
-  };
-  const start = () => {
-    if (!tracker.current) tracker.current = new PullTracker(pullFeel(difficulty, seed));
-    if (!tracker.current.done) setRunning(true);
+    onSliderHand(Math.min(1, Math.max(0, (clientX - r.left - 18) / Math.max(1, r.width - 36))));
   };
 
   const strainColor = view.strain > 0.7 ? "bg-rose-500" : view.strain > 0.4 ? "bg-amber-400" : "bg-emerald-400";
@@ -161,57 +175,62 @@ function PullControl({
           ? "너무 빨라요! 천천히…"
           : view.progress > 0
             ? "좋아요, 그대로 천천히"
-            : "손잡이를 끝까지 천천히 끌어 빼요";
+            : slider
+              ? "손잡이를 끝까지 천천히 끌어 빼요"
+              : "👆 반짝이는 블록을 꾹 잡고, 빼고 싶은 쪽으로 천천히 끌어요";
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between text-xs">
-        <span className={`font-bold ${view.stuck ? "animate-pulse text-rose-300 light:text-rose-600" : "text-amber-100 light:text-amber-800"}`}>{hint}</span>
-        <span className="tabular-nums text-white/50 light:text-slate-500">{Math.round(view.progress * 100)}%</span>
+      <div className="flex items-center justify-between gap-2 text-xs">
+        <span className={`font-bold break-keep ${view.stuck ? "animate-pulse text-rose-300 light:text-rose-600" : "text-amber-100 light:text-amber-800"}`}>{hint}</span>
+        <span className="shrink-0 tabular-nums text-white/50 light:text-slate-500">{Math.round(view.progress * 100)}%</span>
       </div>
-      <div
-        ref={track}
-        role="slider"
-        aria-label="블록 당기기"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(view.progress * 100)}
-        tabIndex={0}
-        className="relative h-14 touch-none rounded-2xl border border-amber-900/40 bg-gradient-to-r from-amber-950/60 to-stone-900/60 select-none light:border-amber-300 light:from-amber-100 light:to-stone-100"
-        onPointerDown={(e) => {
-          if (view.done) return;
-          (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-          dragging.current = true;
-          start();
-        }}
-        onPointerMove={(e) => {
-          if (dragging.current) handFrom(e.clientX);
-        }}
-        onPointerUp={() => {
-          dragging.current = false;
-        }}
-        onPointerCancel={() => {
-          dragging.current = false;
-        }}
-        onKeyDown={(e) => {
-          if (view.done) return;
-          if (e.key === "ArrowRight" || e.key === " ") {
-            e.preventDefault();
-            start();
-            hand.current = Math.min(1, hand.current + 0.03);
-          }
-        }}
-      >
-        {/* block coming out */}
-        <div className="pointer-events-none absolute inset-y-3 left-[18px] rounded-md bg-gradient-to-r from-amber-300 to-amber-500 opacity-80 transition-[width] duration-75" style={{ width: `calc((100% - 36px) * ${view.progress})` }} />
-        {/* hand */}
+      {!slider && view.progress === 0 && !view.done && (
+        <p className="text-[11px] break-keep text-white/45 light:text-slate-500">내 쪽으로 끌면 끝을 집어 당기고, 반대쪽으로 밀면 손가락으로 밀어내요. 손을 떼었다가 다시 잡아도 이어져요.</p>
+      )}
+      {slider && (
         <div
-          className={`pointer-events-none absolute top-1/2 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 text-lg shadow-lg ${view.stuck ? "border-rose-400 bg-rose-500/80" : "border-amber-200 bg-amber-500"}`}
-          style={{ left: `calc(18px + (100% - 36px) * ${view.hand})` }}
+          ref={track}
+          role="slider"
+          aria-label="블록 당기기"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(view.progress * 100)}
+          tabIndex={0}
+          className="relative h-14 touch-none rounded-2xl border border-amber-900/40 bg-gradient-to-r from-amber-950/60 to-stone-900/60 select-none light:border-amber-300 light:from-amber-100 light:to-stone-100"
+          onPointerDown={(e) => {
+            if (view.done) return;
+            (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+            dragging.current = true;
+            setSliderStarted(true);
+          }}
+          onPointerMove={(e) => {
+            if (dragging.current) handFrom(e.clientX);
+          }}
+          onPointerUp={() => {
+            dragging.current = false;
+          }}
+          onPointerCancel={() => {
+            dragging.current = false;
+          }}
+          onKeyDown={(e) => {
+            if (view.done) return;
+            if (e.key === "ArrowRight" || e.key === " ") {
+              e.preventDefault();
+              setSliderStarted(true);
+              onSliderHand(Math.min(1, view.hand + 0.03));
+            }
+          }}
         >
-          {view.stuck ? "🔒" : "✋"}
+          <div className="pointer-events-none absolute inset-y-3 left-[18px] rounded-md bg-gradient-to-r from-amber-300 to-amber-500 opacity-80 transition-[width] duration-75" style={{ width: `calc((100% - 36px) * ${view.progress})` }} />
+          <div
+            className={`pointer-events-none absolute top-1/2 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 text-lg shadow-lg ${view.stuck ? "border-rose-400 bg-rose-500/80" : "border-amber-200 bg-amber-500"}`}
+            style={{ left: `calc(18px + (100% - 36px) * ${view.hand})` }}
+          >
+            {view.stuck ? "🔒" : "✋"}
+          </div>
         </div>
-      </div>
+      )}
       <div className="flex items-center gap-2 text-[11px] text-white/50 light:text-slate-500">
         긴장도
         <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
@@ -292,6 +311,9 @@ export default function WobbleTowerBoard({ state, viewerSeat, names, connectedSe
   const [rules, setRules] = useState(false);
   const [pick, setPick] = useState<{ turn: number; coord: Coord } | null>(null);
   const [pulling, setPulling] = useState<number | null>(null);
+  /** Turn on which I grabbed the selected block in 3D (starts the pull clock). */
+  const [grabbedTurn, setGrabbedTurn] = useState<number | null>(null);
+  const hand = useRef<HandState>({ hand: 0, sign: 0 });
 
   const myTurn = state.activeSeat === viewerSeat && (state.phase === "pull" || state.phase === "place");
   const selected = pick && pick.turn === state.turn && state.phase === "pull" ? pick.coord : null;
@@ -314,12 +336,22 @@ export default function WobbleTowerBoard({ state, viewerSeat, names, connectedSe
     (c: Coord) => {
       if (pulling === state.turn) return;
       setPick({ turn: state.turn, coord: c });
+      setGrabbedTurn(null);
+      hand.current = { hand: 0, sign: 0 };
       getWobbleSound().play("select");
       window.setTimeout(() => getWobbleSound().play("wiggle"), 120);
-      onLive({ turn: state.turn, level: c.level, slot: c.slot, progress: 0, strain: 0, stuck: false, jerked: false, at: performance.now() });
+      onLive({ turn: state.turn, level: c.level, slot: c.slot, progress: 0, strain: 0, stuck: false, jerked: false, sign: 0, hand: 0, at: performance.now() });
     },
     [pulling, state.turn, onLive],
   );
+
+  const onGrab = useCallback(() => setGrabbedTurn(state.turn), [state.turn]);
+  const onHand = useCallback((h: number, sign: number) => {
+    hand.current = { hand: Math.max(hand.current.hand, h), sign };
+  }, []);
+  const onSliderHand = useCallback((h: number) => {
+    hand.current = { hand: Math.max(hand.current.hand, h), sign: hand.current.sign };
+  }, []);
 
   const finishPull = useCallback(
     (quality: number) => {
@@ -421,6 +453,9 @@ export default function WobbleTowerBoard({ state, viewerSeat, names, connectedSe
             legal={legal}
             selected={selected}
             onSelect={select}
+            grabbable={myTurn && state.phase === "pull" && !!selected}
+            onGrab={onGrab}
+            onHand={onHand}
             placeSlots={placeSlots}
             placeLevel={target.level}
             onPlace={place}
@@ -477,6 +512,10 @@ export default function WobbleTowerBoard({ state, viewerSeat, names, connectedSe
                 coord={selected}
                 difficulty={difficulty}
                 seed={(state.seed ^ Math.imul(state.turn + 1, 2654435761)) | 0}
+                handRef={hand}
+                grabbed={grabbedTurn === state.turn}
+                slider={!canWebgl}
+                onSliderHand={onSliderHand}
                 onLive={(l) => {
                   if (l.progress > 0 && pulling !== state.turn) setPulling(state.turn);
                   onLive(l);
@@ -485,7 +524,7 @@ export default function WobbleTowerBoard({ state, viewerSeat, names, connectedSe
               />
             </div>
           ) : (
-            <p className="text-center text-sm text-white/70 light:text-slate-600">🫵 뺄 블록을 탑에서 눌러 고르세요. 어두운 블록은 뺄 수 없어요. 화면을 끌면 탑을 돌려볼 수 있어요.</p>
+            <p className="text-center text-sm text-white/70 light:text-slate-600">🫵 뺄 블록을 탑에서 눌러 고르세요. 어두운 블록은 뺄 수 없어요. 빈 곳을 끌면 탑을 돌려볼 수 있어요.</p>
           )}
         </div>
       )}

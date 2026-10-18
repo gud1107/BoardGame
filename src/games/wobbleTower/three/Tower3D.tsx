@@ -15,9 +15,10 @@ import type { CollapseSim } from "./collapse";
  * - The tower bends like a damped spring (sway.ts): kicks from pulls,
  *   jerks and placements, a slow random breathing that grows with damage,
  *   and a static lean toward the center of mass.
- * - A pull slides the block out along its long axis toward the camera
- *   (live from `live` while someone drags, otherwise replayed), then the
- *   block floats above the tower until it's placed.
+ * - A pull: the player grabs the block and drags it out along its long
+ *   axis — toward the camera (a pinch on the near end) or away (a fingertip
+ *   pushing it through). Shown live from `live` for everyone, replayed for
+ *   bots; then the block floats above the tower until it's placed.
  * - A collapse hands every block to a cannon-es world (collapse.ts).
  *
  * Lint rules this file follows (React Compiler, see bluffRoulette/Scene3D):
@@ -38,6 +39,10 @@ export interface LivePull {
   strain: number;
   stuck: boolean;
   jerked: boolean;
+  /** Which way along the block's long axis it is coming out (±1), 0 = not decided yet. */
+  sign: number;
+  /** Where the finger is (0..1 of the pull) — runs ahead of `progress` while the block is stuck. */
+  hand: number;
   /** performance.now() of the last update — stale remote updates fade out. */
   at: number;
 }
@@ -52,6 +57,11 @@ export interface TowerSceneProps {
   legal: Set<string> | null;
   selected: Coord | null;
   onSelect: (c: Coord) => void;
+  /** The viewer may grab the selected block and drag it out (§5). */
+  grabbable: boolean;
+  onGrab: () => void;
+  /** Finger position along the pull (0..1, never decreases) and exit side (±1). */
+  onHand: (hand: number, sign: number) => void;
   /** Empty top slots the viewer may place into right now, or null. */
   placeSlots: number[] | null;
   placeLevel: number;
@@ -134,6 +144,10 @@ function Tower(props: TowerSceneProps) {
   const lastPoses = useRef(new Map<number, Pose>());
   const sounds = useRef({ impactAt: 0, creakAt: 0 });
   const shake = useRef(0);
+  const gl = useThree((st) => st.gl);
+  const grab = useRef<{ key: string; sign: number; hand: number } | null>(null);
+  const hitbox = useRef<THREE.Mesh>(null);
+  const finger = useRef<THREE.Group>(null);
 
   useEffect(() => {
     // fetch the physics chunk early so a collapse never waits on the network
@@ -203,7 +217,8 @@ function Tower(props: TowerSceneProps) {
     const live = props.live.current;
     const liveActive = !!live && !anim.current?.collapsed && (anim.current === null || anim.current.turn < live.turn) && t * 1000 - live.at < 2500 && coordOf.get(levels[live.level]?.slots[live.slot]?.id ?? -1) !== undefined;
     if (liveActive && live) {
-      if (liveSign.current?.turn !== live.turn) {
+      if (live.sign !== 0) liveSign.current = { turn: live.turn, sign: live.sign };
+      else if (liveSign.current?.turn !== live.turn) {
         const axis = longAxis(live.level);
         liveSign.current = { turn: live.turn, sign: Math.sign(cam.position.x * axis.x + cam.position.z * axis.z) || 1 };
       }
@@ -394,10 +409,93 @@ function Tower(props: TowerSceneProps) {
       if (g.material !== mat) g.material = mat;
     }
 
+    // grab hitbox rides on the selected block (bigger than the block, easier to catch on a phone)
+    const hb = hitbox.current;
+    if (hb && selected) {
+      const id = levels[selected.level]?.slots[selected.slot]?.id;
+      const pose = id !== undefined ? lastPoses.current.get(id) : undefined;
+      if (pose) {
+        hb.position.set(pose.p[0], pose.p[1], pose.p[2]);
+        hb.quaternion.set(pose.q[0], pose.q[1], pose.q[2], pose.q[3]);
+      }
+    }
+
+    // fingers: one fingertip pushing the near end, or a pinch on the end coming toward you
+    const fg = finger.current;
+    if (fg) {
+      const show = liveActive && !!live && live.sign !== 0 && live.progress < 1 && !out;
+      fg.visible = show;
+      if (show && live) {
+        const r = restPose(live.level, live.slot);
+        const axis = longAxis(live.level);
+        const sg = live.sign;
+        const camSide = Math.sign(cam.position.x * axis.x + cam.position.z * axis.z) || 1;
+        const pulling = sg === camSide;
+        // the finger presses ahead of a stuck block only a hair
+        const h = Math.min(live.hand, live.progress + 0.035) * PULL_OUT;
+        const along = pulling ? h + BLOCK_L / 2 - 0.1 : h - BLOCK_L / 2 - 0.075;
+        const shudder = live.stuck ? Math.sin(t * 70) * 0.01 : 0;
+        const y = r.y;
+        fg.position.set(r.x + axis.x * sg * (along + shudder) + bendOffset(ax, y, topY), y + 0.02, r.z + axis.z * sg * (along + shudder) + bendOffset(az, y, topY));
+        fg.rotation.set(0, Math.atan2(axis.x * sg, axis.z * sg), 0);
+        const [f0, f1] = fg.children;
+        if (f0 && f1) {
+          // pinch = thumb + index on both sides; push = one fingertip behind the end
+          f0.position.set(pulling ? BLOCK_W / 2 + 0.05 : 0, 0, 0);
+          f1.visible = pulling;
+          f1.position.set(-(BLOCK_W / 2 + 0.05), 0, 0);
+        }
+      }
+    }
+
     // camera shake (consumed by CameraRig through the shared ref)
     shake.current = Math.max(0, shake.current - dt * 0.9);
     camShake.v = shake.current + Math.min(0.3, rattle * 0.08);
   });
+
+  /** §5 — grab the selected block and drag it along its long axis (screen-projected). */
+  const startDrag = (e: ThreeEvent<PointerEvent>) => {
+    if (!props.grabbable || !selected) return;
+    e.stopPropagation();
+    const key = `${selected.level}:${selected.slot}`;
+    if (!grab.current || grab.current.key !== key) grab.current = { key, sign: 0, hand: 0 };
+    const g = grab.current;
+    dragLock.v = true;
+    props.onGrab();
+    const el = gl.domElement;
+    const w = el.clientWidth || 1;
+    const hgt = el.clientHeight || 1;
+    const r = restPose(selected.level, selected.slot);
+    const axis = longAxis(selected.level);
+    const p0 = new THREE.Vector3(r.x, r.y, r.z).project(e.camera);
+    const p1 = new THREE.Vector3(r.x + axis.x, r.y, r.z + axis.z).project(e.camera);
+    const ax = ((p1.x - p0.x) * w) / 2;
+    const ay = (-(p1.y - p0.y) * hgt) / 2;
+    // px per world unit along the axis; floored so an end-on view is not twitchy
+    const len2 = Math.max(ax * ax + ay * ay, 900);
+    const sx = e.nativeEvent.clientX;
+    const sy = e.nativeEvent.clientY;
+    const base = g.hand * PULL_OUT * (g.sign || 1);
+    const onHand = props.onHand;
+    const move = (ev: PointerEvent) => {
+      const d = base + ((ev.clientX - sx) * ax + (ev.clientY - sy) * ay) / len2;
+      if (g.sign === 0) {
+        if (Math.abs(d) < 0.05) return;
+        g.sign = Math.sign(d);
+      }
+      g.hand = Math.max(g.hand, Math.min(1, (d * g.sign) / PULL_OUT));
+      onHand(g.hand, g.sign);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      dragLock.v = false;
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  };
 
   const pick = (e: ThreeEvent<MouseEvent>, id: number) => {
     if (e.delta > 8) return;
@@ -421,6 +519,10 @@ function Tower(props: TowerSceneProps) {
           castShadow
           receiveShadow
           onClick={(e) => pick(e, id)}
+          onPointerDown={(e) => {
+            const c = coordOf.get(id);
+            if (c && selected && c.level === selected.level && c.slot === selected.slot) startDrag(e);
+          }}
           onPointerOver={(e) => {
             if (!legal) return;
             e.stopPropagation();
@@ -431,6 +533,21 @@ function Tower(props: TowerSceneProps) {
           }}
         />
       ))}
+      {props.grabbable && selected && (
+        <mesh ref={hitbox} geometry={boxGeo} scale={[1.08, 3.2, 2.4]} onPointerDown={startDrag}>
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+      )}
+      <group ref={finger} visible={false}>
+        <mesh scale={[1, 0.8, 1.25]}>
+          <sphereGeometry args={[0.085, 16, 12]} />
+          <meshStandardMaterial color="#f0bf98" roughness={0.6} />
+        </mesh>
+        <mesh scale={[1, 0.8, 1.25]}>
+          <sphereGeometry args={[0.085, 16, 12]} />
+          <meshStandardMaterial color="#f0bf98" roughness={0.6} />
+        </mesh>
+      </group>
       {placeSlots?.map((slot) => (
         <mesh
           key={`ghost-${placeLevel}-${slot}`}
@@ -475,12 +592,14 @@ function hoverRotY(level: number): number {
 
 /** Shared between Tower (writer) and CameraRig (reader) inside one frame loop. */
 const camShake = { v: 0 };
+/** True while a block is being dragged — the orbit camera holds still. */
+const dragLock = { v: false };
 
 /**
  * Orbit camera: drag to circle the tower and tilt, wheel / pinch to zoom.
  * Frames the whole tower and eases toward the selected level.
  */
-function CameraRig({ topY, focusY }: { topY: number; focusY: number | null }) {
+function CameraRig({ topY, focusY, closeUp }: { topY: number; focusY: number | null; closeUp: boolean }) {
   const gl = useThree((s) => s.gl);
   const orbit = useRef({ az: Math.PI / 4 + 0.2, el: 0.32, dist: 14, zoom: 1 });
   const look = useRef(new THREE.Vector3(0, 2, 0));
@@ -500,6 +619,7 @@ function CameraRig({ topY, focusY }: { topY: number; focusY: number | null }) {
       if (!prev) return;
       const cur = { x: e.clientX, y: e.clientY };
       pointers.set(e.pointerId, cur);
+      if (dragLock.v) return;
       const o = orbit.current;
       if (pointers.size >= 2 && pinch) {
         const [a, b] = [...pointers.values()];
@@ -537,7 +657,9 @@ function CameraRig({ topY, focusY }: { topY: number; focusY: number | null }) {
     const o = orbit.current;
     const portrait = frame.size.width / frame.size.height < 0.9;
     const fitDist = Math.max(7, topY * (portrait ? 1.75 : 1.25) + 3.2);
-    o.dist += (fitDist * o.zoom - o.dist) * 0.06;
+    // move in on the block you picked so it is big enough to grab
+    const near = closeUp ? (portrait ? 0.55 : 0.68) : 1;
+    o.dist += (fitDist * o.zoom * near - o.dist) * 0.06;
     const ty = focusY ?? topY * 0.5;
     look.current.y += (ty - look.current.y) * 0.06;
     const r = o.dist;
@@ -620,7 +742,7 @@ function SceneContents(props: TowerSceneProps) {
       <pointLight position={[0, 2.5, 0]} intensity={0.6} distance={9} color="#ffb870" />
       <Table quality={props.quality} />
       <Tower {...props} />
-      <CameraRig topY={topY} focusY={focusY} />
+      <CameraRig topY={topY} focusY={focusY} closeUp={!!props.selected && props.grabbable} />
       <FpsProbe onFps={props.onFps} />
     </>
   );

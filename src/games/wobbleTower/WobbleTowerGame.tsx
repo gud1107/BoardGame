@@ -63,7 +63,7 @@ import { getWobbleSound } from "./wobbleSound";
  * over a Supabase Realtime channel, presence-derived seats, host-chosen lobby
  * bots, vote-based bot takeover, room chat). Additions:
  *
- * - "live" broadcast: the acting player's drag (progress/strain/stuck) at
+ * - "live" broadcast: the acting player's drag (progress/strain/stuck, exit side, finger) at
  *   ~11 Hz, purely cosmetic, so everyone watches the block slide out and the
  *   tower sway in real time (rulebook §11). Only the final `quality` in the
  *   `pull` action affects the game.
@@ -113,7 +113,9 @@ function sanitizeLive(raw: unknown): LivePull | null {
   const progress = num(r.progress, 0, 1);
   const strain = num(r.strain, 0, 1);
   if (turn === null || level === null || slot === null || progress === null || strain === null) return null;
-  return { turn: Math.round(turn), level: Math.round(level), slot: Math.round(slot), progress, strain, stuck: r.stuck === true, jerked: r.jerked === true, at: performance.now() };
+  const sign = r.sign === 1 || r.sign === -1 ? r.sign : 0;
+  const hand = num(r.hand, 0, 1) ?? progress;
+  return { turn: Math.round(turn), level: Math.round(level), slot: Math.round(slot), progress, strain, stuck: r.stuck === true, jerked: r.jerked === true, sign, hand, at: performance.now() };
 }
 
 export default function WobbleTowerGame({ onComplete }: PlayableGameProps) {
@@ -553,8 +555,8 @@ export default function WobbleTowerGame({ onComplete }: PlayableGameProps) {
     const edge = l.progress === 0 || l.progress >= 1 || l.jerked;
     if (!edge && now - liveSentRef.current < 90) return;
     liveSentRef.current = now;
-    const { turn, level, slot, progress, strain, stuck, jerked } = l;
-    channelRef.current?.send({ type: "broadcast", event: "live", payload: { seat: mySeatRef.current, live: { turn, level, slot, progress, strain, stuck, jerked } } });
+    const { turn, level, slot, progress, strain, stuck, jerked, sign, hand } = l;
+    channelRef.current?.send({ type: "broadcast", event: "live", payload: { seat: mySeatRef.current, live: { turn, level, slot, progress, strain, stuck, jerked, sign, hand } } });
   }, []);
 
   const sendChatMessage = useCallback(
