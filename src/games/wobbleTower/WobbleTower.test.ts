@@ -22,7 +22,7 @@ import {
 import { PullTracker, pullFeel } from "./pull";
 import { TowerSway, bendOffset } from "./three/sway";
 import { LiveSmoother } from "./three/liveSmooth";
-import { botPrediction, predictionPoints, sanitizePrediction, sanitizeReaction } from "./reactions";
+import { botPrediction, groupReactions, predictionPoints, reactionLaneX, REACTION_TTL_MS, sanitizePrediction, sanitizeReaction, type Reaction } from "./reactions";
 import { wobbleTowerStatDetails } from "./stats";
 
 const full = (): Level => ({ slots: [{ id: 0, loose: 0.5 }, { id: 1, loose: 0.5 }, { id: 2, loose: 0.5 }] });
@@ -351,5 +351,30 @@ describe("§12.5 spectator layer", () => {
       return f / 2000;
     };
     expect(rate(1.5)).toBeGreaterThan(rate(0.1) * 3);
+  });
+});
+
+describe("§12.5 reactions stay out of the way", () => {
+  it("lanes keep every seat off the middle of the stage, where the tower stands", () => {
+    for (let seat = 0; seat < 6; seat++) {
+      const x = reactionLaneX(seat);
+      expect(x < 25 || x > 75).toBe(true);
+    }
+    expect(new Set([0, 1, 2, 3, 4, 5].map(reactionLaneX)).size).toBe(6);
+  });
+
+  it("spam from one seat becomes one bubble with a count, and the total is capped", () => {
+    const now = 10_000;
+    const spam: Reaction[] = [];
+    for (let i = 0; i < 9; i++) spam.push({ id: `a${i}`, seat: 1, kind: "laugh", at: now - i * 100 });
+    for (let seat = 0; seat < 6; seat++) spam.push({ id: `c${seat}`, seat, kind: "cheer", at: now - 50 });
+    spam.push({ id: "old", seat: 2, kind: "gasp", at: now - REACTION_TTL_MS - 1 });
+    const g = groupReactions(spam, now, 4);
+    expect(g).toHaveLength(4);
+    const all = groupReactions(spam, now, 99);
+    expect(all.find((x) => x.r.seat === 1 && x.r.kind === "laugh")?.count).toBe(9);
+    expect(all.some((x) => x.r.id === "old")).toBe(false);
+    // two kinds from the same seat stack instead of overlapping
+    expect(all.filter((x) => x.r.seat === 1).map((x) => x.stack).sort()).toEqual([0, 1]);
   });
 });

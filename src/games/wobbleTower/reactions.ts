@@ -77,3 +77,31 @@ export function botPrediction(instability: number, rand: () => number): Predicti
   const pFall = Math.max(0.06, Math.min(0.6, instability * 0.35));
   return rand() < pFall ? "fall" : "stand";
 }
+
+/** Side lane x (%) for a seat — reactions never rise over the tower in the middle. */
+export function reactionLaneX(seat: number): number {
+  const step = Math.floor(seat / 2) * 7;
+  return seat % 2 === 0 ? 7 + step : 93 - step;
+}
+
+/** Same seat + same emote within the TTL collapses into one bubble with a ×n count. */
+export function groupReactions(reactions: readonly Reaction[], nowMs: number, max: number): { r: Reaction; count: number; stack: number }[] {
+  const groups = new Map<string, { r: Reaction; count: number }>();
+  for (const r of reactions) {
+    if (nowMs - r.at >= REACTION_TTL_MS) continue;
+    const key = `${r.seat}:${r.kind}`;
+    const g = groups.get(key);
+    if (!g) groups.set(key, { r, count: 1 });
+    else {
+      g.count += 1;
+      if (r.at >= g.r.at) g.r = r;
+    }
+  }
+  const latest = [...groups.values()].sort((a, b) => a.r.at - b.r.at).slice(-max);
+  const perSeat = new Map<number, number>();
+  return latest.map((g) => {
+    const stack = perSeat.get(g.r.seat) ?? 0;
+    perSeat.set(g.r.seat, stack + 1);
+    return { ...g, stack };
+  });
+}

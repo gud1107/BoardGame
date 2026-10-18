@@ -26,7 +26,7 @@ import RulebookModal from "./RulebookModal";
 import { webglAvailable } from "./three/webgl";
 import type { LivePull } from "./three/Tower3D";
 import { getWobbleSound, wobbleCues } from "./wobbleSound";
-import { predictionPoints, REACTION_EMOJI, REACTION_TTL_MS, REACTIONS, type Prediction, type PredictionBoard, type Reaction, type ReactionKind } from "./reactions";
+import { groupReactions, predictionPoints, REACTION_EMOJI, REACTION_TTL_MS, REACTIONS, reactionLaneX, type Prediction, type PredictionBoard, type Reaction, type ReactionKind } from "./reactions";
 
 const Loading3D = () => <div className="flex h-full items-center justify-center bg-[#160f0a] text-xs text-amber-200/60">🪵 탑 세우는 중…</div>;
 const Tower3D = dynamic(() => import("./three/Tower3D"), { ssr: false, loading: Loading3D });
@@ -398,21 +398,33 @@ function ReactionBar({ onReact, allowBlow }: { onReact: (kind: ReactionKind) => 
   );
 }
 
-/** Reactions float up over the stage from each sender's column. */
-function ReactionLayer({ reactions, names, playerCount, viewerSeat, nowMs }: { reactions: Reaction[]; names: Record<Seat, string>; playerCount: number; viewerSeat: Seat; nowMs: number }) {
-  const shown = reactions.filter((r) => nowMs - r.at < REACTION_TTL_MS);
+/**
+ * Reactions float up from side lanes (left/right edges by seat) so the tower stays clear.
+ * `compact` = the person pulling or placing right now: small, faint, short hop along the
+ * bottom edge, no names, at most 4 — they need to see the block, not the crowd.
+ */
+function ReactionLayer({ reactions, names, viewerSeat, nowMs, compact }: { reactions: Reaction[]; names: Record<Seat, string>; viewerSeat: Seat; nowMs: number; compact: boolean }) {
+  const groups = groupReactions(reactions, nowMs, compact ? 4 : 8);
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <style>{`@keyframes wbt-float{0%{transform:translate(-50%,0) scale(.6);opacity:0}12%{transform:translate(-50%,-14px) scale(1.15);opacity:1}75%{opacity:1}100%{transform:translate(-50%,-150px) scale(1);opacity:0}}`}</style>
-      {shown.map((r) => {
-        const x = 10 + (playerCount > 1 ? r.seat / (playerCount - 1) : 0.5) * 80;
-        return (
-          <div key={r.id} className="absolute bottom-6 flex flex-col items-center" style={{ left: `${x}%`, animation: `wbt-float ${REACTION_TTL_MS}ms ease-out forwards` }}>
-            <span className="text-4xl drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]">{REACTION_EMOJI[r.kind]}</span>
-            <span className="max-w-24 truncate rounded-full bg-black/60 px-2 text-[10px] font-bold text-white">{r.seat === viewerSeat ? "나" : (names[r.seat] ?? "")}</span>
-          </div>
-        );
-      })}
+      <style>{`@keyframes wbt-float{0%{transform:translate(-50%,0) scale(.6);opacity:0}12%{transform:translate(-50%,-14px) scale(1.15);opacity:1}75%{opacity:1}100%{transform:translate(-50%,-150px) scale(1);opacity:0}}@keyframes wbt-hop{0%{transform:translate(-50%,6px) scale(.7);opacity:0}15%{transform:translate(-50%,-6px) scale(1);opacity:.8}70%{opacity:.8}100%{transform:translate(-50%,-34px) scale(.9);opacity:0}}`}</style>
+      {groups.map(({ r, count, stack }) => (
+        <div
+          key={r.id}
+          className={`absolute flex items-center gap-0.5 ${compact ? "" : "flex-col"}`}
+          style={{
+            left: `${reactionLaneX(r.seat)}%`,
+            bottom: compact ? 6 + stack * 22 : 24 + stack * 40,
+            animation: `${compact ? "wbt-hop" : "wbt-float"} ${compact ? 1600 : REACTION_TTL_MS}ms ease-out forwards`,
+          }}
+        >
+          <span className={`${compact ? "text-xl" : "text-4xl"} drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]`}>
+            {REACTION_EMOJI[r.kind]}
+            {count > 1 && <sup className={`ml-0.5 rounded-full bg-black/70 px-1 font-black text-amber-200 ${compact ? "text-[9px]" : "text-[11px]"}`}>×{count}</sup>}
+          </span>
+          {!compact && <span className="max-w-24 truncate rounded-full bg-black/60 px-2 text-[10px] font-bold text-white">{r.seat === viewerSeat ? "나" : (names[r.seat] ?? "")}</span>}
+        </div>
+      ))}
     </div>
   );
 }
@@ -610,7 +622,7 @@ export default function WobbleTowerBoard({
         ) : (
           <Tower2D state={state} legal={legal} selected={selected} onSelect={select} />
         )}
-        <ReactionLayer reactions={reactions} names={names} playerCount={state.playerCount} viewerSeat={viewerSeat} nowMs={nowMs} />
+        <ReactionLayer reactions={reactions} names={names} viewerSeat={viewerSeat} nowMs={nowMs} compact={myTurn} />
         {myCall && lastPull && state.turn === lastPull.turn + 1 && (
           <span className={`pointer-events-none absolute top-11 left-2 rounded-full px-3 py-1 text-xs font-black ${myCallPts > 0 ? "bg-violet-500/90 text-white" : "bg-black/60 text-white/70"}`}>
             🔮 {myCallPts > 0 ? `예측 적중 +${myCallPts}` : "예측 빗나감"}
