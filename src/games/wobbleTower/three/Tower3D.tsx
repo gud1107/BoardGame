@@ -7,6 +7,7 @@ import type { Block, Collapse, Coord, Level, TowerEvent } from "../engine";
 import { TowerSway, bendOffset, bendTilt } from "./sway";
 import { blockMaterials, ghostMaterial, tableTexture, VARIANTS, type BlockLook } from "./wood";
 import type { CollapseSim } from "./collapse";
+import { LiveSmoother } from "./liveSmooth";
 
 /**
  * 와르르 타워 3D 무대 (rulebook §13). Display only — every pose is derived
@@ -45,6 +46,8 @@ export interface LivePull {
   hand: number;
   /** performance.now() of the last update — stale remote updates fade out. */
   at: number;
+  /** Came over the network (smoothed for display) rather than from my own finger. */
+  remote?: boolean;
 }
 
 export interface TowerSceneProps {
@@ -148,6 +151,7 @@ function Tower(props: TowerSceneProps) {
   const grab = useRef<{ key: string; sign: number; hand: number } | null>(null);
   const hitbox = useRef<THREE.Mesh>(null);
   const finger = useRef<THREE.Group>(null);
+  const smoother = useRef<LiveSmoother | null>(null);
 
   useEffect(() => {
     // fetch the physics chunk early so a collapse never waits on the network
@@ -201,7 +205,7 @@ function Tower(props: TowerSceneProps) {
           turn: lastEvent.turn,
           kind: lastEvent.kind,
           start: t,
-          from: lastEvent.kind === "pull" && liveHere ? live.progress : 0,
+          from: lastEvent.kind === "pull" && liveHere ? (live.remote && smoother.current?.matches(live) ? smoother.current.p : live.progress) : 0,
           sign,
           blockId: lastEvent.blockId,
           at: lastEvent.at,
@@ -214,8 +218,11 @@ function Tower(props: TowerSceneProps) {
     }
 
     // ---- live drag (mine or someone else's)
-    const live = props.live.current;
-    const liveActive = !!live && !anim.current?.collapsed && (anim.current === null || anim.current.turn < live.turn) && t * 1000 - live.at < 2500 && coordOf.get(levels[live.level]?.slots[live.slot]?.id ?? -1) !== undefined;
+    const rawLive = props.live.current;
+    const liveActive = !!rawLive && !anim.current?.collapsed && (anim.current === null || anim.current.turn < rawLive.turn) && t * 1000 - rawLive.at < 2500 && coordOf.get(levels[rawLive.level]?.slots[rawLive.slot]?.id ?? -1) !== undefined;
+    // remote drags arrive ~11x/s with jitter: ease between packets (liveSmooth.ts); my own drag is drawn raw
+    smoother.current ??= new LiveSmoother();
+    const live = rawLive && liveActive && rawLive.remote ? { ...rawLive, ...smoother.current.update(rawLive, t * 1000, dt) } : rawLive;
     if (liveActive && live) {
       if (live.sign !== 0) liveSign.current = { turn: live.turn, sign: live.sign };
       else if (liveSign.current?.turn !== live.turn) {

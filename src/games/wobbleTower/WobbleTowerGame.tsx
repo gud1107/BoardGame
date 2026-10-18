@@ -115,7 +115,7 @@ function sanitizeLive(raw: unknown): LivePull | null {
   if (turn === null || level === null || slot === null || progress === null || strain === null) return null;
   const sign = r.sign === 1 || r.sign === -1 ? r.sign : 0;
   const hand = num(r.hand, 0, 1) ?? progress;
-  return { turn: Math.round(turn), level: Math.round(level), slot: Math.round(slot), progress, strain, stuck: r.stuck === true, jerked: r.jerked === true, sign, hand, at: performance.now() };
+  return { turn: Math.round(turn), level: Math.round(level), slot: Math.round(slot), progress, strain, stuck: r.stuck === true, jerked: r.jerked === true, sign, hand, at: performance.now(), remote: true };
 }
 
 export default function WobbleTowerGame({ onComplete }: PlayableGameProps) {

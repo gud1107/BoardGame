@@ -21,6 +21,7 @@ import {
 } from "./engine";
 import { PullTracker, pullFeel } from "./pull";
 import { TowerSway, bendOffset } from "./three/sway";
+import { LiveSmoother } from "./three/liveSmooth";
 import { wobbleTowerStatDetails } from "./stats";
 
 const full = (): Level => ({ slots: [{ id: 0, loose: 0.5 }, { id: 1, loose: 0.5 }, { id: 2, loose: 0.5 }] });
@@ -268,5 +269,59 @@ describe("§13 sway", () => {
       return sum;
     };
     expect(amp(1.2)).toBeGreaterThan(amp(0) * 3);
+  });
+});
+
+describe("§11 remote drag smoothing", () => {
+  // someone pulls at a steady 0.5/s; packets every ~90 ms with jitter and one 250 ms hiccup
+  function simulate(stuckFrom = 2, stuckTo = 2) {
+    const sm = new LiveSmoother();
+    const rng = seededRng(4);
+    const truth = (ms: number) => {
+      const t = ms / 1000;
+      if (t < stuckFrom) return Math.min(1, t * 0.5);
+      if (t < stuckTo) return Math.min(1, stuckFrom * 0.5);
+      return Math.min(1, (t - (stuckTo - stuckFrom)) * 0.5);
+    };
+    let nextPacket = 0;
+    let sample = { turn: 1, level: 3, slot: 1, progress: 0, hand: 0, strain: 0.2, stuck: false, at: 0 };
+    let rawPrev = 0;
+    let shownPrev = 0;
+    let rawJump = 0;
+    let shownJump = 0;
+    let maxLag = 0;
+    for (let ms = 0; ms <= 1900; ms += 1000 / 60) {
+      if (ms >= nextPacket) {
+        const p = truth(ms);
+        sample = { ...sample, progress: p, hand: p, stuck: ms / 1000 >= stuckFrom && ms / 1000 < stuckTo, at: ms };
+        nextPacket = ms + (Math.abs(ms - 800) < 60 ? 250 : 70 + rng() * 40);
+      }
+      const shown = sm.update(sample, ms, 1 / 60).progress;
+      expect(shown).toBeGreaterThanOrEqual(shownPrev);
+      expect(shown).toBeLessThanOrEqual(1);
+      rawJump = Math.max(rawJump, sample.progress - rawPrev);
+      shownJump = Math.max(shownJump, shown - shownPrev);
+      if (ms > 300) maxLag = Math.max(maxLag, truth(ms) - shown);
+      rawPrev = sample.progress;
+      shownPrev = shown;
+    }
+    return { rawJump, shownJump, maxLag };
+  }
+
+  it("turns packet steps into small per-frame moves without falling far behind", () => {
+    const r = simulate();
+    expect(r.rawJump).toBeGreaterThan(0.1); // the 250 ms hiccup = one big raw step
+    expect(r.shownJump).toBeLessThan(r.rawJump / 3);
+    expect(r.maxLag).toBeLessThan(0.1);
+  });
+
+  it("does not guess the block forward while it is stuck", () => {
+    const sm = new LiveSmoother();
+    const base = { turn: 2, level: 4, slot: 0, hand: 0.4, strain: 0.5, stuck: false };
+    sm.update({ ...base, progress: 0.3, at: 0 }, 0, 1 / 60);
+    sm.update({ ...base, progress: 0.4, at: 100 }, 100, 1 / 60);
+    let shown = 0;
+    for (let ms = 117; ms < 600; ms += 17) shown = sm.update({ ...base, progress: 0.4, stuck: true, at: 100 }, ms, 1 / 60).progress;
+    expect(shown).toBeLessThanOrEqual(0.4 + 1e-9);
   });
 });
