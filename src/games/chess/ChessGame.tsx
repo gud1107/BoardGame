@@ -492,7 +492,8 @@ export default function ChessGame({ onComplete }: PlayableGameProps) {
 
   /** Stamps moves with the time this client watched the turn run (§12.2). */
   const handleAction = useCallback((action: EngineAction) => {
-    const stamped: EngineAction = action.type === "move" ? { ...action, spentMs: Math.max(0, Date.now() - turnStartRef.current) } : action;
+    const ply = gameStateRef.current?.moves.length;
+    const stamped: EngineAction = action.type === "move" ? { ...action, spentMs: Math.max(0, Date.now() - turnStartRef.current), ply } : action;
     sendAction(stamped);
     // sendAction only reads refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -532,7 +533,7 @@ export default function ChessGame({ onComplete }: PlayableGameProps) {
       const key = `${s.moves.length}:${s.pos.turn}`;
       if (flagSentRef.current === key) return;
       flagSentRef.current = key;
-      sendAction({ type: "flag", seat: myRole, spentMs: elapsed });
+      sendAction({ type: "flag", seat: myRole, spentMs: elapsed, ply: s.moves.length });
     }, 250);
     return () => window.clearInterval(id);
     // sendAction only reads refs.

@@ -158,11 +158,11 @@ export interface ChessState {
 }
 
 export type EngineAction =
-  | { type: "move"; seat: Seat; uci: string; spentMs?: number }
+  | { type: "move"; seat: Seat; uci: string; spentMs?: number; ply?: number }
   | { type: "resign"; seat: Seat }
   | { type: "offer"; seat: Seat; kind: "draw" | "takeback" }
   | { type: "respond"; seat: Seat; accept: boolean }
-  | { type: "flag"; seat: Seat; spentMs: number };
+  | { type: "flag"; seat: Seat; spentMs: number; ply?: number };
 
 export const MAX_OFFERS = 3;
 
@@ -299,6 +299,10 @@ export function applyAction(state: ChessState, action: EngineAction): ChessState
   if (state.phase !== "playing") return state;
   const seatColor = state.colors[action.seat];
   if (!seatColor) return state;
+  // `ply` = moves.length the sender saw. A move or flag claim aimed at an older
+  // position (the flag a client sent while its own last-second move was still
+  // in flight, a move racing a takeback) is stale and dropped.
+  if ((action.type === "move" || action.type === "flag") && action.ply !== undefined && action.ply !== state.moves.length) return state;
 
   switch (action.type) {
     case "move": {

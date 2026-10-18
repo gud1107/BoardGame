@@ -235,6 +235,21 @@ describe("clock (§12)", () => {
     s = applyAction(s, { type: "flag", seat: "p1", spentMs: 60_000 });
     expect(s.result).toEqual({ winner: null, reason: "timeoutVsInsufficient" });
   });
+  it("a flag claim for an older ply is stale (last-second move already landed)", () => {
+    let s = play(fresh("1+0"), "e2e4", "e7e5");
+    const flagForWhite: EngineAction = { type: "flag", seat: "p1", spentMs: 60_050, ply: 2 };
+    s = applyAction(s, { type: "move", seat: "p1", uci: "g1f3", spentMs: 59_900, ply: 2 });
+    expect(s.moves).toHaveLength(3);
+    expect(applyAction(s, flagForWhite)).toBe(s); // black's full minute must not be charged
+    expect(applyAction(play(fresh("1+0"), "e2e4", "e7e5"), flagForWhite).result?.reason).toBe("timeout");
+  });
+  it("a move aimed at an older position (raced a takeback) is dropped", () => {
+    let s = play(fresh(), "e2e4", "e7e5", "g1f3");
+    s = applyAction(s, { type: "offer", seat: "p1", kind: "takeback" });
+    s = applyAction(s, { type: "respond", seat: "p2", accept: true });
+    expect(applyAction(s, { type: "move", seat: "p1", uci: "d2d4", ply: 3 })).toBe(s);
+    expect(applyAction(s, { type: "move", seat: "p1", uci: "d2d4", ply: 2 }).moves).toHaveLength(3);
+  });
   it("no clock → flag ignored", () => {
     const s = play(fresh("none"), "e2e4", "e7e5");
     expect(applyAction(s, { type: "flag", seat: "p1", spentMs: 1e9 })).toBe(s);
