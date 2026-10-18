@@ -21,7 +21,7 @@ const TAIL = 0.35;
 
 export type ReplayEvent =
   | { kind: "flick"; seat: Seat; power: number }
-  | { kind: "clack"; impulse: number; x: number; y: number }
+  | { kind: "clack"; impulse: number; x: number; y: number; a: number; b: number }
   | { kind: "fall"; id: number; owner: Seat }
   | { kind: "floor"; id: number; strength: number }
   | { kind: "done"; shot: ShotRecord };
@@ -134,6 +134,12 @@ export class ReplayPlayer {
   private falls = new Map<number, FallTrack>();
   private fades = new Map<number, { stone: Stone; at: number }>();
   private lastNow = 0;
+  private freezeUntil = 0;
+
+  /** Hold the replay still for a beat after a big hit (cosmetic hit-stop). */
+  hitStop(ms: number) {
+    this.freezeUntil = Math.max(this.freezeUntil, this.lastNow + ms);
+  }
 
   get busy(): boolean {
     return this.cur !== null || this.queue.length > 0;
@@ -176,7 +182,7 @@ export class ReplayPlayer {
     if (cur) {
       // fast-forward when more shots are waiting
       const speed = this.queue.length > 0 ? 2.6 : 1;
-      cur.t += dt * speed;
+      if (now >= this.freezeUntil) cur.t += dt * speed;
       const rec = cur.rec;
       const roll = cur.t - WINDUP;
       const shooter = rec.before.find((s) => s.id === rec.stoneId);
@@ -209,7 +215,7 @@ export class ReplayPlayer {
       const cols: SimCollision[] = cur.sim.collisions ?? [];
       while (cur.clackIdx < cols.length && cols[cur.clackIdx].step <= step) {
         const c = cols[cur.clackIdx++];
-        emit?.({ kind: "clack", impulse: c.impulse, x: c.x, y: c.y });
+        emit?.({ kind: "clack", impulse: c.impulse, x: c.x, y: c.y, a: c.a, b: c.b });
       }
       const falls = cur.sim.falls;
       while (cur.fallIdx < falls.length && falls[cur.fallIdx].step <= step) {

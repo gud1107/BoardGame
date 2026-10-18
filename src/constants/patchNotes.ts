@@ -58,6 +58,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.66.1",
+    releaseDate: "2026-10-18",
+    title: "⚫ 알까기 대전 — 부딪힐 때 쾅!",
+    changes: [
+      { game: "alkkagi", type: "FEAT", desc: "💥 알끼리 부딪히면 섬광·충격파 고리·불꽃과 함께 탁!/딱!/쾅! — 세게 칠수록 크게, 맞은 알은 튀어 오르고 화면이 흔들려요" },
+      { game: "alkkagi", type: "FEAT", desc: "센 충돌엔 잠깐 멈칫하는 손맛, 판 밖으로 떨어진 알은 바닥에서 먼지가 피어올라요" },
+    ],
+  },
+  {
     version: "v1.66.0",
     releaseDate: "2026-10-18",
     title: "🥌 신규 게임 컬링 파티 — 다 같이 쓸어!",

@@ -128,6 +128,8 @@ function Board2D({
 }) {
   const svg = useRef<SVGSVGElement>(null);
   const [view, setView] = useState<ReplayView | null>(null);
+  /** Collision ripples (§13), board coords + strength, aged in the frame loop. */
+  const [ripples, setRipples] = useState<{ id: number; x: number; y: number; k: number; age: number }[]>([]);
   const [aimView, setAimView] = useState<LiveAim | null>(null);
   const drag = useRef<{ id: number; x: number; y: number } | null>(null);
   const lastAim = useRef<LiveAim | null>(null);
@@ -139,8 +141,16 @@ function Board2D({
   useEffect(() => {
     let id = 0;
     let busy: boolean | null = null;
+    let live: { id: number; x: number; y: number; k: number; born: number }[] = [];
+    let seq = 0;
     const loop = () => {
-      const v = player.sample(state, performance.now(), (e) => cb.current.onEvent(e));
+      const now = performance.now();
+      const v = player.sample(state, now, (e) => {
+        if (e.kind === "clack") live.push({ id: seq++, x: e.x, y: e.y, k: Math.min(1, e.impulse / 9), born: now });
+        cb.current.onEvent(e);
+      });
+      live = live.filter((r) => now - r.born < 450);
+      setRipples(live.map((r) => ({ id: r.id, x: r.x, y: r.y, k: r.k, age: (now - r.born) / 450 })));
       if (busy !== v.busy) {
         busy = v.busy;
         cb.current.onBusy(v.busy);
@@ -239,6 +249,16 @@ function Board2D({
           />
         )}
         {guide?.hit && guide.hit.t <= guide.len + 1e-6 && <circle {...P(guide.hit.cx, guide.hit.cy)} r={radius(guide.me.king)} fill="none" stroke="#fff6d8" strokeWidth={0.06} />}
+        {ripples.map((r) => {
+          const p = P(r.x, r.y);
+          const e = 1 - Math.pow(1 - r.age, 3);
+          return (
+            <g key={`rp-${r.id}`} pointerEvents="none">
+              <circle {...p} r={0.2 + e * (0.7 + r.k * 2)} fill="none" stroke={r.k > 0.7 ? "#ffd27a" : "#fff6dc"} strokeWidth={0.12 * (1 - r.age) + 0.02} opacity={1 - r.age} />
+              {r.age < 0.35 && <circle {...p} r={0.25 + r.k * 0.5} fill="#fffbe8" opacity={(1 - r.age / 0.35) * 0.9} />}
+            </g>
+          );
+        })}
         {stones.map((s) => {
           const p = P(s.x, s.y);
           const r = radius(s.king) * (s.fade > 0 ? 1 - s.fade : 1);

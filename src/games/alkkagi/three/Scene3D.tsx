@@ -7,6 +7,7 @@ import { setupStones, toSim, type AlkkagiState, type Seat } from "../engine";
 import { EDGE, firstContact, slideDistance, speedForPower } from "../physics";
 import { FLOOR_DROP, stoneHalfHeight, type ReplayEvent, type ReplayPlayer } from "../replay";
 import { floorTexture, gobanSideTexture, gobanTopTexture, goldMaterial, stoneMaterial } from "./materials";
+import { ImpactFx } from "./impactFx";
 
 /**
  * 알까기 대전 3D 무대 (rulebook §13). Display + input only — the replay
@@ -60,7 +61,6 @@ const stoneGeo = new THREE.SphereGeometry(1, 40, 18);
 const ringGeo = new THREE.TorusGeometry(1, 0.06, 8, 40);
 const dotGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.06, 20);
 const coneGeo = new THREE.ConeGeometry(0.16, 0.34, 10);
-const sparkGeo = new THREE.SphereGeometry(1, 8, 6);
 const SIDE_AZ = [Math.PI / 2, Math.PI, -Math.PI / 2, 0];
 
 /** Shared between the scene (writer) and the camera rig (reader). */
@@ -77,15 +77,13 @@ function aimColor(p: number): THREE.Color {
   return c;
 }
 
-interface Spark {
-  mesh: THREE.Mesh;
+/** A stone that was just hit: it hops and rocks away from the contact point. */
+interface Bump {
   born: number;
-  vx: number;
-  vy: number;
-  vz: number;
-  x: number;
-  y: number;
-  z: number;
+  k: number;
+  /** Unit direction (board coords) from the contact point toward the stone. */
+  dx: number;
+  dy: number;
 }
 
 function Stones(props: SceneProps) {
@@ -100,8 +98,9 @@ function Stones(props: SceneProps) {
   const head = useRef<THREE.Mesh>(null);
   const finger = useRef<THREE.Group>(null);
   const ghost = useRef<THREE.Mesh>(null);
-  const sparkRoot = useRef<THREE.Group>(null);
-  const sparks = useRef<Spark[]>([]);
+  const fxRoot = useRef<THREE.Group>(null);
+  const fx = useRef<ImpactFx | null>(null);
+  const bumps = useRef(new Map<number, Bump>());
   const busyRef = useRef<boolean | null>(null);
   const hover = useRef<number | null>(null);
   const positions = useRef(new Map<number, { x: number; y: number }>());
@@ -124,31 +123,50 @@ function Stones(props: SceneProps) {
     };
   }, []);
 
-  const spawnSparks = (x: number, y: number, k: number) => {
-    const root = sparkRoot.current;
-    if (!root || props.quality === "low") return;
-    const n = 3 + Math.round(k * 6);
-    for (let i = 0; i < n; i++) {
-      const mesh = new THREE.Mesh(sparkGeo, sparkMat);
-      const ang = Math.random() * Math.PI * 2;
-      const sp = 1.5 + Math.random() * 3 * (0.5 + k);
-      const s: Spark = { mesh, born: nowMs(), vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, vz: 1 + Math.random() * 2.5, x, y, z: 0.2 };
-      root.add(mesh);
-      sparks.current.push(s);
-    }
-  };
+  useEffect(() => {
+    const root = fxRoot.current;
+    if (!root) return;
+    const f = new ImpactFx();
+    root.add(f.root);
+    fx.current = f;
+    return () => {
+      f.dispose();
+      root.remove(f.root);
+      fx.current = null;
+    };
+  }, []);
 
   useFrame((_, dtRaw) => {
     const dt = Math.min(dtRaw, 0.05);
     const t = nowMs();
+    const low = props.quality === "low";
+    const pending: ReplayEvent[] = [];
     const view = player.sample(state, t, (e) => {
-      if (e.kind === "clack") {
-        spawnSparks(e.x, e.y, Math.min(1, e.impulse / 9));
-        camShake.v = Math.min(0.5, camShake.v + Math.min(1, e.impulse / 9) * 0.18);
-      }
-      if (e.kind === "floor") camShake.v = Math.min(0.5, camShake.v + 0.06 * e.strength);
+      pending.push(e);
       props.onEvent(e);
     });
+    // collision effects (§13): flash, shockwave, sparks, 탁!/딱!/쾅!, hop, hit-stop, shake
+    for (const e of pending) {
+      if (e.kind === "clack") {
+        const k = Math.min(1, e.impulse / 9);
+        fx.current?.hit(e.x, e.y, k, t, low);
+        camShake.v = Math.min(0.7, camShake.v + k * 0.28);
+        if (k > 0.6) player.hitStop(40 + k * 50);
+        for (const id of [e.a, e.b]) {
+          const st = view.stones.find((s) => s.id === id);
+          if (!st) continue;
+          const dx = st.x - e.x;
+          const dy = st.y - e.y;
+          const d = Math.hypot(dx, dy) || 1;
+          bumps.current.set(id, { born: t, k, dx: dx / d, dy: dy / d });
+        }
+      } else if (e.kind === "floor") {
+        const f = view.fallen.find((s) => s.id === e.id);
+        if (f) fx.current?.dust(f.x, f.y, -FLOOR_DROP, e.strength, t, low);
+        camShake.v = Math.min(0.7, camShake.v + 0.08 * e.strength);
+      }
+    }
+    fx.current?.update(t, dt);
     if (busyRef.current !== view.busy) {
       busyRef.current = view.busy;
       props.onBusy(view.busy);
@@ -165,8 +183,22 @@ function Stones(props: SceneProps) {
       const hh = stoneHalfHeight(s.king);
       const lift = s.fade > 0 ? s.fade * 1.4 : 0;
       g.visible = true;
-      g.position.set(s.x, hh + lift, -s.y);
-      g.rotation.set(0, g.rotation.y, 0);
+      // a fresh hit makes the stone hop and rock away from the contact
+      const b = bumps.current.get(s.id);
+      let hop = 0;
+      let rock = 0;
+      if (b) {
+        const age = (t - b.born) / 1000;
+        if (age > 0.4) bumps.current.delete(s.id);
+        else {
+          const env = Math.exp(-age * 9);
+          hop = Math.abs(Math.sin(age * 26)) * env * (0.05 + b.k * 0.22);
+          rock = Math.sin(age * 30) * env * (0.08 + b.k * 0.32);
+        }
+      }
+      g.position.set(s.x, hh + lift + hop, -s.y);
+      if (rock !== 0 && b) g.quaternion.setFromAxisAngle(new THREE.Vector3(-b.dy, 0, -b.dx), rock);
+      else g.rotation.set(0, g.rotation.y, 0);
       const k = s.fade > 0 ? 1 - s.fade : 1;
       g.scale.setScalar(Math.max(0.001, k));
     }
@@ -280,25 +312,7 @@ function Stones(props: SceneProps) {
       fg.visible = show;
     }
 
-    // ---- sparks
-    const root = sparkRoot.current;
-    if (root) {
-      sparks.current = sparks.current.filter((s) => {
-        const age = (t - s.born) / 1000;
-        if (age > 0.32) {
-          root.remove(s.mesh);
-          return false;
-        }
-        s.vz -= 9 * dt;
-        s.x += s.vx * dt;
-        s.y += s.vy * dt;
-        s.z = Math.max(0.02, s.z + s.vz * dt);
-        s.mesh.position.set(s.x, s.z, -s.y);
-        s.mesh.scale.setScalar(0.05 * (1 - age / 0.32));
-        return true;
-      });
-    }
-    camShake.v = Math.max(0, camShake.v - dt * 1.6);
+    camShake.v = Math.max(0, camShake.v - dt * 2.2);
   });
 
   /** §4 — press my stone, pull back, release. */
@@ -435,12 +449,11 @@ function Stones(props: SceneProps) {
           <meshStandardMaterial color="#f8dccb" roughness={0.3} />
         </mesh>
       </group>
-      <group ref={sparkRoot} />
+      <group ref={fxRoot} />
     </group>
   );
 }
 
-const sparkMat = new THREE.MeshBasicMaterial({ color: "#fff2c4", transparent: true, opacity: 0.95 });
 
 function Goban({ quality }: { quality: "high" | "low" }) {
   const top = useMemo(() => gobanTopTexture(), []);
@@ -541,8 +554,8 @@ function CameraRig({ side, topView }: { side: number; topView: boolean }) {
     const portrait = frame.size.width / frame.size.height < 0.9;
     const dist = (portrait ? 36 : 25) * o.zoom * (topView ? 1.02 : 1);
     const s = camShake.v;
-    const jx = s > 0.01 ? (Math.random() - 0.5) * s * 0.25 : 0;
-    const jy = s > 0.01 ? (Math.random() - 0.5) * s * 0.25 : 0;
+    const jx = s > 0.01 ? (Math.random() - 0.5) * s * 0.4 : 0;
+    const jy = s > 0.01 ? (Math.random() - 0.5) * s * 0.4 : 0;
     // look a bit toward my side when tilted so the near half isn't cut off
     cam.position.set(Math.cos(o.az) * Math.cos(o.el) * dist + jx, Math.sin(o.el) * dist + jy, Math.sin(o.az) * Math.cos(o.el) * dist);
     cam.lookAt(0, -0.6, 0);
