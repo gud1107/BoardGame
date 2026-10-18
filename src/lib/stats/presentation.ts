@@ -106,6 +106,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "만든 습관", key: "habitsFormed", unit: "개" },
     { label: "붕괴 없는 일주일", key: "flawlessWeeks", flag: true },
   ],
+  curling: [
+    { label: "🎯 버튼", key: "buttons", unit: "번" },
+    { label: "테이크아웃", key: "takeouts", unit: "개" },
+    { label: "엔드 최고 득점", key: "maxEnd", unit: "점" },
+    { label: "스틸", key: "steals", unit: "번" },
+  ],
   alkkagi: [
     { label: "떨어뜨린 알", key: "knocked", unit: "개" },
     { label: "잃은 알", key: "lost", unit: "개" },
@@ -260,6 +266,11 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "glp-score", label: "한 판 최고 점수", num: "maxScore", format: "count", unit: "점" },
     { id: "glp-goals", label: "인생 목표 달성", num: "goalsMet", format: "count", unit: "번" },
     { id: "glp-habits", label: "만든 습관", num: "habitsFormed", format: "count", unit: "개" },
+  ],
+  curling: [
+    { id: "crl-buttons", label: "🎯 버튼", num: "buttons", format: "count", unit: "번" },
+    { id: "crl-takeouts", label: "테이크아웃", num: "takeouts", format: "count", unit: "개" },
+    { id: "crl-maxend", label: "엔드 최고 득점", num: "maxEnd", format: "count", unit: "점" },
   ],
   alkkagi: [
     { id: "akg-knocked", label: "떨어뜨린 알", num: "knocked", format: "count", unit: "개" },

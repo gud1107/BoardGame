@@ -58,6 +58,17 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.66.0",
+    releaseDate: "2026-10-18",
+    title: "🥌 신규 게임 컬링 파티 — 다 같이 쓸어!",
+    changes: [
+      { game: "curling", type: "FEAT", desc: "신규 게임 🥌 컬링 파티 — 진짜 컬링 규칙(엔드·해머·호그 라인·프리 가드 존)으로 2~8인 팀전/개인전 · AI 봇과 바로" },
+      { game: "curling", type: "FEAT", desc: "🧹 스톤이 가는 동안 우리 팀 모두 연타로 쓸기 — 더 멀리·더 곧게, 상대도 티 라인을 넘으면 쓸어서 밀어내기" },
+      { game: "curling", type: "FEAT", desc: "🎉 엔드마다 파티 스톤 1개 — 💣 폭탄 · 🐘 묵직이 · 🍯 끈끈이 · 🌀 회오리 · 👻 유령 · 🧲 자석" },
+      { game: "curling", type: "FEAT", desc: "📺 중계처럼 스톤을 따라가는 카메라, 엔드별 점수표, 버튼·더블 테이크아웃 해설과 리액션" },
+    ],
+  },
+  {
     version: "v1.65.0",
     releaseDate: "2026-10-18",
     title: "⚫ 신규 게임 알까기 대전 — 3D 바둑판에서 알 튕기기",

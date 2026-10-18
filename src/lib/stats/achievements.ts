@@ -178,6 +178,15 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["habits-4", "🌱", "루틴 마스터", "수면이 아닌 습관 4개로 마무리", 4, k("maxHabits")],
     ["flawless-3", "🧘", "번아웃 제로", "붕괴 없이 일주일 3번", 3, k("flawlessWeeks")],
   ],
+  curling: [
+    ["button-1", "🎯", "첫 버튼", "아무것도 안 맞히고 버튼 위에 멈추기", 1, k("buttons")],
+    ["button-10", "🥌", "버튼 장인", "버튼 누적 10번", 10, k("buttons")],
+    ["double-1", "🔥", "더블 테이크아웃", "한 번에 상대 스톤 2개 이상 내보내기", 1, k("doubles")],
+    ["big-end", "🏔️", "빅 엔드", "한 엔드에 3점 이상", 3, k("maxEnd")],
+    ["steal-1", "🕵️", "스틸!", "해머 없이 엔드 득점", 1, k("steals")],
+    ["party-20", "🎉", "파티 피플", "파티 스톤 20번 사용", 20, k("partyStones")],
+    ["takeout-50", "💥", "테이크아웃 머신", "상대 스톤 누적 50개 내보내기", 50, k("takeouts")],
+  ],
   alkkagi: [
     ["knock-1", "⚫", "첫 알까기", "상대 알 1개 떨어뜨리기", 1, k("knocked")],
     ["double-1", "💥", "더블킬", "한 번에 2개 이상 떨어뜨리기", 1, k("multiKnocks")],

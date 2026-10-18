@@ -81,6 +81,13 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "붕괴 없는 일주일", value: (d) => n(d.flawlessWeeks) },
     { label: "약속 성사 / 기회 카드", value: (d) => `${n(d.matches)} / ${n(d.opportunities)}` },
   ],
+  curling: [
+    { label: "투구 / 🎯 버튼", value: (d) => `${n(d.throws)} / ${n(d.buttons)}` },
+    { label: "테이크아웃 (더블 이상)", value: (d) => `${n(d.takeouts)}개 (${n(d.doubles)})` },
+    { label: "득점 엔드 / 엔드 최고", value: (d) => `${n(d.endsWon)} / ${n(d.maxEnd)}점` },
+    { label: "스틸 / 🧊 프리즈", value: (d) => `${n(d.steals)} / ${n(d.freezes)}` },
+    { label: "파티 스톤 / 호그 라인 미달", value: (d) => `${n(d.partyStones)} / ${n(d.hogs)}` },
+  ],
   alkkagi: [
     { label: "떨어뜨린 알 / 잃은 알", value: (d) => `${n(d.knocked)} / ${n(d.lost)}` },
     { label: "판 1등 / 무결점 승리", value: (d) => `${n(d.roundWins)} / ${n(d.flawless)}` },

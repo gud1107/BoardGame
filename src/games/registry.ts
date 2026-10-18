@@ -123,6 +123,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "curling",
+    name: "컬링 파티",
+    nameEn: "Curling Party",
+    description:
+      "진짜 컬링 규칙(엔드·해머·호그 라인·프리 가드 존)으로 즐기는 2~8인 파티 컬링! 브룸을 놓고 회전을 골라 꾹 눌렀다 떼면 스톤이 미끄러지고, 가는 동안 우리 팀 모두가 연타로 쓸어요 — 상대도 티 라인을 넘으면 쓸어서 밀어낼 수 있어요. 엔드마다 💣폭탄·🐘묵직이·🍯끈끈이·🌀회오리·👻유령·🧲자석 파티 스톤 한 개! 팀전/개인전, AI 봇 지원.",
+    players: { min: 2, max: 8 },
+    playTime: { minMinutes: 4, maxMinutes: 20 },
+    category: "party",
+    thumbnail: { emoji: "🥌", gradient: ["#38bdf8", "#0b1a2e"] },
+    tags: ["컬링", "스위핑", "얼음", "스포츠", "팀전", "물리", "AI봇"],
+    genres: ["party", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "alkkagi",
     name: "알까기 대전",
     nameEn: "Alkkagi Battle",
