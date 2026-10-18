@@ -33,10 +33,12 @@ import {
   type Seat,
 } from "./engine";
 import { botSweepEvery, botWantsSweep, planBotThrowAsync } from "./bot";
+import { botPrediction, EMPTY_PREDICTIONS, predictionHit, sanitizeCall, sanitizePrediction, stoneStayedIn, type Prediction, type PredictionBoard } from "./spectate";
+import type { CallMark } from "./SheetCanvas";
 import CurlingBoard, { REACT_COOLDOWN_MS, REACTION_TTL_MS, type LiveInfo, type Reaction, type ReactionKind } from "./CurlingBoard";
 import type { AimView } from "./SheetCanvas";
 import { LiveThrowRunner, packStones, SweepCounter, unpackStones, type LiveEvent, type LiveView, type SweepSample } from "./live";
-import { PARTY_KINDS, type PartyKind, type ThrowSim } from "./physics";
+import { inHouse, PARTY_KINDS, runThrow, type PartyKind, type ThrowSim } from "./physics";
 import { getCurlingSound, shout, SWEEP_SHOUTS } from "./curlingSound";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
@@ -150,6 +152,7 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
   const [options, setOptions] = useState<GameOptions>(DEFAULT_OPTIONS);
   const optionsRef = useRef<GameOptions>(DEFAULT_OPTIONS);
   const [formError, setFormError] = useState<string | null>(null);
+  const stonesTouchedRef = useRef(false);
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [mySeat, setMySeat] = useState<Seat | null>(null);
@@ -193,10 +196,21 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
   const liveInfoAtRef = useRef(0);
   const liveStartRef = useRef<{ turn: number; at: number } | null>(null);
   const [liveStart, setLiveStart] = useState<{ turn: number; at: number } | null>(null);
+  // §17 spectator layer: skip calls + predictions (never in the engine)
+  const [calls, setCalls] = useState<{ turn: number; marks: Record<number, Omit<CallMark, "name">> }>({ turn: -1, marks: {} });
+  const [predictions, setPredictions] = useState<PredictionBoard>(EMPTY_PREDICTIONS);
+  const predictionsRef = useRef<PredictionBoard>(EMPTY_PREDICTIONS);
+  const [predictLockTurn, setPredictLockTurn] = useState<number | null>(null);
+  const predictLockRef = useRef<number | null>(null);
+  const [seer, setSeer] = useState<Record<number, number>>({});
+  const seerRef = useRef<Record<number, number>>({});
+  const botSpectateRef = useRef<{ turn: number; due: { seat: number; at: number }[]; skipAsked: boolean }>({ turn: -1, due: [], skipAsked: false });
   const markLiveStart = useCallback((turn: number) => {
     const v = { turn, at: Date.now() };
     liveStartRef.current = v;
     setLiveStart(v);
+    predictLockRef.current = turn;
+    setPredictLockTurn(turn);
   }, []);
   const sweepCounter = useRef(new SweepCounter());
   const myTapsRef = useRef(new SweepCounter());
@@ -357,6 +371,35 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
       aimRef.current = { aim, spin: payload.spin === -1 ? -1 : 1, charge, side: currentSide(st), kind: isKind(payload.kind) ? payload.kind : null, interactive: false };
     });
 
+    channel.on("broadcast", { event: "call" }, ({ payload }) => {
+      const st = gameStateRef.current;
+      const c = sanitizeCall(payload, MAX_PLAYERS);
+      if (!st || !c || c.turn !== st.turn || st.phase !== "aim" || c.seat >= st.playerCount) return;
+      const side = currentSide(st);
+      if (st.sideOf[c.seat] !== side || currentThrower(st) === c.seat) return;
+      getCurlingSound().play("aim");
+      setCalls((prev) => ({ turn: c.turn, marks: { ...(prev.turn === c.turn ? prev.marks : {}), [c.seat]: { seat: c.seat, side, x: c.x, y: c.y, tag: c.tag } } }));
+    });
+
+    channel.on("broadcast", { event: "predict" }, ({ payload }) => {
+      const st = gameStateRef.current;
+      const pr = sanitizePrediction(payload, MAX_PLAYERS);
+      if (!st || !pr || pr.turn !== st.turn || st.phase !== "aim" || currentThrower(st) === pr.seat || predictLockRef.current === pr.turn) return;
+      const cur = predictionsRef.current.turn === pr.turn ? predictionsRef.current : { turn: pr.turn, picks: {} };
+      const next: PredictionBoard = { turn: pr.turn, picks: { ...cur.picks, [pr.seat]: pr.pick } };
+      predictionsRef.current = next;
+      setPredictions(next);
+    });
+
+    channel.on("broadcast", { event: "seer" }, ({ payload }) => {
+      const seat = num(payload?.seat, 0, MAX_PLAYERS - 1);
+      const score = num(payload?.score, 0, 10_000);
+      if (seat === null || score === null || !Number.isInteger(seat)) return;
+      const next = { ...seerRef.current, [seat]: Math.max(seerRef.current[seat] ?? 0, Math.round(score)) };
+      seerRef.current = next;
+      setSeer(next);
+    });
+
     channel.on("broadcast", { event: "react" }, ({ payload }) => {
       const seat = num(payload?.seat, 0, MAX_PLAYERS - 1);
       const kind = payload?.kind as ReactionKind;
@@ -387,6 +430,11 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
       lastThrowTurnRef.current = null;
       timeoutStreakRef.current = {};
       setReactions([]);
+      predictionsRef.current = EMPTY_PREDICTIONS;
+      setPredictions(EMPTY_PREDICTIONS);
+      seerRef.current = {};
+      setSeer({});
+      setCalls({ turn: -1, marks: {} });
       setGameState(startGame(playerCount, seed, opts));
       setFinalResult(null);
       setPhase("playing");
@@ -442,7 +490,7 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
         channel.send({
           type: "broadcast",
           event: "state-sync",
-          payload: { state: gameStateRef.current, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current, botTakeover: botTakeoverRef.current },
+          payload: { state: gameStateRef.current, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current, botTakeover: botTakeoverRef.current, seer: seerRef.current },
         });
       } else if (isHost) {
         channel.send({ type: "broadcast", event: "bot-roster", payload: { botSeats: botSeatsRef.current, botLevels: botLevelsRef.current } });
@@ -461,6 +509,13 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
       setBotLevels(levels);
       botTakeoverRef.current = takeover;
       setBotTakeover(takeover);
+      const seerSync = payload?.seer as Record<number, number> | undefined;
+      if (seerSync && typeof seerSync === "object") {
+        const merged = { ...seerRef.current };
+        for (const [k, v] of Object.entries(seerSync)) if (typeof v === "number" && Number.isFinite(v)) merged[Number(k)] = Math.max(merged[Number(k)] ?? 0, Math.round(v));
+        seerRef.current = merged;
+        setSeer(merged);
+      }
       // never rewind: a slower sync must not undo actions this client already applied
       setGameState((prev) => (prev && prev.seed === state.seed && prev.turn > state.turn ? prev : state));
       setFinalResult(null);
@@ -843,6 +898,18 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
     if (lt && lastThrowTurnRef.current !== lt.turn) {
       const first = lastThrowTurnRef.current === null;
       lastThrowTurnRef.current = lt.turn;
+      // 🔮 score calls: mine here, bots' on the driving client (each device sends only its own total)
+      const board = predictionsRef.current;
+      if (!first && board.turn === lt.turn) {
+        const stayed = stoneStayedIn(gameState, lt);
+        const scoreFor = (seat: number) => {
+          const pick = board.picks[seat];
+          if (!pick || !predictionHit(pick, stayed)) return;
+          channelRef.current?.send({ type: "broadcast", event: "seer", payload: { seat, score: (seerRef.current[seat] ?? 0) + 1 } });
+        };
+        if (mySeatRef.current !== null) scoreFor(mySeatRef.current);
+        if (canDriveRef.current) for (const b of allBotSeatsRef.current) scoreFor(b);
+      }
       // two time-outs in a row → ask the table about a bot (§10)
       const streak = timeoutStreakRef.current;
       streak[lt.seat] = lt.auto ? (streak[lt.seat] ?? 0) + 1 : 0;
@@ -894,6 +961,13 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
     if (aimRef.current && !aimRef.current.interactive) {
       // stale broom from the previous thrower (my own aim is cleared by the board)
       aimRef.current = null;
+    }
+    // a new throw: fresh calls/predictions; bots plan their own (driver only)
+    if (gameState.phase === "aim" && canDriveRef.current) {
+      const thr = currentThrower(gameState);
+      const due: { seat: number; at: number }[] = [];
+      for (const b of allBotSeatsRef.current) if (b !== thr && b < gameState.playerCount && Math.random() < 0.75) due.push({ seat: b, at: Date.now() + 1200 + Math.random() * 3500 });
+      botSpectateRef.current = { turn: gameState.turn, due, skipAsked: false };
     }
     // bots cheer / groan at big moments (driver only)
     if (lt && canDriveRef.current && liveRef.current?.turn !== gameState.turn) {
@@ -964,6 +1038,23 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
     else if (e.kind === "solid") s.play("solid");
   }, []);
 
+  const sendCall = useCallback((x: number, y: number, tag: CallMark["tag"]) => {
+    const seat = mySeatRef.current;
+    const st = gameStateRef.current;
+    if (seat === null || !st) return;
+    const now = Date.now();
+    if (now - lastReactAtRef.current < 350) return;
+    lastReactAtRef.current = now;
+    channelRef.current?.send({ type: "broadcast", event: "call", payload: { seat, turn: st.turn, x, y, tag } });
+  }, []);
+
+  const sendPrediction = useCallback((pick: Prediction) => {
+    const seat = mySeatRef.current;
+    const st = gameStateRef.current;
+    if (seat === null || !st || st.phase !== "aim" || currentThrower(st) === seat || predictLockRef.current === st.turn) return;
+    channelRef.current?.send({ type: "broadcast", event: "predict", payload: { seat, turn: st.turn, pick } });
+  }, []);
+
   const sendReaction = useCallback((kind: ReactionKind) => {
     const seat = mySeatRef.current;
     if (seat === null) return;
@@ -1022,6 +1113,34 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
         return;
       }
       const actor = currentThrower(state);
+      if (canDriveRef.current && actor !== null && state.phase === "aim") {
+        const plan = botSpectateRef.current;
+        if (plan.turn === state.turn && predictLockRef.current !== state.turn) {
+          const keep: typeof plan.due = [];
+          for (const d of plan.due) {
+            if (d.at > now) keep.push(d);
+            else channelRef.current?.send({ type: "broadcast", event: "predict", payload: { seat: d.seat, turn: state.turn, pick: botPrediction() } });
+          }
+          plan.due = keep;
+        }
+        // 🤖 AI skip: a bot teammate of a human thrower calls the shot it would play
+        const mate = state.options.mode === "team" && !allBotSeatsRef.current.has(actor) ? state.members[state.sideOf[actor]].find((m) => m !== actor && allBotSeatsRef.current.has(m)) : undefined;
+        if (mate !== undefined && plan.turn === state.turn && !plan.skipAsked) {
+          plan.skipAsked = true;
+          const turn = state.turn;
+          const side = currentSide(state);
+          void planBotThrowAsync(state, levelOf(mate)).then((p) => {
+            const st = gameStateRef.current;
+            if (!st || st.turn !== turn || liveRef.current?.turn === turn) return;
+            const sim = runThrow(state.stones, { aim: p.aim, weight: p.weight, spin: p.spin, kind: p.useCard ? state.cards[side] : null }, side, state.nextStoneId);
+            const alive = new Set(sim.restingStones().map((s) => s.id));
+            const victim = state.stones.find((s) => s.side !== side && !alive.has(s.id));
+            const d = sim.deliveredStone();
+            const call = victim ? { x: victim.x, y: victim.y, tag: "hit" as const } : d.out === null ? { x: d.x, y: d.y, tag: inHouse(d) ? ("draw" as const) : ("guard" as const) } : null;
+            if (call) channelRef.current?.send({ type: "broadcast", event: "call", payload: { seat: mate, turn, x: Math.round(call.x * 100) / 100, y: Math.round(call.y * 100) / 100, tag: call.tag } });
+          });
+        }
+      }
       if (!canDriveRef.current || actor === null || allBotSeatsRef.current.has(actor)) return;
       const started = liveStartRef.current?.turn === state.turn ? liveStartRef.current.at : null;
       const deadline = started !== null ? started + RUN_GRACE_MS : seen.at + AIM_TIMEOUT_MS;
@@ -1031,7 +1150,7 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
       }
     }, 250);
     return () => window.clearInterval(interval);
-  }, [phase, handleAction]);
+  }, [phase, handleAction, levelOf]);
 
   const thrower = gameState ? currentThrower(gameState) : null;
   const liveStarted = gameState && liveStart?.turn === gameState.turn ? liveStart.at : null;
@@ -1228,6 +1347,22 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
     );
   }
 
+  /** Each player's throws per end in 팀전 (the bigger team throws a little less each). */
+  function perPerson(stones: number): string {
+    const big = Math.ceil(targetPlayerCount / 2);
+    const small = Math.floor(targetPlayerCount / 2) || 1;
+    const lo = Math.floor(stones / big);
+    const hi = Math.ceil(stones / small);
+    return lo === hi ? String(lo) : `${lo}~${hi}`;
+  }
+
+  function changePlayerCount(delta: number) {
+    const n = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, targetPlayerCount + delta));
+    setTargetPlayerCount(n);
+    // big tables default to more stones so everyone throws at least twice an end (§2)
+    if (!stonesTouchedRef.current) setOptions((o) => ({ ...o, stones: n >= 6 ? 8 : 4 }));
+  }
+
   if (phase === "enter-name") {
     const ffaOk = targetPlayerCount >= FFA_MIN && targetPlayerCount <= FFA_MAX;
     return withGuard(
@@ -1262,7 +1397,7 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setTargetPlayerCount((n) => Math.max(MIN_PLAYERS, n - 1))}
+                  onClick={() => changePlayerCount(-1)}
                   className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30 light:border-slate-300 light:text-slate-700 light:hover:border-slate-400"
                 >
                   −
@@ -1270,7 +1405,7 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
                 <span className="w-8 text-center text-lg font-semibold text-white light:text-slate-900">{targetPlayerCount}</span>
                 <button
                   type="button"
-                  onClick={() => setTargetPlayerCount((n) => Math.min(MAX_PLAYERS, n + 1))}
+                  onClick={() => changePlayerCount(1)}
                   className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30 light:border-slate-300 light:text-slate-700 light:hover:border-slate-400"
                 >
                   +
@@ -1306,9 +1441,17 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
                 팀당 스톤 수 (엔드마다)
                 <div className="grid grid-cols-3 gap-2">
                   {([4, 6, 8] as const).map((n) => (
-                    <button key={n} type="button" onClick={() => setOptions((o) => ({ ...o, stones: n }))} className={optBtn(options.stones === n)}>
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => {
+                        stonesTouchedRef.current = true;
+                        setOptions((o) => ({ ...o, stones: n }));
+                      }}
+                      className={optBtn(options.stones === n)}
+                    >
                       <b className="block text-sm">{n}개</b>
-                      {n === 4 ? "빠름" : n === 6 ? "보통" : "정식"}
+                      {n === 4 ? "빠름" : n === 6 ? "보통" : "정식"} · 1인 {perPerson(n)}번
                     </button>
                   ))}
                 </div>
@@ -1442,6 +1585,12 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
           reactions={reactions}
           onReact={sendReaction}
           onEvent={handleEvent}
+          calls={calls.turn === gameState.turn ? Object.values(calls.marks).map((m) => ({ ...m, name: names[m.seat] ?? `${m.seat + 1}번` })) : []}
+          onCall={sendCall}
+          predictions={predictions.turn === gameState.turn ? predictions : EMPTY_PREDICTIONS}
+          predictLocked={predictLockTurn === gameState.turn}
+          onPredict={sendPrediction}
+          seer={seer}
         />
         <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
       </>,

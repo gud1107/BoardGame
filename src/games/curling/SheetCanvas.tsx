@@ -39,6 +39,21 @@ export interface AimView {
   interactive: boolean;
 }
 
+/** A teammate's skip call (§17) drawn on the sheet. */
+export interface CallMark {
+  seat: number;
+  side: number;
+  x: number;
+  y: number;
+  tag: "draw" | "guard" | "hit";
+  name: string;
+}
+export const CALL_TAGS: Record<CallMark["tag"], { emoji: string; label: string }> = {
+  draw: { emoji: "🎯", label: "여기 붙여!" },
+  guard: { emoji: "🛡️", label: "가드!" },
+  hit: { emoji: "💥", label: "쳐내!" },
+};
+
 export interface MeasureView {
   scorer: number | null;
   counting: number[];
@@ -56,6 +71,9 @@ interface Props {
   aim: MutableRefObject<AimView | null>;
   measure: MeasureView | null;
   onAim?: (aim: number) => void;
+  /** Tap on the sheet (world meters) when not aiming — skip calls. */
+  onTap?: (x: number, y: number) => void;
+  calls?: readonly CallMark[];
   /** Delivered stone speed 0..1 every frame it moves (rumble SFX). */
   onSlide?: (speed: number) => void;
   /** Each FX-worthy event once (sound). */
@@ -119,11 +137,8 @@ function makePebble(): HTMLCanvasElement | null {
   return c;
 }
 
-function drawSymbol(g: CanvasRenderingContext2D, side: number, r: number) {
-  const k = r * 0.28;
-  g.fillStyle = "rgba(255,255,255,0.95)";
-  g.strokeStyle = "rgba(0,0,0,0.35)";
-  g.lineWidth = Math.max(0.5, r * 0.05);
+/** Shape path for a side (§1): ● ◆ ▲ ■ ★ ✚ — so teams never rely on color alone. */
+function shapePath(g: CanvasRenderingContext2D, side: number, k: number) {
   g.beginPath();
   switch (side % 6) {
     case 0:
@@ -152,12 +167,31 @@ function drawSymbol(g: CanvasRenderingContext2D, side: number, r: number) {
       }
       break;
     default:
-      g.rect(-k * 0.35, -k * 1.2, k * 0.7, k * 2.4);
-      g.rect(-k * 1.2, -k * 0.35, k * 2.4, k * 0.7);
+      g.rect(-k * 0.38, -k * 1.2, k * 0.76, k * 2.4);
+      g.rect(-k * 1.2, -k * 0.38, k * 2.4, k * 0.76);
   }
   g.closePath();
-  g.fill();
+}
+
+/** Bright caps (yellow/green/orange) get a dark symbol, dark caps a white one. */
+const DARK_ON_CAP = SIDE_COLORS.map((hex) => {
+  const n = parseInt(hex.slice(1), 16);
+  const lin = (c: number) => {
+    const v = c / 255;
+    return v <= 0.04 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255) > 0.3;
+});
+
+function drawSymbol(g: CanvasRenderingContext2D, side: number, r: number) {
+  const dark = DARK_ON_CAP[side % 6];
+  shapePath(g, side, r * 0.46);
+  g.lineJoin = "round";
+  g.strokeStyle = dark ? "rgba(255,255,255,0.85)" : "rgba(15,23,42,0.75)";
+  g.lineWidth = Math.max(1, r * 0.1);
   g.stroke();
+  g.fillStyle = dark ? "#0f172a" : "#ffffff";
+  g.fill();
 }
 
 function drawStone(g: CanvasRenderingContext2D, sx: number, sy: number, r: number, s: LiveStone | Stone, alpha = 1) {
@@ -203,9 +237,9 @@ function drawStone(g: CanvasRenderingContext2D, sx: number, sy: number, r: numbe
   // handle
   g.translate(sx, sy);
   g.rotate(s.angle);
-  g.fillStyle = "rgba(20,24,32,0.85)";
-  const hw = r * 0.95;
-  const hh = r * 0.26;
+  g.fillStyle = "rgba(20,24,32,0.45)";
+  const hw = r * 1.05;
+  const hh = r * 0.18;
   g.beginPath();
   g.roundRect(-hw / 2, -hh / 2, hw, hh, hh / 2);
   g.fill();
@@ -240,12 +274,12 @@ function drawHouse(g: CanvasRenderingContext2D, cx: number, cy: number, s: numbe
   g.globalAlpha = 1;
 }
 
-export default function SheetCanvas({ stones, live, aim, measure, onAim, onSlide, onEvent }: Props) {
+export default function SheetCanvas({ stones, live, aim, measure, onAim, onTap, calls, onSlide, onEvent }: Props) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const propsRef = useRef({ stones, measure, onAim, onSlide, onEvent });
+  const propsRef = useRef({ stones, measure, onAim, onTap, calls, onSlide, onEvent });
   useEffect(() => {
-    propsRef.current = { stones, measure, onAim, onSlide, onEvent };
+    propsRef.current = { stones, measure, onAim, onTap, calls, onSlide, onEvent };
   });
 
   useEffect(() => {
@@ -531,6 +565,39 @@ export default function SheetCanvas({ stones, live, aim, measure, onAim, onSlide
         }
       }
 
+      // skip calls (§17)
+      const marks = propsRef.current.calls;
+      if (marks && marks.length && !following) {
+        for (const c of marks) {
+          if (c.y < top - 1 || c.y > viewBottom + 1) continue;
+          const col = SIDE_COLORS[c.side % SIDE_COLORS.length];
+          const cxp = X(c.x);
+          const cyp = Y(c.y);
+          const rr = STONE_R * s * (1.25 + 0.15 * Math.sin(now / 160));
+          g.save();
+          g.setLineDash([4, 3]);
+          g.strokeStyle = col;
+          g.lineWidth = 2.5;
+          g.beginPath();
+          g.arc(cxp, cyp, rr, 0, Math.PI * 2);
+          g.stroke();
+          g.setLineDash([]);
+          const label = `${CALL_TAGS[c.tag].emoji} ${c.name}`;
+          g.font = "bold 11px system-ui, sans-serif";
+          const tw = g.measureText(label).width + 10;
+          const bx = Math.min(Math.max(cxp - tw / 2, 2), usableW - tw - 2);
+          g.fillStyle = "rgba(15,23,42,0.82)";
+          g.beginPath();
+          g.roundRect(bx, cyp - rr - 19, tw, 16, 8);
+          g.fill();
+          g.fillStyle = "#fff";
+          g.textAlign = "left";
+          g.textBaseline = "middle";
+          g.fillText(label, bx + 5, cyp - rr - 11);
+          g.restore();
+        }
+      }
+
       // measure (scored phase): lines from the button to counting stones
       if (meas && meas.counting.length) {
         g.save();
@@ -659,10 +726,15 @@ export default function SheetCanvas({ stones, live, aim, measure, onAim, onSlide
       g.fillRect(mx, MY(HOG_Y) - 0.5, MINI_W, 1.5);
       g.fillRect(mx, MY(RELEASE_Y) - 0.5, MINI_W, 1.5);
       for (const st of shown) {
+        g.save();
+        g.translate(MX(st.x), MY(st.y));
+        shapePath(g, st.side, 2.6);
         g.fillStyle = SIDE_COLORS[st.side % SIDE_COLORS.length];
-        g.beginPath();
-        g.arc(MX(st.x), MY(st.y), 2, 0, Math.PI * 2);
         g.fill();
+        g.strokeStyle = "rgba(15,23,42,0.85)";
+        g.lineWidth = 0.8;
+        g.stroke();
+        g.restore();
       }
       g.strokeStyle = "rgba(15,23,42,0.8)";
       g.lineWidth = 1;
@@ -679,6 +751,16 @@ export default function SheetCanvas({ stones, live, aim, measure, onAim, onSlide
       propsRef.current.onAim?.(Math.max(-2.2, Math.min(2.2, Math.round(x * 100) / 100)));
     };
     const down = (e: PointerEvent) => {
+      const tap = propsRef.current.onTap;
+      if (tap && !(aim.current?.interactive && propsRef.current.onAim)) {
+        const r = canvas.getBoundingClientRect();
+        const usableW = W - MINI_W - 4;
+        const sc = cam.scale || 1;
+        const x = (e.clientX - r.left - usableW / 2) / sc;
+        const y = (e.clientY - r.top) / sc + cam.top;
+        if (Math.abs(x) <= SHEET_HALF) tap(Math.round(x * 100) / 100, Math.round(y * 100) / 100);
+        return;
+      }
       if (!aim.current?.interactive || !propsRef.current.onAim) return;
       dragging = true;
       canvas.setPointerCapture(e.pointerId);

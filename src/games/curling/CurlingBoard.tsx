@@ -19,7 +19,8 @@ import {
   type Seat,
   type ShotKey,
 } from "./engine";
-import SheetCanvas, { PARTY_EMOJI, SIDE_COLORS, SIDE_NAMES_FFA, SIDE_NAMES_TEAM, SIDE_SYMBOLS, type AimView } from "./SheetCanvas";
+import SheetCanvas, { CALL_TAGS, PARTY_EMOJI, SIDE_COLORS, SIDE_NAMES_FFA, SIDE_NAMES_TEAM, SIDE_SYMBOLS, type AimView, type CallMark } from "./SheetCanvas";
+import { predictionHit, stoneStayedIn, type Prediction, type PredictionBoard } from "./spectate";
 import RulebookModal from "./RulebookModal";
 import { curlingCues, getCurlingSound } from "./curlingSound";
 import type { LiveEvent, LiveView } from "./live";
@@ -329,6 +330,79 @@ function ReactionLayer({ reactions, names, playerCount, viewerSeat, nowMs }: { r
   );
 }
 
+/* ── 남의 차례 (§17) ────────────────────────────────────────── */
+
+function SpectatorPanel({
+  teammate,
+  throwerName,
+  throwerColor,
+  callTag,
+  onCallTag,
+  predictions,
+  predictLocked,
+  viewerSeat,
+  onPredict,
+  onReact,
+}: {
+  teammate: boolean;
+  throwerName: string;
+  throwerColor: string;
+  callTag: CallMark["tag"];
+  onCallTag: (t: CallMark["tag"]) => void;
+  predictions: PredictionBoard;
+  predictLocked: boolean;
+  viewerSeat: Seat;
+  onPredict: (p: Prediction) => void;
+  onReact: (k: ReactionKind) => void;
+}) {
+  const mine = predictions.picks[viewerSeat];
+  const counts = { in: 0, out: 0 };
+  for (const p of Object.values(predictions.picks)) counts[p] += 1;
+  return (
+    <div className="flex flex-col gap-2.5">
+      <p className="text-center text-sm text-white/70 light:text-slate-600">
+        <b style={{ color: throwerColor }}>{throwerName}</b>님이 조준 중이에요.
+      </p>
+      {teammate && (
+        <div className="flex flex-col gap-1.5">
+          <p className="text-xs font-bold text-white/80 light:text-slate-700">📣 스킵 콜 — 고르고 시트를 탭하면 우리 팀에게 보여요</p>
+          <div className="grid grid-cols-3 gap-1.5">
+            {(Object.keys(CALL_TAGS) as CallMark["tag"][]).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => onCallTag(t)}
+                className={`rounded-xl border px-1 py-2 text-xs font-bold transition ${callTag === t ? "border-sky-400 bg-sky-500/20 text-sky-100 light:text-sky-800" : "border-white/15 text-white/60 light:border-slate-300 light:text-slate-600"}`}
+              >
+                {CALL_TAGS[t].emoji} {CALL_TAGS[t].label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="flex flex-col gap-1.5">
+        <p className="text-xs font-bold text-white/80 light:text-slate-700">
+          🔮 예측 — 이 스톤, 하우스에 남을까? {predictLocked && <span className="font-normal text-white/50 light:text-slate-400">(마감)</span>}
+        </p>
+        <div className="grid grid-cols-2 gap-1.5">
+          {(["in", "out"] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              disabled={predictLocked}
+              onClick={() => onPredict(p)}
+              className={`rounded-xl border px-2 py-2 text-xs font-bold transition disabled:opacity-60 ${mine === p ? "border-violet-400 bg-violet-500/25 text-violet-100 light:text-violet-800" : "border-white/15 text-white/60 light:border-slate-300 light:text-slate-600"}`}
+            >
+              {p === "in" ? "🏠 남는다" : "💨 못 남는다"} <span className="font-normal opacity-70">({counts[p]})</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <ReactionBar onReact={onReact} />
+    </div>
+  );
+}
+
 /* ── 보드 ─────────────────────────────────────────────────── */
 
 interface Props {
@@ -352,10 +426,17 @@ interface Props {
   reactions: Reaction[];
   onReact: (k: ReactionKind) => void;
   onEvent: (e: LiveEvent) => void;
+  calls: CallMark[];
+  onCall: (x: number, y: number, tag: CallMark["tag"]) => void;
+  predictions: PredictionBoard;
+  predictLocked: boolean;
+  onPredict: (p: Prediction) => void;
+  seer: Record<number, number>;
 }
 
-export default function CurlingBoard({ state, viewerSeat, names, connectedSeats, botSeats, canDrive, deadlineMs, nowMs, live, liveInfo, aim, myIntensity, onThrow, onAimLive, onSweep, onAction, onGameEnd, reactions, onReact, onEvent }: Props) {
+export default function CurlingBoard({ state, viewerSeat, names, connectedSeats, botSeats, canDrive, deadlineMs, nowMs, live, liveInfo, aim, myIntensity, onThrow, onAimLive, onSweep, onAction, onGameEnd, reactions, onReact, onEvent, calls, onCall, predictions, predictLocked, onPredict, seer }: Props) {
   const [rules, setRules] = useState(false);
+  const [callTag, setCallTag] = useState<CallMark["tag"]>("draw");
   const thrower = currentThrower(state);
   const side = currentSide(state);
   const myTurn = thrower === viewerSeat && state.phase === "aim";
@@ -480,6 +561,10 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
   const lt = state.lastThrow;
   const [callShownAt, setCallShownAt] = useState<{ turn: number; at: number } | null>(null);
   if (lt && callShownAt?.turn !== lt.turn) setCallShownAt({ turn: lt.turn, at: nowMs });
+  const canCall = state.phase === "aim" && !myTurn && !liveNow && viewerSeat >= 0 && mySide === side && state.options.mode === "team";
+  // 🔮 my call on the throw that just landed
+  const myPick = lt && predictions.turn === lt.turn ? predictions.picks[viewerSeat] : undefined;
+  const myPickHit = myPick && lt ? predictionHit(myPick, stoneStayedIn(state, lt)) : false;
   const showCall = lt && callShownAt && callShownAt.turn === lt.turn && nowMs - callShownAt.at < 3200 && !liveNow;
 
   // auto next end (driver only)
@@ -538,7 +623,17 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
 
       {/* 무대 */}
       <div className="relative h-[54vh] max-h-[660px] min-h-[320px] overflow-hidden rounded-2xl border border-white/10 light:border-slate-300">
-        <SheetCanvas stones={state.stones} live={live} aim={aim} measure={measureView} onAim={aiming && charge === null ? setAimX : undefined} onSlide={onSlide} onEvent={onEvent} />
+        <SheetCanvas
+          stones={state.stones}
+          live={live}
+          aim={aim}
+          measure={measureView}
+          onAim={aiming && charge === null ? setAimX : undefined}
+          onTap={canCall ? (x, y) => onCall(x, y, callTag) : undefined}
+          calls={state.phase === "aim" && !liveNow ? calls.filter((c) => c.side === mySide) : []}
+          onSlide={onSlide}
+          onEvent={onEvent}
+        />
         <ReactionLayer reactions={reactions} names={names} playerCount={state.playerCount} viewerSeat={viewerSeat} nowMs={nowMs} />
         {state.phase === "aim" && (
           <div className="pointer-events-none absolute top-2 left-2 flex max-w-[calc(100%-2rem)] items-center gap-2 rounded-full bg-black/60 px-3 py-1 text-xs font-bold text-white">
@@ -566,6 +661,11 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
             </span>
           </div>
         )}
+        {showCall && myPick && (
+          <span className={`pointer-events-none absolute top-10 right-6 rounded-full px-3 py-1 text-xs font-black ${myPickHit ? "bg-violet-500/90 text-white" : "bg-black/60 text-white/70"}`}>
+            🔮 {myPickHit ? "예측 적중 +1" : "예측 빗나감"}
+          </span>
+        )}
         {state.phase === "scored" && rec && (
           <div className="pointer-events-none absolute inset-x-0 bottom-[12%] flex flex-col items-center gap-1 text-center">
             <span className="rounded-2xl bg-black/70 px-5 py-2 text-xl font-black text-white shadow-xl">
@@ -590,6 +690,17 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
       {/* 조작 */}
       {aiming && (
         <div className={PANEL}>
+          {calls.some((c) => c.side === mySide) && (
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {calls
+                .filter((c) => c.side === mySide)
+                .map((c) => (
+                  <span key={c.seat} className="rounded-full bg-sky-500/20 px-2.5 py-1 text-xs font-bold text-sky-100 light:text-sky-800">
+                    📣 {c.name}: {CALL_TAGS[c.tag].emoji} {CALL_TAGS[c.tag].label}
+                  </span>
+                ))}
+            </div>
+          )}
           <AimPanel state={state} aimX={aimX} spin={spin} useCard={useCard} charge={charge} onAim={setAimX} onSpin={(s) => {
             setSpin(s);
             setAimX((x) => (Math.sign(x) === s ? -x : x));
@@ -610,13 +721,20 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
           />
         </div>
       )}
-      {state.phase === "aim" && !myTurn && !liveNow && (
-        <div className={`${PANEL} flex flex-col gap-2`}>
-          <p className="text-center text-sm text-white/70 light:text-slate-600">
-            <b style={{ color: SIDE_COLORS[side] }}>{throwerName}</b>님이 조준 중이에요.{" "}
-            {mySide === side ? "우리 편이 던지면 같이 쓸 준비!" : "티 라인을 넘으면 쓸어서 밀어낼 수 있어요."}
-          </p>
-          <ReactionBar onReact={onReact} />
+      {state.phase === "aim" && !myTurn && !liveNow && viewerSeat >= 0 && (
+        <div className={PANEL}>
+          <SpectatorPanel
+            teammate={canCall}
+            throwerName={throwerName}
+            throwerColor={SIDE_COLORS[side]}
+            callTag={callTag}
+            onCallTag={setCallTag}
+            predictions={predictions}
+            predictLocked={predictLocked}
+            viewerSeat={viewerSeat}
+            onPredict={onPredict}
+            onReact={onReact}
+          />
         </div>
       )}
       {liveNow && <ReactionBar onReact={onReact} />}
@@ -631,7 +749,7 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
           <ReactionBar onReact={onReact} />
         </div>
       )}
-      {state.phase === "ended" && <FinalPanel state={state} viewerSeat={viewerSeat} names={names} onGameEnd={onGameEnd} />}
+      {state.phase === "ended" && <FinalPanel state={state} viewerSeat={viewerSeat} names={names} seer={seer} onGameEnd={onGameEnd} />}
 
       {state.phase !== "ended" && (
         <div className={`${PANEL} grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-4`}>
@@ -656,7 +774,8 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
   );
 }
 
-function FinalPanel({ state, viewerSeat, names, onGameEnd }: { state: CurlingState; viewerSeat: Seat; names: Record<Seat, string>; onGameEnd: () => void }) {
+function FinalPanel({ state, viewerSeat, names, seer, onGameEnd }: { state: CurlingState; viewerSeat: Seat; names: Record<Seat, string>; seer: Record<number, number>; onGameEnd: () => void }) {
+  const topSeer = Object.entries(seer).sort((a, b) => b[1] - a[1])[0];
   const rankings = computeRankings(state);
   const tally = state.statTally ?? {};
   const best = (key: string) => {
@@ -699,6 +818,11 @@ function FinalPanel({ state, viewerSeat, names, onGameEnd }: { state: CurlingSta
           </li>
         ))}
       </ol>
+      {topSeer && topSeer[1] > 0 && (
+        <p className="text-center text-sm text-violet-200 light:text-violet-700">
+          🔮 예언왕 <b>{Number(topSeer[0]) === viewerSeat ? "나" : names[Number(topSeer[0])]}</b> ({topSeer[1]}번 적중)
+        </p>
+      )}
       {awards.length > 0 && (
         <div className="flex flex-wrap justify-center gap-1.5">
           {awards.map((a) => (

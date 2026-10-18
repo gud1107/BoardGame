@@ -58,6 +58,17 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.67.0",
+    releaseDate: "2026-10-18",
+    title: "🥌 컬링 파티 — 기다리는 동안 콜·예측, 색약도 구분되는 스톤",
+    changes: [
+      { game: "curling", type: "FEAT", desc: "📣 스킵 콜 — 팀원이 시트를 탭해 🎯 여기 / 🛡️ 가드 / 💥 쳐내를 표시, 봇 팀원은 자기가 던질 샷을 콜해줘요" },
+      { game: "curling", type: "FEAT", desc: "🔮 남의 투구 예측 — 하우스에 남을지 찍고 맞히면 +1, 결과 화면에 예언왕" },
+      { game: "curling", type: "IMPROVE", desc: "6명 이상이면 팀당 스톤 기본 8개(1인 엔드당 2번 이상), 스톤 수 버튼에 1인 투구 수 표시" },
+      { game: "curling", type: "IMPROVE", desc: "🎨 팀 기호(● ◆ ▲ ■ ★ ✚)를 크게, 뚜껑 밝기에 맞춘 대비 색으로 — 적록색약에서도 바로 구분, 미니맵도 모양으로" },
+    ],
+  },
+  {
     version: "v1.66.1",
     releaseDate: "2026-10-18",
     title: "⚫ 알까기 대전 — 부딪힐 때 쾅!",
