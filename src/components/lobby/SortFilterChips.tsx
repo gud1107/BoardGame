@@ -1,6 +1,17 @@
 "use client";
 
-import { ADMIN_SORT_OPTIONS, SORT_OPTIONS, type SortOption } from "@/constants/sortOptions";
+import { ADMIN_SORT_OPTIONS, SORT_OPTIONS, type SortChip, type SortOption } from "@/constants/sortOptions";
+
+/** Chip state for `value`: active either way round, and the tap's next sort (flip when already active). */
+function chipState(opt: SortChip, value: SortOption) {
+  const isReversed = value === opt.reverse;
+  const isActive = value === opt.key || isReversed;
+  return {
+    isActive,
+    label: isReversed ? opt.reverseLabel : opt.label,
+    next: value === opt.key ? opt.reverse : opt.key,
+  };
+}
 
 /**
  * Gold chip strip for picking the lobby showcase grid's sort order — shared
@@ -35,24 +46,21 @@ export default function SortFilterChips({
   return (
     <div className={`-mx-1 flex gap-1.5 overflow-x-auto px-1 py-1 no-scrollbar ${className}`}>
       {SORT_OPTIONS.map((opt) => {
-        const isReversed = opt.reverse !== undefined && value === opt.reverse;
-        const isActive = value === opt.key || isReversed;
-        const arrow = opt.reverse && isActive ? (isReversed ? " ↓" : " ↑") : "";
+        const { isActive, label, next } = chipState(opt, value);
         return (
           <button
             key={opt.key}
             type="button"
-            onClick={() => onChange(opt.reverse && value === opt.key ? opt.reverse : opt.key)}
+            onClick={() => onChange(next)}
             aria-pressed={isActive}
-            title={opt.reverse ? (isReversed ? "내림차순 — 다시 누르면 오름차순" : "오름차순 — 다시 누르면 내림차순") : undefined}
+            title={isActive ? "다시 누르면 반대 순서로 정렬" : undefined}
             className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap transition-all duration-200 ${
               isActive
                 ? "border-amber-400 bg-amber-500/20 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.2)] light:text-amber-700"
                 : "border-white/10 text-white/60 hover:border-amber-400/40 light:border-slate-200 light:text-slate-600 light:hover:border-amber-500/50"
             }`}
           >
-            {opt.label}
-            {arrow}
+            {label}
           </button>
         );
       })}
@@ -60,20 +68,21 @@ export default function SortFilterChips({
         <>
           <span aria-hidden className="mx-0.5 w-px shrink-0 self-stretch bg-white/10 light:bg-slate-200" />
           {ADMIN_SORT_OPTIONS.map((opt) => {
-            const isActive = value === opt.key;
+            const { isActive, label, next } = chipState(opt, value);
             return (
               <button
                 key={opt.key}
                 type="button"
-                onClick={() => onChange(opt.key)}
-                title="관리자 전용 — 게임별 최신 커밋의 커밋/푸시/운영 배포 시각 기준"
+                onClick={() => onChange(next)}
+                aria-pressed={isActive}
+                title="관리자 전용 — 게임별 최신 커밋의 커밋/푸시/운영 배포 시각 기준 (다시 누르면 반대 순서)"
                 className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap transition-all duration-200 ${
                   isActive
                     ? "border-violet-400 bg-violet-500/20 text-violet-200 light:text-violet-700"
                     : "border-violet-400/25 text-violet-300/70 hover:border-violet-400/60 light:border-violet-200 light:text-violet-600"
                 }`}
               >
-                {opt.label}
+                {label}
               </button>
             );
           })}

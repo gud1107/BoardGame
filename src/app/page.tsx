@@ -148,7 +148,10 @@ export default function DashboardPage() {
       cancelled = true;
     };
   }, []);
-  const catalog = useMemo(() => applyGameOverrides(GAME_REGISTRY, overrides), [overrides]);
+  const catalog = useMemo(
+    () => applyGameOverrides(GAME_REGISTRY.filter((g) => !g.hiddenFromLobby), overrides),
+    [overrides],
+  );
 
   // Writing TO sessionStorage in response to React state changing is the
   // effect's proper direction (unlike reading FROM it, handled above) — so

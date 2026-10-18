@@ -1,5 +1,5 @@
 import { GAME_LAST_COMMIT } from "@/constants/gameLastUpdated.generated";
-import type { AdminSortOption } from "@/constants/sortOptions";
+import { adminSortBasis, type AdminSortOption } from "@/constants/sortOptions";
 import type { GameRelease } from "@/lib/admin/gameReleases";
 
 const KST = new Intl.DateTimeFormat("ko-KR", {
@@ -41,6 +41,7 @@ export default function AdminReleaseLine({
   if (!commitAt) return <p className="text-[9px] text-violet-300/60 light:text-violet-600">🛠 커밋 기록 없음</p>;
   const sha = (release?.sha ?? GAME_LAST_COMMIT[gameId]?.sha)?.slice(0, 7);
   const stateLabel = release ? STATE_LABEL[release.state] : undefined;
+  const basis = adminSortBasis(option);
   const cell = (label: string, value: string, active: boolean) => (
     <span className={active ? "font-bold text-violet-200 light:text-violet-700" : ""}>
       {label} {value}
@@ -51,9 +52,9 @@ export default function AdminReleaseLine({
       className="flex flex-wrap gap-x-1.5 font-mono text-[9px] leading-tight text-violet-300/70 light:text-violet-600/80"
       title={sha ? `최신 게임 커밋 ${sha}` : undefined}
     >
-      {cell("커밋", fmt(commitAt), option === "ADMIN_COMMIT_DESC")}
-      {cell("푸시", release ? fmt(release.pushedAt) : "…", option === "ADMIN_PUSH_DESC")}
-      {cell("배포", release ? (stateLabel ?? fmt(release.deployedAt)) : "…", option === "ADMIN_DEPLOY_DESC")}
+      {cell("커밋", fmt(commitAt), basis === "commit")}
+      {cell("푸시", release ? fmt(release.pushedAt) : "…", basis === "push")}
+      {cell("배포", release ? (stateLabel ?? fmt(release.deployedAt)) : "…", basis === "deploy")}
     </p>
   );
 }

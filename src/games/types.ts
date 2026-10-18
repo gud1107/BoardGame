@@ -124,6 +124,12 @@ export interface GameMeta {
    */
   playable: boolean;
   /**
+   * Left out of the 보드게임허브 lobby grid (and its counts) while the entry
+   * stays in the registry — e.g. a 준비중 placeholder whose game already
+   * shipped under another entry. The admin game list still shows it.
+   */
+  hiddenFromLobby?: boolean;
+  /**
    * Whether the game engine can automatically compute a final ranking
    * (e.g. a clear winner/loser) to feed the betting system. If false, the
    * player must enter final standings manually after playing.

@@ -586,6 +586,8 @@ export const GAME_REGISTRY: GameMeta[] = [
     tags: ["균형게임", "대인원"],
     genres: ["party"],
     playable: false,
+    // 젠가는 '와르르 타워'(wobble-tower)로 출시돼 이 준비중 자리는 허브에서 뺀다.
+    hiddenFromLobby: true,
     supportsAutoRanking: false,
   },
   {

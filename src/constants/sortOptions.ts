@@ -19,11 +19,15 @@ import type { GameRelease } from "@/lib/admin/gameReleases";
  */
 export type SortOption =
   | "POPULAR_DESC"
+  | "POPULAR_ASC"
   | "UPDATE_DESC"
+  | "UPDATE_ASC"
   | "NAME_ASC"
+  | "NAME_DESC"
   | "PLAYERS_ASC"
   | "PLAYERS_DESC"
   | "DIFFICULTY_ASC"
+  | "DIFFICULTY_DESC"
   | AdminSortOption;
 
 /**
@@ -32,26 +36,48 @@ export type SortOption =
  * production. Only rendered for site admins (`SortFilterChips` `admin`);
  * push/deploy times come from `/api/admin/game-releases`.
  */
-export type AdminSortOption = "ADMIN_COMMIT_DESC" | "ADMIN_PUSH_DESC" | "ADMIN_DEPLOY_DESC";
+export type AdminSortOption =
+  | "ADMIN_COMMIT_DESC"
+  | "ADMIN_COMMIT_ASC"
+  | "ADMIN_PUSH_DESC"
+  | "ADMIN_PUSH_ASC"
+  | "ADMIN_DEPLOY_DESC"
+  | "ADMIN_DEPLOY_ASC";
+
+/** Which release time an admin sort reads, regardless of direction. */
+export type AdminSortBasis = "commit" | "push" | "deploy";
+
+export function adminSortBasis(option: AdminSortOption): AdminSortBasis {
+  if (option.startsWith("ADMIN_COMMIT")) return "commit";
+  if (option.startsWith("ADMIN_PUSH")) return "push";
+  return "deploy";
+}
 
 /**
- * `reverse` makes a chip two-way (2026-10-19): tapping it again while active
- * flips between `key` (오름차순, shown ↑) and `reverse` (내림차순, shown ↓).
- * "인원순" replaced the separate 인원 적은순/많은순 chips this way; both keys
- * stay valid so a saved sort keeps working.
+ * Every chip is two-way (2026-10-19): the first tap picks `key`, tapping it
+ * again while active flips to `reverse` (and back), and the chip shows
+ * `reverseLabel` while flipped — 인기순 ↔ 인기 낮은순 and so on. "인원순"
+ * replaced the separate 인원 적은순/많은순 chips this way.
  */
-export const SORT_OPTIONS: { key: SortOption; label: string; reverse?: SortOption }[] = [
-  { key: "POPULAR_DESC", label: "👑 인기순" },
-  { key: "UPDATE_DESC", label: "🔥 최근 업데이트순" },
-  { key: "NAME_ASC", label: "가나다순" },
-  { key: "PLAYERS_ASC", label: "👥 인원순", reverse: "PLAYERS_DESC" },
-  { key: "DIFFICULTY_ASC", label: "난이도 쉬운순" },
+export interface SortChip<K extends SortOption = SortOption> {
+  key: K;
+  label: string;
+  reverse: K;
+  reverseLabel: string;
+}
+
+export const SORT_OPTIONS: SortChip[] = [
+  { key: "POPULAR_DESC", label: "👑 인기순", reverse: "POPULAR_ASC", reverseLabel: "👑 인기 낮은순" },
+  { key: "UPDATE_DESC", label: "🔥 최근 업데이트순", reverse: "UPDATE_ASC", reverseLabel: "🔥 오래된 업데이트순" },
+  { key: "NAME_ASC", label: "가나다순", reverse: "NAME_DESC", reverseLabel: "가나다 역순" },
+  { key: "PLAYERS_ASC", label: "👥 인원순 ↑", reverse: "PLAYERS_DESC", reverseLabel: "👥 인원순 ↓" },
+  { key: "DIFFICULTY_ASC", label: "🎯 난이도순 ↑", reverse: "DIFFICULTY_DESC", reverseLabel: "🎯 난이도순 ↓" },
 ];
 
-export const ADMIN_SORT_OPTIONS: { key: AdminSortOption; label: string }[] = [
-  { key: "ADMIN_COMMIT_DESC", label: "🛠 커밋순" },
-  { key: "ADMIN_PUSH_DESC", label: "🛠 푸시순" },
-  { key: "ADMIN_DEPLOY_DESC", label: "🛠 배포순" },
+export const ADMIN_SORT_OPTIONS: SortChip<AdminSortOption>[] = [
+  { key: "ADMIN_COMMIT_DESC", label: "🛠 커밋순", reverse: "ADMIN_COMMIT_ASC", reverseLabel: "🛠 커밋 오래된순" },
+  { key: "ADMIN_PUSH_DESC", label: "🛠 푸시순", reverse: "ADMIN_PUSH_ASC", reverseLabel: "🛠 푸시 오래된순" },
+  { key: "ADMIN_DEPLOY_DESC", label: "🛠 배포순", reverse: "ADMIN_DEPLOY_ASC", reverseLabel: "🛠 배포 오래된순" },
 ];
 
 export function isAdminSortOption(option: SortOption): option is AdminSortOption {
@@ -84,15 +110,19 @@ export function adminReleaseTime(
 ): number {
   const r = releases?.[gameId];
   const commit = toMs(r?.commitAt ?? GAME_LAST_COMMIT[gameId]?.at ?? getGameLastUpdated(gameId));
-  if (option === "ADMIN_COMMIT_DESC") return commit;
-  if (option === "ADMIN_PUSH_DESC") return toMs(r?.pushedAt) || toMs(r?.deployedAt) || commit;
+  const basis = adminSortBasis(option);
+  if (basis === "commit") return commit;
+  if (basis === "push") return toMs(r?.pushedAt) || toMs(r?.deployedAt) || commit;
   return toMs(r?.deployedAt) || toMs(r?.pushedAt) || commit;
 }
 
 /**
  * `playCounts` (all-time plays per game id, from Supabase via
- * `fetchGamePlayStats().total`) is only read by `POPULAR_DESC`; while it's still
- * loading, or for games nobody has played, ties fall back to recency.
+ * `fetchGamePlayStats().total`) is only read by the 인기순 sorts; while it's
+ * still loading, or for games nobody has played, ties fall back to recency.
+ * Each `_ASC`/`_DESC` pair is one comparator run forwards or backwards, so
+ * flipping a chip reverses the whole order — except games with no 난이도,
+ * which stay last either way.
  */
 export function sortGamesBy<T extends GameMeta>(
   games: T[],
@@ -100,20 +130,26 @@ export function sortGamesBy<T extends GameMeta>(
   playCounts?: ReadonlyMap<string, number>,
   releases?: Readonly<Record<string, GameRelease>>,
 ): T[] {
-  return [...games].sort((a, b) => {
+  const compare = (a: T, b: T): number => {
     switch (option) {
       case "ADMIN_COMMIT_DESC":
       case "ADMIN_PUSH_DESC":
       case "ADMIN_DEPLOY_DESC":
+      case "ADMIN_COMMIT_ASC":
+      case "ADMIN_PUSH_ASC":
+      case "ADMIN_DEPLOY_ASC":
         return adminReleaseTime(b.id, option, releases) - adminReleaseTime(a.id, option, releases) || byLastUpdatedDesc(a, b);
       case "POPULAR_DESC":
+      case "POPULAR_ASC":
         return (
           (playCounts?.get(b.id) ?? 0) - (playCounts?.get(a.id) ?? 0) ||
           byLastUpdatedDesc(a, b)
         );
       case "UPDATE_DESC":
+      case "UPDATE_ASC":
         return byLastUpdatedDesc(a, b);
       case "NAME_ASC":
+      case "NAME_DESC":
         return a.name.localeCompare(b.name, "ko");
       case "PLAYERS_ASC":
         return (
@@ -124,12 +160,22 @@ export function sortGamesBy<T extends GameMeta>(
           b.players.max - a.players.max || b.players.min - a.players.min
         );
       case "DIFFICULTY_ASC":
-        return (
-          (getGameDifficulty(a.id) ?? NO_DIFFICULTY_RANK) -
-          (getGameDifficulty(b.id) ?? NO_DIFFICULTY_RANK)
-        );
+      case "DIFFICULTY_DESC": {
+        const da = getGameDifficulty(a.id) ?? NO_DIFFICULTY_RANK;
+        const db = getGameDifficulty(b.id) ?? NO_DIFFICULTY_RANK;
+        if (da === NO_DIFFICULTY_RANK || db === NO_DIFFICULTY_RANK) return da - db;
+        return option === "DIFFICULTY_ASC" ? da - db : db - da;
+      }
       default:
         return 0;
     }
-  });
+  };
+  // PLAYERS_* and DIFFICULTY_* spell out both directions above; the rest
+  // are written for their default direction and flipped here.
+  const flipped =
+    option === "POPULAR_ASC" ||
+    option === "UPDATE_ASC" ||
+    option === "NAME_DESC" ||
+    option.startsWith("ADMIN_") && option.endsWith("_ASC");
+  return [...games].sort(flipped ? (a, b) => compare(b, a) : compare);
 }
