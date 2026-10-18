@@ -1,16 +1,129 @@
 "use client";
 
+import { useState } from "react";
 import Overlay from "@/components/Overlay";
 import { AIM_TIMEOUT_MS, RUN_GRACE_MS } from "./engine";
 import { PARTY_EMOJI } from "./SheetCanvas";
+import { CurlDiagram, GlossaryList, ScoringDiagram, SheetDiagram, SweepDiagram } from "./guide";
 
 const H3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
 const LIST = "list-disc space-y-1.5 pl-4 text-white/70 light:text-slate-600";
 
-/** 게임 중 📖 버튼 — 전체 룰북(boardGameRule/컬링파티/컬링파티.md)의 앱 적용판 요약. */
-export default function RulebookModal({ onClose }: { onClose: () => void }) {
+type Tab = "start" | "rules" | "words";
+const TABS: { id: Tab; label: string }[] = [
+  { id: "start", label: "🔰 처음 해요" },
+  { id: "rules", label: "📖 전체 규칙" },
+  { id: "words", label: "📚 용어" },
+];
+
+/** 게임 중 📖 버튼 — 전체 룰북(boardGameRule/컬링파티/컬링파티.md)의 앱 적용판: 그림 설명 · 전체 규칙 · 용어 사전. */
+export default function RulebookModal({ onClose, onReplayTour, onResetCoach }: { onClose: () => void; onReplayTour?: () => void; onResetCoach?: () => void }) {
+  const [tab, setTab] = useState<Tab>("start");
   return (
     <Overlay title="📖 컬링 파티 룰북" onClose={onClose} wide>
+      <div className="mb-4 grid grid-cols-3 gap-1.5">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={`rounded-xl border px-2 py-2 text-xs font-bold ${tab === t.id ? "border-sky-400 bg-sky-500/20 text-sky-100 light:text-sky-800" : "border-white/15 text-white/60 light:border-slate-300 light:text-slate-600"}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === "start" && <QuickStart onReplayTour={onReplayTour} onResetCoach={onResetCoach} />}
+      {tab === "words" && <GlossaryList />}
+      {tab === "rules" && <FullRules />}
+    </Overlay>
+  );
+}
+
+function QuickStart({ onReplayTour, onResetCoach }: { onReplayTour?: () => void; onResetCoach?: () => void }) {
+  return (
+    <div className="flex flex-col gap-4 text-sm break-keep text-white/80 light:text-slate-700">
+      <section className="flex flex-col gap-2">
+        <h3 className={H3}>1분 요약</h3>
+        <ol className="list-decimal space-y-1.5 pl-4 text-white/75 light:text-slate-600">
+          <li>
+            위쪽 과녁(<b>하우스</b>) 한가운데 <b>버튼</b>에 내 스톤을 가장 가깝게!
+          </li>
+          <li>
+            내 차례: <b>브룸 옮기기 → 회전 고르기 → 🥌 꾹 눌렀다 떼기</b>.
+          </li>
+          <li>
+            스톤이 가는 동안 <b>🧹 연타</b> = 더 멀리·더 곧게.
+          </li>
+          <li>
+            엔드 끝: <b>가장 가까운 편만</b>, 상대 최고 스톤보다 안쪽의 내 스톤 수만큼 점수.
+          </li>
+        </ol>
+      </section>
+      <section className="flex flex-col gap-2">
+        <h3 className={H3}>시트 구조</h3>
+        <SheetDiagram />
+      </section>
+      <section className="flex flex-col gap-2">
+        <h3 className={H3}>회전과 휘기 — 브룸은 휘는 반대쪽에</h3>
+        <CurlDiagram />
+        <p className="text-xs text-white/60 light:text-slate-500">스톤은 느려질수록 많이 휘어요. 드로우(하우스에 멈추기)는 약 1.1 m, 세게 던지는 테이크아웃은 0.4~0.8 m 휘어요. 🔰 초보 도우미가 켜진 방에서는 힘을 모으는 동안 휘는 길(다른 스톤·쓸기 제외)이 보여요.</p>
+      </section>
+      <section className="flex flex-col gap-2">
+        <h3 className={H3}>힘 게이지 읽기</h3>
+        <ul className={LIST}>
+          <li>
+            <b className="text-slate-300">회색 미달</b> — 호그 라인을 못 넘어 아웃.
+          </li>
+          <li>
+            <b className="text-sky-300">파랑 가드</b> — 하우스 앞에 멈춰 길을 막아요.
+          </li>
+          <li>
+            <b className="text-rose-300">빨강 하우스</b> — 과녁 안에 멈춰요. 처음엔 여기!
+          </li>
+          <li>
+            <b className="text-amber-300">주황 테이크아웃</b> — 상대 스톤을 쳐내는 세기. 아무것도 안 맞히면 뒤로 나가요.
+          </li>
+        </ul>
+      </section>
+      <section className="flex flex-col gap-2">
+        <h3 className={H3}>쓸기</h3>
+        <SweepDiagram />
+      </section>
+      <section className="flex flex-col gap-2">
+        <h3 className={H3}>점수 세기 예시</h3>
+        <ScoringDiagram />
+        <p className="text-xs text-white/60 light:text-slate-500">레드 1·2번이 옐로의 가장 가까운 스톤(점선)보다 안쪽 → 레드 2점. 바깥쪽 레드는 세지 않아요. 게임 중엔 위쪽 &ldquo;지금 끝나면&rdquo; 칩이 실시간으로 알려 줘요.</p>
+      </section>
+      <section className="flex flex-col gap-2">
+        <h3 className={H3}>처음 하는 사람을 위한 팁</h3>
+        <ul className={LIST}>
+          <li>첫 투구는 브룸을 기본 위치 그대로 두고 빨간 &lsquo;하우스&rsquo; 구간에서 떼 보세요 — 그것만으로 하우스에 들어가요.</li>
+          <li>상대 스톤이 버튼 근처에 있으면 주황 구간으로 쳐내고, 내가 이기고 있으면 하우스 앞에 가드를 세워 지키세요.</li>
+          <li>마지막 스톤(🔨 해머)을 가진 편이 유리해요. 해머가 없으면 하우스 앞을 막아 상대를 귀찮게!</li>
+          <li>팀원이 짚어 준 📣 콜(시트 위 점선 원)을 참고하세요. 봇 팀원의 콜은 레벨만큼만 믿을 만해요.</li>
+        </ul>
+      </section>
+      {(onReplayTour || onResetCoach) && (
+        <div className="grid grid-cols-2 gap-2">
+          {onReplayTour && (
+            <button type="button" onClick={onReplayTour} className="rounded-xl bg-sky-600 py-2.5 text-xs font-bold text-white">
+              🔰 처음 안내 다시 보기
+            </button>
+          )}
+          {onResetCoach && (
+            <button type="button" onClick={onResetCoach} className="rounded-xl border border-white/15 py-2.5 text-xs font-bold text-white/80 light:border-slate-300 light:text-slate-700">
+              💬 코치 말풍선 다시 켜기
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FullRules() {
+  return (
       <div className="flex flex-col gap-5 text-sm text-white/80 light:text-slate-700">
         <section>
           <h3 className={H3}>목표</h3>
@@ -98,6 +211,5 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           </ul>
         </section>
       </div>
-    </Overlay>
   );
 }

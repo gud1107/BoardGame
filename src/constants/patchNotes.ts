@@ -58,6 +58,17 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.69.0",
+    releaseDate: "2026-10-19",
+    title: "🥌 컬링 파티 — 처음 해도 쉽게: 그림 안내 · 코치 · 초보 도우미",
+    changes: [
+      { game: "curling", type: "FEAT", desc: "🔰 첫 판에 그림 안내 6장(목표·던지기·쓸기·점수·해머·주의) — 🔰 안내 버튼으로 언제든 다시" },
+      { game: "curling", type: "FEAT", desc: "💬 코치 말풍선 — 첫 조준, 첫 쓸기, 첫 점수 계산, 호그 미달처럼 규칙이 필요한 순간에 한 번씩 알려줘요" },
+      { game: "curling", type: "FEAT", desc: "🔰 초보 도우미(방 옵션) — 힘 모을 때 실제로 휘는 길과 멈출 자리, 지금 점수 나는 스톤에 번호" },
+      { game: "curling", type: "IMPROVE", desc: "📖 룰북을 처음 해요(그림) · 전체 규칙 · 용어 사전 22개 탭으로, 조준 중 '지금 끝나면 누가 몇 점' 칩" },
+    ],
+  },
+  {
     version: "v1.68.1",
     releaseDate: "2026-10-19",
     title: "🥌 컬링 파티 — AI 스킵 콜은 레벨만큼, 숨기기도 가능",

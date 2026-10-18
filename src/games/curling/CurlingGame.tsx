@@ -1317,7 +1317,7 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
         title="컬링 파티 온라인 대전"
         description={
           <p className="text-sm text-white/50 light:text-slate-500">
-            {MIN_PLAYERS}~{MAX_PLAYERS}명이 각자 기기로 접속해 스톤을 던지고, 다 같이 연타로 쓸어요! 엔드마다 💣🐘🍯🌀👻🧲 파티 스톤이 하나씩. 빈자리는 봇이 채워요.
+            {MIN_PLAYERS}~{MAX_PLAYERS}명이 각자 기기로 접속해 스톤을 던지고, 다 같이 연타로 쓸어요! 엔드마다 💣🐘🍯🌀👻🧲 파티 스톤이 하나씩. 빈자리는 봇이 채워요. 컬링이 처음이어도 괜찮아요 — 첫 판에 그림 안내가 뜨고, 게임 중에도 🔰 코치가 그때그때 알려 줘요.
           </p>
         }
         actions={
@@ -1466,6 +1466,10 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
                 <b className="block text-sm">🛡️ 프리 가드 존 {options.fgz ? "ON" : "OFF"}</b>
                 초반 가드 보호(정식 규칙)
               </button>
+              <button type="button" onClick={() => setOptions((o) => ({ ...o, guide: !o.guide }))} className={`${optBtn(options.guide)} col-span-2`}>
+                <b className="block text-sm">🔰 초보 도우미 {options.guide ? "ON" : "OFF"}</b>
+                힘 모을 때 휘는 길 미리보기 + 지금 점수 나는 스톤에 번호 — 처음 하는 사람이 있으면 켜 두세요(모두에게 똑같이 보여요)
+              </button>
             </div>
           </>
         )}
@@ -1498,7 +1502,7 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
               </button>
               {isHost && (
                 <p className="text-xs text-white/50 light:text-slate-500">
-                  {opts.mode === "team" ? "팀전" : "개인전"} · {opts.ends}엔드{opts.mode === "team" ? ` · 팀당 ${opts.stones}스톤` : ""} · 파티 스톤 {opts.party ? "ON" : "OFF"} · 프리 가드 존 {opts.fgz ? "ON" : "OFF"}
+                  {opts.mode === "team" ? "팀전" : "개인전"} · {opts.ends}엔드{opts.mode === "team" ? ` · 팀당 ${opts.stones}스톤` : ""} · 파티 스톤 {opts.party ? "ON" : "OFF"} · 프리 가드 존 {opts.fgz ? "ON" : "OFF"} · 초보 도우미 {opts.guide ? "ON" : "OFF"}
                 </p>
               )}
               <p className="text-xs text-white/50 light:text-slate-500">

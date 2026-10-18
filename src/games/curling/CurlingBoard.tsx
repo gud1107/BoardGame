@@ -10,6 +10,7 @@ import {
   currentSide,
   currentThrower,
   isLastStone,
+  measure,
   RUN_GRACE_MS,
   SCORE_PAUSE_MS,
   stonesLeft,
@@ -21,6 +22,7 @@ import {
 } from "./engine";
 import SheetCanvas, { CALL_TAGS, PARTY_EMOJI, SIDE_COLORS, SIDE_NAMES_FFA, SIDE_NAMES_TEAM, SIDE_SYMBOLS, type AimView, type CallMark } from "./SheetCanvas";
 import { predictionHit, stoneStayedIn, type Prediction, type PredictionBoard } from "./spectate";
+import { CoachBubble, HowToPlayTour, loadCoachSeen, saveCoachSeen, TOUR_KEY, type CoachId } from "./guide";
 import RulebookModal from "./RulebookModal";
 import { curlingCues, getCurlingSound } from "./curlingSound";
 import type { LiveEvent, LiveView } from "./live";
@@ -436,7 +438,26 @@ interface Props {
 }
 
 export default function CurlingBoard({ state, viewerSeat, names, connectedSeats, botSeats, canDrive, deadlineMs, nowMs, live, liveInfo, aim, myIntensity, onThrow, onAimLive, onSweep, onAction, onGameEnd, reactions, onReact, onEvent, calls, onCall, predictions, predictLocked, onPredict, seer }: Props) {
+  const lt = state.lastThrow;
   const [rules, setRules] = useState(false);
+  // §21 first-time help: the tour opens by itself once per device, coach tips show once each
+  const [tourOpen, setTourOpen] = useState(() => {
+    try {
+      return window.localStorage.getItem(TOUR_KEY) !== "1";
+    } catch {
+      return false;
+    }
+  });
+  const [coachSeen, setCoachSeen] = useState<Set<CoachId>>(loadCoachSeen);
+  const markSeen = useCallback((...ids: CoachId[]) => {
+    setCoachSeen((prev) => {
+      if (ids.every((id) => prev.has(id))) return prev;
+      const next = new Set(prev);
+      for (const id of ids) next.add(id);
+      saveCoachSeen(next);
+      return next;
+    });
+  }, []);
   const [callTag, setCallTag] = useState<CallMark["tag"]>("draw");
   const thrower = currentThrower(state);
   const side = currentSide(state);
@@ -500,6 +521,7 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
 
   const startCharge = useCallback(() => {
     if (!aiming || chargeRef.current) return;
+    markSeen("aim-power");
     getCurlingSound().unlock();
     const start = performance.now();
     lastTickRef.current = 0;
@@ -517,7 +539,7 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
     };
     chargeRef.current = { start, raf: requestAnimationFrame(loop) };
     setCharge(0);
-  }, [aiming]);
+  }, [aiming, markSeen]);
 
   const endCharge = useCallback(
     (cancel: boolean) => {
@@ -530,10 +552,12 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
       const weight = ph < 1 ? ph : 2 - ph;
       setCharge(null);
       if (cancel || !aiming) return;
+      // a thrown stone means the aiming steps were understood
+      markSeen("aim-broom", "aim-spin", "aim-power");
       onAimLive(null);
       onThrow({ aim: aimX, weight, spin, useCard });
     },
-    [aiming, aimX, spin, useCard, onThrow, onAimLive],
+    [aiming, aimX, spin, useCard, onThrow, onAimLive, markSeen],
   );
   useEffect(() => () => {
     if (chargeRef.current) cancelAnimationFrame(chargeRef.current.raf);
@@ -579,7 +603,6 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
   }, [aiming, sweepAllowed, startCharge, endCharge, onSweep]);
 
   // shot call banner
-  const lt = state.lastThrow;
   const [callShownAt, setCallShownAt] = useState<{ turn: number; at: number } | null>(null);
   if (lt && callShownAt?.turn !== lt.turn) setCallShownAt({ turn: lt.turn, at: nowMs });
   const canCall = state.phase === "aim" && !myTurn && !liveNow && viewerSeat >= 0 && mySide === side && state.options.mode === "team";
@@ -607,7 +630,35 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
   const limit = liveNow ? RUN_GRACE_MS : AIM_TIMEOUT_MS;
   const throwerName = thrower !== null ? (names[thrower] ?? `${thrower + 1}번`) : "";
   const rec = state.phase !== "aim" ? state.history[state.history.length - 1] : null;
-  const measureView = state.phase === "scored" && rec ? { scorer: rec.scorer, counting: rec.counting } : null;
+  const guideOn = state.options.guide !== false;
+  const aimTo = (x: number) => {
+    setAimX(x);
+    markSeen("aim-broom");
+  };
+  const prov = state.phase === "aim" && !liveNow ? measure(state.stones) : null;
+  const measureView = state.phase === "scored" && rec ? { scorer: rec.scorer, counting: rec.counting } : guideOn && prov && prov.counting.length ? { scorer: prov.scorer, counting: prov.counting } : null;
+
+  // which coach tip (if any) fits this moment — most specific first
+  const coachId: CoachId | null = (() => {
+    if (tourOpen || rules || viewerSeat < 0 || charge !== null) return null;
+    const want: CoachId[] = [];
+    if (showCall && lt && lt.seat === viewerSeat && !lt.auto) {
+      const k = lt.call.key;
+      if (k === "hog" || k === "through" || k === "fgz" || k === "guard") want.push(k);
+    }
+    if (aiming) {
+      want.push("aim-broom", "aim-spin", "aim-power");
+      if (state.options.party && state.cards[side]) want.push("card");
+      if (isLastStone(state)) want.push("hammer");
+    }
+    if (liveNow) {
+      if (mySide === liveNow.side) want.push("sweep-own");
+      else if (liveNow.passedTee) want.push("sweep-opp");
+    }
+    if (state.phase === "aim" && !myTurn && !liveNow) want.push(canCall ? "mate-call" : "watch");
+    if (state.phase === "scored") want.push("scored");
+    return want.find((id) => !coachSeen.has(id)) ?? null;
+  })();
   const left = stonesLeft(state);
   const per = stonesPerSide(state);
   const isExtra = state.end >= state.options.ends;
@@ -622,6 +673,9 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
         </span>
         <span className="ml-auto flex items-center gap-1.5">
           <SuiteSoundHud suite={getCurlingSound} icon="🥌" label="Ice Party" preview="hit" />
+          <button onClick={() => setTourOpen(true)} className={CHIP} title="처음 하는 사람을 위한 안내">
+            🔰 안내
+          </button>
           <button onClick={() => setRules(true)} className={CHIP}>
             📖 룰북
           </button>
@@ -649,8 +703,16 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
           live={live}
           aim={aim}
           measure={measureView}
-          onAim={aiming && charge === null ? setAimX : undefined}
-          onTap={canCall ? (x, y) => onCall(x, y, callTag) : undefined}
+          onAim={aiming && charge === null ? aimTo : undefined}
+          onTap={
+            canCall
+              ? (x, y) => {
+                  onCall(x, y, callTag);
+                  markSeen("mate-call");
+                }
+              : undefined
+          }
+          guide={guideOn}
           calls={state.phase === "aim" && !liveNow ? teamCalls : []}
           onSlide={onSlide}
           onEvent={onEvent}
@@ -664,6 +726,19 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
             {remaining !== null && <span className={`shrink-0 tabular-nums ${remaining <= 10 ? "text-rose-300" : "text-white/60"}`}>{remaining}s</span>}
           </div>
         )}
+        {prov && (
+          <span className="pointer-events-none absolute bottom-3 left-2 max-w-[70%] truncate rounded-full bg-black/65 px-3 py-1 text-[11px] font-bold text-white">
+            지금 끝나면{" "}
+            {prov.scorer === null ? (
+              <span className="text-white/70">아무도 점수 없음</span>
+            ) : (
+              <>
+                <span style={{ color: SIDE_COLORS[prov.scorer] }}>{sideLabel(state, prov.scorer, names)}</span> +{prov.points}
+              </>
+            )}
+          </span>
+        )}
+        {coachId && <CoachBubble id={coachId} onDismiss={() => markSeen(coachId)} />}
         {isLastStone(state) && state.phase === "aim" && !liveNow && (
           <span className="pointer-events-none absolute top-10 left-2 rounded-full bg-amber-500/90 px-2.5 py-0.5 text-[11px] font-black text-slate-900">🔨 해머 — 이 엔드 마지막 스톤</span>
         )}
@@ -725,11 +800,15 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
               )}
             </div>
           )}
-          <AimPanel state={state} aimX={aimX} spin={spin} useCard={useCard} charge={charge} onAim={setAimX} onSpin={(s) => {
+          <AimPanel state={state} aimX={aimX} spin={spin} useCard={useCard} charge={charge} onAim={aimTo} onSpin={(s) => {
+            markSeen("aim-spin");
             setSpin(s);
             setAimX((x) => (Math.sign(x) === s ? -x : x));
             getCurlingSound().play("spin");
-          }} onCard={setUseCard} onChargeStart={startCharge} onChargeEnd={endCharge} />
+          }} onCard={(v) => {
+            markSeen("card");
+            setUseCard(v);
+          }} onChargeStart={startCharge} onChargeEnd={endCharge} />
         </div>
       )}
       {liveNow && viewerSeat >= 0 && (
@@ -740,7 +819,10 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
             mine={myIntensity}
             ownTeam={liveNow.own}
             opp={liveNow.opp}
-            onSweep={onSweep}
+            onSweep={() => {
+              markSeen(mySide === liveNow.side ? "sweep-own" : "sweep-opp");
+              onSweep();
+            }}
             title={mySide === liveNow.side ? (liveNow.seat === viewerSeat ? "내 스톤 — 쓸면 더 멀리·더 곧게!" : "우리 편 스톤 — 같이 쓸어요!") : liveNow.passedTee ? "상대 스톤 — 쓸어서 하우스 밖으로!" : "상대 스톤이 오는 중…"}
           />
         </div>
@@ -793,7 +875,22 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
         </div>
       )}
 
-      {rules && <RulebookModal onClose={() => setRules(false)} />}
+      {rules && (
+        <RulebookModal
+          onClose={() => setRules(false)}
+          onReplayTour={() => {
+            setRules(false);
+            setTourOpen(true);
+          }}
+          onResetCoach={() => {
+            const empty = new Set<CoachId>();
+            saveCoachSeen(empty);
+            setCoachSeen(empty);
+            setRules(false);
+          }}
+        />
+      )}
+      {tourOpen && <HowToPlayTour onClose={() => setTourOpen(false)} />}
     </div>
   );
 }

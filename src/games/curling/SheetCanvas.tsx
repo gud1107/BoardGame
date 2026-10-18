@@ -15,6 +15,7 @@ import {
   SHEET_HALF,
   STONE_R,
   TEE_Y,
+  ThrowSim,
   travelFor,
   type PartyKind,
   type Stone,
@@ -76,6 +77,8 @@ interface Props {
   /** Tap on the sheet (world meters) when not aiming — skip calls. */
   onTap?: (x: number, y: number) => void;
   calls?: readonly CallMark[];
+  /** 🔰 초보 도우미 (§21): while charging, draw the real curved no-sweep path instead of a straight marker. */
+  guide?: boolean;
   /** Delivered stone speed 0..1 every frame it moves (rumble SFX). */
   onSlide?: (speed: number) => void;
   /** Each FX-worthy event once (sound). */
@@ -276,12 +279,12 @@ function drawHouse(g: CanvasRenderingContext2D, cx: number, cy: number, s: numbe
   g.globalAlpha = 1;
 }
 
-export default function SheetCanvas({ stones, live, aim, measure, onAim, onTap, calls, onSlide, onEvent }: Props) {
+export default function SheetCanvas({ stones, live, aim, measure, onAim, onTap, calls, guide, onSlide, onEvent }: Props) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const propsRef = useRef({ stones, measure, onAim, onTap, calls, onSlide, onEvent });
+  const propsRef = useRef({ stones, measure, onAim, onTap, calls, guide, onSlide, onEvent });
   useEffect(() => {
-    propsRef.current = { stones, measure, onAim, onTap, calls, onSlide, onEvent };
+    propsRef.current = { stones, measure, onAim, onTap, calls, guide, onSlide, onEvent };
   });
 
   useEffect(() => {
@@ -544,8 +547,48 @@ export default function SheetCanvas({ stones, live, aim, measure, onAim, onTap, 
         g.fill();
         g.stroke();
         g.restore();
-        // predicted straight stop while charging
-        if (av.charge !== null) {
+        // 🔰 guide: the real curved path of a lone, unswept stone at this weight
+        if (av.charge !== null && propsRef.current.guide) {
+          const kind = av.kind === "swirl" || av.kind === "magnet" ? av.kind : null;
+          const sim = new ThrowSim([], { aim: av.aim, weight: av.charge, spin: av.spin, kind }, av.side, -1);
+          const pts: { x: number; y: number }[] = [];
+          while (!sim.done) {
+            sim.step(0, 0);
+            if (sim.tick % 8 === 0) {
+              const ds = sim.deliveredStone();
+              if (ds.y < viewBottom + 2) pts.push({ x: ds.x, y: ds.y });
+            }
+          }
+          const end = sim.deliveredStone();
+          g.save();
+          g.strokeStyle = color;
+          g.globalAlpha = 0.85;
+          g.setLineDash([6, 5]);
+          g.lineWidth = 2.5;
+          g.beginPath();
+          pts.forEach((p, k) => (k === 0 ? g.moveTo(X(p.x), Y(p.y)) : g.lineTo(X(p.x), Y(p.y))));
+          g.stroke();
+          g.setLineDash([]);
+          if (end.out === null || end.out === "hog") {
+            g.lineWidth = 2;
+            g.beginPath();
+            g.arc(X(end.x), Y(end.y), STONE_R * s * 1.15, 0, Math.PI * 2);
+            g.stroke();
+          }
+          g.font = "bold 11px system-ui, sans-serif";
+          g.textAlign = "center";
+          g.fillStyle = "#0f172a";
+          const tip = end.out === "hog" ? "미달 — 호그 라인을 못 넘어요" : end.out ? "지나쳐서 아웃" : "🔰 쓸지 않으면 여기쯤 (다른 스톤 제외)";
+          const ty = end.out === null || end.out === "hog" ? Math.max(14, Math.min(H - 8, Y(end.y) - STONE_R * s * 1.6)) : 14;
+          g.globalAlpha = 1;
+          const tw = g.measureText(tip).width + 10;
+          g.fillStyle = "rgba(255,255,255,0.85)";
+          g.fillRect(X(0) - tw / 2, ty - 10, tw, 14);
+          g.fillStyle = "#0f172a";
+          g.fillText(tip, X(0), ty + 1);
+          g.restore();
+        } else if (av.charge !== null) {
+          // predicted straight stop while charging
           const t = travelFor(av.charge);
           const px = d.x * t;
           const py = RELEASE_Y + d.y * t;

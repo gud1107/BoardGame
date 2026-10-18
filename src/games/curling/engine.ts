@@ -60,9 +60,11 @@ export interface GameOptions {
   party: boolean;
   /** §8 프리 가드 존 */
   fgz: boolean;
+  /** §21 🔰 초보 도우미 — display only (curved path preview, live scoring numbers); the engine never reads it. */
+  guide: boolean;
 }
 
-export const DEFAULT_OPTIONS: GameOptions = { mode: "team", ends: 3, stones: 4, party: true, fgz: true };
+export const DEFAULT_OPTIONS: GameOptions = { mode: "team", ends: 3, stones: 4, party: true, fgz: true, guide: true };
 
 export type Phase = "aim" | "scored" | "ended";
 
@@ -172,6 +174,7 @@ export function normalizeOptions(playerCount: number, o: Partial<GameOptions> = 
     stones: o.stones === 6 || o.stones === 8 ? o.stones : 4,
     party: o.party !== false,
     fgz: o.fgz !== false,
+    guide: o.guide !== false,
   };
 }
 
