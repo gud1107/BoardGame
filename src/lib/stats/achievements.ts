@@ -178,6 +178,13 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["habits-4", "🌱", "루틴 마스터", "수면이 아닌 습관 4개로 마무리", 4, k("maxHabits")],
     ["flawless-3", "🧘", "번아웃 제로", "붕괴 없이 일주일 3번", 3, k("flawlessWeeks")],
   ],
+  alkkagi: [
+    ["knock-1", "⚫", "첫 알까기", "상대 알 1개 떨어뜨리기", 1, k("knocked")],
+    ["double-1", "💥", "더블킬", "한 번에 2개 이상 떨어뜨리기", 1, k("multiKnocks")],
+    ["flawless-1", "🛡️", "무결점 승리", "알을 하나도 안 잃고 판 1등", 1, k("flawless")],
+    ["king-3", "👑", "왕 사냥꾼", "왕알 모드에서 왕 잡기 3번", 3, k("kingKills")],
+    ["knock-100", "🎯", "알까기 장인", "상대 알 누적 100개", 100, k("knocked")],
+  ],
   "wobble-tower": [
     ["builder-1", "🏅", "마지막 건축가", "무너지기 직전에 마지막으로 올리기 1번", 1, k("lastBuilder")],
     ["pulls-50", "🪵", "목수의 손", "빼기 성공 누적 50번", 50, k("pulls")],

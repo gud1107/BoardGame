@@ -81,6 +81,13 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "붕괴 없는 일주일", value: (d) => n(d.flawlessWeeks) },
     { label: "약속 성사 / 기회 카드", value: (d) => `${n(d.matches)} / ${n(d.opportunities)}` },
   ],
+  alkkagi: [
+    { label: "떨어뜨린 알 / 잃은 알", value: (d) => `${n(d.knocked)} / ${n(d.lost)}` },
+    { label: "판 1등 / 무결점 승리", value: (d) => `${n(d.roundWins)} / ${n(d.flawless)}` },
+    { label: "더블킬 (한 번에 2개+)", value: (d) => n(d.multiKnocks) },
+    { label: "한 번에 최다", value: (d) => `${n(d.bestShot)}개` },
+    { label: "왕 잡기 / 스스로 떨어짐", value: (d) => `${n(d.kingKills)} / ${n(d.selfFalls)}` },
+  ],
   "wobble-tower": [
     { label: "빼기 성공 / 무너뜨림", value: (d) => `${n(d.pulls)} / ${n(d.collapses)}` },
     { label: "🏅 마지막 건축가", value: (d) => n(d.lastBuilder) },

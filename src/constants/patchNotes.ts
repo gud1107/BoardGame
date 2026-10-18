@@ -58,6 +58,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.65.0",
+    releaseDate: "2026-10-18",
+    title: "⚫ 신규 게임 알까기 대전 — 3D 바둑판에서 알 튕기기",
+    changes: [
+      { game: "alkkagi", type: "FEAT", desc: "신규 게임 ⚫ 알까기 대전 — 3D 바둑판에서 내 알을 튕겨 상대 알을 판 밖으로! 마지막까지 알이 남으면 승리, 2~4인 · AI 봇과 바로" },
+      { game: "alkkagi", type: "FEAT", desc: "🎯 알을 꾹 눌러 새총처럼 당겼다 놓기 — 화살표·점선 조준, 상대 알을 떨어뜨리면 🔥 한 번 더 (최대 3번)" },
+      { game: "alkkagi", type: "FEAT", desc: "모든 기기가 똑같이 계산하는 물리 — 딱 부딪치고 판 아래로 굴러떨어져요 · 👑 왕알 모드, 알 개수·단판/3판 선택" },
+    ],
+  },
+  {
     version: "v1.64.0",
     releaseDate: "2026-10-18",
     title: "🪵 신규 게임 와르르 타워 — 3D 나무 탑에서 블록 빼기",

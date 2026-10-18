@@ -123,6 +123,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "alkkagi",
+    name: "알까기 대전",
+    nameEn: "Alkkagi Battle",
+    description:
+      "3D 바둑판 위에서 내 알을 손가락으로 튕겨 상대 알을 판 밖으로 떨어뜨리는 2~4인 물리 대결! 알을 꾹 눌러 새총처럼 당겼다 놓으면 딱— 맞은 알이 날아가 판 아래로 굴러떨어져요. 상대 알을 떨어뜨리면 한 번 더, 마지막까지 알이 남은 사람이 승리. 👑 왕알 모드, 단판/3판, AI 봇 지원.",
+    players: { min: 2, max: 4 },
+    playTime: { minMinutes: 5, maxMinutes: 20 },
+    category: "party",
+    thumbnail: { emoji: "⚫", gradient: ["#d9a85c", "#16161a"] },
+    tags: ["알까기", "바둑알", "바둑", "튕기기", "물리", "3D", "AI봇"],
+    genres: ["party", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "wobble-tower",
     name: "와르르 타워",
     nameEn: "Wobble Tower",
