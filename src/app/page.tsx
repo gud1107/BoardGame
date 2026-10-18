@@ -12,6 +12,8 @@ import { useActiveRooms } from "@/games/shared/room/useActiveRooms";
 import { PLAYER_FILTERS } from "@/constants/playerFilters";
 import { DEFAULT_SORT_OPTION, isAdminSortOption, type SortOption, sortGamesBy } from "@/constants/sortOptions";
 import SortFilterChips from "@/components/lobby/SortFilterChips";
+import NewOnlyChip from "@/components/lobby/NewOnlyChip";
+import { isNewGame } from "@/constants/gameUpdateCount";
 import { useGameBgm } from "@/lib/audio/useGameBgm";
 import { fetchGamePlayStats } from "@/lib/analytics/playCounts";
 import { applyGameOverrides, fetchGameOverrides, type GameOverride } from "@/lib/siteConfig/siteConfig";
@@ -31,6 +33,7 @@ interface SavedLobbyState {
   filterIdx: number;
   genreFilter: GenreFilter;
   sortOption: SortOption;
+  newOnly: boolean;
 }
 
 /**
@@ -96,9 +99,11 @@ export default function DashboardPage() {
   const [filterIdxPick, setFilterIdx] = useState<number | null>(null);
   const [genrePick, setGenreFilter] = useState<GenreFilter | null>(null);
   const [sortPick, setSortOption] = useState<SortOption | null>(null);
+  const [newOnlyPick, setNewOnly] = useState<boolean | null>(null);
   const query = queryPick ?? saved.query ?? "";
   const filterIdx = filterIdxPick ?? saved.filterIdx ?? 0;
   const genreFilter = genrePick ?? saved.genreFilter ?? "all";
+  const newOnly = newOnlyPick ?? saved.newOnly ?? false;
   // 🛠 커밋/푸시/배포순 are site-admin only (2026-10-11); anyone else with
   // one somehow saved falls back to the default.
   const isAdmin = useIsSiteAdmin(useSubscriptionStore((s) => s.userId));
@@ -160,13 +165,13 @@ export default function DashboardPage() {
     try {
       window.sessionStorage.setItem(
         LOBBY_STATE_KEY,
-        JSON.stringify({ query, filterIdx, genreFilter, sortOption }),
+        JSON.stringify({ query, filterIdx, genreFilter, sortOption, newOnly }),
       );
     } catch {
       // Storage full/blocked — state just won't survive this particular
       // back-navigation, no worse than before this fix.
     }
-  }, [hydrated, query, filterIdx, genreFilter, sortOption]);
+  }, [hydrated, query, filterIdx, genreFilter, sortOption, newOnly]);
 
   // 2026-09-06 AskUserQuestion: 모바일 검색어 입력 중엔 캐러셀/쇼케이스를
   // 숨기고 결과 그리드를 최상단으로 끌어올린다 (인원수/장르 필터 칩은 유지).
@@ -194,9 +199,11 @@ export default function DashboardPage() {
         g.description.toLowerCase().includes(q) ||
         g.tags?.some((tag) => tag.toLowerCase().includes(q));
       const matchesPlayers = filter.test(g.players.min, g.players.max);
-      return matchesQuery && matchesPlayers;
+      // 🆕 신규만: same rule as the NEW badge (needs the client clock, so
+      // it waits for hydration like the badge does).
+      return matchesQuery && matchesPlayers && (!newOnly || isNewGame(g.id, now));
     });
-  }, [query, filterIdx, catalog]);
+  }, [query, filterIdx, catalog, newOnly, now]);
 
   const filtered = useMemo(() => {
     const byGenre =
@@ -238,6 +245,8 @@ export default function DashboardPage() {
         onQueryChange={setQuery}
         filterIdx={filterIdx}
         onFilterChange={setFilterIdx}
+        newOnly={newOnly}
+        onNewOnlyChange={setNewOnly}
         sortOption={sortOption}
         onSortChange={setSortOption}
         monthPlays={monthPlays}
@@ -309,6 +318,7 @@ export default function DashboardPage() {
               {f.label}
             </button>
           ))}
+          <NewOnlyChip value={newOnly} onChange={setNewOnly} />
         </div>
         <div className="flex items-center gap-2">
           <span className="shrink-0 text-[11px] font-medium text-amber-500/60 light:text-amber-700">
@@ -361,6 +371,7 @@ export default function DashboardPage() {
               {f.label}
             </button>
           ))}
+          <NewOnlyChip value={newOnly} onChange={setNewOnly} />
         </div>
 
         <div className="mb-4 hidden items-center gap-2 sm:flex">

@@ -35,12 +35,16 @@ export default function SortFilterChips({
   return (
     <div className={`-mx-1 flex gap-1.5 overflow-x-auto px-1 py-1 no-scrollbar ${className}`}>
       {SORT_OPTIONS.map((opt) => {
-        const isActive = value === opt.key;
+        const isReversed = opt.reverse !== undefined && value === opt.reverse;
+        const isActive = value === opt.key || isReversed;
+        const arrow = opt.reverse && isActive ? (isReversed ? " ↓" : " ↑") : "";
         return (
           <button
             key={opt.key}
             type="button"
-            onClick={() => onChange(opt.key)}
+            onClick={() => onChange(opt.reverse && value === opt.key ? opt.reverse : opt.key)}
+            aria-pressed={isActive}
+            title={opt.reverse ? (isReversed ? "내림차순 — 다시 누르면 오름차순" : "오름차순 — 다시 누르면 내림차순") : undefined}
             className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap transition-all duration-200 ${
               isActive
                 ? "border-amber-400 bg-amber-500/20 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.2)] light:text-amber-700"
@@ -48,6 +52,7 @@ export default function SortFilterChips({
             }`}
           >
             {opt.label}
+            {arrow}
           </button>
         );
       })}

@@ -34,12 +34,17 @@ export type SortOption =
  */
 export type AdminSortOption = "ADMIN_COMMIT_DESC" | "ADMIN_PUSH_DESC" | "ADMIN_DEPLOY_DESC";
 
-export const SORT_OPTIONS: { key: SortOption; label: string }[] = [
+/**
+ * `reverse` makes a chip two-way (2026-10-19): tapping it again while active
+ * flips between `key` (오름차순, shown ↑) and `reverse` (내림차순, shown ↓).
+ * "인원순" replaced the separate 인원 적은순/많은순 chips this way; both keys
+ * stay valid so a saved sort keeps working.
+ */
+export const SORT_OPTIONS: { key: SortOption; label: string; reverse?: SortOption }[] = [
   { key: "POPULAR_DESC", label: "👑 인기순" },
   { key: "UPDATE_DESC", label: "🔥 최근 업데이트순" },
   { key: "NAME_ASC", label: "가나다순" },
-  { key: "PLAYERS_ASC", label: "인원 적은순" },
-  { key: "PLAYERS_DESC", label: "인원 많은순" },
+  { key: "PLAYERS_ASC", label: "👥 인원순", reverse: "PLAYERS_DESC" },
   { key: "DIFFICULTY_ASC", label: "난이도 쉬운순" },
 ];
 

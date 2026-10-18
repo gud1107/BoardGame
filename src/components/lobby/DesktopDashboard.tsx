@@ -9,6 +9,7 @@ import type { SortOption } from "@/constants/sortOptions";
 import GameShowcaseCard from "./GameShowcaseCard";
 import { getGameFreshnessBadge } from "@/constants/gameUpdateCount";
 import SortFilterChips from "./SortFilterChips";
+import NewOnlyChip from "./NewOnlyChip";
 
 /**
  * Desktop-only (xl+, ≥1280px) zero-scroll lobby dashboard — a single
@@ -62,6 +63,8 @@ export default function DesktopDashboard({
   onQueryChange,
   filterIdx,
   onFilterChange,
+  newOnly,
+  onNewOnlyChange,
   sortOption,
   onSortChange,
   monthPlays,
@@ -77,6 +80,8 @@ export default function DesktopDashboard({
   onQueryChange: (q: string) => void;
   filterIdx: number;
   onFilterChange: (idx: number) => void;
+  newOnly: boolean;
+  onNewOnlyChange: (next: boolean) => void;
   sortOption: SortOption;
   onSortChange: (option: SortOption) => void;
   /** This month's real starts per game (shown as "🔥 10월 N회 플레이"). */
@@ -132,6 +137,7 @@ export default function DesktopDashboard({
                   {f.label}
                 </button>
               ))}
+              <NewOnlyChip value={newOnly} onChange={onNewOnlyChange} compact />
             </div>
             <span className="shrink-0 text-xs font-medium text-amber-500/60 light:text-amber-700">
               총 {totalCount}개 게임 · 플레이 가능 {playableCount}개

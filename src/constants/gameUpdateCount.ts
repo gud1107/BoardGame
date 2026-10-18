@@ -68,6 +68,12 @@ export const NEW_BADGE_DAYS = 14;
 /** …and UPDATED for this long after its last game-specific update. */
 export const UPDATED_BADGE_DAYS = 5;
 
+/** Same rule as the NEW badge — also drives the lobby's "🆕 신규만" filter. */
+export function isNewGame(gameId: GameId, now: number): boolean {
+  const addedAt = GAME_ADDED[gameId];
+  return !!addedAt && now > 0 && now - Date.parse(addedAt) < NEW_BADGE_DAYS * DAY_MS;
+}
+
 /**
  * Lobby card badge: NEW wins over UPDATED (a fresh game is also recently
  * touched). `now` is passed in (not read here) so the lobby can freeze one
@@ -75,8 +81,7 @@ export const UPDATED_BADGE_DAYS = 5;
  */
 export function getGameFreshnessBadge(gameId: GameId, now: number): GameFreshnessBadge | null {
   if (!(now > 0)) return null; // clock not known yet (server / hydration render)
-  const addedAt = GAME_ADDED[gameId];
-  if (addedAt && now - Date.parse(addedAt) < NEW_BADGE_DAYS * DAY_MS) return "NEW";
+  if (isNewGame(gameId, now)) return "NEW";
   const updatedAt = getGameLastUpdated(gameId);
   if (updatedAt && now - Date.parse(updatedAt) < UPDATED_BADGE_DAYS * DAY_MS) return "UPDATED";
   return null;
