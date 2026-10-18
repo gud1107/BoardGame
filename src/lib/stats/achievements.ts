@@ -178,6 +178,16 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["habits-4", "🌱", "루틴 마스터", "수면이 아닌 습관 4개로 마무리", 4, k("maxHabits")],
     ["flawless-3", "🧘", "번아웃 제로", "붕괴 없이 일주일 3번", 3, k("flawlessWeeks")],
   ],
+  chess: [
+    ["mate-1", "♚", "첫 체크메이트", "체크메이트로 1번 이기기", 1, k("mateWins")],
+    ["ep-1", "👻", "지나가는 폰", "앙파상 1번", 1, k("enPassants")],
+    ["promo-1", "♛", "승진", "프로모션 1번", 1, k("promotions")],
+    ["under-1", "♞", "언더프로모션", "퀸이 아닌 기물로 승진 1번", 1, k("underPromotions")],
+    ["quick-1", "⚡", "번개 메이트", "20반수 안에 체크메이트 승", 1, k("quickMates")],
+    ["castle-20", "🏰", "성 쌓기", "캐슬링 누적 20번", 20, k("castles")],
+    ["capture-100", "⚔️", "학살자", "기물 누적 100개 잡기", 100, k("captures")],
+    ["mate-10", "🎖️", "그랜드마스터의 길", "체크메이트 승 누적 10번", 10, k("mateWins")],
+  ],
   curling: [
     ["button-1", "🎯", "첫 버튼", "아무것도 안 맞히고 버튼 위에 멈추기", 1, k("buttons")],
     ["button-10", "🥌", "버튼 장인", "버튼 누적 10번", 10, k("buttons")],

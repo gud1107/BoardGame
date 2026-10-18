@@ -25,7 +25,7 @@ interface WorkerGlobalScope {
   postMessage(message: BotWorkerResponse): void;
 }
 
-export type BotWorkerGameId = "five-cucumbers" | "perudo" | "malDalliJa";
+export type BotWorkerGameId = "five-cucumbers" | "perudo" | "malDalliJa" | "chess";
 
 export interface BotWorkerRequest {
   requestId: number;
@@ -61,6 +61,10 @@ async function handleRequest(req: BotWorkerRequest): Promise<BotWorkerResponse> 
       }
       case "malDalliJa": {
         const { chooseBotAction } = await import("@/games/malDalliJa/engine");
+        return { requestId: req.requestId, action: chooseBotAction(req.state, req.seat, req.level, rng) };
+      }
+      case "chess": {
+        const { chooseBotAction } = await import("@/games/chess/engine");
         return { requestId: req.requestId, action: chooseBotAction(req.state, req.seat, req.level, rng) };
       }
       default:

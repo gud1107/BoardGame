@@ -106,6 +106,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "만든 습관", key: "habitsFormed", unit: "개" },
     { label: "붕괴 없는 일주일", key: "flawlessWeeks", flag: true },
   ],
+  chess: [
+    { label: "체크메이트 승", key: "mateWins", flag: true },
+    { label: "잡은 기물", key: "captures", unit: "개" },
+    { label: "체크", key: "checks", unit: "번" },
+    { label: "승진", key: "promotions", unit: "번" },
+  ],
   curling: [
     { label: "🎯 버튼", key: "buttons", unit: "번" },
     { label: "테이크아웃", key: "takeouts", unit: "개" },
@@ -266,6 +272,11 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "glp-score", label: "한 판 최고 점수", num: "maxScore", format: "count", unit: "점" },
     { id: "glp-goals", label: "인생 목표 달성", num: "goalsMet", format: "count", unit: "번" },
     { id: "glp-habits", label: "만든 습관", num: "habitsFormed", format: "count", unit: "개" },
+  ],
+  chess: [
+    { id: "chs-mates", label: "체크메이트 승", num: "mateWins", format: "count", unit: "번" },
+    { id: "chs-captures", label: "잡은 기물", num: "captures", format: "count", unit: "개" },
+    { id: "chs-quick", label: "번개 메이트", num: "quickMates", format: "count", unit: "번" },
   ],
   curling: [
     { id: "crl-buttons", label: "🎯 버튼", num: "buttons", format: "count", unit: "번" },

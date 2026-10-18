@@ -58,6 +58,17 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.68.0",
+    releaseDate: "2026-10-18",
+    title: "♟️ 신규 게임 체스 — 정통 FIDE 규칙 + 수마다 이펙트",
+    changes: [
+      { game: "chess", type: "FEAT", desc: "신규 게임 ♟️ 체스 — 캐슬링·앙파상·프로모션·스테일메이트·3회 반복·50수·기물 부족까지 국제 규칙 그대로, AI 봇 Lv.1~10" },
+      { game: "chess", type: "FEAT", desc: "⏱️ 체스 시계 1+0 ~ 30+0(증초 포함)과 시간 패, 🤝 무승부 제안 · ↩️ 무르기 · 🏳️ 기권, 방장이 색·시간 선택" },
+      { game: "chess", type: "FEAT", desc: "✨ 이동 이펙트 — 잔상 슬라이드, 나이트 점프, 잡기 파편, 캐슬링 금빛 궤적, 앙파상 소용돌이, 승진 빛기둥, 체크 공격선, 체크메이트 충격파" },
+      { game: "chess", type: "FEAT", desc: "📜 기보(SAN) 되감기 보기·PGN 복사, 끌어서 놓기/눌러서 두기, 판 테마 3종, 🎻 BGM과 수 종류별 효과음" },
+    ],
+  },
+  {
     version: "v1.67.0",
     releaseDate: "2026-10-18",
     title: "🥌 컬링 파티 — 기다리는 동안 콜·예측, 색약도 구분되는 스톤",

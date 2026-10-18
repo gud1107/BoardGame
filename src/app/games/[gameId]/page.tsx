@@ -338,7 +338,7 @@ export default function GamePlayPage() {
       ? "max-w-[96rem]"
       : game.id === "splendor-duel" || game.id === "tavern-brawl"
       ? "max-w-7xl"
-      : game.id === "summoners-rift" || game.id === "avalon" || game.id === "dalmuti" || game.id === "mafia" || game.id === "god-life-planner"
+      : game.id === "summoners-rift" || game.id === "chess" || game.id === "avalon" || game.id === "dalmuti" || game.id === "mafia" || game.id === "god-life-planner"
         ? "max-w-5xl"
       : game.id === "destiny-war-39"
         ? "max-w-6xl"

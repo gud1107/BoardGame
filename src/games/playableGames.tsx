@@ -46,6 +46,7 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   "mine-of-oblivion": dynamic(() => import("./mineOfOblivion/MineOfOblivionGame"), { ssr: false }),
   "mine-of-oblivion-2": dynamic(() => import("./mineOfOblivion2/MineOfOblivion2Game"), { ssr: false }),
   "word-tower": dynamic(() => import("./wordTower/WordTowerGame"), { ssr: false }),
+  chess: dynamic(() => import("./chess/ChessGame"), { ssr: false }),
   curling: dynamic(() => import("./curling/CurlingGame"), { ssr: false }),
   alkkagi: dynamic(() => import("./alkkagi/AlkkagiGame"), { ssr: false }),
   "wobble-tower": dynamic(() => import("./wobbleTower/WobbleTowerGame"), { ssr: false }),

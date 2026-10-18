@@ -123,6 +123,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "chess",
+    name: "체스",
+    nameEn: "Chess",
+    description:
+      "국제 규칙(FIDE) 그대로의 정통 체스! 캐슬링·앙파상·프로모션·3회 반복·50수 규칙까지 전부 구현, 1+0 불릿부터 30분 클래식까지 체스 시계, 무승부 제안·무르기·기권, 기보(SAN) 되감기와 PGN 복사. 수마다 잔상·나이트 점프·잡기 파편·캐슬링 금빛 궤적·승진 빛기둥·체크메이트 충격파 이펙트. AI 봇 Lv.1~10.",
+    players: { min: 2, max: 2 },
+    playTime: { minMinutes: 2, maxMinutes: 60 },
+    category: "strategy",
+    thumbnail: { emoji: "♟️", gradient: ["#e7c48f", "#1a1410"] },
+    tags: ["체스", "2인전용", "추상전략", "클래식", "체스시계", "AI봇"],
+    genres: ["strategy"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "curling",
     name: "컬링 파티",
     nameEn: "Curling Party",
