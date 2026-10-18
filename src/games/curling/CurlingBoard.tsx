@@ -28,6 +28,7 @@ import { BACK_Y, HOG_Y, HOUSE_R, RELEASE_Y, STONE_R, weightForTravel, type Party
 
 const PANEL = "rounded-2xl border border-white/10 bg-white/[0.04] p-3 light:border-slate-200 light:bg-white light:shadow-sm";
 const PRIMARY = "rounded-xl bg-sky-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-sky-500 disabled:opacity-40";
+const AI_CALLS_KEY = "curling-ai-calls";
 const CHIP = "rounded-full border border-white/15 px-2.5 py-1 text-[11px] font-bold text-white/70 light:border-slate-300 light:text-slate-600";
 
 /* ── 공유 타입 ───────────────────────────────────────────────── */
@@ -477,6 +478,26 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
   const classify = useMemo(() => curlingCues(mySide >= 0 ? mySide : null, viewerSeat), [mySide, viewerSeat]);
   useSoundCues(state, getCurlingSound, classify);
 
+  // 🤖 AI skip calls can be hidden per device for players who'd rather read the house themselves (§17)
+  const [hideAiCalls, setHideAiCalls] = useState(() => {
+    try {
+      return typeof window !== "undefined" && window.localStorage.getItem(AI_CALLS_KEY) === "off";
+    } catch {
+      return false;
+    }
+  });
+  const toggleAiCalls = () => {
+    const next = !hideAiCalls;
+    setHideAiCalls(next);
+    try {
+      window.localStorage.setItem(AI_CALLS_KEY, next ? "off" : "on");
+    } catch {
+      /* ignore */
+    }
+  };
+  const teamCalls = calls.filter((c) => c.side === mySide && !(hideAiCalls && c.bot));
+  const hasAiCall = calls.some((c) => c.side === mySide && c.bot);
+
   const startCharge = useCallback(() => {
     if (!aiming || chargeRef.current) return;
     getCurlingSound().unlock();
@@ -630,7 +651,7 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
           measure={measureView}
           onAim={aiming && charge === null ? setAimX : undefined}
           onTap={canCall ? (x, y) => onCall(x, y, callTag) : undefined}
-          calls={state.phase === "aim" && !liveNow ? calls.filter((c) => c.side === mySide) : []}
+          calls={state.phase === "aim" && !liveNow ? teamCalls : []}
           onSlide={onSlide}
           onEvent={onEvent}
         />
@@ -690,15 +711,18 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
       {/* 조작 */}
       {aiming && (
         <div className={PANEL}>
-          {calls.some((c) => c.side === mySide) && (
-            <div className="mb-2 flex flex-wrap gap-1.5">
-              {calls
-                .filter((c) => c.side === mySide)
-                .map((c) => (
-                  <span key={c.seat} className="rounded-full bg-sky-500/20 px-2.5 py-1 text-xs font-bold text-sky-100 light:text-sky-800">
-                    📣 {c.name}: {CALL_TAGS[c.tag].emoji} {CALL_TAGS[c.tag].label}
-                  </span>
-                ))}
+          {(teamCalls.length > 0 || hasAiCall) && (
+            <div className="mb-2 flex flex-wrap items-center gap-1.5">
+              {teamCalls.map((c) => (
+                <span key={c.seat} className="rounded-full bg-sky-500/20 px-2.5 py-1 text-xs font-bold text-sky-100 light:text-sky-800">
+                  📣 {c.name}: {CALL_TAGS[c.tag].emoji} {CALL_TAGS[c.tag].label}
+                </span>
+              ))}
+              {hasAiCall && (
+                <button type="button" onClick={toggleAiCalls} className={`${CHIP} ml-auto`}>
+                  {hideAiCalls ? "🤖 AI 콜 보기" : "🙈 AI 콜 숨기기"}
+                </button>
+              )}
             </div>
           )}
           <AimPanel state={state} aimX={aimX} spin={spin} useCard={useCard} charge={charge} onAim={setAimX} onSpin={(s) => {

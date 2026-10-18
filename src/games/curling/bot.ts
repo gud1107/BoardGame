@@ -100,9 +100,9 @@ function grid(level: BotLevel): { aims: number[]; weights: number[] } {
   return { aims, weights };
 }
 
-/** Synchronous plan (tests, sims). */
-export function planBotThrow(state: CurlingState, level: BotLevel, rng: () => number = Math.random): BotPlan {
-  const it = planSteps(state, level, rng);
+/** Synchronous plan (tests, sims). `intent` = the shot it means to play, without execution noise. */
+export function planBotThrow(state: CurlingState, level: BotLevel, rng: () => number = Math.random, intent = false): BotPlan {
+  const it = planSteps(state, level, rng, intent);
   for (;;) {
     const r = it.next();
     if (r.done) return r.value;
@@ -110,8 +110,8 @@ export function planBotThrow(state: CurlingState, level: BotLevel, rng: () => nu
 }
 
 /** Same plan, yielding to the browser every few hundred simulations so the sheet keeps animating. */
-export async function planBotThrowAsync(state: CurlingState, level: BotLevel, rng: () => number = Math.random): Promise<BotPlan> {
-  const it = planSteps(state, level, rng);
+export async function planBotThrowAsync(state: CurlingState, level: BotLevel, rng: () => number = Math.random, intent = false): Promise<BotPlan> {
+  const it = planSteps(state, level, rng, intent);
   for (;;) {
     const r = it.next();
     if (r.done) return r.value;
@@ -121,7 +121,7 @@ export async function planBotThrowAsync(state: CurlingState, level: BotLevel, rn
 
 const BATCH = 160;
 
-function* planSteps(state: CurlingState, level: BotLevel, rng: () => number): Generator<void, BotPlan> {
+function* planSteps(state: CurlingState, level: BotLevel, rng: () => number, intent = false): Generator<void, BotPlan> {
   const l = clampBotLevel(level);
   const side = currentSide(state);
   const card = state.options.party ? state.cards[side] : null;
@@ -180,6 +180,8 @@ function* planSteps(state: CurlingState, level: BotLevel, rng: () => number): Ge
     l,
     rng,
   );
+  // a skip call (§17) shows the intended shot — judgment varies by level, the hand doesn't shake
+  if (intent) return { aim: pick.aim, weight: pick.weight, spin: pick.spin, useCard: pick.kind !== null };
   const noise = botNoise(l);
   return {
     aim: Math.max(-2.2, Math.min(2.2, pick.aim + gaussian(rng) * noise.aim)),

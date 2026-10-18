@@ -47,6 +47,8 @@ export interface CallMark {
   y: number;
   tag: "draw" | "guard" | "hit";
   name: string;
+  /** Called by a bot teammate (🤖 AI 스킵) — each player can hide these. */
+  bot?: boolean;
 }
 export const CALL_TAGS: Record<CallMark["tag"], { emoji: string; label: string }> = {
   draw: { emoji: "🎯", label: "여기 붙여!" },

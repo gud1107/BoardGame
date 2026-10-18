@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { applyAction, currentThrower, startGame } from "./engine";
 import { predictionHit, sanitizeCall, sanitizePrediction, stoneStayedIn } from "./spectate";
 import { restingPoint, weightForTravel } from "./physics";
+import { planBotThrow } from "./bot";
+import { seededRng } from "@/lib/rng";
 
 describe("spectator layer (§17)", () => {
   it("scores a prediction by whether the delivered stone stayed in the house", () => {
@@ -22,6 +24,18 @@ describe("spectator layer (§17)", () => {
     expect(predictionHit("out", true)).toBe(false);
     s = applyAction(s, { type: "throw", seat: currentThrower(s)!, turn: s.turn, aim: 0, weight: 1, spin: 1, useCard: false, own: [], opp: [] });
     expect(stoneStayedIn(s, s.lastThrow!)).toBe(false);
+  });
+
+  it("an AI skip call is the intended shot — no execution noise", () => {
+    const s = startGame(4, 77, { party: false });
+    for (const lv of [1, 10]) {
+      const call = planBotThrow(s, lv, seededRng(lv), true);
+      const step = lv >= 7 ? 0.07 : 0.16;
+      const k = (call.aim + 2) / step;
+      expect(Math.abs(k - Math.round(k))).toBeLessThan(1e-6);
+      const thrown = planBotThrow(s, lv, seededRng(lv));
+      expect(thrown.aim).not.toBe(call.aim);
+    }
   });
 
   it("rejects malformed predictions and calls", () => {

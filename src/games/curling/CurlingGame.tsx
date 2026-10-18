@@ -1129,7 +1129,7 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
           plan.skipAsked = true;
           const turn = state.turn;
           const side = currentSide(state);
-          void planBotThrowAsync(state, levelOf(mate)).then((p) => {
+          void planBotThrowAsync(state, levelOf(mate), Math.random, true).then((p) => {
             const st = gameStateRef.current;
             if (!st || st.turn !== turn || liveRef.current?.turn === turn) return;
             const sim = runThrow(state.stones, { aim: p.aim, weight: p.weight, spin: p.spin, kind: p.useCard ? state.cards[side] : null }, side, state.nextStoneId);
@@ -1585,7 +1585,7 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
           reactions={reactions}
           onReact={sendReaction}
           onEvent={handleEvent}
-          calls={calls.turn === gameState.turn ? Object.values(calls.marks).map((m) => ({ ...m, name: names[m.seat] ?? `${m.seat + 1}번` })) : []}
+          calls={calls.turn === gameState.turn ? Object.values(calls.marks).map((m) => ({ ...m, name: names[m.seat] ?? `${m.seat + 1}번`, bot: allBotSeatSet.has(m.seat) })) : []}
           onCall={sendCall}
           predictions={predictions.turn === gameState.turn ? predictions : EMPTY_PREDICTIONS}
           predictLocked={predictLockTurn === gameState.turn}

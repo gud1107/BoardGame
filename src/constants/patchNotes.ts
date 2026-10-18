@@ -58,6 +58,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.68.1",
+    releaseDate: "2026-10-19",
+    title: "🥌 컬링 파티 — AI 스킵 콜은 레벨만큼, 숨기기도 가능",
+    changes: [
+      { game: "curling", type: "IMPROVE", desc: "🤖 봇 팀원의 스킵 콜이 손 떨림 없는 '의도한 샷'으로 — 판단력은 레벨만큼(Lv.1 콜은 자주 틀리고 Lv.7+는 거의 정확)" },
+      { game: "curling", type: "FEAT", desc: "🙈 AI 콜 숨기기 — 하우스를 직접 읽고 싶으면 내 화면에서만 봇 콜을 끌 수 있어요(사람 팀원 콜은 그대로)" },
+    ],
+  },
+  {
     version: "v1.68.0",
     releaseDate: "2026-10-18",
     title: "♟️ 신규 게임 체스 — 정통 FIDE 규칙 + 수마다 이펙트",
