@@ -122,6 +122,10 @@ export default function ChessGame({ onComplete }: PlayableGameProps) {
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [myRole, setMyRole] = useState<Seat | null>(null);
+  const myRoleRef = useRef<Seat | null>(null);
+  useEffect(() => {
+    myRoleRef.current = myRole;
+  }, [myRole]);
   const [myName, setMyName] = useState("");
   const [myPlayerId, setMyPlayerId] = useState<string | undefined>(undefined);
   const [occupants, setOccupants] = useState<Occupant[]>([]);
@@ -182,6 +186,16 @@ export default function ChessGame({ onComplete }: PlayableGameProps) {
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
+
+  /** Host while present, otherwise the guest — the one client allowed to commit actions. */
+  function isAuthorityNow() {
+    return myRoleRef.current === "p1" || !occupantsRef.current.some((o) => o.role === "p1");
+  }
+  function sendAction(action: EngineAction) {
+    const channel = channelRef.current;
+    if (!channel) return;
+    channel.send({ type: "broadcast", event: isAuthorityNow() ? "game-action" : "propose", payload: { action } });
+  }
 
   /** The client just saw a new turn begin (clock reference point, §12.2). */
   function markTurnStart() {
@@ -295,8 +309,25 @@ export default function ChessGame({ onComplete }: PlayableGameProps) {
       setGameState(next);
     });
 
-    channel.on("broadcast", { event: "bot-roster" }, ({ payload }) => adoptRoster(payload));
-    channel.on("broadcast", { event: "room-settings" }, ({ payload }) => adoptSettings(payload));
+    // The host is the source of truth for both — it ignores the echo of its
+    // own replies, which could otherwise land after a quick settings click
+    // and snap it back to the defaults.
+    channel.on("broadcast", { event: "bot-roster" }, ({ payload }) => {
+      if (myRole !== "p1") adoptRoster(payload);
+    });
+    channel.on("broadcast", { event: "room-settings" }, ({ payload }) => {
+      if (myRole !== "p1") adoptSettings(payload);
+    });
+
+    // Single writer: only the authority (the host, or the guest while the
+    // host is away) broadcasts `game-action`; the other client proposes and
+    // the authority re-broadcasts. Every client then applies actions in one
+    // sender's order, so a last-second move and a flag can't land in
+    // different orders on the two screens.
+    channel.on("broadcast", { event: "propose" }, ({ payload }) => {
+      if (!isAuthorityNow() || !payload?.action) return;
+      channel.send({ type: "broadcast", event: "game-action", payload: { action: payload.action } });
+    });
 
     channel.on("broadcast", { event: "bot-takeover-event" }, ({ payload }) => {
       const event = payload?.event as BotTakeoverEvent | undefined;
@@ -460,7 +491,9 @@ export default function ChessGame({ onComplete }: PlayableGameProps) {
   /** Stamps moves with the time this client watched the turn run (§12.2). */
   const handleAction = useCallback((action: EngineAction) => {
     const stamped: EngineAction = action.type === "move" ? { ...action, spentMs: Math.max(0, Date.now() - turnStartRef.current) } : action;
-    channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action: stamped } });
+    sendAction(stamped);
+    // sendAction only reads refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Lv.1-4 search shallowly on the main thread; Lv.5+ (depth 3+ / iterative
@@ -475,8 +508,10 @@ export default function ChessGame({ onComplete }: PlayableGameProps) {
     return chooseBotAction(state, actor, level);
   }, []);
 
+  // Bots follow the authority, so a takeover bot keeps playing if the host leaves.
+  const isAuthority = myRole === "p1" || !occupants.some((o) => o.role === "p1");
   useBotAutoplay<ChessState, EngineAction, Seat>({
-    active: isHost && phase === "playing",
+    active: isAuthority && phase === "playing",
     state: gameState,
     currentActor: chessCurrentActor,
     botSeats: allBotRoleSet,
@@ -495,9 +530,11 @@ export default function ChessGame({ onComplete }: PlayableGameProps) {
       const key = `${s.moves.length}:${s.pos.turn}`;
       if (flagSentRef.current === key) return;
       flagSentRef.current = key;
-      channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action: { type: "flag", seat: myRole, spentMs: elapsed } satisfies EngineAction } });
+      sendAction({ type: "flag", seat: myRole, spentMs: elapsed });
     }, 250);
     return () => window.clearInterval(id);
+    // sendAction only reads refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, myRole]);
 
   // "무응답(idle)" takeover trigger.
