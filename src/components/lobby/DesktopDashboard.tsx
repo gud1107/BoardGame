@@ -7,6 +7,8 @@ import PublicRoomBrowser from "./PublicRoomBrowser";
 import { PLAYER_FILTERS } from "@/constants/playerFilters";
 import type { SortOption } from "@/constants/sortOptions";
 import GameShowcaseCard from "./GameShowcaseCard";
+import GamePosterCard from "./GamePosterCard";
+import { LOBBY_CARD_STYLE } from "@/constants/lobbyCardStyle";
 import { getGameFreshnessBadge } from "@/constants/gameUpdateCount";
 import SortFilterChips from "./SortFilterChips";
 import NewOnlyChip from "./NewOnlyChip";
@@ -150,17 +152,30 @@ export default function DesktopDashboard({
 
         <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1 [scrollbar-width:thin]">
           {games.length > 0 ? (
-            <div className="grid grid-cols-4 gap-4 xl:grid-cols-5">
+            <div className={`grid grid-cols-4 gap-4 xl:grid-cols-5 ${LOBBY_CARD_STYLE === "poster" ? "2xl:grid-cols-6" : ""}`}>
               {games.map((game) => (
-                <GameShowcaseCard
-                  key={game.id}
-                  game={game}
-                  liveRoomCount={liveCountByGame.get(game.id) ?? 0}
-                  badge={getGameFreshnessBadge(game.id, now)}
-                  plays={monthPlays.get(game.id) ?? 0}
-                  now={now}
-                  adminLine={adminLine?.(game.id)}
-                />
+                LOBBY_CARD_STYLE === "poster" ? (
+                  <GamePosterCard
+                    key={game.id}
+                    game={game}
+                    liveRoomCount={liveCountByGame.get(game.id) ?? 0}
+                    badge={getGameFreshnessBadge(game.id, now)}
+                    plays={monthPlays.get(game.id) ?? 0}
+                    now={now}
+                    adminLine={adminLine?.(game.id)}
+                    compact
+                  />
+                ) : (
+                  <GameShowcaseCard
+                    key={game.id}
+                    game={game}
+                    liveRoomCount={liveCountByGame.get(game.id) ?? 0}
+                    badge={getGameFreshnessBadge(game.id, now)}
+                    plays={monthPlays.get(game.id) ?? 0}
+                    now={now}
+                    adminLine={adminLine?.(game.id)}
+                  />
+                )
               ))}
             </div>
           ) : (

@@ -58,6 +58,17 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.70.0",
+    releaseDate: "2026-10-19",
+    title: "🎬 보드게임허브 포스터 개편 — 실제 게임 화면 + 한 줄 카피",
+    changes: [
+      { game: "common", type: "FEAT", desc: "🎬 게임 카드를 영화 포스터처럼 — 실제 플레이 화면 32종 캡처, 큰 제목과 한 줄 카피, 호버 시 빛 반사·줌" },
+      { game: "common", type: "FEAT", desc: "🔃 모든 정렬을 한 번 더 누르면 반대로 — 인기 낮은순, 오래된 업데이트순, 가나다 역순, 인원순·난이도순 ↑↓" },
+      { game: "common", type: "FEAT", desc: "🆕 신규만 보기 — 최근 14일 안에 추가된 게임만 골라 보기" },
+      { game: "common", type: "IMPROVE", desc: "와르르 타워로 출시된 준비중 '젠가' 카드는 허브에서 숨김" },
+    ],
+  },
+  {
     version: "v1.69.0",
     releaseDate: "2026-10-19",
     title: "🥌 컬링 파티 — 처음 해도 쉽게: 그림 안내 · 코치 · 초보 도우미",

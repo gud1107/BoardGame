@@ -6388,3 +6388,41 @@ html {
     opacity: 1;
   }
 }
+
+/* ── Lobby poster cards (GamePosterCard.tsx, 2026-10-19) ───────────────── */
+/* Diagonal light sweep across the poster on hover. */
+.poster-shine {
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.28) 48%, transparent 62%);
+  transform: translateX(-120%);
+  opacity: 0;
+}
+.group\/poster:hover .poster-shine {
+  animation: poster-shine-sweep 900ms ease-out;
+}
+@keyframes poster-shine-sweep {
+  0% { transform: translateX(-120%); opacity: 1; }
+  100% { transform: translateX(120%); opacity: 1; }
+}
+/* Generated (no-capture) posters: rotating light rays + floating emoji. */
+.poster-rays {
+  background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, 0.35) 0deg 6deg, transparent 6deg 22deg);
+  border-radius: 9999px;
+  mask-image: radial-gradient(circle, black 15%, transparent 65%);
+  transform: translate(-50%, -50%);
+  animation: poster-rays-spin 40s linear infinite;
+}
+@keyframes poster-rays-spin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+.poster-float {
+  transform: translate(-50%, -50%);
+  animation: poster-float 5s ease-in-out infinite;
+}
+@keyframes poster-float {
+  0%, 100% { transform: translate(-50%, -50%) rotate(-4deg); }
+  50% { transform: translate(-50%, -56%) rotate(4deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .poster-rays, .poster-float, .group\/poster:hover .poster-shine { animation: none; }
+}
