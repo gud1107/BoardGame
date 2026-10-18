@@ -1,10 +1,18 @@
 import * as THREE from "three";
+import { WORDS, wordTier, type WordTier } from "./fxWords";
 
 /**
  * 알까기 대전 collision effects (rulebook §13). Purely cosmetic, owned by
  * the 3D scene: every stone-on-stone hit gets a flash, a shockwave ring on
- * the board, a spray of sparks and — for real hits — a comic "탁! / 딱! /
- * 쾅!" that pops up and floats away. Stones hitting the floor kick up dust.
+ * the board, a spray of sparks and a comic word that pops up and floats
+ * away. Stones hitting the floor kick up dust.
+ *
+ * Word tiers (must read without sound or colour, at 360 px too):
+ *   탁!  light hit — plain, smallest
+ *   딱!  solid hit that knocks nothing off — bigger, speed ticks around it
+ *   쾅!  ONLY the hit that sends a stone off the board — biggest, jagged
+ *        burst behind it, double shockwave, flash, hit-stop
+ * Each tier has a minimum on-screen height so phones still read it.
  *
  * Board coords (x, y) → three.js (x, −y), board top at y = 0.
  * `k` is the hit strength 0..1 (impulse / 9, clamped).
@@ -52,28 +60,75 @@ function puffTexture(): THREE.Texture {
   return puffTex;
 }
 
-const wordTex = new Map<string, THREE.Texture>();
-/** Comic onomatopoeia with a thick outline. */
-function wordTexture(word: string, fill: string): THREE.Texture {
-  const key = `${word}:${fill}`;
-  const hit = wordTex.get(key);
+const wordTex = new Map<WordTier, THREE.Texture>();
+/** Comic onomatopoeia with a thick outline; 딱 gets speed ticks, 쾅 a jagged burst (shape cues, not just colour). */
+function wordTexture(tier: WordTier): THREE.Texture {
+  const hit = wordTex.get(tier);
   if (hit) return hit;
+  const { word, fill } = WORDS[tier];
   const c = document.createElement("canvas");
   c.width = 256;
   c.height = 128;
   const g = c.getContext("2d")!;
-  g.font = "900 96px 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
+  const cx = 128;
+  const cy = 64;
+  if (tier === 2) {
+    // explosion burst
+    g.beginPath();
+    const spikes = 14;
+    for (let i = 0; i <= spikes * 2; i++) {
+      const ang = (i / (spikes * 2)) * Math.PI * 2;
+      const r = i % 2 === 0 ? 1 : 0.62 + ((i * 37) % 7) * 0.025;
+      const x = cx + Math.cos(ang) * 124 * r;
+      const y = cy + Math.sin(ang) * 62 * r;
+      if (i === 0) g.moveTo(x, y);
+      else g.lineTo(x, y);
+    }
+    g.closePath();
+    g.fillStyle = "#fff1a8";
+    g.fill();
+    g.lineWidth = 6;
+    g.strokeStyle = "#1a0d05";
+    g.stroke();
+  } else if (tier === 1) {
+    // speed ticks on both sides
+    g.strokeStyle = "#1a0d05";
+    g.lineCap = "round";
+    for (const [x1, y1, x2, y2] of [
+      [14, 30, 40, 44],
+      [8, 64, 38, 64],
+      [14, 98, 40, 84],
+      [242, 30, 216, 44],
+      [248, 64, 218, 64],
+      [242, 98, 216, 84],
+    ]) {
+      g.lineWidth = 12;
+      g.strokeStyle = "#1a0d05";
+      g.beginPath();
+      g.moveTo(x1, y1);
+      g.lineTo(x2, y2);
+      g.stroke();
+      g.lineWidth = 5;
+      g.strokeStyle = fill;
+      g.beginPath();
+      g.moveTo(x1, y1);
+      g.lineTo(x2, y2);
+      g.stroke();
+    }
+  }
+  const size = tier === 2 ? 92 : tier === 1 ? 92 : 84;
+  g.font = `900 ${size}px 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif`;
   g.textAlign = "center";
   g.textBaseline = "middle";
   g.lineJoin = "round";
   g.lineWidth = 18;
   g.strokeStyle = "#1a0d05";
-  g.strokeText(word, 128, 68);
+  g.strokeText(word, cx, cy + 4);
   g.fillStyle = fill;
-  g.fillText(word, 128, 68);
+  g.fillText(word, cx, cy + 4);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  wordTex.set(key, tex);
+  wordTex.set(tier, tex);
   return tex;
 }
 
@@ -88,10 +143,16 @@ export class ImpactFx {
   private list: Fx[] = [];
   private lastWordAt = -1e9;
 
-  /** A stone-on-stone hit at board point (x, y). */
-  hit(x: number, y: number, k: number, now: number, low: boolean) {
+  /**
+   * A stone-on-stone hit at board point (x, y). `fatal` = this hit sends a
+   * stone off the board; `unitsPerPx` = world units per screen pixel at the
+   * hit (keeps the word readable on small screens).
+   */
+  hit(x: number, y: number, kIn: number, now: number, low: boolean, fatal = false, unitsPerPx = 0) {
     const px = x;
     const pz = -y;
+    // a knock-off always reads as a big hit; a hit that knocks nothing off stays modest
+    const k = fatal ? Math.max(0.85, kIn) : Math.min(kIn, 0.7);
 
     // shockwave ring flat on the board
     const ringMat = new THREE.MeshBasicMaterial({ color: k > 0.7 ? "#ffd27a" : "#fff3d6", transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
@@ -105,8 +166,8 @@ export class ImpactFx {
       ringMat.opacity = 0.9 * (1 - a);
     }, () => ringMat.dispose());
 
-    if (k > 0.55) {
-      // a second, slower ring for big hits
+    if (fatal) {
+      // a second, slower ring for the knock-off
       const ring2Mat = ringMat.clone();
       const ring2 = new THREE.Mesh(ringGeo, ring2Mat);
       ring2.rotation.x = -Math.PI / 2;
@@ -153,17 +214,18 @@ export class ImpactFx {
     }
 
     // "탁!" for a tap, "딱!" for a solid hit, "쾅!" for a smash
-    if (k > 0.3 && now - this.lastWordAt > 140) {
+    const tier = wordTier(kIn, fatal);
+    // a knock-off always gets its word; small taps are rate-limited so chains don't pile up
+    if (tier !== null && (tier === 2 || now - this.lastWordAt > 140)) {
       this.lastWordAt = now;
-      const word = k > 0.75 ? "쾅!" : k > 0.5 ? "딱!" : "탁!";
-      const fill = k > 0.75 ? "#ff6b3d" : k > 0.5 ? "#ffd34d" : "#fff6dc";
-      const mat = new THREE.SpriteMaterial({ map: wordTexture(word, fill), transparent: true, depthWrite: false, depthTest: false });
+      const spec = WORDS[tier];
+      const mat = new THREE.SpriteMaterial({ map: wordTexture(tier), transparent: true, depthWrite: false, depthTest: false });
       const sprite = new THREE.Sprite(mat);
-      sprite.renderOrder = 10;
-      const base = 0.9 + k * 1.1;
+      sprite.renderOrder = 10 + tier;
+      const base = Math.max(spec.world, spec.minPx * unitsPerPx);
       const tilt = (Math.random() - 0.5) * 0.5;
       mat.rotation = tilt;
-      this.add(sprite, now, 0.75, (a) => {
+      this.add(sprite, now, tier === 2 ? 1 : 0.75, (a) => {
         // pop in with overshoot, then drift up and fade
         const pop = a < 0.18 ? easeOut(a / 0.18) * 1.25 : 1.25 - Math.min(1, (a - 0.18) / 0.15) * 0.25;
         sprite.scale.set(base * 2 * pop, base * pop, 1);

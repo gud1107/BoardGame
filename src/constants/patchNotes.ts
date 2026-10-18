@@ -64,6 +64,8 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     changes: [
       { game: "alkkagi", type: "FEAT", desc: "💥 알끼리 부딪히면 섬광·충격파 고리·불꽃과 함께 탁!/딱!/쾅! — 세게 칠수록 크게, 맞은 알은 튀어 오르고 화면이 흔들려요" },
       { game: "alkkagi", type: "FEAT", desc: "센 충돌엔 잠깐 멈칫하는 손맛, 판 밖으로 떨어진 알은 바닥에서 먼지가 피어올라요" },
+      { game: "alkkagi", type: "IMPROVE", desc: "💥 쾅!은 알을 떨어뜨린 충돌에만 — 폭발 모양·멈칫·묵직한 소리, 그냥 센 충돌은 딱!까지" },
+      { game: "alkkagi", type: "IMPROVE", desc: "📱 작은 화면에서도 탁/딱/쾅 글자가 잘 보이게 최소 크기 보장, 색 말고 모양(속도선·폭발)으로도 구분" },
     ],
   },
   {

@@ -28,6 +28,8 @@ const SFX = {
       { wave: "sine", freq: 1250, dur: 0.05, peak: 0.04 + k * 0.08, attack: 0.001 },
     ];
   },
+  /** The hit that sends a stone off the board — a heavy crack under the clack. */
+  smash: [fx.thud(95, 0.35, 0.55), ...fx.crack(0.01, 0.3), { inst: "taiko", note: "A1", at: 0.02, gain: 0.55 }],
   fall: [fx.whoosh(1400, 380, 0.28, 0.06)],
   /** arg = strength 0..1 — stone hits the wooden floor and bounces once. */
   floor: (k: number) => [fx.thud(200, 0.12, 0.25 + k * 0.25), fx.click(1500, 0.08 + k * 0.06), fx.click(1700, 0.04 + k * 0.03, 0.11)],

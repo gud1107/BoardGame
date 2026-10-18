@@ -136,7 +136,7 @@ function Stones(props: SceneProps) {
     };
   }, []);
 
-  useFrame((_, dtRaw) => {
+  useFrame((frame, dtRaw) => {
     const dt = Math.min(dtRaw, 0.05);
     const t = nowMs();
     const low = props.quality === "low";
@@ -149,9 +149,13 @@ function Stones(props: SceneProps) {
     for (const e of pending) {
       if (e.kind === "clack") {
         const k = Math.min(1, e.impulse / 9);
-        fx.current?.hit(e.x, e.y, k, t, low);
-        camShake.v = Math.min(0.7, camShake.v + k * 0.28);
-        if (k > 0.6) player.hitStop(40 + k * 50);
+        // world units per screen pixel at the hit, so the word keeps a readable size on phones
+        const cam = frame.camera as THREE.PerspectiveCamera;
+        const dist = cam.position.distanceTo(new THREE.Vector3(e.x, 0, -e.y));
+        const upp = (2 * dist * Math.tan(((cam.fov ?? 40) * Math.PI) / 360)) / Math.max(1, frame.size.height);
+        fx.current?.hit(e.x, e.y, k, t, low, e.fatal, upp);
+        camShake.v = Math.min(0.8, camShake.v + (e.fatal ? 0.45 : Math.min(k, 0.7) * 0.22));
+        if (e.fatal) player.hitStop(70 + k * 50);
         for (const id of [e.a, e.b]) {
           const st = view.stones.find((s) => s.id === id);
           if (!st) continue;

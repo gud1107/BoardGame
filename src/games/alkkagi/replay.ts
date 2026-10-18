@@ -21,7 +21,8 @@ const TAIL = 0.35;
 
 export type ReplayEvent =
   | { kind: "flick"; seat: Seat; power: number }
-  | { kind: "clack"; impulse: number; x: number; y: number; a: number; b: number }
+  /** `fatal`: the last hit a stone takes before it falls off this shot (§13 — only these get the big "쾅!"). */
+  | { kind: "clack"; impulse: number; x: number; y: number; a: number; b: number; fatal: boolean }
   | { kind: "fall"; id: number; owner: Seat }
   | { kind: "floor"; id: number; strength: number }
   | { kind: "done"; shot: ShotRecord };
@@ -84,11 +85,34 @@ interface Playing {
   /** Seconds of playback done so far (windup + sim time). */
   t: number;
   clackIdx: number;
+  /** Indexes into `sim.collisions` that knock a stone off. */
+  fatal: Set<number>;
   fallIdx: number;
   flicked: boolean;
 }
 
 const slideTime = (sim: SimResult) => sim.steps * DT;
+
+/**
+ * For every stone that falls, the last collision it was part of before
+ * leaving the board — the hit that actually sent it off. A stone that was
+ * never hit (the shooter sliding off on its own) has none.
+ */
+export function fatalHits(sim: SimResult): Set<number> {
+  const out = new Set<number>();
+  const cols = sim.collisions ?? [];
+  for (const f of sim.falls) {
+    for (let i = cols.length - 1; i >= 0; i--) {
+      const c = cols[i];
+      if (c.step > f.step) continue;
+      if (c.a === f.id || c.b === f.id) {
+        out.add(i);
+        break;
+      }
+    }
+  }
+  return out;
+}
 
 /** Where a fallen stone is `s` seconds after leaving the edge. */
 export function fallPose(f: SimFall, s: number): { x: number; y: number; z: number; tilt: number; settled: boolean; dirX: number; dirY: number } {
@@ -173,7 +197,7 @@ export class ReplayPlayer {
     if (!this.cur && this.queue.length > 0) {
       const rec = this.queue.shift()!;
       const sim = simulate(toSim(rec.before), rec.stoneId, rec.vx / 1000, rec.vy / 1000, true);
-      this.cur = { rec, sim, t: 0, clackIdx: 0, fallIdx: 0, flicked: false };
+      this.cur = { rec, sim, t: 0, clackIdx: 0, fallIdx: 0, flicked: false, fatal: fatalHits(sim) };
     }
 
     let shot: ShotView | null = null;
@@ -214,8 +238,9 @@ export class ReplayPlayer {
       // sounds / falls whose time has come
       const cols: SimCollision[] = cur.sim.collisions ?? [];
       while (cur.clackIdx < cols.length && cols[cur.clackIdx].step <= step) {
-        const c = cols[cur.clackIdx++];
-        emit?.({ kind: "clack", impulse: c.impulse, x: c.x, y: c.y, a: c.a, b: c.b });
+        const idx = cur.clackIdx++;
+        const c = cols[idx];
+        emit?.({ kind: "clack", impulse: c.impulse, x: c.x, y: c.y, a: c.a, b: c.b, fatal: cur.fatal.has(idx) });
       }
       const falls = cur.sim.falls;
       while (cur.fallIdx < falls.length && falls[cur.fallIdx].step <= step) {

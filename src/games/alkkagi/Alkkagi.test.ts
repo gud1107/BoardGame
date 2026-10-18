@@ -15,6 +15,8 @@ import {
 import { chooseBotAction } from "./bot";
 import { EDGE, firstContact, simulate, speedForPower, powerForSpeed, STONE_R } from "./physics";
 import { alkkagiStatDetails } from "./stats";
+import { fatalHits } from "./replay";
+import { wordTier } from "./three/fxWords";
 
 function withStones(stones: Omit<Stone, "id">[], patch: Partial<AlkkagiState> = {}): AlkkagiState {
   const s = startGame(2, 1);
@@ -91,6 +93,34 @@ describe("physics", () => {
     ];
     expect(firstContact(st, 0, 0, 1)?.id).toBe(2);
     expect(firstContact(st, 0, 0, -1)).toBeNull();
+  });
+});
+
+describe("impact words (§13)", () => {
+  it("only the hit that knocks a stone off is fatal", () => {
+    const res = simulate(
+      [
+        { id: 0, x: 0, y: 2, r: STONE_R, m: 1 },
+        { id: 1, x: 0, y: 5, r: STONE_R, m: 1 },
+        { id: 2, x: 5, y: 0, r: STONE_R, m: 1 },
+      ],
+      0,
+      0,
+      15,
+      true,
+    );
+    expect(res.falls.map((f) => f.id)).toEqual([1]);
+    const fatal = [...fatalHits(res)];
+    expect(fatal).toHaveLength(1);
+    const c = res.collisions![fatal[0]];
+    expect([c.a, c.b]).toContain(1);
+  });
+
+  it("쾅 only for knock-offs; hard misses top out at 딱", () => {
+    expect(wordTier(1, false)).toBe(1);
+    expect(wordTier(0.1, true)).toBe(2);
+    expect(wordTier(0.4, false)).toBe(0);
+    expect(wordTier(0.2, false)).toBeNull();
   });
 });
 
