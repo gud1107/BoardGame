@@ -1372,7 +1372,10 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
               {/* One tap toggles; the ▾ beside it opens what 자동 is allowed to do. */}
               <span className={`inline-flex overflow-hidden rounded-full border text-[11px] font-bold ${autoPlay ? "border-sky-300/70 bg-sky-500/30 text-sky-50 light:border-sky-400 light:bg-sky-50 light:text-sky-700" : "border-white/15 hover:border-white/30 light:border-slate-300"}`}>
                 <button
-                  onClick={onToggleAuto}
+                  onClick={() => {
+                    onToggleAuto();
+                    setAutoMenuOpen(false);
+                  }}
                   aria-pressed={autoPlay}
                   title={autoPlay ? "🤖 자동 켜짐 — 한 번 누르면 꺼져요" : "🤖 자동 꺼짐 — 한 번 누르면 AI가 내 보드를 대신 운영해요"}
                   className="py-0.5 pr-1 pl-2"
@@ -1392,7 +1395,10 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
               {autoMenuOpen && (
                 <div className="absolute top-7 left-0 z-30 flex w-52 flex-col gap-1 rounded-xl border border-white/15 bg-slate-900/95 p-2 text-[12px] whitespace-normal text-white shadow-xl light:border-slate-200 light:bg-white light:text-slate-800">
                   <button
-                    onClick={onToggleAuto}
+                    onClick={() => {
+                      onToggleAuto();
+                      setAutoMenuOpen(false);
+                    }}
                     aria-pressed={autoPlay}
                     className={`rounded-lg px-2 py-1.5 text-left font-bold ${autoPlay ? "bg-sky-500/30 text-sky-50 light:bg-sky-100 light:text-sky-800" : "bg-white/10 light:bg-slate-100"}`}
                   >
