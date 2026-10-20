@@ -12,7 +12,9 @@
 
 import { seededRng, shuffle } from "@/lib/rng";
 import {
+  ACTIVITY_INFO,
   BLOCK_COUNT,
+  BLOCK_INFO,
   CHALLENGES,
   GOAL_BY_ID,
   LIFE_GOALS,
@@ -105,6 +107,10 @@ export interface DayRecord {
   burnout: boolean;
   nightSleep: number;
   notes: string[];
+  /** 결과 화면 "오늘 달라진 점"용 — 하루 시작/마감 때 트랙과 점수(예전 기록엔 없을 수 있음). */
+  startTracks?: Tracks;
+  scoreBefore?: ScoreBreakdown;
+  scoreAfter?: ScoreBreakdown;
 }
 
 export interface SeatState {
@@ -559,8 +565,12 @@ interface Working {
   temptationDone: boolean;
   startHp: number;
   startMp: number;
+  startTracks: Tracks;
+  scoreBefore: ScoreBreakdown;
   notes: string[];
 }
+
+const blockTag = (b: number) => `${BLOCK_INFO[b].label}(${BLOCK_INFO[b].time})`;
 
 function growthOf(applied: Partial<Tracks>): number {
   let n = 0;
@@ -594,6 +604,8 @@ export function simulateDay(state: GameState, plans: readonly (ResolvedPlan | nu
       temptationDone: false,
       startHp: seat.hp,
       startMp: seat.mp,
+      startTracks: { ...orig.tracks },
+      scoreBefore: seatScore(state, i, orig),
       notes: [],
     };
   });
@@ -701,7 +713,7 @@ export function simulateDay(state: GameState, plans: readonly (ResolvedPlan | nu
       if (b === 2 && cell === "sleep" && w.plan.temptation === "yield" && !w.plan.instant && card(i).id === "T4" && !w.plan.cells.includes("temptation")) {
         w.temptationDone = true;
       }
-      if (noShow) w.notes.push(`🙇 ${b + 1}번째 블록 약속 펑크(관계 −1)`);
+      if (noShow) w.notes.push(`🙇 ${blockTag(b)} 약속 펑크 — 혼자 나가서 관계 −1`);
       w.growth += growthOf(gains);
       w.outcomes.push({ cell, kind, hp: s.hp, mp: s.mp, gains, ...(noShow ? { noShow } : {}), ...(overtime ? { overtime } : {}) });
     });
@@ -771,7 +783,7 @@ export function simulateDay(state: GameState, plans: readonly (ResolvedPlan | nu
     }
 
     // 4) 붕괴 판정
-    for (const w of work) if (w) checkCollapse(w, `${b + 1}번째 블록에서`);
+    for (const w of work) if (w) checkCollapse(w, `${blockTag(b)}에`);
   }
 
   // ---- 마감 (§8 ⑤)
@@ -826,13 +838,13 @@ export function simulateDay(state: GameState, plans: readonly (ResolvedPlan | nu
     const kept: Habit[] = [];
     for (const h of s.habits) {
       if (done[h.block] === h.activity) {
-        if (h.shaken) w.notes.push(`🔁 ${h.block + 1}번째 블록 습관 회복`);
+        if (h.shaken) w.notes.push(`🔁 ${blockTag(h.block)} ${ACTIVITY_INFO[h.activity].name} 습관 회복`);
         kept.push({ ...h, shaken: false });
       } else if (h.shaken) {
-        w.notes.push(`💔 ${h.block + 1}번째 블록 습관을 잃었어요`);
+        w.notes.push(`💔 ${blockTag(h.block)} ${ACTIVITY_INFO[h.activity].name} 습관을 잃었어요(이틀 연속 빠짐)`);
       } else {
         kept.push({ ...h, shaken: true });
-        w.notes.push(`⚠️ ${h.block + 1}번째 블록 습관이 흔들려요`);
+        w.notes.push(`⚠️ ${blockTag(h.block)} ${ACTIVITY_INFO[h.activity].name} 습관이 흔들려요 — 내일 꼭 다시`);
       }
     }
     s.habits = kept;
@@ -848,7 +860,7 @@ export function simulateDay(state: GameState, plans: readonly (ResolvedPlan | nu
       }
       s.habits.push({ block: b, activity: a, shaken: false });
       s.habitsFormed += 1;
-      w.notes.push(`🌱 ${b + 1}번째 블록 습관 형성!`);
+      w.notes.push(`🌱 ${blockTag(b)} ${ACTIVITY_INFO[a].name} 습관 형성!`);
     }
     // 집계
     const b2 = w.outcomes[1];
@@ -915,6 +927,9 @@ export function simulateDay(state: GameState, plans: readonly (ResolvedPlan | nu
         burnout: w.burnout,
         nightSleep: w.nightSleep,
         notes: w.notes,
+        startTracks: w.startTracks,
+        scoreBefore: w.scoreBefore,
+        scoreAfter: seatScore(state, i, s),
       },
     ];
     return s;
@@ -1141,7 +1156,11 @@ export interface ScoreBreakdown {
 }
 
 export function scoreBreakdown(state: GameState, seat: Seat): ScoreBreakdown {
-  const s = state.seats[seat];
+  return seatScore(state, seat, state.seats[seat]);
+}
+
+/** 임의 시점의 자리 상태로 점수를 매긴다(하루 시작/마감 비교용). */
+export function seatScore(state: GameState, seat: Seat, s: SeatState): ScoreBreakdown {
   const growth = trackSum(s.tracks);
   const balance = Math.min(...TRACKS.map((t) => s.tracks[t]));
   const habits = s.habits.reduce((n, h) => n + (h.shaken ? 1 : 2), 0);
@@ -1152,6 +1171,58 @@ export function scoreBreakdown(state: GameState, seat: Seat): ScoreBreakdown {
   const penalty = s.collapses * TUNING.collapsePenalty;
   const total = growth + balance + habits + goal + s.challengePoints + condition - penalty;
   return { growth, balance, habits, goal, goalMet, challenges: s.challengePoints, condition, penalty, total };
+}
+
+/** UI용 인생 목표 진행도 — 사람이 읽는 "지금/목표" 문구와 0~1 비율. */
+export function goalProgressInfo(goalId: string, s: SeatState, short: boolean): { ratio: number; label: string; met: boolean } {
+  const t = s.tracks;
+  const need = (n: number) => (short ? Math.round((n * 5) / 7) : n);
+  const one = (name: string, cur: number, target: number) => ({ ratio: Math.min(1, cur / target), label: `${name} ${cur}/${target}` });
+  const two = (a: { ratio: number; label: string }, b: { ratio: number; label: string }) => ({ ratio: (a.ratio + b.ratio) / 2, label: `${a.label} · ${b.label}` });
+  let r: { ratio: number; label: string };
+  switch (goalId) {
+    case "G1":
+      r = one("💪 몸", t.body, need(32));
+      break;
+    case "G2":
+      r = one("📘 지식", t.knowledge, need(32));
+      break;
+    case "G3":
+      r = one("💰 자산", t.wealth, need(32));
+      break;
+    case "G4":
+      r = one("🤝 관계", t.social, need(32));
+      break;
+    case "G5": {
+      const low = Math.min(...TRACKS.map((x) => t[x]));
+      r = one("가장 낮은 트랙", low, need(22));
+      break;
+    }
+    case "G6":
+      r = one("🌅 새벽 활동", s.morningDays, short ? 4 : 5);
+      break;
+    case "G7":
+      r = one("🌱 수면 외 습관", nonSleepHabits(s), 4);
+      break;
+    case "G8":
+      r = s.collapses > 0 ? { ratio: 0, label: `붕괴 ${s.collapses}회 — 이미 실패` } : one("💗 멘탈(붕괴 0회)", s.mp, 8);
+      break;
+    case "G9":
+      r = one("💼 야근·특근", s.overtimeWorks, need(7));
+      break;
+    case "G10":
+      r = two(one("📘", t.knowledge, need(25)), one("💰", t.wealth, need(25)));
+      break;
+    case "G11":
+      r = one("🤝 약속 성사", s.matches, need(10));
+      break;
+    case "G12":
+      r = two({ ratio: s.habits.some((h) => h.activity === "study") ? 1 : 0, label: s.habits.some((h) => h.activity === "study") ? "공부 습관 ✓" : "공부 습관 ✗" }, one("📘", t.knowledge, need(28)));
+      break;
+    default:
+      r = { ratio: 0, label: "" };
+  }
+  return { ...r, met: goalAchieved(goalId, s, short) };
 }
 
 export function computeRankings(state: GameState): { seat: Seat; rank: number; score: number }[] {

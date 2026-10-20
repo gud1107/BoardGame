@@ -17,6 +17,7 @@ import {
   type ResolvedPlan,
 } from "./engine";
 import { CHALLENGES, LIFE_GOALS, OPPORTUNITIES, TEMPTATION_DECK } from "./data";
+import { situationNotes } from "./guide";
 
 const cells = (s: string): Cell[] =>
   s.split(" ").map((c) => ({ 수: "sleep", 공: "study", 운: "exercise", 일: "work", 약: "meet", 휴: "rest", "·": "empty", 유: "temptation" })[c] as Cell);
@@ -261,6 +262,13 @@ describe("봇 완주 · 점수", () => {
     for (let i = 0; i < n; i++) {
       const b = scoreBreakdown(s, i);
       expect(b.total).toBe(b.growth + b.balance + b.habits + b.goal + b.challenges + b.condition - b.penalty);
+      // 결과 화면 "오늘 달라진 점" — 마지막 날 마감 점수 = 최종 점수, 날 사이 트랙·습관은 이어진다
+      const days = s.seats[i].days;
+      expect(days[6].scoreAfter!.total).toBe(b.total);
+      for (let d = 0; d + 1 < days.length; d++) {
+        expect(days[d + 1].scoreBefore!.growth).toBe(days[d].scoreAfter!.growth);
+        expect(days[d + 1].scoreBefore!.habits).toBe(days[d].scoreAfter!.habits);
+      }
     }
   });
 
@@ -274,5 +282,22 @@ describe("봇 완주 · 점수", () => {
       lo += scoreBreakdown(b, 0).total;
     }
     expect(hi).toBeGreaterThan(lo);
+  });
+});
+
+describe("상황 안내", () => {
+  it("몸살·무기력·위험 게이지·저항 불가·마지막 날을 짚어 준다", () => {
+    let s = planning(2);
+    s = { ...s, day: 6, seats: s.seats.map((x, i) => (i === 0 ? { ...x, sick: true, apathy: true, hp: 2, mp: 1 } : x)) };
+    const titles = situationNotes(s, 0).map((n) => n.title);
+    expect(titles).toEqual(expect.arrayContaining(["몸살", "무기력", "체력 2 — 위험", "멘탈 1 — 위험", "유혹을 참을 수 없어요", "마지막 날"]));
+    expect(situationNotes(s, 1).map((n) => n.title)).not.toContain("몸살");
+  });
+
+  it("2일 연속한 블록은 오늘 하면 습관이 된다고 알려 준다", () => {
+    let s = planning(1);
+    const streak = s.seats[0].streak.map((x, b) => (b === 2 ? { activity: "exercise" as const, count: 2 } : x));
+    s = { ...s, day: 2, seats: [{ ...s.seats[0], streak }] };
+    expect(situationNotes(s, 0).some((n) => n.title.includes("B3") && n.title.includes("습관"))).toBe(true);
   });
 });

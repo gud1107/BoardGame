@@ -58,6 +58,17 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.73.0",
+    releaseDate: "2026-10-21",
+    title: "📅 갓생 플래너 — 쉬운 안내와 결과 변화 보기",
+    changes: [
+      { game: "god-life-planner", type: "FEAT", desc: "🏆 게임 목표 카드 + 지금 내 점수·순위·인생 목표 진행 막대 상시 표시 — 무엇을 위해 하는지 한눈에" },
+      { game: "god-life-planner", type: "FEAT", desc: "📌 오늘의 상황 안내 — 이벤트 대처법, 몸살·무기력·숙취, 위험 게이지, 습관 직전·흔들림, 마지막 날 팁" },
+      { game: "god-life-planner", type: "FEAT", desc: "📈 결과 화면 '오늘 달라진 점' — 점수·순위 변화, 항목별 증감, 체력·멘탈·트랙 전후, 내일 상태 예고" },
+      { game: "god-life-planner", type: "IMPROVE", desc: "🧭 첫날 3단계 사용법, 활동별 효과 설명, 룰북에 상황별 Q&A·이벤트 대처법, 종료 화면 날마다 점수 흐름" },
+    ],
+  },
+  {
     version: "v1.72.0",
     releaseDate: "2026-10-21",
     title: "🎬 로비 카드 하이라이트 영상",
