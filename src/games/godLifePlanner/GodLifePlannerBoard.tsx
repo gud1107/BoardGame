@@ -42,6 +42,7 @@ import {
   type SeatState,
 } from "./engine";
 import { ACTIVITY_HELP, EVENT_TIPS, situationNotes, type GuideTone } from "./guide";
+import DayReplay from "./DayReplay";
 import RulebookModal from "./RulebookModal";
 
 interface Props {
@@ -424,6 +425,7 @@ function DayChangePanel({ state, seat, rec }: { state: GameState; seat: Seat; re
 export default function GodLifePlannerBoard({ state, viewerSeat, names, connectedSeats, deadlineMs, nowMs, committedPlan, onAction, onCommit, onGameEnd }: Props) {
   const me = state.seats[viewerSeat];
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  const [previewReplay, setPreviewReplay] = useState(false);
   const [brush, setBrush] = useState<Activity>("study");
   const [draft, setDraft] = useState<Plan>(() => defaultDraft(state, viewerSeat));
   const draftKeyRef = useRef(`${state.seed}:${state.day}`);
@@ -682,6 +684,7 @@ export default function GodLifePlannerBoard({ state, viewerSeat, names, connecte
     const plan = committed ? (committedPlan ?? draft) : draft;
     const shown = committed && committedPlan ? previewDay(state, viewerSeat, committedPlan) : preview;
     const rec = shown?.record ?? null;
+    const shownAfter = shown?.after ?? null;
     const warnings: string[] = [];
     if (rec) {
       if (rec.exhausted) warnings.push("🥵 이대로면 탈진해요 (−3점, 내일 몸살)");
@@ -793,6 +796,15 @@ export default function GodLifePlannerBoard({ state, viewerSeat, names, connecte
               </span>
               <span className="text-white/45 light:text-slate-400">(약속 성사·기회 카드 경쟁은 공개 후 결정)</span>
             </div>
+          )}
+          {rec && shownAfter && (
+            previewReplay ? (
+              <DayReplay state={state} rec={rec} endTracks={shownAfter.tracks} preview onClose={() => setPreviewReplay(false)} />
+            ) : (
+              <button onClick={() => setPreviewReplay(true)} className={`${GHOST} self-start !border-sky-400/40 !text-sky-200 light:!text-sky-700`}>
+                🎬 이 계획대로 하루 미리 재생
+              </button>
+            )
           )}
           {warnings.length > 0 && (
             <ul className="flex flex-col gap-1 text-xs text-rose-200 light:text-rose-700">
@@ -914,6 +926,12 @@ export default function GodLifePlannerBoard({ state, viewerSeat, names, connecte
       <div className="flex flex-col gap-3">
         <style>{GLP_KEYFRAMES}</style>
         {header}
+        {me.days[state.day] && (
+          <div className={`${CARD} flex flex-col gap-2 p-3 sm:p-4`}>
+            <p className="text-sm font-bold text-white light:text-slate-900">🎬 오늘 하루 다시 보기 <span className="text-xs font-normal text-white/50 light:text-slate-500">— 내 계획이 시간대별로 어떻게 흘러갔는지</span></p>
+            <DayReplay key={`replay-${state.day}`} state={state} rec={me.days[state.day]} endTracks={me.tracks} />
+          </div>
+        )}
         {me.days[state.day] && <DayChangePanel state={state} seat={viewerSeat} rec={me.days[state.day]} />}
         <div className={`${CARD} flex flex-col gap-3 p-3 sm:p-4`}>
           <p className="text-sm font-bold text-white light:text-slate-900">🗓️ {state.seatCount > 1 ? "모두의 하루" : "나의 하루"}</p>

@@ -713,7 +713,7 @@ export function simulateDay(state: GameState, plans: readonly (ResolvedPlan | nu
       if (b === 2 && cell === "sleep" && w.plan.temptation === "yield" && !w.plan.instant && card(i).id === "T4" && !w.plan.cells.includes("temptation")) {
         w.temptationDone = true;
       }
-      if (noShow) w.notes.push(`🙇 ${blockTag(b)} 약속 펑크 — 혼자 나가서 관계 −1`);
+      if (noShow) w.notes.push(`🙇 ${blockTag(b)} 약속 펑크 — 체력이 모자라 못 나가서 관계 −1`);
       w.growth += growthOf(gains);
       w.outcomes.push({ cell, kind, hp: s.hp, mp: s.mp, gains, ...(noShow ? { noShow } : {}), ...(overtime ? { overtime } : {}) });
     });

@@ -58,6 +58,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.74.0",
+    releaseDate: "2026-10-21",
+    title: "🎬 갓생 플래너 하루 재생",
+    changes: [
+      { game: "god-life-planner", type: "FEAT", desc: "🎬 하루 다시 보기 — 결과 화면에서 내 계획이 0시부터 24시까지 한 블록씩 애니메이션으로 재생, 체력·멘탈·트랙이 실시간으로 변해요" },
+      { game: "god-life-planner", type: "FEAT", desc: "🔮 계획 미리 재생 — 확정 전에 '이 계획대로 하루 미리 재생', 칸을 바꾸면 영상도 바로 다시 계산돼요" },
+      { game: "god-life-planner", type: "IMPROVE", desc: "☀️ 시간대별 하늘·활동별 동작·떠오르는 +수치·붕괴 흔들림, 일시정지·2배속·블록 골라 보기, 모션 줄이기 설정 존중" },
+    ],
+  },
+  {
     version: "v1.73.0",
     releaseDate: "2026-10-21",
     title: "📅 갓생 플래너 — 쉬운 안내와 결과 변화 보기",
