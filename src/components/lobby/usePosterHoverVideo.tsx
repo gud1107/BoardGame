@@ -68,6 +68,8 @@ export function usePosterHoverVideo(video: { webm: string; mp4: string } | null)
         aria-hidden
         tabIndex={-1}
         onPlaying={() => setReady(true)}
+        // A clip that can't decode stays invisible; the still capture shows.
+        onError={() => setReady(false)}
         className={`pointer-events-none absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${
           showing && ready ? "opacity-100" : "opacity-0"
         }`}

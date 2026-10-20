@@ -4,6 +4,7 @@
 //   node scripts/poster-videos/check.mjs --raw <dir>  → raw recordings (<id>.webm + <id>.json)
 //
 // Clip checks: both files exist, 480×600, 3–9 s, no audio, ≤ 700 KB each,
+// standard-range yuv420p (full-range VP9 fails to decode in Chromium),
 // first frame not black, enough motion (mean frame-to-frame luma change), and
 // no frozen stretch over 4.5 s (a bot game stuck waiting on the host's turn —
 // shorter pauses are just turn-based games between moves).
@@ -19,10 +20,10 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..", "..");
 
 function probe(file) {
-  const out = execFileSync("ffprobe", ["-v", "error", "-show_entries", "stream=codec_type,width,height:format=duration", "-of", "json", file], { encoding: "utf8" });
+  const out = execFileSync("ffprobe", ["-v", "error", "-show_entries", "stream=codec_type,width,height,pix_fmt,color_range:format=duration", "-of", "json", file], { encoding: "utf8" });
   const j = JSON.parse(out);
   const video = j.streams.find((s) => s.codec_type === "video");
-  return { duration: +j.format.duration, width: video?.width, height: video?.height, audio: j.streams.some((s) => s.codec_type === "audio") };
+  return { duration: +j.format.duration, width: video?.width, height: video?.height, pixFmt: video?.pix_fmt, range: video?.color_range, audio: j.streams.some((s) => s.codec_type === "audio") };
 }
 
 /** Per-frame luma average and frame-to-frame change, plus frozen stretches. */
@@ -77,6 +78,8 @@ if (rawIdx >= 0) {
       if (p.width !== 480 || p.height !== 600) fail(id, `${name} is ${p.width}×${p.height}, want 480×600`);
       if (p.duration < 3 || p.duration > 9) fail(id, `${name} lasts ${p.duration.toFixed(1)}s, want 3–9s`);
       if (p.audio) fail(id, `${name} has an audio track`);
+      // Full-range VP9 doesn't decode in Chromium (and the mp4 fallback never kicks in).
+      if (p.pixFmt !== "yuv420p" || p.range !== "tv") fail(id, `${name} is ${p.pixFmt}/${p.range}, want yuv420p/tv`);
       const kb = statSync(f).size / 1024;
       if (kb > 700) fail(id, `${name} is ${kb.toFixed(0)}KB, want ≤ 700KB`);
     }

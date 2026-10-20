@@ -27,8 +27,11 @@ for (const id of ids) {
   const [x, y, w, cropH] = h.crop;
   const speed = h.speed ?? 1;
   const boost = h.crfBoost ?? 0;
-  const vf = [`crop=${w}:${cropH}:${x}:${y}`, "scale=480:600:flags=lanczos", `setpts=PTS/${speed}`, "fps=30"].join(",");
-  const input = ["-y", "-loglevel", "error", "-ss", String(h.from), "-to", String(h.to), "-i", join(rawDir, `${id}.webm`), "-vf", vf, "-an"];
+  // Playwright records full-range ("pc") video; Chromium fails to decode a
+  // full-range VP9 clip (PIPELINE_ERROR_DECODE) and won't fall back to the
+  // mp4 <source>, so convert to standard-range yuv420p.
+  const vf = [`crop=${w}:${cropH}:${x}:${y}`, "scale=480:600:flags=lanczos:out_range=tv", "format=yuv420p", `setpts=PTS/${speed}`, "fps=30"].join(",");
+  const input = ["-y", "-loglevel", "error", "-ss", String(h.from), "-to", String(h.to), "-i", join(rawDir, `${id}.webm`), "-vf", vf, "-an", "-color_range", "tv"];
   const webm = join(root, "public", "posters", `${id}.webm`);
   const mp4 = join(root, "public", "posters", `${id}.mp4`);
   execFileSync("ffmpeg", [...input, "-c:v", "libvpx-vp9", "-b:v", "0", "-crf", String(38 + boost), "-row-mt", "1", "-deadline", "good", "-cpu-used", "2", webm], { stdio: "inherit" });
