@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
+import { preferLowDetail, useBoardView } from "@/games/shared/three/tableKit";
 import CityMap, { cellLabel, HELI_STYLES, TOKEN_CLASS, TokenChip } from "./CityMap";
 import {
   currentActor,
@@ -24,6 +26,12 @@ import {
 } from "./engine";
 import { playCityEventSound } from "./cityChaseAudio";
 
+// three.js only loads when the 3D city is actually shown (🖼️ 2D otherwise / without WebGL).
+const CityMap3D = dynamic(() => import("./three/CityMap3D"), {
+  ssr: false,
+  loading: () => <div className="flex aspect-square w-full items-center justify-center text-xs text-white/40">3D 도시 준비 중…</div>,
+});
+
 export interface CityChaseBoardProps {
   state: CityChaseState;
   viewerSeat: SeatIndex;
@@ -39,6 +47,8 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
   const isMyTurn = actor === viewerSeat;
   const over = state.phase === "gameOver";
   const [showHeat, setShowHeat] = useState(false);
+  const { view: boardView, setView: setBoardView, canToggle } = useBoardView("city-chase-view");
+  const [lowDetail] = useState(preferLowDetail);
 
   // SFX once per applied action.
   const soundSeqRef = useRef(state.seq);
@@ -166,6 +176,28 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
 
       <div className="flex flex-col gap-3 md:flex-row md:items-start">
         <div className="relative md:flex-1">
+          {canToggle && (
+            <button
+              onClick={() => setBoardView(boardView === "3d" ? "2d" : "3d")}
+              className="absolute right-2 top-2 z-[60] rounded-full border border-white/20 bg-black/60 px-2.5 py-1 text-[11px] text-white/80 hover:border-white/40"
+            >
+              {boardView === "3d" ? "🖼️ 2D로" : "🧊 3D로"}
+            </button>
+          )}
+          {boardView === "3d" ? (
+            <CityMap3D
+              state={state}
+              showSecret={isThief || over}
+              revealRoute={over}
+              thiefTargets={thiefTargets}
+              heliControls={heliControls}
+              onCellClick={handleCell}
+              onPointClick={handlePoint}
+              heat={heat}
+              latestSearch={latestSearch}
+              lowDetail={lowDetail}
+            />
+          ) : (
           <CityMap
             state={state}
             showSecret={isThief || over}
@@ -177,6 +209,7 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
             heat={heat}
             latestSearch={latestSearch}
           />
+          )}
           {!isThief && !over && state.phase === "thief" && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-3xl bg-black/55 backdrop-blur-[2px]">
               <div className="text-center">

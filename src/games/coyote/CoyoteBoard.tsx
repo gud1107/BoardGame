@@ -1,7 +1,10 @@
 "use client";
 
 import { type CSSProperties, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Avatar from "@/components/common/Avatar";
+import { preferLowDetail, useBoardView } from "@/games/shared/three/tableKit";
+import type { CoyoteSeat3D } from "./three/CoyoteTable3D";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import RulebookModal from "./RulebookModal";
@@ -44,6 +47,12 @@ import {
   type EngineAction,
   type SeatIndex,
 } from "./engine";
+
+// three.js only loads when the 3D table is actually shown (🖼️ 2D otherwise / without WebGL).
+const CoyoteTable3D = dynamic(() => import("./three/CoyoteTable3D"), {
+  ssr: false,
+  loading: () => <div className="flex h-full items-center justify-center text-xs text-orange-100/50">3D 테이블 준비 중…</div>,
+});
 
 /**
  * Pure game UI + rules driver — same controlled-component contract as every
@@ -89,6 +98,8 @@ function seatPosition(relativeIndex: number, total: number): CSSProperties {
 
 export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: CoyoteBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  const { view: boardView, setView: setBoardView, canToggle } = useBoardView("coyote-view");
+  const [lowDetail] = useState(preferLowDetail);
 
   // Same "diff consecutive lockstep snapshots on render" pattern every other
   // Board in this project uses to drive purely cosmetic flourishes — see
@@ -404,6 +415,33 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
   // deal) still visually strikes the seat now displaying that same card.
   const questionResolvedCard: Card | null = res && qSeat !== null ? (res.extraDrawnCards[res.extraDrawnCards.length - 1] ?? null) : null;
 
+  /** Same per-seat display rules as `renderSeat` below, flattened for the 3D table. */
+  function seat3D(seat: SeatIndex): CoyoteSeat3D {
+    const player = state.players.find((p) => p.seat === seat)!;
+    const isEliminated = player.hearts <= 0;
+    const isDyingSeat = isEliminated && seat === justEliminatedSeatValue;
+    const settled = isDyingSeat && (deathStage === "skull" || deathStage === "done");
+    const isQuestionSeat = revealed && res !== null && seat === qSeat;
+    const card = isQuestionSeat && questionStage === "done" ? (res!.extraDrawnCards[res!.extraDrawnCards.length - 1] ?? cardBySeat.get(seat) ?? null) : (cardBySeat.get(seat) ?? null);
+    const isMaxZeroSeat =
+      revealed && res !== null && res.maxZeroTarget.card !== null && (res.maxZeroTarget.seat === seat || (seat === qSeat && res.maxZeroTarget.card === questionResolvedCard));
+    const showRoles = revealed && res !== null;
+    const isCaller = showRoles && seat === res!.callerSeat;
+    const isBidder = showRoles && seat === res!.bid.seat;
+    const isLoser = showRoles && verdictShown && seat === res!.loserSeat;
+    return {
+      seat,
+      name: names[seat] ?? `${seat + 1}번`,
+      hearts: player.hearts,
+      out: isEliminated && (!isDyingSeat || settled),
+      card,
+      struck: isMaxZeroSeat && maxZeroStage !== "pending",
+      role: isCaller ? "caller" : isBidder ? "bidder" : null,
+      verdict: isLoser ? "lost" : showRoles && verdictShown && (isCaller || isBidder) ? "won" : null,
+      flashing: isDyingSeat && (deathStage === "shake" || deathStage === "shatter"),
+    };
+  }
+
   function renderSeat(seat: SeatIndex, style: CSSProperties, isSelf: boolean) {
     const player = state.players.find((p) => p.seat === seat)!;
     const isActive = state.phase === "playing" && state.activeSeat === seat;
@@ -533,17 +571,46 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
           {state.playerCount}인 · {state.roundNumber}라운드 · 하트 {STARTING_HEARTS}개 모두 잃으면 탈락
         </span>
         <div className="flex items-center gap-1.5">
+          {canToggle && (
+            <button
+              onClick={() => setBoardView(boardView === "3d" ? "2d" : "3d")}
+              className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+            >
+              {boardView === "3d" ? "🖼️ 2D로" : "🧊 3D로"}
+            </button>
+          )}
           <CoyoteSoundHud />
           {rulebookButton}
         </div>
       </div>
 
       {/* Round table: every seat's forehead card placed around an ellipse, viewer at the bottom. Widens for 7-8 players (see `compact`) so seatPosition's slightly larger radius has more physical room to spread cards apart. */}
-      <div className={`relative z-10 mx-auto w-full ${compact ? "h-[320px] max-w-lg sm:h-[380px]" : "h-[280px] max-w-md sm:h-[320px]"}`}>
-        <div className="absolute inset-[10%] rounded-[50%] border-4 border-orange-900/50 bg-gradient-to-b from-orange-950/50 to-black/70 shadow-inner" />
-        {renderSeat(viewerSeat, seatPosition(0, state.playerCount), true)}
-        {otherSeats.map((seat, i) => renderSeat(seat, seatPosition(i + 1, state.playerCount), false))}
-      </div>
+      {boardView === "3d" ? (
+        <div className="relative z-10 h-[360px] w-full overflow-hidden rounded-2xl border border-black/50 sm:h-[460px]">
+          <CoyoteTable3D
+            playerCount={state.playerCount}
+            viewerSeat={viewerSeat}
+            seats={seatOrder.map(seat3D)}
+            activeSeat={state.phase === "playing" ? state.activeSeat : null}
+            revealed={revealed}
+            roundNumber={state.roundNumber}
+            currentBid={state.currentBid ? { seat: state.currentBid.seat, number: state.currentBid.number } : null}
+            maxHearts={STARTING_HEARTS}
+            lowDetail={lowDetail}
+          />
+          {state.phase === "playing" && (
+            <span className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-orange-100/80">
+              내 이마 카드는 나만 못 봐요 🤫 · 드래그로 둘러보기
+            </span>
+          )}
+        </div>
+      ) : (
+        <div className={`relative z-10 mx-auto w-full ${compact ? "h-[320px] max-w-lg sm:h-[380px]" : "h-[280px] max-w-md sm:h-[320px]"}`}>
+          <div className="absolute inset-[10%] rounded-[50%] border-4 border-orange-900/50 bg-gradient-to-b from-orange-950/50 to-black/70 shadow-inner" />
+          {renderSeat(viewerSeat, seatPosition(0, state.playerCount), true)}
+          {otherSeats.map((seat, i) => renderSeat(seat, seatPosition(i + 1, state.playerCount), false))}
+        </div>
+      )}
 
       {/* Bidding phase */}
       {state.phase === "playing" && (

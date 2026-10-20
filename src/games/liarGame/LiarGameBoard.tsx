@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import dynamic from "next/dynamic";
+import { preferLowDetail, useBoardView } from "@/games/shared/three/tableKit";
+import type { PersonMood } from "@/games/shared/three/SeatedPerson";
+import type { LiarSeat3D } from "./three/LiarTable3D";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import {
   MAX_CHAT_LEN,
@@ -23,6 +27,12 @@ import {
 } from "./engine";
 import { getCategory } from "./words";
 import RulebookModal from "./RulebookModal";
+
+// three.js only loads when the 3D room is actually shown (🖼️ 2D otherwise / without WebGL).
+const LiarTable3D = dynamic(() => import("./three/LiarTable3D"), {
+  ssr: false,
+  loading: () => <div className="flex h-full items-center justify-center text-xs text-white/40">3D 방 준비 중…</div>,
+});
 
 interface Props {
   state: GameState;
@@ -107,6 +117,8 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
   const visible = visibleDescriptions(state, viewerSeat);
 
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  const { view: boardView, setView: setBoardView, canToggle } = useBoardView("liar-game-view");
+  const [lowDetail] = useState(preferLowDetail);
   const [hideCard, setHideCard] = useState(false);
   const [text, setText] = useState("");
   const [chat, setChat] = useState("");
@@ -174,6 +186,60 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
   const showChat = state.phase !== "describe";
   const votedCount = state.voters.filter((s) => s in state.votes).length;
 
+  /** 3D 방의 한 자리: 말풍선(볼 수 있는 정보만) · 동작 · 시선 · 표시. */
+  function liarSeat3D(seat: Seat): LiarSeat3D {
+    const descs = visible.filter((d) => d.seat === seat);
+    const lastDesc = descs[descs.length - 1];
+    let lastChatIdx = -1;
+    roundChat.forEach((m, i) => {
+      if (m.seat === seat) lastChatIdx = i;
+    });
+    const recentChat = state.phase !== "describe" && lastChatIdx >= 0 && lastChatIdx >= roundChat.length - 2 ? roundChat[lastChatIdx] : null;
+    const liar = revealed && outcome ? outcome.liarSeat : state.phase === "guess" ? plan.liarSeat : null;
+    let bubble: LiarSeat3D["bubble"] = null;
+    let mood: PersonMood = "rest";
+    let lookSeat: Seat | null = null;
+    let tag: string | null = null;
+    if (state.phase === "describe") {
+      if (writing.includes(seat)) {
+        bubble = { text: "✍️ …", kind: "status", key: `w${state.stage}` };
+        mood = "write";
+      } else {
+        const now = seat === viewerSeat ? descs.filter((d) => d.lap === lap).pop() : undefined;
+        bubble = now ? { text: now.text, kind: "mine", key: `m${state.stage}` } : { text: "✅ 제출", kind: "status", key: `s${state.roundIndex}-${lap}` };
+      }
+    } else {
+      if (recentChat) {
+        bubble = { text: chatText(recentChat, names), kind: "chat", key: `c${lastChatIdx}` };
+        mood = "talk";
+        lookSeat = recentChat.mention ?? null;
+      } else if (lastDesc) {
+        bubble = { text: lastDesc.auto ? "(패스)" : lastDesc.text, kind: seat === viewerSeat ? "mine" : "desc", key: `d${state.roundIndex}-${lastDesc.lap}` };
+      }
+      if (state.phase === "discuss" && !recentChat) {
+        mood = state.readySeats.includes(seat) ? "raise" : "think";
+        if (state.readySeats.includes(seat)) tag = "✅ 준비";
+      }
+      if (state.phase === "vote") {
+        if (seat in state.votes) {
+          mood = "smug";
+          tag = "🗳 투표 완료";
+        } else if (!recentChat) mood = "think";
+        if (state.voteRound === 2 && state.candidates.includes(seat)) tag = "⚖️ 동점";
+      }
+      if (liar !== null) {
+        lookSeat = seat === liar ? null : liar;
+        if (state.phase === "guess") mood = seat === liar ? "nervous" : "rest";
+        if (revealed && outcome) {
+          mood = seat === liar ? (outcome.winner === "liar" ? "laugh" : "sad") : outcome.winner === "citizens" ? "cheer" : "shock";
+          if (seat !== liar && outcome.accused === seat) tag = "👉 지목됨";
+        }
+        if (seat === liar) tag = "🎭 라이어";
+      }
+    }
+    return { seat, name: names[seat] ?? `${seat + 1}번`, score: state.scores[seat], bubble, mood, lookSeat, tag };
+  }
+
   return (
     <div className="flex flex-col gap-3">
       {/* 상단 바 */}
@@ -202,6 +268,14 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
             >
               ⏱ {secondsLeft}초
             </span>
+          )}
+          {canToggle && (
+            <button
+              onClick={() => setBoardView(boardView === "3d" ? "2d" : "3d")}
+              className="rounded-full border border-white/15 px-3 py-1 text-xs text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600"
+            >
+              {boardView === "3d" ? "🖼️ 2D로" : "🧊 3D로"}
+            </button>
           )}
           <button
             onClick={() => setRulebookOpen(true)}
@@ -249,6 +323,24 @@ export default function LiarGameBoard({ state, viewerSeat, names, connectedSeats
             </div>
           )}
         </button>
+      )}
+
+      {/* 3D 방 — 말풍선·동작으로 같은 정보를 보여 주고, 아래 좌석 카드는 기록으로 남는다 */}
+      {boardView === "3d" && (
+        <div className="relative h-[340px] w-full overflow-hidden rounded-2xl border border-white/10 sm:h-[440px] light:border-slate-200">
+          <LiarTable3D
+            seatCount={state.seatCount}
+            viewerSeat={viewerSeat}
+            seats={seats.map(liarSeat3D)}
+            liarSeat={revealed && outcome ? outcome.liarSeat : state.phase === "guess" ? plan.liarSeat : null}
+            votes={revealed && outcome ? outcome.firstVotes : null}
+            overview={revealed}
+            lowDetail={lowDetail}
+          />
+          <span className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-white/70">
+            드래그로 둘러보기
+          </span>
+        </div>
       )}
 
       {/* 좌석 */}

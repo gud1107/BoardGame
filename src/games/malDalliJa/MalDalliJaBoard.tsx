@@ -1,6 +1,8 @@
 "use client";
 
 import Image from "next/image";
+import dynamic from "next/dynamic";
+import { preferLowDetail, useBoardView } from "@/games/shared/three/tableKit";
 import { useEffect, useRef, useState } from "react";
 import Avatar from "@/components/common/Avatar";
 import { AnimatedHorse, MoveParticleLayer, buildMoveAnim, type MoveAnim, type MoveEvent, type MoveParticle } from "./MoveEffects";
@@ -69,6 +71,12 @@ import { getMalDalliJaBgm } from "./malDalliJaBgm";
  * gated on `animations.length === 0` so a winning move's flight/impact
  * finishes playing before WINNER/ELIMINATED takes over the screen.
  */
+// three.js only loads when the 3D board is actually shown (🖼️ 2D otherwise / without WebGL).
+const MalDalliJaBoard3D = dynamic(() => import("./three/Board3D"), {
+  ssr: false,
+  loading: () => <div className="flex h-full items-center justify-center text-xs text-white/40">3D 경기장 준비 중…</div>,
+});
+
 export interface MalDalliJaBoardProps {
   state: MalDalliJaState;
   viewerSeat: Seat;
@@ -125,6 +133,8 @@ export default function MalDalliJaBoard({
   onGameEnd,
 }: MalDalliJaBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  const { view: boardView, setView: setBoardView, canToggle } = useBoardView("mal-dalli-ja-view");
+  const [lowDetail] = useState(preferLowDetail);
   const opponentSeat = otherSeat(viewerSeat);
   const isMyTurn = state.phase === "playing" && state.activeSeat === viewerSeat;
 
@@ -476,6 +486,14 @@ export default function MalDalliJaBoard({
             </span>
           )}
           <SuiteSoundHud suite={getMalDalliJaBgm} icon="🐎" label="Grand Derby Gallop" preview="preview" showSfx={false} />
+          {canToggle && (
+            <button
+              onClick={() => setBoardView(boardView === "3d" ? "2d" : "3d")}
+              className="break-keep rounded-full border border-white/15 light:border-slate-200 px-3 py-1.5 text-xs text-white/70 light:text-slate-700 hover:border-white/30"
+            >
+              {boardView === "3d" ? "🖼️ 2D로" : "🧊 3D로"}
+            </button>
+          )}
           <button
             onClick={() => setRulebookOpen(true)}
             className="break-keep rounded-full border border-white/15 light:border-slate-200 px-3 py-1.5 text-xs text-white/70 light:text-slate-700 hover:border-white/30"
@@ -501,6 +519,27 @@ export default function MalDalliJaBoard({
       )}
 
       {/* ---- Board ---- */}
+      {boardView === "3d" ? (
+        <div className="relative mx-auto aspect-square max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-xl border border-white/10 light:border-slate-200">
+          <MalDalliJaBoard3D
+            positions={state.positions}
+            viewerSeat={viewerSeat}
+            activeSeat={state.phase === "playing" ? state.activeSeat : null}
+            selected={selectedHorseIndex}
+            legal={[...legalByCell.values()]}
+            movable={movableHorseIndices}
+            animations={animations}
+            lastMove={state.moveHistory.length ? { seat: state.moveHistory[state.moveHistory.length - 1].seat, to: state.moveHistory[state.moveHistory.length - 1].to } : null}
+            onCellClick={handleCellClick}
+            onAnimDone={handleAnimDone}
+            onHop={() => getSoundEngine().playHoofBeat()}
+            lowDetail={lowDetail}
+          />
+          <span className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-white/70">
+            드래그로 회전 · 말을 누르고 빛나는 칸으로
+          </span>
+        </div>
+      ) : (
       <div className="relative mx-auto w-full max-w-xl">
         <div className="grid w-full grid-cols-11 overflow-hidden rounded-xl border border-white/10 light:border-slate-200 bg-black light:bg-white light:shadow-md shadow-[0_0_60px_-15px_rgba(244,63,94,0.35)]">
           {cells}
@@ -524,6 +563,7 @@ export default function MalDalliJaBoard({
           ))}
         </div>
       </div>
+      )}
 
       <p className="break-keep text-center text-xs text-white/40 light:text-slate-500">
         {isMyTurn

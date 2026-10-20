@@ -58,6 +58,18 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.75.0",
+    releaseDate: "2026-10-21",
+    title: "🧊 코요테·라이어·말달리자·시티 체이스 3D",
+    changes: [
+      { game: "coyote", type: "FEAT", desc: "🌵 사막의 밤 모닥불 테이블 — 사람들이 이마 밴드에 카드를 꽂고 둘러앉아요. 선언은 말풍선, 코요테!는 손가락질, 공개 땐 카드가 테이블로" },
+      { game: "liar-game", type: "FEAT", desc: "🕵️ 전등 아래 원탁 방 — 설명·채팅이 머리 위 말풍선, 쓰는 중엔 고개 숙여 적고, 공개 땐 라이어에게 붉은 조명과 투표 화살표" },
+      { game: "mal-dalli-ja", type: "FEAT", desc: "🐎 데스게임 경기장의 입체 돌판 — 나이트 말 20개, 오아시스 물웅덩이·야자수, 칸마다 깡충 뛰는 이동과 큰 L자 도약" },
+      { game: "city-chase", type: "FEAT", desc: "🌃 밤의 입체 도시 — 불 켜진 빌딩, 로터 돌아가는 헬기와 탐조등(감시 구역), 수색하면 빌딩이 들려 흔적·차가 보여요" },
+      { game: "common", type: "IMPROVE", desc: "🖼️ 네 게임 모두 헤더의 '2D로' 버튼으로 예전 화면 전환 가능(기기에 저장), 3D를 못 쓰는 기기는 자동으로 2D" },
+    ],
+  },
+  {
     version: "v1.74.0",
     releaseDate: "2026-10-21",
     title: "🎬 갓생 플래너 하루 재생",
