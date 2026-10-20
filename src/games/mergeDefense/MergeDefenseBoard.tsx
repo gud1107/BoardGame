@@ -355,6 +355,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   const map = MAPS[sanitizeMap(state.map)];
   const mainRef = useRef<HTMLCanvasElement | null>(null);
   const miniRefs = useRef<(HTMLCanvasElement | null)[]>([]);
+  const lastMiniRef = useRef(0);
   const stateRef = useRef(state);
   const stateAtRef = useRef(0);
   const fxRef = useRef<Fx[]>([]);
@@ -1157,8 +1158,11 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           }
         }
       }
+      // Opponent minimaps at ~30fps — tiny, and a full board redraw each for every frame.
+      const drawMinis = real - lastMiniRef.current >= 32;
+      if (drawMinis) lastMiniRef.current = real;
       miniRefs.current.forEach((c, seat) => {
-        if (!c || seat === view) return;
+        if (!c || seat === view || !drawMinis) return;
         const dpr = Math.min(2, window.devicePixelRatio || 1);
         const w = Math.round(c.clientWidth * dpr);
         const h = Math.round(c.clientHeight * dpr);

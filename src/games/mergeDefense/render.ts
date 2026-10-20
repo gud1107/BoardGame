@@ -142,11 +142,6 @@ function fieldCanvas(scale: number, alive: boolean, mini: boolean): HTMLCanvasEl
   return c;
 }
 
-/** The static field (grass, road, flat pads) as an image `px` wide — the 3D view's ground texture. */
-export function fieldImage(px: number, alive: boolean): HTMLCanvasElement | null {
-  return fieldCanvas(px / BOARD_W, alive, false);
-}
-
 function paintField(ctx: Ctx, alive: boolean, mini: boolean) {
   const rnd = seeded(20261008);
   // Grass
@@ -535,13 +530,13 @@ export function drawBoardOverlay3D(ctx: Ctx, board: Board, opts: DrawOptions, P:
       roundRect(ctx, x - w / 2 - k, y - bh - k, w + 2 * k, bh + 2 * k, 2 * k);
       ctx.fill();
       const frac = Math.max(0, m.hp / m.maxHp);
-      const col = frac > 0.5 ? ["#86efac", "#16a34a"] : frac > 0.25 ? ["#fde68a", "#d97706"] : ["#fca5a5", "#dc2626"];
-      const g = ctx.createLinearGradient(x - w / 2, 0, x + w / 2, 0);
-      g.addColorStop(0, col[0]);
-      g.addColorStop(1, col[1]);
-      ctx.fillStyle = g;
-      roundRect(ctx, x - w / 2, y - bh, Math.max(k, w * frac), bh, 1.5 * k);
-      ctx.fill();
+      // Solid fills (no per-monster gradient objects — this runs for every monster every frame).
+      const col = frac > 0.5 ? ["#22c55e", "#bbf7d0"] : frac > 0.25 ? ["#f59e0b", "#fde68a"] : ["#ef4444", "#fecaca"];
+      const fw = Math.max(k, w * frac);
+      ctx.fillStyle = col[0];
+      ctx.fillRect(x - w / 2, y - bh, fw, bh);
+      ctx.fillStyle = col[1];
+      ctx.fillRect(x - w / 2, y - bh, fw, bh * 0.35);
       y -= bh + 3 * k;
     }
     const st = TIER_STYLE[tier];
