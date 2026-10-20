@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import type { MoveRecord } from "../engine";
 
 /**
@@ -146,10 +147,31 @@ function buildGeometries(): Record<string, THREE.BufferGeometry> {
 }
 
 const GEO = buildGeometries();
+// Lacquered ivory / polished ebony. Ebony stays a warm dark brown (not
+// black) and gets a glossy clearcoat, so the room reflections and rim lights
+// trace its silhouette even on the dark squares.
 const MAT = {
-  w: new THREE.MeshStandardMaterial({ color: "#f1e6cf", roughness: 0.38, metalness: 0.04 }),
-  b: new THREE.MeshStandardMaterial({ color: "#2b2622", roughness: 0.3, metalness: 0.18 }),
+  w: new THREE.MeshPhysicalMaterial({ color: "#e9dcc1", roughness: 0.4, metalness: 0, clearcoat: 0.4, clearcoatRoughness: 0.3, sheen: 0.25, sheenColor: new THREE.Color("#fff6e0"), envMapIntensity: 0.3 }),
+  b: new THREE.MeshPhysicalMaterial({ color: "#2a211c", roughness: 0.3, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.1, sheen: 0.6, sheenColor: new THREE.Color("#a8805c"), envMapIntensity: 0.55 }),
+  gold: new THREE.MeshStandardMaterial({ color: "#d4a94e", roughness: 0.3, metalness: 1, envMapIntensity: 0.7 }),
 };
+/** Thin gold band around each piece's foot. */
+const trimGeo = { big: new THREE.TorusGeometry(0.362, 0.016, 8, 48).rotateX(Math.PI / 2).translate(0, 0.11, 0), small: new THREE.TorusGeometry(0.318, 0.015, 8, 48).rotateX(Math.PI / 2).translate(0, 0.11, 0) };
+
+function radialTexture(stops: [number, string][], size = 256): THREE.CanvasTexture {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const g = c.getContext("2d")!;
+  const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  for (const [o, col] of stops) grad.addColorStop(o, col);
+  g.fillStyle = grad;
+  g.fillRect(0, 0, size, size);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+/** Soft contact shadow under every piece (works without shadow maps too). */
+const blobMat = new THREE.MeshBasicMaterial({ map: radialTexture([[0, "rgba(0,0,0,.55)"], [0.45, "rgba(0,0,0,.3)"], [1, "rgba(0,0,0,0)"]]), transparent: true, depthWrite: false, toneMapped: false });
 const unitPlane = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
 const discGeo = new THREE.CircleGeometry(0.15, 28).rotateX(-Math.PI / 2);
 const capRingGeo = new THREE.RingGeometry(0.38, 0.47, 36).rotateX(-Math.PI / 2);
@@ -177,6 +199,7 @@ interface PieceProps {
 
 function Piece({ ch, sq, from, hop, delay = 0, dur = 0.3, lifted, topple, toppleAt = 0, wobble, shadows, onPick }: PieceProps) {
   const ref = useRef<THREE.Group>(null);
+  const blob = useRef<THREE.Mesh>(null);
   const t0 = useRef(-1);
   const lift = useRef(0);
   const white = ch === ch.toUpperCase();
@@ -207,8 +230,15 @@ function Piece({ ch, sq, from, hop, delay = 0, dur = 0.3, lifted, topple, topple
       y += Math.sin(a) * 0.28;
     }
     g.position.set(x, y, z);
+    const b = blob.current;
+    if (b) {
+      b.position.set(x, 0.004, z);
+      b.scale.setScalar(0.92 / (1 + y * 0.9));
+    }
   });
   return (
+    <>
+    <mesh ref={blob} geometry={unitPlane} material={blobMat} position={[x0, 0.004, z0]} scale={0.92} renderOrder={1} />
     <group
       ref={ref}
       position={[x0, 0, z0]}
@@ -219,7 +249,9 @@ function Piece({ ch, sq, from, hop, delay = 0, dur = 0.3, lifted, topple, topple
       }}
     >
       <mesh geometry={GEO[type]} material={white ? MAT.w : MAT.b} castShadow={shadows} />
+      <mesh geometry={type === "p" ? trimGeo.small : trimGeo.big} material={MAT.gold} />
     </group>
+    </>
   );
 }
 
@@ -361,41 +393,87 @@ function Shake({ at, amp }: { at: number; amp: number }) {
 
 /* ── Board, highlights ── */
 
+/** Fine wavy grain lines over a rectangle (deterministic). */
+function grain(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, seed: number, alpha: number, lines: number) {
+  g.save();
+  g.beginPath();
+  g.rect(x, y, w, h);
+  g.clip();
+  for (let i = 0; i < lines; i++) {
+    const yy = y + ((i + noise(i, seed)) / lines) * h;
+    const amp = 2 + noise(i, seed + 1) * 5;
+    const ph = noise(i, seed + 2) * 6.28;
+    g.strokeStyle = noise(i, seed + 3) > 0.5 ? `rgba(0,0,0,${alpha})` : `rgba(255,255,255,${alpha * 0.6})`;
+    g.lineWidth = 0.8 + noise(i, seed + 4) * 1.6;
+    g.beginPath();
+    for (let xx = 0; xx <= w; xx += 8) {
+      const yv = yy + Math.sin(xx / (40 + amp * 9) + ph) * amp;
+      if (xx === 0) g.moveTo(x + xx, yv);
+      else g.lineTo(x + xx, yv);
+    }
+    g.stroke();
+  }
+  g.restore();
+}
+
 function boardTexture(light: string, dark: string, flipped: boolean): THREE.CanvasTexture {
-  const S = 128;
-  const M = 64;
+  const S = 160;
+  const M = 80;
   const c = document.createElement("canvas");
   c.width = c.height = S * 8 + M * 2;
   const g = c.getContext("2d")!;
+  // walnut border
   const wood = g.createLinearGradient(0, 0, c.width, c.height);
-  wood.addColorStop(0, "#5a3a1f");
-  wood.addColorStop(1, "#2d1b0e");
+  wood.addColorStop(0, "#3b2312");
+  wood.addColorStop(0.5, "#2a170b");
+  wood.addColorStop(1, "#1e1007");
   g.fillStyle = wood;
   g.fillRect(0, 0, c.width, c.height);
+  grain(g, 0, 0, c.width, c.height, 7, 0.08, 90);
+  // squares with their own grain, alternating direction like an inlaid board
   for (let r = 0; r < 8; r++)
     for (let f = 0; f < 8; f++) {
-      g.fillStyle = (f + r) % 2 === 1 ? light : dark;
-      g.fillRect(M + f * S, M + (7 - r) * S, S, S);
+      const x = M + f * S;
+      const y = M + (7 - r) * S;
+      const isLight = (f + r) % 2 === 1;
+      g.fillStyle = isLight ? light : dark;
+      g.fillRect(x, y, S, S);
+      if (f % 2 === 0) grain(g, x, y, S, S, f * 8 + r, isLight ? 0.05 : 0.09, 11);
+      else {
+        g.save();
+        g.translate(x + S, y);
+        g.rotate(Math.PI / 2);
+        grain(g, 0, 0, S, S, f * 8 + r + 99, isLight ? 0.05 : 0.09, 11);
+        g.restore();
+      }
+      g.strokeStyle = "rgba(0,0,0,.08)";
+      g.lineWidth = 2;
+      g.strokeRect(x + 1, y + 1, S - 2, S - 2);
     }
-  g.strokeStyle = "rgba(0,0,0,.45)";
-  g.lineWidth = 4;
-  g.strokeRect(M - 2, M - 2, S * 8 + 4, S * 8 + 4);
-  g.fillStyle = "#ead6b2";
-  g.font = "bold 34px system-ui, sans-serif";
+  // double gold inlay around the playing field
+  g.strokeStyle = "#c9a052";
+  g.lineWidth = 5;
+  g.strokeRect(M - 6, M - 6, S * 8 + 12, S * 8 + 12);
+  g.lineWidth = 2;
+  g.strokeStyle = "rgba(201,160,82,.7)";
+  g.strokeRect(M - 16, M - 16, S * 8 + 32, S * 8 + 32);
+  g.fillStyle = "#d8bd86";
+  g.font = "600 38px Georgia, 'Times New Roman', serif";
   g.textAlign = "center";
   g.textBaseline = "middle";
-  const text = (s: string, x: number, y: number) => {
+  const text = (str: string, x: number, y: number) => {
     g.save();
     g.translate(x, y);
     if (flipped) g.rotate(Math.PI);
-    g.fillText(s, 0, 0);
+    g.fillText(str, 0, 0);
     g.restore();
   };
+  const off = (M - 16) / 2;
   for (let i = 0; i < 8; i++) {
-    text("abcdefgh"[i], M + i * S + S / 2, c.height - M / 2);
-    text("abcdefgh"[i], M + i * S + S / 2, M / 2);
-    text(String(8 - i), M / 2, M + i * S + S / 2);
-    text(String(8 - i), c.width - M / 2, M + i * S + S / 2);
+    text("abcdefgh"[i], M + i * S + S / 2, c.height - off);
+    text("abcdefgh"[i], M + i * S + S / 2, off);
+    text(String(8 - i), off, M + i * S + S / 2);
+    text(String(8 - i), c.width - off, M + i * S + S / 2);
   }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -403,15 +481,36 @@ function boardTexture(light: string, dark: string, flipped: boolean): THREE.Canv
   return tex;
 }
 
-function Board({ light, dark, flipped, shadows, onSquare }: { light: string; dark: string; flipped: boolean; shadows: boolean; onSquare: (sq: number) => void }) {
+/** Rounded, bevelled slab under the board top (top face at y = 0). */
+const frameGeo = (() => {
+  const h = 4.75;
+  const r = 0.28;
+  const sh = new THREE.Shape();
+  sh.moveTo(-h + r, -h);
+  sh.lineTo(h - r, -h);
+  sh.quadraticCurveTo(h, -h, h, -h + r);
+  sh.lineTo(h, h - r);
+  sh.quadraticCurveTo(h, h, h - r, h);
+  sh.lineTo(-h + r, h);
+  sh.quadraticCurveTo(-h, h, -h, h - r);
+  sh.lineTo(-h, -h + r);
+  sh.quadraticCurveTo(-h, -h, -h + r, -h);
+  const depth = 0.4;
+  const bevel = 0.07;
+  const geo = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 4, curveSegments: 8 });
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(0, -(depth + bevel) - 0.002, 0);
+  return geo;
+})();
+const frameMat = new THREE.MeshPhysicalMaterial({ color: "#2b180b", roughness: 0.42, clearcoat: 0.8, clearcoatRoughness: 0.2, envMapIntensity: 0.3 });
+const tableMat = new THREE.MeshStandardMaterial({ map: radialTexture([[0, "rgba(74,50,32,1)"], [0.35, "rgba(46,30,19,1)"], [0.75, "rgba(24,16,11,.6)"], [1, "rgba(24,16,11,0)"]], 512), transparent: true, roughness: 0.85, depthWrite: false });
+
+function Board({ light, dark, flipped, shadows, env, onSquare }: { light: string; dark: string; flipped: boolean; shadows: boolean; env: THREE.Texture; onSquare: (sq: number) => void }) {
   const tex = useMemo(() => boardTexture(light, dark, flipped), [light, dark, flipped]);
   useEffect(() => () => tex.dispose(), [tex]);
   return (
     <group>
-      <mesh position={[0, -0.22, 0]} receiveShadow={shadows}>
-        <boxGeometry args={[9.3, 0.44, 9.3]} />
-        <meshStandardMaterial color="#3a2414" roughness={0.6} />
-      </mesh>
+      <mesh geometry={frameGeo} material={frameMat} receiveShadow={shadows} castShadow={shadows} />
       <mesh
         geometry={unitPlane}
         scale={[9, 1, 9]}
@@ -425,15 +524,35 @@ function Board({ light, dark, flipped, shadows, onSquare }: { light: string; dar
           if (f >= 0 && f < 8 && r >= 0 && r < 8) onSquare(r * 8 + f);
         }}
       >
-        <meshStandardMaterial map={tex} roughness={0.55} metalness={0.02} />
+        <meshPhysicalMaterial map={tex} envMap={env} roughness={0.38} clearcoat={0.6} clearcoatRoughness={0.25} envMapIntensity={0.12} />
       </mesh>
-      {/* table */}
-      <mesh position={[0, -0.46, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow={shadows}>
-        <circleGeometry args={[30, 48]} />
-        <meshStandardMaterial color="#1b130d" roughness={0.9} />
-      </mesh>
+      {/* table, fading into the backdrop */}
+      <mesh geometry={unitPlane} material={tableMat} position={[0, -0.5, 0]} scale={[34, 1, 34]} receiveShadow={shadows} />
     </group>
   );
+}
+
+/**
+ * Soft studio reflections (PMREM of three's RoomEnvironment), set as each
+ * material's own envMap — with `scene.environment` three ignores the
+ * per-material envMapIntensity and everything washes out.
+ */
+function useStudioEnv(): THREE.Texture {
+  const gl = useThree((st) => st.gl);
+  const env = useMemo(() => {
+    const pm = new THREE.PMREMGenerator(gl);
+    const tex = pm.fromScene(new RoomEnvironment(), 0.04).texture;
+    pm.dispose();
+    return tex;
+  }, [gl]);
+  useEffect(() => {
+    for (const m of [MAT.w, MAT.b, MAT.gold, frameMat]) {
+      m.envMap = env;
+      m.needsUpdate = true;
+    }
+    return () => env.dispose();
+  }, [env]);
+  return env;
 }
 
 function Tile({ sq, color, opacity, y = 0.006 }: { sq: number; color: string; opacity: number; y?: number }) {
@@ -543,6 +662,7 @@ function CameraRig({ flipped }: { flipped: boolean }) {
 function Scene(props: Chess3DProps) {
   const { board, selected, hints, myTurn, last, checkedKing, mated, checkKing, anim, animPly, slideS, hopS, nope, onSquare } = props;
   const shadows = props.quality === "high";
+  const env = useStudioEnv();
 
   const info = useMemo(() => {
     if (!anim) return null;
@@ -632,7 +752,7 @@ function Scene(props: Chess3DProps) {
 
   return (
     <>
-      <Board light={props.light} dark={props.dark} flipped={props.flipped} shadows={shadows} onSquare={onSquare} />
+      <Board light={props.light} dark={props.dark} flipped={props.flipped} shadows={shadows} env={env} onSquare={onSquare} />
       {tiles}
       {checkedKing >= 0 && <CheckGlow sq={checkedKing} />}
       {pieces}
@@ -644,26 +764,33 @@ function Scene(props: Chess3DProps) {
 export default function Chess3D(props: Chess3DProps) {
   const high = props.quality === "high";
   return (
-    <Canvas shadows={high} dpr={high ? [1, 1.75] : [1, 1.25]} gl={{ antialias: true, powerPreference: "high-performance" }} camera={{ fov: 38, position: [0, 11, 7], near: 0.1, far: 120 }} style={{ touchAction: "none" }}>
-      <color attach="background" args={["#140e09"]} />
-      <fog attach="fog" args={["#140e09", 22, 55]} />
-      <hemisphereLight args={["#fff2dc", "#2a1a0e", 0.75]} />
+    <Canvas
+      shadows={high ? "soft" : false}
+      dpr={high ? [1, 1.75] : [1, 1.25]}
+      gl={{ antialias: true, alpha: true, powerPreference: "high-performance", toneMappingExposure: 0.95 }}
+      camera={{ fov: 38, position: [0, 11, 7], near: 0.1, far: 120 }}
+      style={{ touchAction: "none", background: "radial-gradient(ellipse at 50% 38%, #3a2a1c 0%, #1c140d 55%, #0b0806 100%)" }}
+    >
+      <hemisphereLight args={["#fff2dc", "#2a1a0e", 0.25]} />
       <directionalLight
         position={[5, 14, 7]}
-        intensity={2.1}
-        color="#fff3e0"
+        intensity={1.7}
+        color="#fff1dc"
         castShadow={high}
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
         shadow-camera-left={-7}
         shadow-camera-right={7}
         shadow-camera-top={7}
         shadow-camera-bottom={-7}
         shadow-camera-near={1}
         shadow-camera-far={40}
-        shadow-bias={-0.0005}
+        shadow-bias={-0.0004}
+        shadow-normalBias={0.02}
       />
-      <directionalLight position={[-7, 6, -6]} intensity={0.55} color="#a9c1ff" />
+      {/* rim lights from both ends so dark pieces keep an outline whichever side the camera is on */}
+      <directionalLight position={[-4, 5, -10]} intensity={0.9} color="#b9cdf5" />
+      <directionalLight position={[4, 5, 10]} intensity={0.45} color="#ffe2b8" />
       <Scene {...props} />
       <CameraRig flipped={props.flipped} />
     </Canvas>
