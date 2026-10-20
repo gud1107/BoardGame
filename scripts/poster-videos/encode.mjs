@@ -6,7 +6,8 @@
 // Raw recordings (<dir>/<id>.webm, from record.cjs) are not committed — only
 // the choices in highlights.json are: { from, to } seconds in the raw video,
 // crop [x, y, w, h] in raw pixels (4:5), optional speed (>1 = faster), optional
-// crfBoost (higher = smaller file, for busy real-time scenes over the size cap).
+// crfBoost (higher = smaller file, for busy real-time scenes over the size cap),
+// optional stillAt (raw second) → also writes the card's still <id>.webp.
 import { execFileSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -38,4 +39,11 @@ for (const id of ids) {
   execFileSync("ffmpeg", [...input, "-c:v", "libx264", "-crf", String(27 + boost / 2), "-preset", "slow", "-pix_fmt", "yuv420p", "-movflags", "+faststart", mp4], { stdio: "inherit" });
   const kb = (p) => Math.round(statSync(p).size / 1024);
   console.log(`${id}: webm ${kb(webm)}KB, mp4 ${kb(mp4)}KB`);
+  // Games that had no still capture get one from the same recording, so the
+  // card's still and its clip show the same scene (`stillAt` = raw second).
+  if (h.stillAt !== undefined) {
+    const webp = join(root, "public", "posters", `${id}.webp`);
+    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-ss", String(h.stillAt), "-i", join(rawDir, `${id}.webm`), "-vf", `crop=${w}:${cropH}:${x}:${y},scale=480:600:flags=lanczos`, "-frames:v", "1", "-c:v", "libwebp", "-quality", "74", webp], { stdio: "inherit" });
+    console.log(`${id}: still ${kb(webp)}KB`);
+  }
 }

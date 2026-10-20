@@ -58,6 +58,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.76.0",
+    releaseDate: "2026-10-21",
+    title: "🎬 하이라이트 영상 17개 게임 추가",
+    changes: [
+      { game: "common", type: "FEAT", desc: "🎬 마피아·아발론·여관 난투·텔레파시 등 17개 게임도 실제 게임 장면 카드 + 마우스오버 하이라이트 영상 — 플레이 가능한 49개 게임 전부" },
+    ],
+  },
+  {
     version: "v1.75.0",
     releaseDate: "2026-10-21",
     title: "🧊 코요테·라이어·말달리자·시티 체이스 3D",

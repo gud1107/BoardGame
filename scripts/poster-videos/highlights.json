@@ -5,6 +5,13 @@
     "crop": [160, 180, 640, 800],
     "moment": "알 튕겨 맞히기"
   },
+  "avalon": {
+    "from": 42,
+    "to": 50,
+    "crop": [160, 0, 640, 800],
+    "moment": "원정대 투표",
+    "stillAt": 46
+  },
   "bang": {
     "from": 44,
     "to": 52,
@@ -61,6 +68,27 @@
     "crop": [170, 300, 620, 775],
     "moment": "투구 안착"
   },
+  "dalmuti": {
+    "from": 155,
+    "to": 163,
+    "crop": [160, 40, 640, 800],
+    "moment": "마지막 패 스포트라이트",
+    "stillAt": 160
+  },
+  "destiny-war-39": {
+    "from": 60,
+    "to": 68,
+    "crop": [160, 0, 640, 800],
+    "moment": "카드 공개",
+    "stillAt": 63
+  },
+  "doodle-phone": {
+    "from": 134,
+    "to": 142,
+    "crop": [160, 0, 640, 800],
+    "moment": "그림 앨범 공개",
+    "stillAt": 140
+  },
   "five-cucumbers": {
     "from": 46,
     "to": 54,
@@ -73,11 +101,39 @@
     "crop": [180, 250, 600, 750],
     "moment": "경매 입찰"
   },
+  "god-life-planner": {
+    "from": 40,
+    "to": 48,
+    "crop": [70, 60, 820, 1025],
+    "moment": "하루 계획",
+    "stillAt": 44
+  },
+  "great-legacy": {
+    "from": 42,
+    "to": 50,
+    "crop": [160, 0, 640, 800],
+    "moment": "자산 경매",
+    "stillAt": 45
+  },
+  "grid-poker": {
+    "from": 91,
+    "to": 99,
+    "crop": [160, 60, 640, 800],
+    "moment": "ROUND WINNER",
+    "stillAt": 94
+  },
   "hanamikoji": {
     "from": 22,
     "to": 30,
     "crop": [160, 180, 640, 800],
     "moment": "게이샤 카드 행동"
+  },
+  "hill-of-truth": {
+    "from": 15,
+    "to": 23,
+    "crop": [160, 100, 640, 800],
+    "moment": "스무고개 질문",
+    "stillAt": 17
   },
   "hungry-shark": {
     "from": 42,
@@ -127,11 +183,46 @@
     "crop": [160, 200, 640, 800],
     "moment": "하트 공개"
   },
+  "mafia": {
+    "from": 84,
+    "to": 92,
+    "crop": [160, 0, 640, 800],
+    "moment": "밤 → 비극의 새벽",
+    "stillAt": 90
+  },
   "mal-dalli-ja": {
     "from": 99,
     "to": 107,
     "crop": [170, 280, 620, 775],
     "moment": "탈락"
+  },
+  "memory-feast": {
+    "from": 32,
+    "to": 40,
+    "crop": [160, 160, 640, 800],
+    "moment": "카드 뒤집기",
+    "stillAt": 38
+  },
+  "merge-defense": {
+    "from": 120,
+    "to": 128,
+    "crop": [160, 240, 640, 800],
+    "moment": "보스 몬스터 공격",
+    "stillAt": 124
+  },
+  "mine-of-oblivion": {
+    "from": 66,
+    "to": 74,
+    "crop": [150, 120, 640, 800],
+    "moment": "지뢰 폭사",
+    "stillAt": 68
+  },
+  "mine-of-oblivion-2": {
+    "from": 23,
+    "to": 31,
+    "crop": [150, 120, 640, 800],
+    "moment": "시한폭탄 폭발",
+    "stillAt": 33
   },
   "no-thanks": {
     "from": 64,
@@ -144,6 +235,13 @@
     "to": 66,
     "crop": [130, 190, 700, 875],
     "moment": "두도 판정"
+  },
+  "pieces-of-language": {
+    "from": 11,
+    "to": 19,
+    "crop": [160, 100, 640, 800],
+    "moment": "단어 완성 → WINNER",
+    "stillAt": 13
   },
   "rat-a-tat-cat": {
     "from": 52,
@@ -182,6 +280,20 @@
     "crop": [160, 220, 640, 800],
     "moment": "생존"
   },
+  "tavern-brawl": {
+    "from": 130,
+    "to": 138,
+    "crop": [70, 100, 820, 1025],
+    "moment": "전투 — 막음!",
+    "stillAt": 134
+  },
+  "telepathy": {
+    "from": 62,
+    "to": 70,
+    "crop": [160, 280, 640, 800],
+    "moment": "실수 공개",
+    "stillAt": 64
+  },
   "wobble-tower": {
     "from": 113,
     "to": 121,
@@ -193,5 +305,12 @@
     "to": 106,
     "crop": [200, 170, 560, 700],
     "moment": "마천루 쌓기"
+  },
+  "worm": {
+    "from": 66,
+    "to": 74,
+    "crop": [160, 60, 640, 800],
+    "moment": "먹이 사냥",
+    "stillAt": 70
   }
 }

@@ -14,7 +14,10 @@ const { chromium } = require(process.env.PWCORE || 'playwright-core');
 const id = process.argv[2];
 const recordSec = +(process.argv[3] || 75);
 const base = process.argv[4] || 'https://board-game-tau-navy.vercel.app';
-const REALTIME = new Set(['hungry-shark', 'crab-survival']);
+const REALTIME = new Set(['hungry-shark', 'crab-survival', 'worm']);
+// 지렁이 has no lobby bots and needs two people: a second (unrecorded) browser
+// context joins with ?room=<code> and steers too.
+const NEEDS_GUEST = new Set(['worm']);
 const root = path.join(__dirname, '..', '..');
 const out = process.env.POSTER_RAW_DIR || path.join(require('os').tmpdir(), 'poster-raw');
 fs.mkdirSync(out, { recursive: true });
@@ -28,7 +31,7 @@ const VW = 960, VH = 1200;
   const t0 = Date.now();
   const log = [];
   let meta = { id, ok: false };
-  let ctx;
+  let ctx, guest = null;
   try {
     ctx = await browser.newContext({
       viewport: { width: VW, height: VH }, deviceScaleFactor: 1, colorScheme: 'dark',
@@ -65,8 +68,26 @@ const VW = 960, VH = 1200;
       // keep recording rooms out of the public list
       await clickFirst(/^🔒\s*비공개/);
       if (await clickFirst(/^(\S+\s*)?방 만들기|방 만들고|만들기$/)) { await page.waitForTimeout(1500); continue; }
-      if (await clickFirst(/봇으로.*채우|일괄 채우기|빈 자리.*봇|모두 봇|봇 채우기/)) { await page.waitForTimeout(1500); continue; }
+      if (await clickFirst(/봇으로.*채우|일괄 채우기|빈 자리.*봇|빈자리 AI로 채우|모두 봇|봇 채우기/)) { await page.waitForTimeout(1500); continue; }
       if (botClicks < 3 && (await clickFirst(/봇 추가/))) { botClicks++; await page.waitForTimeout(1200); continue; }
+      if (NEEDS_GUEST.has(id) && !guest) {
+        const code = await page.evaluate((g) => { const k = Object.keys(localStorage).find((k) => new RegExp(`^${g}-seat-\\d{4}$`).test(k)); return k ? k.slice(-4) : null; }, id);
+        if (code) {
+          guest = await (await browser.newContext({ viewport: { width: VW, height: VH }, colorScheme: 'dark' })).newPage();
+          await guest.goto(`${base}/games/${id}?room=${code}`, { waitUntil: 'domcontentloaded', timeout: 120000 });
+          await guest.waitForTimeout(3500);
+          for (let i = 0; i < 6; i++) {
+            const inp = guest.locator('input[placeholder*="닉네임"]:visible');
+            if (await inp.count()) { if (!(await inp.first().inputValue().catch(() => 'x'))) await inp.first().fill('손님'); }
+            const b = guest.locator('button:visible', { hasText: /참여|참가|입장|들어가기|확인|알겠어요/ }).first();
+            if (await b.count()) await b.click({ timeout: 2000 }).catch(() => {});
+            await guest.waitForTimeout(1200);
+          }
+          log.push('guest@' + code);
+          await page.waitForTimeout(2000);
+          continue;
+        }
+      }
       if (await clickFirst(/지금 시작|게임 시작|바로 시작|시작하기|^시작$/)) { await page.waitForTimeout(1500); continue; }
       if (await clickFirst(/^확인$|건너뛰기|스킵|닫기|^시작할게요|알겠어요|룰 확인/)) { await page.waitForTimeout(800); continue; }
       const body = (await page.locator('body').innerText().catch(() => '')) || '';
@@ -134,6 +155,7 @@ const VW = 960, VH = 1200;
         await page.keyboard.down(k);
         // also steer by mouse for pointer-driven games
         await page.mouse.move(clip.x + Math.random() * clip.w, clip.y + Math.random() * clip.h, { steps: 8 });
+        if (guest) await guest.mouse.move(VW * (0.2 + Math.random() * 0.6), VH * (0.2 + Math.random() * 0.6), { steps: 8 }).catch(() => {});
         await page.waitForTimeout(500 + Math.random() * 900);
         await page.keyboard.up(k);
         if (Math.random() < 0.3) await page.keyboard.press('Space');
@@ -144,12 +166,13 @@ const VW = 960, VH = 1200;
       // Round-end screens wait for each human's "다음 라운드" — press it for our (bot) seat.
       while (Date.now() < end) {
         await page.waitForTimeout(2000);
-        await clickFirst(/^(\S+\s*)?다음 라운드( 시작)?$|^(\S+\s*)?다음 판$/);
+        // also role-card acks (마피아·아발론), "ROUND n 시작" (운명전쟁39), album paging (그림 전화기)
+        await clickFirst(/^(\S+\s*)?다음 라운드( 시작)?$|^(\S+\s*)?다음 판$|^확인했어요$|^ROUND \d+ 시작$|^다음 장/);
       }
     } else {
       // Monkey for the host's own seat: no self-autoplay exists, so on our
       // turn press a random safe action button or a random board point.
-      const UNSAFE = /나가|떠나|설정|채팅|룰북|규칙|메뉴|공유|복사|초대|소리|음악|BGM|테마|2D|3D|화질|신고|로비|홈|기권|항복|포기|무르기|무승부|돌리기|숨기기|전체화면|도움|투표|보내기|🔊|🔇|⚙|📖/;
+      const UNSAFE = /나가|떠나|설정|채팅|룰북|규칙|메뉴|공유|복사|초대|소리|음악|BGM|테마|2D|3D|화질|신고|로비|홈|기권|항복|포기|무르기|무승부|돌리기|숨기기|전체화면|도움|투표|보내기|버그|리포트|🔊|🔇|⚙|📖/;
       while (Date.now() < end) {
         await page.waitForTimeout(900 + Math.random() * 700);
         const cands = await page.evaluate((src) => {
@@ -165,7 +188,10 @@ const VW = 960, VH = 1200;
           const i = cands[Math.floor(Math.random() * cands.length)];
           await page.locator('main button').nth(i).click({ timeout: 800 }).catch(() => {});
         } else {
-          await page.mouse.click(clip.x + 20 + Math.random() * (clip.w - 40), clip.y + 20 + Math.random() * (clip.h - 40)).catch(() => {});
+          // only board points inside <main>, never floating (fixed) widgets like the bug-report button
+          const px = clip.x + 20 + Math.random() * (clip.w - 40), py = clip.y + 20 + Math.random() * (clip.h - 40);
+          const inBoard = await page.evaluate(([x, y]) => { const el = document.elementFromPoint(x, y); if (!el || !el.closest('main')) return false; for (let a = el; a; a = a.parentElement) if (getComputedStyle(a).position === 'fixed') return false; return true; }, [px, py]).catch(() => false);
+          if (inBoard) await page.mouse.click(px, py).catch(() => {});
         }
       }
     }
