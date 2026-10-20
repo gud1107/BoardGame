@@ -53,6 +53,13 @@ export function playSendUnit() {
   getSoundEngine().playCardDrawWhoosh();
 }
 
+/** 🤖 자동 ON = rising radar ping, OFF = a soft whiff — tell apart without looking. */
+export function playAutoToggle(on: boolean) {
+  const sfx = getSoundEngine();
+  if (on) sfx.playRadarPing();
+  else sfx.playPassWhiff();
+}
+
 // ---------------------------------------------------------------------------
 // Per-tower hit sounds. Attacks fire many times a second, so these get their
 // own tiny synth: very low level, each kind rate-limited, and a global cap so

@@ -410,6 +410,9 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   const fxPrefsRef = useRef(fxPrefs);
   const [fxMenuOpen, setFxMenuOpen] = useState(false);
   const [autoMenuOpen, setAutoMenuOpen] = useState(false);
+  /** Short "🤖 자동 켜짐/꺼짐" toast under the 자동 button — so the switch reads without color or sound. */
+  const [autoToast, setAutoToast] = useState<{ on: boolean; key: number } | null>(null);
+  const autoPlayRef = useRef(autoPlay);
   /** Tapped monster (info card) — by id, so it follows the monster until it dies. */
   const [selectedMobId, setSelectedMobId] = useState<number | null>(null);
   const selectedMobRef = useRef<number | null>(null);
@@ -993,6 +996,20 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
     return () => window.clearTimeout(t);
   }, [goldPop]);
 
+  // 🤖 자동 switched (by me, or by "판 시작 때 자동 켜기"): toast + a cue + a tap on phones.
+  useEffect(() => {
+    if (autoPlayRef.current === autoPlay) return;
+    autoPlayRef.current = autoPlay;
+    setAutoToast((t) => ({ on: autoPlay, key: (t?.key ?? 0) + 1 }));
+    audio.playAutoToggle(autoPlay);
+    if (typeof navigator !== "undefined") navigator.vibrate?.(autoPlay ? [30, 40, 30] : 40);
+  }, [autoPlay]);
+  useEffect(() => {
+    if (!autoToast) return;
+    const t = window.setTimeout(() => setAutoToast((x) => (x?.key === autoToast.key ? null : x)), 1800);
+    return () => window.clearTimeout(t);
+  }, [autoToast]);
+
   // Clear banners after a moment.
   useEffect(() => {
     if (!banner) return;
@@ -1392,6 +1409,15 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
                   ▾
                 </button>
               </span>
+              {autoToast && !autoMenuOpen && (
+                <span
+                  key={autoToast.key}
+                  role="status"
+                  className={`pointer-events-none absolute top-7 left-0 z-30 animate-[md-pop_0.35s_ease-out] rounded-lg border px-2 py-1 text-[12px] font-bold whitespace-nowrap shadow-lg ${autoToast.on ? "border-sky-300/70 bg-sky-900/95 text-sky-50 light:border-sky-400 light:bg-sky-50 light:text-sky-800" : "border-white/20 bg-slate-900/95 text-white light:border-slate-300 light:bg-white light:text-slate-700"}`}
+                >
+                  {autoToast.on ? "🤖 자동 켜짐 ▶ AI가 운영 중" : "✋ 자동 꺼짐 — 직접 운영"}
+                </span>
+              )}
               {autoMenuOpen && (
                 <div className="absolute top-7 left-0 z-30 flex w-52 flex-col gap-1 rounded-xl border border-white/15 bg-slate-900/95 p-2 text-[12px] whitespace-normal text-white shadow-xl light:border-slate-200 light:bg-white light:text-slate-800">
                   <button
