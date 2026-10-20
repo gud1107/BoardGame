@@ -142,6 +142,11 @@ function fieldCanvas(scale: number, alive: boolean, mini: boolean): HTMLCanvasEl
   return c;
 }
 
+/** The static field (grass, road, flat pads) as an image `px` wide — the 3D view's ground texture. */
+export function fieldImage(px: number, alive: boolean): HTMLCanvasElement | null {
+  return fieldCanvas(px / BOARD_W, alive, false);
+}
+
 function paintField(ctx: Ctx, alive: boolean, mini: boolean) {
   const rnd = seeded(20261008);
   // Grass
@@ -438,6 +443,132 @@ export function drawBoard(ctx: Ctx, board: Board, opts: DrawOptions) {
     ctx.textBaseline = "middle";
     ctx.fillText("탈락", BOARD_W / 2, BOARD_H / 2);
   }
+}
+
+/** Board → CSS-pixel map of the 3D view: screen = (a·x + c·y + e + hx·h, b·x + d·y + f + hy·h) at height h. */
+export interface BoardProj {
+  a: number;
+  b: number;
+  c: number;
+  d: number;
+  e: number;
+  f: number;
+  hx: number;
+  hy: number;
+}
+
+/** Body top per monster kind in the 3D view (× its size) — HP bars sit just above. */
+const MOB_TOP_3D: Record<Mob["kind"], number> = { normal: 1.6, fast: 2.5, tank: 1.3, boss: 2.4, elite: 2.5, invader: 2.4, golem: 2.7, wraith: 2.9, warlord: 2.9, knight: 2.6, shaman: 2.6 };
+
+/**
+ * 3D view overlay — what stays flat and screen-facing over the WebGL board:
+ * the danger frame (on the board plane), placement-guide percentages, HP
+ * bars, rank chevrons and the 탈락 veil. `ctx` is in device pixels; `dpr`
+ * turns the projection's CSS pixels into device pixels.
+ */
+export function drawBoardOverlay3D(ctx: Ctx, board: Board, opts: DrawOptions, P: BoardProj, dpr: number) {
+  const { now } = opts;
+  const at = (x: number, y: number, h: number): [number, number] => [(P.a * x + P.c * y + P.e + P.hx * h) * dpr, (P.b * x + P.d * y + P.f + P.hy * h) * dpr];
+  /** Device pixels per board unit (horizontal). */
+  const k = Math.hypot(P.a, P.b) * dpr;
+
+  const load = fieldLoad(board) / (opts.limit ?? 50);
+  if (board.alive && load > 0.65) {
+    ctx.save();
+    ctx.setTransform(P.a * dpr, P.b * dpr, P.c * dpr, P.d * dpr, P.e * dpr, P.f * dpr);
+    const a = (load - 0.65) * 1.8 * (0.6 + 0.4 * Math.sin(now / 160));
+    ctx.strokeStyle = `rgba(239,68,68,${Math.min(0.8, a)})`;
+    ctx.lineWidth = 10;
+    roundRect(ctx, 5, 5, BOARD_W - 10, BOARD_H - 10, 16);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  if (opts.coverage) {
+    const empties = opts.coverage.map((v, i) => (board.units[i] ? -1 : v));
+    const vals = empties.filter((v) => v >= 0);
+    const lo = Math.min(...vals);
+    const hi = Math.max(...vals);
+    empties.forEach((v, slot) => {
+      if (v < 0) return;
+      const t = hi > lo ? (v - lo) / (hi - lo) : 1;
+      const c = slotCenter(slot);
+      const hue = Math.round(t * 130);
+      const [x, y] = at(c.x, c.y + (opts.buildSlot === slot ? 14 : 0), 7);
+      ctx.font = `800 ${11 * k}px system-ui, sans-serif`;
+      ctx.lineWidth = 3 * k;
+      ctx.strokeStyle = "rgba(0,0,0,0.65)";
+      const label = `${Math.round(v * 100)}%`;
+      ctx.strokeText(label, x, y);
+      ctx.fillStyle = `hsl(${hue}, 90%, 74%)`;
+      ctx.fillText(label, x, y);
+      if (t >= 0.999 && vals.length > 1) {
+        const [sx, sy] = at(c.x, c.y - 14, 7);
+        ctx.font = `900 ${11 * k}px system-ui, sans-serif`;
+        ctx.fillStyle = "#fde047";
+        ctx.fillText("★", sx, sy);
+      }
+    });
+  }
+
+  for (const m of board.mobs) {
+    if (m.hp <= 0) continue;
+    const slow = m.slowT > 0 ? m.slowPct : 0;
+    const frozen = (m.stunT ?? 0) > 0;
+    const trav = frozen ? m.trav : m.trav + (m.speed * (1 - slow) * opts.alpha) / TICKS_PER_SEC;
+    const p = pathPoint(trav);
+    const size = mobSize(m);
+    const tier = mobTier(m);
+    const big = m.kind === "boss" || m.kind === "warlord";
+    const h = size * (MOB_TOP_3D[m.kind] + (m.kind === "boss" ? tier * 0.2 : 0)) + 4;
+    const x = at(p.x, p.y, h)[0];
+    let y = at(p.x, p.y, h)[1];
+    if (m.hp < m.maxHp) {
+      const w = (big ? 46 : Math.max(16, size * 2.2)) * k;
+      const bh = 3 * k;
+      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      roundRect(ctx, x - w / 2 - k, y - bh - k, w + 2 * k, bh + 2 * k, 2 * k);
+      ctx.fill();
+      const frac = Math.max(0, m.hp / m.maxHp);
+      const col = frac > 0.5 ? ["#86efac", "#16a34a"] : frac > 0.25 ? ["#fde68a", "#d97706"] : ["#fca5a5", "#dc2626"];
+      const g = ctx.createLinearGradient(x - w / 2, 0, x + w / 2, 0);
+      g.addColorStop(0, col[0]);
+      g.addColorStop(1, col[1]);
+      ctx.fillStyle = g;
+      roundRect(ctx, x - w / 2, y - bh, Math.max(k, w * frac), bh, 1.5 * k);
+      ctx.fill();
+      y -= bh + 3 * k;
+    }
+    const st = TIER_STYLE[tier];
+    if (st) {
+      ctx.strokeStyle = st.ring;
+      ctx.lineWidth = 1.4 * k;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      for (let i = 0; i < tier; i++) {
+        const cy = y - 2 * k - i * 2.6 * k;
+        ctx.beginPath();
+        ctx.moveTo(x - 3.2 * k, cy + 1.6 * k);
+        ctx.lineTo(x, cy - 0.6 * k);
+        ctx.lineTo(x + 3.2 * k, cy + 1.6 * k);
+        ctx.stroke();
+      }
+    }
+  }
+
+  if (!board.alive) {
+    ctx.fillStyle = "rgba(10,10,12,0.5)";
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.fillStyle = "#fecaca";
+    ctx.font = `900 ${40 * k}px system-ui, sans-serif`;
+    ctx.fillText("탈락", ctx.canvas.width / 2, ctx.canvas.height / 2);
+  }
+  ctx.restore();
 }
 
 function drawPortal(ctx: Ctx, now: number, mini: boolean) {
@@ -1324,6 +1455,12 @@ export function drawMobAt(ctx: Ctx, m: Mob, x: number, y: number, now: number) {
   ctx.restore();
 }
 
+const MOB_SIZE: Record<Mob["kind"], number> = { normal: 9, fast: 8, tank: 12, boss: 19, elite: 12, invader: 13, golem: 14, wraith: 11, warlord: 16, knight: 11, shaman: 10 };
+/** Body radius of a monster on the board (tier included) — shared with the 3D view. */
+export function mobSize(m: Pick<Mob, "kind" | "bornWave">): number {
+  return MOB_SIZE[m.kind] * (TIER_STYLE[mobTier(m)]?.scale ?? 1);
+}
+
 function drawMob(ctx: Ctx, m: Mob, trav: number, now: number, mini: boolean, hitAt?: number) {
   const p = pathPoint(trav);
   const ahead = pathPoint(trav + 4);
@@ -1334,7 +1471,7 @@ function drawMob(ctx: Ctx, m: Mob, trav: number, now: number, mini: boolean, hit
 
   const tier = mobTier(m);
   const tierScale = TIER_STYLE[tier]?.scale ?? 1;
-  const size = { normal: 9, fast: 8, tank: 12, boss: 19, elite: 12, invader: 13, golem: 14, wraith: 11, warlord: 16, knight: 11, shaman: 10 }[m.kind] * tierScale;
+  const size = mobSize(m);
   ctx.fillStyle = "rgba(0,0,0,0.3)";
   ellipse(ctx, 0, size * 0.75, size * 0.95, size * 0.32);
   ctx.fill();

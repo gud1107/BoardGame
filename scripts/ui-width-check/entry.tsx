@@ -28,6 +28,12 @@ import {
 } from "@/games/mergeDefense/engine";
 
 const screen = new URLSearchParams(location.search).get("screen") ?? "";
+// Taps below use 2D-board fractions; the 3D board shares the same box, so width checks hold for both.
+try {
+  localStorage.setItem("merge-defense:view", "2d");
+} catch {
+  /* file:// storage blocked — WebGL-less headless falls back to 2D anyway */
+}
 const noop = () => {};
 const names = { 0: "초록고양이", 1: "🤖 AI 2", 2: "길고긴닉네임플레이어입니다", 3: "🤖 AI 4" };
 const settings = {

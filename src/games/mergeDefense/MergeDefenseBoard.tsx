@@ -71,7 +71,9 @@ import {
   type MergeDefenseState,
   type SeatIndex,
 } from "./engine";
-import { coverageFor, drawBoard, drawFx, SEAT_COLORS, type Fx } from "./render";
+import { coverageFor, drawBoard, drawBoardOverlay3D, drawFx, SEAT_COLORS, type BoardProj, type Fx } from "./render";
+import type { DefenseScene } from "./three/defenseScene";
+import { webglAvailable } from "../chess/three/webgl";
 import { SKILL_FX_MS } from "./skillFx";
 import * as audio from "./mergeDefenseAudio";
 import RulebookModal from "./RulebookModal";
@@ -316,6 +318,26 @@ function mobAt(board: Board | undefined, x: number, y: number): Mob | null {
   return best;
 }
 
+type BoardView = "3d" | "2d";
+const VIEW_KEY = "merge-defense:view";
+/** 3D by default; 2D when WebGL is missing or the viewer picked it. */
+function initialView(): BoardView {
+  if (!webglAvailable()) return "2d";
+  try {
+    return window.localStorage.getItem(VIEW_KEY) === "2d" ? "2d" : "3d";
+  } catch {
+    return "3d";
+  }
+}
+function initialQuality(): "high" | "low" {
+  if (typeof window === "undefined") return "low";
+  return window.innerWidth >= 768 && (navigator.hardwareConcurrency ?? 4) >= 4 ? "high" : "low";
+}
+/** Height (board units) at which a tap on the 3D board is read — pad tops, so towers stay tappable. */
+const TAP_HEIGHT = 7;
+/** Effects float at monster-body height over the 3D board. */
+const FX_HEIGHT = 9;
+
 const GAMBLE_ODDS_TEXT = GAMBLE_ODDS.map((o) => `${o.grade ? GRADE_NAMES[o.grade] : "꽝"} ${o.pct}%`).join(" · ");
 
 export default function MergeDefenseBoard({ state, mySeat, names, onAction, autoPlay = false, onToggleAuto, autoConfig = AUTO_DEFAULT, onAutoConfig, autoPresets = [], onAutoPresets, autoOnStart = false, onAutoOnStart, randomMap = false, mapBest }: Props) {
@@ -389,6 +411,49 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   const [autoMenuOpen, setAutoMenuOpen] = useState(false);
   /** Tapped monster (info card) — by id, so it follows the monster until it dies. */
   const [selectedMobId, setSelectedMobId] = useState<number | null>(null);
+  const selectedMobRef = useRef<number | null>(null);
+  useEffect(() => {
+    selectedMobRef.current = selectedMobId;
+  }, [selectedMobId]);
+  // 3D board (default) / classic 2D canvas. three.js loads only when 3D is shown.
+  const [canWebgl, setCanWebgl] = useState(webglAvailable);
+  const [view, setView] = useState<BoardView>(initialView);
+  const [quality] = useState(initialQuality);
+  const glRef = useRef<HTMLCanvasElement | null>(null);
+  const sceneRef = useRef<DefenseScene | null>(null);
+  /** Latest board→screen map of the 3D view (null → the 2D board is drawn). */
+  const projRef = useRef<BoardProj | null>(null);
+  const toggleView = () => {
+    const next: BoardView = view === "3d" ? "2d" : "3d";
+    setView(next);
+    try {
+      window.localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      /* not remembered */
+    }
+  };
+  useEffect(() => {
+    if (view !== "3d") return;
+    let alive = true;
+    import("./three/defenseScene")
+      .then((m) => {
+        if (!alive || !glRef.current) return;
+        try {
+          sceneRef.current = m.createDefenseScene(glRef.current, quality);
+        } catch {
+          // No usable WebGL context after all → classic board, button hidden.
+          setCanWebgl(false);
+          setView("2d");
+        }
+      })
+      .catch(() => alive && setView("2d"));
+    return () => {
+      alive = false;
+      sceneRef.current?.dispose();
+      sceneRef.current = null;
+      projRef.current = null;
+    };
+  }, [view, quality]);
   /** 판매 is two taps: the first arms it for this slot (button turns into "정말 판매?"). */
   const [sellArm, setSellArm] = useState<number | null>(null);
   // Only a board that mounts at the very start of a match plays the map intro (not a reconnect).
@@ -968,7 +1033,6 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           const z = slow ? 1 + SLOWMO.zoom * Math.sin(slowT * Math.PI) : 1;
           const zx = slow ? sl.x - sl.x * z : 0;
           const zy = slow ? sl.y - sl.y * z : 0;
-          ctx.setTransform(k * z, 0, 0, k * z, (ox + zx) * k, (oy + zy) * k);
           const board = s.boards[view];
           const sel = view === mySeat ? selectedRef.current : null;
           const highlight = new Set<number>();
@@ -979,7 +1043,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           const movingUnit = moving !== null ? board.units[moving] : null;
           const guideOn = guideVisible(guideRef.current, s.wave);
           const coverage = mine && guideOn ? coverageFor(movingUnit ? unitRange(movingUnit) : BUILD_RANGE) : null;
-          drawBoard(ctx, board, {
+          const drawOpts = {
             alpha: s.phase === "playing" ? alpha : 0,
             now,
             selected: sel,
@@ -992,8 +1056,41 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
             hits: hitsRef.current,
             firedAt: firedRef.current,
             limit: eliminationLimit(s),
-          });
-          drawFx(ctx, fxRef.current, now);
+          };
+          // 3D board: the WebGL scene draws the world, this canvas becomes its
+          // overlay (HP bars, labels, effects) through the scene's board→screen map.
+          const scene3d = sceneRef.current;
+          const proj = scene3d
+            ? scene3d.render({
+                board,
+                alpha: drawOpts.alpha,
+                now,
+                selected: sel,
+                buildSlot: drawOpts.buildSlot,
+                highlight,
+                dropTarget: drawOpts.dropTarget,
+                coverage,
+                bornAt: bornAtRef.current,
+                hits: hitsRef.current,
+                firedAt: firedRef.current,
+                aim: aimRef.current,
+                selectedMob: selectedMobRef.current,
+                shake: { x: ox, y: oy },
+                zoom: { z, x: sl.x, y: sl.y },
+              })
+            : null;
+          projRef.current = proj;
+          if (proj) {
+            const dpr = main.clientWidth > 0 ? main.width / main.clientWidth : 1;
+            drawBoardOverlay3D(ctx, board, drawOpts, proj, dpr);
+            ctx.setTransform(proj.a * dpr, proj.b * dpr, proj.c * dpr, proj.d * dpr, (proj.e + proj.hx * FX_HEIGHT) * dpr, (proj.f + proj.hy * FX_HEIGHT) * dpr);
+            drawFx(ctx, fxRef.current, now);
+            ctx.setTransform(k, 0, 0, k, 0, 0);
+          } else {
+            ctx.setTransform(k * z, 0, 0, k * z, (ox + zx) * k, (oy + zy) * k);
+            drawBoard(ctx, board, drawOpts);
+            drawFx(ctx, fxRef.current, now);
+          }
           const cb = comboRef.current;
           const comboAge = real - cb.last;
           // Chain just broke → one settlement callout ("콤보 종료 ×N", gold if it's this match's best).
@@ -1092,6 +1189,14 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
 
   function toLogical(e: React.PointerEvent<HTMLCanvasElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
+    const P = projRef.current;
+    if (P) {
+      // 3D: invert the board→screen map at pad-top height.
+      const sx = e.clientX - rect.left - P.e - P.hx * TAP_HEIGHT;
+      const sy = e.clientY - rect.top - P.f - P.hy * TAP_HEIGHT;
+      const det = P.a * P.d - P.b * P.c || 1;
+      return { x: (P.d * sx - P.c * sy) / det, y: (P.a * sy - P.b * sx) / det };
+    }
     return { x: ((e.clientX - rect.left) / rect.width) * BOARD_W, y: ((e.clientY - rect.top) / rect.height) * BOARD_H };
   }
 
@@ -1428,6 +1533,16 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
               )}
             </span>
           )}
+          {canWebgl && (
+            <button
+              onClick={toggleView}
+              title={view === "3d" ? "평면(2D) 보드로 보기" : "입체(3D) 보드로 보기"}
+              className="rounded-full border border-white/15 px-2 py-0.5 text-[11px] hover:border-white/30 light:border-slate-300"
+            >
+              {view === "3d" ? "🖼️" : "🧊"}
+              <span className="hidden sm:inline"> {view === "3d" ? "2D로" : "3D로"}</span>
+            </button>
+          )}
           <button
             onClick={() => setGuide((g) => GUIDE_CYCLE[(GUIDE_CYCLE.indexOf(g) + 1) % GUIDE_CYCLE.length])}
             title="빈 칸마다 길을 얼마나 덮는지(%) 보여줘요 — ★가 가장 좋은 자리. 누를 때마다 자동(2·3·5웨이브까지) → 항상 ON → OFF"
@@ -1567,10 +1682,17 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
       )}
 
       {/* Main board */}
-      <div className="relative">
+      <div
+        className={
+          view === "3d"
+            ? "relative aspect-[400/280] w-full overflow-hidden rounded-2xl bg-[radial-gradient(ellipse_at_50%_35%,#1e293b_0%,#0b1120_75%)] shadow-[0_10px_30px_-12px_rgba(0,0,0,0.8)] light:bg-[radial-gradient(ellipse_at_50%_35%,#e2e8f0_0%,#94a3b8_80%)]"
+            : "relative"
+        }
+      >
+        {view === "3d" && <canvas ref={glRef} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden />}
         <canvas
           ref={mainRef}
-          className="aspect-[400/280] w-full touch-none rounded-2xl shadow-[0_10px_30px_-12px_rgba(0,0,0,0.8)]"
+          className={view === "3d" ? "absolute inset-0 h-full w-full touch-none" : "aspect-[400/280] w-full touch-none rounded-2xl shadow-[0_10px_30px_-12px_rgba(0,0,0,0.8)]"}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}

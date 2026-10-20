@@ -58,6 +58,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.71.0",
+    releaseDate: "2026-10-20",
+    title: "🧊 랜덤 합성 디펜스 3D 보드",
+    changes: [
+      { game: "merge-defense", type: "FEAT", desc: "🧊 내 보드가 3D 입체 디오라마로 — 타워 10종·몬스터 11종 입체 모델, 포탈 소용돌이, 그림자와 조명" },
+      { game: "merge-defense", type: "FEAT", desc: "🖼️ 2D로 / 🧊 3D로 버튼 — 기존 평면 보드로 언제든 전환(기기에 기억), WebGL이 없으면 자동으로 2D" },
+    ],
+  },
+  {
     version: "v1.70.0",
     releaseDate: "2026-10-19",
     title: "🎬 보드게임허브 포스터 개편 — 실제 게임 화면 + 한 줄 카피",
