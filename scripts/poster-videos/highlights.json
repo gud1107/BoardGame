@@ -1,0 +1,197 @@
+{
+  "alkkagi": {
+    "from": 50,
+    "to": 58,
+    "crop": [160, 180, 640, 800],
+    "moment": "알 튕겨 맞히기"
+  },
+  "bang": {
+    "from": 44,
+    "to": 52,
+    "crop": [180, 180, 600, 750],
+    "moment": "카드 발동"
+  },
+  "bluff-roulette": {
+    "from": 214,
+    "to": 222,
+    "crop": [180, 200, 600, 750],
+    "moment": "리볼버 클로즈업"
+  },
+  "century": {
+    "from": 295,
+    "to": 303,
+    "crop": [180, 240, 600, 750],
+    "moment": "카드 획득"
+  },
+  "chess": {
+    "from": 329,
+    "to": 345,
+    "crop": [80, 40, 800, 1000],
+    "moment": "체크",
+    "speed": 2
+  },
+  "city-chase": {
+    "from": 62,
+    "to": 70,
+    "crop": [150, 260, 420, 525],
+    "moment": "추격"
+  },
+  "coup": {
+    "from": 76,
+    "to": 84,
+    "crop": [230, 290, 500, 625],
+    "moment": "도전 팝업"
+  },
+  "coyote": {
+    "from": 55,
+    "to": 63,
+    "crop": [160, 180, 640, 800],
+    "moment": "코요테! 판정"
+  },
+  "crab-survival": {
+    "from": 75,
+    "to": 83,
+    "crop": [253, 112, 454, 568],
+    "moment": "거대 꽃게 조우",
+    "crfBoost": 8
+  },
+  "curling": {
+    "from": 62,
+    "to": 70,
+    "crop": [170, 300, 620, 775],
+    "moment": "투구 안착"
+  },
+  "five-cucumbers": {
+    "from": 46,
+    "to": 54,
+    "crop": [180, 250, 600, 750],
+    "moment": "카드 내기"
+  },
+  "for-sale": {
+    "from": 17,
+    "to": 25,
+    "crop": [180, 250, 600, 750],
+    "moment": "경매 입찰"
+  },
+  "hanamikoji": {
+    "from": 22,
+    "to": 30,
+    "crop": [160, 180, 640, 800],
+    "moment": "게이샤 카드 행동"
+  },
+  "hungry-shark": {
+    "from": 42,
+    "to": 50,
+    "crop": [252, 112, 456, 570],
+    "moment": "사냥·미션 완료"
+  },
+  "ink-duel": {
+    "from": 58,
+    "to": 66,
+    "crop": [280, 230, 400, 500],
+    "moment": "잉크 사격"
+  },
+  "las-vegas": {
+    "from": 26,
+    "to": 34,
+    "crop": [160, 280, 640, 800],
+    "moment": "주사위 배치"
+  },
+  "liar-game": {
+    "from": 61,
+    "to": 69,
+    "crop": [160, 230, 640, 800],
+    "moment": "라이어 공개"
+  },
+  "lost-cities": {
+    "from": 25,
+    "to": 33,
+    "crop": [160, 200, 640, 800],
+    "moment": "원정 카드"
+  },
+  "lotr-duel": {
+    "from": 33,
+    "to": 41,
+    "crop": [140, 180, 680, 850],
+    "moment": "격돌"
+  },
+  "love-letter": {
+    "from": 22,
+    "to": 30,
+    "crop": [180, 200, 600, 750],
+    "moment": "공주의 마음"
+  },
+  "love-wins-all": {
+    "from": 121,
+    "to": 129,
+    "crop": [160, 200, 640, 800],
+    "moment": "하트 공개"
+  },
+  "mal-dalli-ja": {
+    "from": 99,
+    "to": 107,
+    "crop": [170, 280, 620, 775],
+    "moment": "탈락"
+  },
+  "no-thanks": {
+    "from": 64,
+    "to": 72,
+    "crop": [180, 220, 600, 750],
+    "moment": "칩 내기·카드 가져가기"
+  },
+  "perudo": {
+    "from": 58,
+    "to": 66,
+    "crop": [130, 190, 700, 875],
+    "moment": "두도 판정"
+  },
+  "rat-a-tat-cat": {
+    "from": 52,
+    "to": 61,
+    "crop": [180, 180, 600, 750],
+    "moment": "랫타탯캣 선언"
+  },
+  "show-me-the-coin": {
+    "from": 21,
+    "to": 29,
+    "crop": [200, 100, 560, 700],
+    "moment": "동전 공개"
+  },
+  "splendor": {
+    "from": 29,
+    "to": 37,
+    "crop": [180, 240, 600, 750],
+    "moment": "카드 구매"
+  },
+  "splendor-duel": {
+    "from": 49,
+    "to": 57,
+    "crop": [180, 240, 600, 750],
+    "moment": "왕관 카드"
+  },
+  "spot-difference": {
+    "from": 14,
+    "to": 26,
+    "crop": [140, 220, 400, 500],
+    "moment": "틀린 곳 찾기",
+    "speed": 1.5
+  },
+  "summoners-rift": {
+    "from": 26,
+    "to": 34,
+    "crop": [160, 220, 640, 800],
+    "moment": "생존"
+  },
+  "wobble-tower": {
+    "from": 113,
+    "to": 121,
+    "crop": [160, 160, 640, 800],
+    "moment": "붕괴"
+  },
+  "word-tower": {
+    "from": 98,
+    "to": 106,
+    "crop": [200, 170, 560, 700],
+    "moment": "마천루 쌓기"
+  }
+}

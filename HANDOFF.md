@@ -51,6 +51,18 @@
 - **고급화 + 렉 감소(같은 날 후속)**: "더 세련되게, 렉 최소화" → 측정 하네스(실제 호스트 루프 재현: 봇 4명 20Hz setState, W22, WebGL draw 호출 래핑 + CDP 프로파일)로 원인 확인: 몬스터/타워 부품이 전부 개별 메시라 **draw 565/프레임**, GC 467ms/6s. 씬 재작성 — 모양(타워 kind:grade, 몬스터 kind:tier[:unitKind])마다 **템플릿**: 부품을 정점색으로 굽고 표면(matte/satin/metal/glass/glow/add)별 병합 → 부품당 InstancedMesh 하나를 같은 모양 전체가 공유, 애니메이션은 인스턴스 행렬(노드 anim), 발광은 instanceColor. 상태 표시·그림자·고리·패드·장식은 전역 인스턴스 풀(`Spray`). 프레임당 할당 없음. 결과 **draw 164(몬스터 수와 무관)**, GC 114ms. 해상도 자동 조절(1초 평균 >24ms면 픽셀비 −0.25, ≤1이면 그림자 끔; 안정되면 복구). 미니 보드 2D 그리기 ~30fps 제한(2D 모드도 이득). HP 바 그라데이션 객체 생성 제거. 그래픽: RoomEnvironment PMREM 반사광(`scene.environmentIntensity` 0.38), 림라이트(onBeforeCompile, 표면 재질 공용), 그라데이션 정점색, 3D 전용 바닥 페인팅(잔디 줄무늬·자갈길·패드 접지 그림자), 연석/풀숲/꽃 인스턴스, 금 상감 테두리. ⚠️ 하네스 절대 fps는 SwiftShader라 무의미 — draw 수·GC·main-thread 시간으로 비교.
 - **안 한 것**: 실기기 FPS/발열, 3D에서 실제 탭·드래그 손맛(수학적 역변환만, 헤드리스 탭 미검증), 연출 장면별 스크린샷, 결과 카드(recordCard)는 2D 그대로.
 
+## 🎬 로비 포스터 카드 마우스오버 하이라이트 영상 (PC 전용) — 2026-10-21 (커밋/푸시, 배포는 웹훅 자동)
+
+"보드게임허브 카드에 마우스 올리면 GIF처럼 실제 하이라이트 플레이 영상" 요청. 게임별 명장면을 직접 골라 넣었고(사용자 선택), 모바일은 보류(사용자 지시).
+
+- **카드**(`GamePosterCard.tsx` + `usePosterHoverVideo.tsx`): 마우스로 0.25초 머물러야 `<video>`를 만들어 받기 시작(그리드를 훑을 때 10개가 동시에 받지 않게) → 재생 프레임이 나오면 정지 사진 위로 0.3초 페이드인, 떠나면 정지·페이드아웃, 다시 올리면 처음부터. `preload="none"`이라 로비 첫 로딩 용량은 그대로. `(hover: hover) and (pointer: fine)`·`pointerType === "mouse"`일 때만 → 휴대폰/태블릿은 안 바뀜. `prefers-reduced-motion`, 데이터 절약 모드도 사진 유지. 색 보정 그라데이션·제목은 영상 위에 그대로 얹힘.
+- **목록·끄기**: `src/constants/posterVideos.ts` — `POSTER_HOVER_VIDEO = false`로 전체 끄기, `POSTER_VIDEO_IDS` 32개 = 정지 포스터(`posterImages.ts`)가 있는 게임 전부. 파일 `public/posters/<id>.webm`(VP9) + `.mp4`(H.264, 사파리), 480×600, 8초 안팎, 무음, 37~554KB(64개 합계 9.6MB, 마우스를 올린 카드만 받음).
+- **만드는 법**(`scripts/poster-videos/`): `record.cjs`(운영 사이트에서 방 만들기→봇 채우기→시작을 자동으로 하고 Playwright로 녹화, 실시간 2종은 "…잠수"/"섬으로 출발!" 누르고 방향키·마우스로 조종, 라운드 끝 "다음 라운드"도 누름) → `sheet.cjs`(시각이 찍힌 미리보기 시트) → 사람이 고른 구간·자르기 영역을 `highlights.json`에 기록 → `encode.mjs`(자르기·스케일·인코딩, 클립별 `speed`·`crfBoost`) → `check.mjs`(검사). raw 녹화는 커밋하지 않음(`POSTER_RAW_DIR`).
+- **⚠️ 녹화하며 알게 된 것**: ① 내 자리를 봇에게 맡기는 기능이 없어 방장 차례에 게임이 멈춤 — 봇 대체 투표는 "다른 사람" 과반이 필요해서 혼자서는 통과 불가. 해결: 녹화 스크립트가 같은 방 채널(`<게임id>-room-<코드>`, 코드·좌석은 localStorage `<게임>-seat-<코드>`)에 별도 연결로 `bot-takeover-event` vote-start→convert를 보내 실제 봇 대체 경로로 내 자리를 봇으로 바꿈(게임 코드 수정 없음). ② Playwright 녹화는 `ms-playwright/ffmpeg-1013`이 필요한데 캐시엔 1011뿐이고 1011로는 영상이 안 나옴 → 시스템 ffmpeg 9.0을 그 경로에 복사해서 해결. ③ 녹화 중인 webm을 다른 ffmpeg가 읽고 있으면 최종 이름 바꾸기가 EPERM으로 실패.
+- **검사**(`node scripts/poster-videos/check.mjs`): 두 파일 존재·480×600·3~9초·무음·700KB 이하·첫 프레임 밝기 6 이상(어두운 테마 게임은 9~20이 정상)·평균 프레임 변화 0.3 이상·4.5초 넘게 멈춘 구간 없음. `--raw <dir>`은 녹화 실패 검사(시작 못 함, 60초 미만, 판이 녹화의 60% 넘게 멈춤) — 첫 녹화에서 12개 게임 멈춤을 이걸로 잡음. 단위 테스트 `posterVideos.test.ts`는 목록의 id마다 두 파일·정지 포스터·highlights 항목 존재 확인.
+- **확인한 것**: eslint 통과, `posterVideos.test.ts` 32개 통과, `check.mjs` 32개 전부 통과, 클립마다 프레임을 모아 의도한 장면(체크·붕괴·MISSED!·ELIMINATED·SURVIVED·도전 팝업 등)이 들어갔는지 눈으로 확인. tsc는 기존 `proceduralSuites.test.ts` 오류 1건만(이번 변경과 무관).
+- **안 한 것**: 모바일(보류), 실제 사람 손 마우스로 PC 체감 확인, 사파리 실기기에서 mp4 재생, 새 게임 추가 시 자동 녹화(지금은 사람이 구간 선택).
+
 ## ♟️ 신규 게임 체스 (`chess`, 2인 정통 FIDE 체스) — 2026-10-18 (커밋/푸시, 배포는 웹훅 자동)
 
 "체스게임, 룰북 A-Z 상세히, 이동 이펙트 다" 요청. 룰북(기준 문서): `boardGameRule/체스/체스.md` (§0~§20 + 용어 사전·FAQ).

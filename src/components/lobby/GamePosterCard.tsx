@@ -8,6 +8,8 @@ import { GAME_COLLECTIONS } from "@/games/collections";
 import { getGameDifficulty } from "@/constants/gameDifficulty";
 import { getPosterImage } from "@/constants/posterImages";
 import { getPosterTagline } from "@/constants/posterTaglines";
+import { getPosterVideo } from "@/constants/posterVideos";
+import { usePosterHoverVideo } from "./usePosterHoverVideo";
 import type { GameFreshnessBadge } from "@/constants/gameUpdateCount";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import { useGoldClickBurst } from "./useGoldClickBurst";
@@ -56,6 +58,7 @@ export default function GamePosterCard({
   const { particles, isPressed, triggerBurst } = useGoldClickBurst();
   const [colorA, colorB] = game.thumbnail.gradient;
   const poster = getPosterImage(game.id);
+  const hoverVideo = usePosterHoverVideo(poster && game.playable ? getPosterVideo(game.id) : null);
   const difficulty = getGameDifficulty(game.id);
   const collection = game.collectionId ? GAME_COLLECTIONS[game.collectionId] : undefined;
   const genres = (game.genres ?? []).slice(0, 2);
@@ -68,6 +71,8 @@ export default function GamePosterCard({
           ? "hover:-translate-y-1.5 hover:shadow-[0_22px_44px_-12px_var(--poster-glow)] hover:ring-2 hover:ring-(color:--poster-a) active:scale-[0.97]"
           : "grayscale-[0.7]"
       } ${isPressed ? "lobby-card-pressed scale-95 brightness-125" : ""}`}
+      onPointerEnter={hoverVideo.onPointerEnter}
+      onPointerLeave={hoverVideo.onPointerLeave}
       style={
         {
           "--poster-a": colorA,
@@ -76,7 +81,8 @@ export default function GamePosterCard({
         } as React.CSSProperties
       }
     >
-      {/* Art: the capture (slow Ken Burns zoom on hover) or the generated poster. */}
+      {/* Art: the capture (slow Ken Burns zoom on hover, or a highlight clip on
+          desktop — `posterVideos.ts`) or the generated poster. */}
       {poster ? (
         <Image
           src={poster}
@@ -99,6 +105,7 @@ export default function GamePosterCard({
           </span>
         </div>
       )}
+      {hoverVideo.layer}
 
       {/* Color grade in the game's colors + readability gradients. */}
       <div

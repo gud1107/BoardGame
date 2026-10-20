@@ -58,6 +58,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.72.0",
+    releaseDate: "2026-10-21",
+    title: "🎬 로비 카드 하이라이트 영상",
+    changes: [
+      { game: "common", type: "FEAT", desc: "🎬 PC에서 게임 카드에 마우스를 올리면 실제 플레이 명장면이 재생 — 32개 게임, 체스 체크·젠가 붕괴·코요테 판정 등" },
+      { game: "common", type: "IMPROVE", desc: "⚡ 영상은 마우스를 올렸을 때만 받아서 로비 첫 로딩은 그대로 — 휴대폰·움직임 줄이기·데이터 절약 모드에선 사진 유지" },
+    ],
+  },
+  {
     version: "v1.71.0",
     releaseDate: "2026-10-20",
     title: "🧊 랜덤 합성 디펜스 3D 보드",
