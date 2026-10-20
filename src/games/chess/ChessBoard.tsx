@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import dynamic from "next/dynamic";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import ChessPiece, { ChessPieceDefs, PIECE_NAME_KO, pieceProps, type PieceType } from "./ChessPieces";
@@ -27,6 +28,31 @@ import {
   type Seat,
 } from "./engine";
 import { chessCues, getChessSound } from "./chessSound";
+import { webglAvailable } from "./three/webgl";
+
+// three.js는 무거워서 3D 판이 처음 필요할 때만 받는다
+const Chess3D = dynamic(() => import("./three/Chess3D"), {
+  ssr: false,
+  loading: () => <div className="flex h-full w-full items-center justify-center text-xs text-amber-200/60">♟️ 3D 체스판 준비 중…</div>,
+});
+
+type View = "3d" | "2d";
+const VIEW_KEY = "chess-view";
+
+/** 3D by default (§16); 2D when WebGL is missing or the viewer picked it. */
+function initialView(): View {
+  if (!webglAvailable()) return "2d";
+  try {
+    return window.localStorage.getItem(VIEW_KEY) === "2d" ? "2d" : "3d";
+  } catch {
+    return "3d";
+  }
+}
+
+function initialQuality(): "high" | "low" {
+  if (typeof window === "undefined") return "low";
+  return window.innerWidth >= 768 && (navigator.hardwareConcurrency ?? 4) >= 4 ? "high" : "low";
+}
 
 /**
  * 체스 board (rulebook §16, §17) — controlled component: state in, actions
@@ -136,6 +162,19 @@ export default function ChessBoard({ state, viewerSeat, names, opponentConnected
     }
   }
   const colors = THEMES[theme];
+  const [canWebgl] = useState(webglAvailable);
+  const [view, setView] = useState<View>(initialView);
+  const [quality] = useState(initialQuality);
+  function toggleView() {
+    const next: View = view === "3d" ? "2d" : "3d";
+    setView(next);
+    setDrag(null);
+    try {
+      window.localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      /* private mode */
+    }
+  }
 
   /* ── History browsing (§14) ── */
   const [viewPly, setViewPly] = useState<number | null>(null);
@@ -705,6 +744,50 @@ export default function ChessBoard({ state, viewerSeat, names, opponentConnected
 
   const promoColorWhite = myColor === "w";
 
+  const overlays = (
+    <>
+      {label && (
+        <div key={`label${animPly}`} className={`pointer-events-none absolute left-1/2 top-1/2 whitespace-nowrap rounded-2xl bg-gradient-to-r px-5 py-2 text-[clamp(18px,5vw,34px)] font-black tracking-tight shadow-2xl ${label.tone}`} style={{ zIndex: 30, animation: `cz-label 1.5s ease-out ${(animInfo?.dur ?? 0) * 0.7}s both` }}>
+          {label.text}
+        </div>
+      )}
+      {isDraw && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center" style={{ zIndex: 25 }}>
+          <span className="rounded-2xl bg-black/60 px-5 py-2 text-3xl font-black text-white" style={{ animation: "cz-rise .6s ease-out .3s both" }}>
+            ½-½
+          </span>
+        </div>
+      )}
+      {promo && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/55" style={{ zIndex: 40 }} onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>
+          <div className="flex flex-col items-center gap-2 rounded-2xl bg-slate-900/95 p-3 shadow-2xl" style={{ animation: "cz-rise .25s ease-out" }}>
+            <p className="text-sm font-bold text-amber-200">승진할 기물을 고르세요</p>
+            <div className="flex gap-2">
+              {(["q", "r", "b", "n"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => {
+                    const p = promo;
+                    setPromo(null);
+                    onAction({ type: "move", seat: viewerSeat, uci: `${sqName(p.from)}${sqName(p.to)}${t}` });
+                  }}
+                  className="flex h-16 w-16 flex-col items-center justify-center rounded-xl bg-white/10 transition hover:scale-105 hover:bg-amber-400/30 sm:h-20 sm:w-20"
+                  aria-label={PIECE_NAME_KO[t]}
+                >
+                  <ChessPiece type={t} white={promoColorWhite} className="h-12 w-12 sm:h-16 sm:w-16" />
+                  <span className="text-[10px] text-white/70">{PIECE_NAME_KO[t]}</span>
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setPromo(null)} className="text-xs text-white/50 hover:text-white/80">
+              취소
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
   return (
     <div onPointerDownCapture={() => getChessSound().unlock()} className="flex flex-col gap-3">
       <style>{CSS}</style>
@@ -722,6 +805,11 @@ export default function ChessBoard({ state, viewerSeat, names, opponentConnected
         </div>
         <div className="flex items-center gap-1.5">
           <SuiteSoundHud suite={getChessSound} icon="🎻" label="Grandmaster's Study" preview="castle" />
+          {canWebgl && (
+            <button onClick={toggleView} className={BTN} title={view === "3d" ? "평면 2D 판으로 보기" : "입체 3D 판으로 보기"}>
+              {view === "3d" ? "🖼️ 2D로" : "🧊 3D로"}
+            </button>
+          )}
           <button onClick={onOpenRulebook} className={BTN}>
             📖 룰북
           </button>
@@ -750,76 +838,69 @@ export default function ChessBoard({ state, viewerSeat, names, opponentConnected
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="mx-auto flex w-full max-w-[min(100%,calc(100dvh-15rem))] min-w-0 flex-col gap-2 lg:max-w-[min(100%,calc(100dvh-19rem))]">
           {playerBar(oppSeat, oppColor)}
-          <div className="rounded-xl p-[1.6%]" style={{ background: colors.frame, boxShadow: "0 18px 40px -18px rgba(0,0,0,.7)" }}>
+          {view === "3d" ? (
             <div
-              className={`cz-shake relative select-none overflow-hidden rounded-[3px] transition-[filter] duration-700`}
-              style={{ ["--amp" as string]: shakeAmp, animation: shakeAmp ? `cz-shake-${(animPly ?? 0) % 2 ? "a" : "b"} .38s ease-out ${(animInfo?.impact ?? 0)}s` : undefined, filter: isDraw ? "grayscale(.85) brightness(.85)" : undefined }}
+              className="relative aspect-square w-full select-none overflow-hidden rounded-xl transition-[filter] duration-700"
+              style={{ background: "#140e09", boxShadow: "0 18px 40px -18px rgba(0,0,0,.7)", filter: isDraw ? "grayscale(.85) brightness(.85)" : undefined }}
+              role="grid"
+              aria-label="3D 체스판 — 칸을 눌러 기물을 고르고 옮겨요, 끌면 시점 회전"
             >
+              <Chess3D
+                board={shownPos.board}
+                flipped={flipped}
+                light={colors.light}
+                dark={colors.dark}
+                selected={browsing ? null : selected}
+                hints={selectedMoves.map((m) => ({ to: m.to, capture: m.capture }))}
+                myTurn={myTurn}
+                last={shownLast ? { from: shownLast.from, to: shownLast.to } : null}
+                checkedKing={checkedKing}
+                mated={mated}
+                checkKing={anim?.check ? kingSquare(state.pos, state.pos.turn) : -1}
+                anim={anim}
+                animPly={animPly}
+                slideS={SLIDE_S}
+                hopS={HOP_S}
+                nope={nope}
+                quality={quality}
+                onSquare={clickSquare}
+              />
+              {overlays}
+            </div>
+          ) : (
+            <div className="rounded-xl p-[1.6%]" style={{ background: colors.frame, boxShadow: "0 18px 40px -18px rgba(0,0,0,.7)" }}>
               <div
-                ref={boardRef}
-                className="relative aspect-square w-full touch-none"
-                onPointerDown={onPointerDown}
-                onPointerMove={onPointerMove}
-                onPointerUp={onPointerUp}
-                onPointerCancel={() => setDrag(null)}
-                role="grid"
-                aria-label="체스판"
+                className={`cz-shake relative select-none overflow-hidden rounded-[3px] transition-[filter] duration-700`}
+                style={{ ["--amp" as string]: shakeAmp, animation: shakeAmp ? `cz-shake-${(animPly ?? 0) % 2 ? "a" : "b"} .38s ease-out ${(animInfo?.impact ?? 0)}s` : undefined, filter: isDraw ? "grayscale(.85) brightness(.85)" : undefined }}
               >
-                <div className="absolute inset-0 grid grid-cols-8 grid-rows-8">{squares}</div>
-                {checkedKing >= 0 && (
-                  <div className="pointer-events-none absolute flex items-center justify-center" style={{ ...cellStyle(checkedKing), zIndex: 3 }}>
-                    <div className="h-full w-full rounded-full" style={{ background: "radial-gradient(circle, rgba(239,68,68,.95) 0%, rgba(239,68,68,.55) 40%, transparent 72%)", animation: "cz-pulse 1s ease-in-out infinite" }} />
-                  </div>
-                )}
-                {pieces}
-                {fx}
-                {drag?.active && state.pos.board[drag.from] !== "." && (
-                  <div className="pointer-events-none absolute" style={{ left: drag.x, top: drag.y, width: "12.5%", height: "12.5%", transform: "translate(-50%,-58%) scale(1.18)", zIndex: 20, filter: "drop-shadow(0 10px 8px rgba(0,0,0,.45))" }}>
-                    <ChessPiece {...pieceProps(state.pos.board[drag.from])} className="h-full w-full" />
-                  </div>
-                )}
-                {label && (
-                  <div key={`label${animPly}`} className={`pointer-events-none absolute left-1/2 top-1/2 whitespace-nowrap rounded-2xl bg-gradient-to-r px-5 py-2 text-[clamp(18px,5vw,34px)] font-black tracking-tight shadow-2xl ${label.tone}`} style={{ zIndex: 30, animation: `cz-label 1.5s ease-out ${(animInfo?.dur ?? 0) * 0.7}s both` }}>
-                    {label.text}
-                  </div>
-                )}
-                {isDraw && (
-                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center" style={{ zIndex: 25 }}>
-                    <span className="rounded-2xl bg-black/60 px-5 py-2 text-3xl font-black text-white" style={{ animation: "cz-rise .6s ease-out .3s both" }}>
-                      ½-½
-                    </span>
-                  </div>
-                )}
-                {promo && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/55" style={{ zIndex: 40 }} onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>
-                    <div className="flex flex-col items-center gap-2 rounded-2xl bg-slate-900/95 p-3 shadow-2xl" style={{ animation: "cz-rise .25s ease-out" }}>
-                      <p className="text-sm font-bold text-amber-200">승진할 기물을 고르세요</p>
-                      <div className="flex gap-2">
-                        {(["q", "r", "b", "n"] as const).map((t) => (
-                          <button
-                            key={t}
-                            onClick={() => {
-                              const p = promo;
-                              setPromo(null);
-                              onAction({ type: "move", seat: viewerSeat, uci: `${sqName(p.from)}${sqName(p.to)}${t}` });
-                            }}
-                            className="flex h-16 w-16 flex-col items-center justify-center rounded-xl bg-white/10 transition hover:scale-105 hover:bg-amber-400/30 sm:h-20 sm:w-20"
-                            aria-label={PIECE_NAME_KO[t]}
-                          >
-                            <ChessPiece type={t} white={promoColorWhite} className="h-12 w-12 sm:h-16 sm:w-16" />
-                            <span className="text-[10px] text-white/70">{PIECE_NAME_KO[t]}</span>
-                          </button>
-                        ))}
-                      </div>
-                      <button onClick={() => setPromo(null)} className="text-xs text-white/50 hover:text-white/80">
-                        취소
-                      </button>
+                <div
+                  ref={boardRef}
+                  className="relative aspect-square w-full touch-none"
+                  onPointerDown={onPointerDown}
+                  onPointerMove={onPointerMove}
+                  onPointerUp={onPointerUp}
+                  onPointerCancel={() => setDrag(null)}
+                  role="grid"
+                  aria-label="체스판"
+                >
+                  <div className="absolute inset-0 grid grid-cols-8 grid-rows-8">{squares}</div>
+                  {checkedKing >= 0 && (
+                    <div className="pointer-events-none absolute flex items-center justify-center" style={{ ...cellStyle(checkedKing), zIndex: 3 }}>
+                      <div className="h-full w-full rounded-full" style={{ background: "radial-gradient(circle, rgba(239,68,68,.95) 0%, rgba(239,68,68,.55) 40%, transparent 72%)", animation: "cz-pulse 1s ease-in-out infinite" }} />
                     </div>
-                  </div>
-                )}
+                  )}
+                  {pieces}
+                  {fx}
+                  {drag?.active && state.pos.board[drag.from] !== "." && (
+                    <div className="pointer-events-none absolute" style={{ left: drag.x, top: drag.y, width: "12.5%", height: "12.5%", transform: "translate(-50%,-58%) scale(1.18)", zIndex: 20, filter: "drop-shadow(0 10px 8px rgba(0,0,0,.45))" }}>
+                      <ChessPiece {...pieceProps(state.pos.board[drag.from])} className="h-full w-full" />
+                    </div>
+                  )}
+                  {overlays}
+                </div>
               </div>
             </div>
-          </div>
+          )}
           {playerBar(viewerSeat, myColor)}
           <div className="flex flex-wrap items-center justify-between gap-1 px-1 text-xs">
             <span className={status.tone}>{status.text}</span>
