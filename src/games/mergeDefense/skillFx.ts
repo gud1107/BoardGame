@@ -1067,7 +1067,7 @@ function drawPonder(ctx: Ctx, f: SkillFx, k: number) {
   const t = easeOut(clamp01(k / 0.5));
   ctx.globalAlpha = 1 - Math.max(0, k - 0.5) / 0.5;
   ctx.fillStyle = "rgba(255,255,255,0.92)";
-  ctx.strokeStyle = "#78350f";
+  ctx.strokeStyle = "#4338ca";
   ctx.lineWidth = 1.2;
   for (const [dx, dy, r] of [
     [-6, -10, 1.6],
@@ -1082,7 +1082,7 @@ function drawPonder(ctx: Ctx, f: SkillFx, k: number) {
   ctx.ellipse(x + 4, y - 27 - t * 6, 9 * t + 1, 6 * t + 1, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
-  ctx.fillStyle = "#b45309";
+  ctx.fillStyle = "#6366f1";
   for (let i = -1; i <= 1; i++) {
     ctx.beginPath();
     ctx.arc(x + 4 + i * 3.4 * t, y - 27 - t * 6, 1.1 * t, 0, Math.PI * 2);

@@ -344,9 +344,9 @@ export const UNITS: Record<UnitKind, UnitDef> = {
   cannon: { name: "대포", emoji: "💣", color: "#78716c", dmg: 20, interval: 36, range: 135, dmgType: "physical", desc: "느린 포격 · 주변 몬스터에 60% 폭발 피해" },
   holy: { name: "성기사", emoji: "☀️", color: "#fbbf24", dmg: 9, interval: 18, range: 130, dmgType: "magic", desc: "빛의 광선 · 큰 몬스터(탱커·정예·보스 등)에 피해 +40%" },
   wind: { name: "바람", emoji: "🌪️", color: "#5eead4", dmg: 6, interval: 9, range: 140, dmgType: "physical", desc: "아주 빠른 연타 · 빠른 몬스터에 피해 +30%" },
-  // 석상 타워 (2026-10-18): a torch-bearing copper goddess and a bronze thinker.
+  // 석상 타워 (2026-10-18): a torch-bearing copper goddess and a white-marble thinker.
   liberty: { name: "횃불의 여신", emoji: "🗽", color: "#0f9f8a", dmg: 11, interval: 24, range: 175, dmgType: "magic", desc: "가장 긴 사거리 · 횃불 광선에 맞으면 화상" },
-  thinker: { name: "사색의 석상", emoji: "🗿", color: "#9a6a3a", dmg: 38, interval: 46, range: 130, dmgType: "physical", desc: "느린 묵직한 한 방 · 사거리 안에서 체력이 가장 많은 몬스터를 노려요" },
+  thinker: { name: "사색의 석상", emoji: "🗿", color: "#a5b4fc", dmg: 38, interval: 46, range: 130, dmgType: "physical", desc: "느린 묵직한 한 방 · 사거리 안에서 체력이 가장 많은 몬스터를 노려요" },
 };
 
 /**

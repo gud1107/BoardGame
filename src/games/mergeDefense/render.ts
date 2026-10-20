@@ -1057,69 +1057,112 @@ function drawLiberty(ctx: Ctx, now: number, firing: boolean, mini: boolean, aura
 }
 
 function drawThinker(ctx: Ctx, now: number, firing: boolean, mini: boolean, aura: boolean) {
-  // Bronze figure hunched on a rock, chin on hand, lost in thought.
-  if (aura && !mini) auraRing(ctx, now, 80, "#fbbf24");
-  // Rock seat
-  ctx.fillStyle = "#57534e";
-  ctx.beginPath();
-  ctx.moveTo(-10, 6);
-  ctx.lineTo(-9, -2);
-  ctx.lineTo(-2, -4);
-  ctx.lineTo(4, -1);
-  ctx.lineTo(5, 6);
-  ctx.closePath();
+  // White-marble thinker on a gold-inlaid obsidian plinth; three linked
+  // points (the "idea") orbit a tilted ring above the head.
+  if (aura && !mini) auraRing(ctx, now, 80, "#a5b4fc");
+  // Obsidian plinth
+  const stone = ctx.createLinearGradient(0, 0, 0, 7);
+  stone.addColorStop(0, "#312e81");
+  stone.addColorStop(1, "#0f172a");
+  ctx.fillStyle = stone;
+  roundRect(ctx, -10, 0, 20, 6.5, 1.2);
   ctx.fill();
-  ctx.fillStyle = "rgba(255,255,255,0.12)";
-  ctx.fillRect(-8, -2, 6, 1.4);
-  const bronze = ctx.createLinearGradient(-6, -20, 10, 6);
-  bronze.addColorStop(0, "#e0a96d");
-  bronze.addColorStop(0.5, "#a86b32");
-  bronze.addColorStop(1, "#5c3a1a");
-  ctx.fillStyle = bronze;
-  ctx.strokeStyle = bronze;
+  ctx.fillStyle = "#d4af37";
+  ctx.fillRect(-10, 0, 20, 0.9);
+  ctx.fillStyle = "rgba(212,175,55,0.45)";
+  ctx.fillRect(-7, 3.6, 14, 0.5);
+  const marble = ctx.createLinearGradient(-7, -24, 9, 0);
+  marble.addColorStop(0, "#ffffff");
+  marble.addColorStop(0.55, "#e2e8f0");
+  marble.addColorStop(1, "#94a3b8");
+  const edge = "rgba(30,27,75,0.45)";
   ctx.lineCap = "round";
-  // Torso leaning forward
+  ctx.lineJoin = "round";
+  // Marble seat block
+  ctx.fillStyle = "#cbd5e1";
+  ctx.fillRect(-8, -5, 7, 5);
+  ctx.fillStyle = "rgba(255,255,255,0.6)";
+  ctx.fillRect(-8, -5, 7, 0.8);
+  // Torso, leaning forward
+  ctx.fillStyle = marble;
+  ctx.strokeStyle = edge;
+  ctx.lineWidth = 0.6;
   ctx.beginPath();
-  ctx.moveTo(-6, -3);
-  ctx.quadraticCurveTo(-7, -12, -1, -15);
-  ctx.lineTo(3, -13);
-  ctx.quadraticCurveTo(1, -7, 1, -3);
+  ctx.moveTo(-6, -4.5);
+  ctx.quadraticCurveTo(-6.5, -13, -1.5, -16.5);
+  ctx.lineTo(2.5, -15.5);
+  ctx.quadraticCurveTo(1.5, -9, 0.5, -4.5);
   ctx.closePath();
   ctx.fill();
-  // Thigh + shin
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(-1, -3);
-  ctx.lineTo(8, -3.5);
-  ctx.lineTo(8.5, 5.5);
   ctx.stroke();
-  // Arm: shoulder → elbow on knee → hand under chin
-  ctx.lineWidth = 2.6;
+  // Thigh to the knee, shin down to the plinth
+  ctx.strokeStyle = marble;
+  ctx.lineWidth = 3.8;
   ctx.beginPath();
-  ctx.moveTo(1.5, -12.5);
-  ctx.lineTo(7, -5);
-  ctx.lineTo(5.5, -14.5);
+  ctx.moveTo(-2, -5);
+  ctx.lineTo(6.5, -7);
+  ctx.lineTo(7.2, -0.2);
   ctx.stroke();
-  // Head, tipped down onto the hand
+  // Arm: shoulder → elbow on the knee → fist under the chin
+  ctx.lineWidth = 2.3;
   ctx.beginPath();
-  ctx.arc(4.2, -17.5, 3.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "rgba(255,236,200,0.35)";
+  ctx.moveTo(1.5, -14.5);
+  ctx.lineTo(6.2, -8.2);
+  ctx.lineTo(4.6, -16.4);
+  ctx.stroke();
+  // Head, tipped down onto the fist
+  ctx.fillStyle = marble;
+  ctx.strokeStyle = edge;
+  ctx.lineWidth = 0.6;
   ctx.beginPath();
-  ctx.arc(3, -18.8, 1.4, 0, Math.PI * 2);
+  ctx.arc(3.4, -19.4, 3.2, 0, Math.PI * 2);
   ctx.fill();
-  // Thought bubbles drift up; they glow when the idea lands (firing).
-  if (!mini) {
-    for (let i = 0; i < 3; i++) {
-      const t = (now / 1400 + i / 3) % 1;
-      ctx.globalAlpha = (firing ? 0.95 : 0.55) * (1 - t);
-      ctx.fillStyle = firing ? "#fde68a" : "#f5f5f4";
-      ctx.beginPath();
-      ctx.arc(8 + t * 5, -22 - t * 12, 1 + i * 0.8 + t, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
+  ctx.stroke();
+  // Gold rim light down the back (brightens when the idea lands)
+  ctx.strokeStyle = firing ? "#fde68a" : "rgba(212,175,55,0.75)";
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  ctx.moveTo(-6.2, -5.5);
+  ctx.quadraticCurveTo(-6.6, -13, -1.8, -16.8);
+  ctx.stroke();
+  if (mini) return;
+  // The idea: three points on a tilted orbit, joined into a triangle.
+  const cx = 4;
+  const cy = -27.5;
+  const rx = 6.5;
+  const ry = 2.3;
+  const tilt = -0.2;
+  ctx.globalAlpha = firing ? 0.95 : 0.6;
+  ctx.strokeStyle = "#a5b4fc";
+  ctx.lineWidth = 0.7;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, tilt, 0, Math.PI * 2);
+  ctx.stroke();
+  const spin = now / (firing ? 380 : 1100);
+  const pts: [number, number][] = [];
+  for (let i = 0; i < 3; i++) {
+    const a = spin + (i * Math.PI * 2) / 3;
+    const ex = Math.cos(a) * rx;
+    const ey = Math.sin(a) * ry;
+    pts.push([cx + ex * Math.cos(tilt) - ey * Math.sin(tilt), cy + ex * Math.sin(tilt) + ey * Math.cos(tilt)]);
   }
+  ctx.strokeStyle = firing ? "rgba(253,230,138,0.9)" : "rgba(199,210,254,0.55)";
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  ctx.closePath();
+  ctx.stroke();
+  if (firing) {
+    ctx.shadowColor = "#fde68a";
+    ctx.shadowBlur = 8;
+  }
+  ctx.fillStyle = firing ? "#fef3c7" : "#e0e7ff";
+  for (const [x, y] of pts) {
+    ctx.beginPath();
+    ctx.arc(x, y, 1.15, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
 }
 
 function drawPoison(ctx: Ctx, now: number, firing: boolean, mini: boolean) {
@@ -2734,29 +2777,56 @@ function drawShot(ctx: Ctx, f: Extract<Fx, { type: "shot" }>, k: number) {
       break;
     }
     case "thinker": {
-      // A heavy bronze "idea" orb lobbed from the head, then a dull thud ring.
+      // A white-gold shard of thought darts from the orbit, then a crisp ring + ticks.
       const t = Math.min(1, k * 1.6);
       const sx = fx + 4;
-      const sy = fy - 18;
+      const sy = fy - 27;
       const x = sx + (tx - sx) * t;
-      const y = sy + (ty - sy) * t - Math.sin(t * Math.PI) * 18;
+      const y = sy + (ty - sy) * t - Math.sin(t * Math.PI) * 10;
       if (t < 1) {
-        const g = ctx.createRadialGradient(x - 1, y - 1, 0.5, x, y, 4 + f.grade * 0.6);
-        g.addColorStop(0, "#fde68a");
-        g.addColorStop(0.6, "#b45309");
-        g.addColorStop(1, "#451a03");
-        ctx.fillStyle = g;
+        const ang = Math.atan2(ty - sy, tx - sx);
+        const L = 5 + f.grade * 0.7;
+        ctx.strokeStyle = "rgba(165,180,252,0.55)";
+        ctx.lineWidth = 1.4;
         ctx.beginPath();
-        ctx.arc(x, y, 3.5 + f.grade * 0.6, 0, Math.PI * 2);
+        ctx.moveTo(x - Math.cos(ang) * L * 2.4, y - Math.sin(ang) * L * 2.4);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(ang);
+        ctx.shadowColor = "#fde68a";
+        ctx.shadowBlur = 6;
+        ctx.fillStyle = "#fffbeb";
+        ctx.strokeStyle = "#d4af37";
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(L, 0);
+        ctx.lineTo(0, -L * 0.38);
+        ctx.lineTo(-L * 0.6, 0);
+        ctx.lineTo(0, L * 0.38);
+        ctx.closePath();
         ctx.fill();
+        ctx.stroke();
+        ctx.restore();
       } else {
         const r = (k - 0.62) / 0.38;
+        const rr = 6 + r * (10 + f.grade * 2);
         ctx.globalAlpha = Math.max(0, 1 - r);
-        ctx.strokeStyle = "#fbbf24";
-        ctx.lineWidth = 2.4;
+        ctx.strokeStyle = "#c7d2fe";
+        ctx.lineWidth = 1.6;
         ctx.beginPath();
-        ctx.arc(tx, ty, 6 + r * (10 + f.grade * 2), 0, Math.PI * 2);
+        ctx.arc(tx, ty, rr, 0, Math.PI * 2);
         ctx.stroke();
+        ctx.strokeStyle = "#fde68a";
+        ctx.lineWidth = 1.2;
+        for (let i = 0; i < 4; i++) {
+          const a = (i * Math.PI) / 2 + Math.PI / 4;
+          ctx.beginPath();
+          ctx.moveTo(tx + Math.cos(a) * rr * 0.55, ty + Math.sin(a) * rr * 0.55);
+          ctx.lineTo(tx + Math.cos(a) * rr * 0.9, ty + Math.sin(a) * rr * 0.9);
+          ctx.stroke();
+        }
       }
       break;
     }
