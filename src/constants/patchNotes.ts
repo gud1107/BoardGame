@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.81.0",
+    releaseDate: "2026-10-21",
+    title: "🎙️ 갓생 플래너 브이로그 — 한국 출연자·목소리",
+    changes: [
+      { game: "god-life-planner", type: "IMPROVE", desc: "🎬 하루 재생 영상을 동아시아 출연자 실사 클립으로 교체, 탈진·번아웃 전용 장면(책상에 엎드려 잠듦) 추가" },
+      { game: "god-life-planner", type: "FEAT", desc: "🎙️ 브이로거 내레이션 — 블록마다 한국어 목소리로 하루를 이야기하고, 다 말한 뒤 다음 장면으로. 🎙️ 버튼으로 켜고 끄기" },
+      { game: "god-life-planner", type: "IMPROVE", desc: "📹 브이로그 연출 — 손떨림 카메라·필름 색감·그레인, 📍 장소 태그, VLOG 인트로, 좋아요·구독 아웃트로" },
+    ],
+  },
+  {
     version: "v1.80.0",
     releaseDate: "2026-10-21",
     title: "🧊 24개 게임 3D — 카드·보드 게임 테이블과 입체 보드",

@@ -71,22 +71,27 @@ Wikimedia Commons의 CC0/퍼블릭 도메인 파일(최대 1280×1400 축소본)
 ## 영상 (갓생 플래너 하루 재생 브이로그)
 
 [src/games/godLifePlanner/VlogStage.tsx](src/games/godLifePlanner/VlogStage.tsx)가 쓰는 짧은 실사 클립
-(`public/assets/games/god-life-planner/vlog/<키>.webm|mp4|webp`). 모두 [Coverr](https://coverr.co/license) 무료
-영상을 5초 이하로 잘라 640×360·무음으로 다시 인코딩했습니다. Coverr 라이선스: 상업·비상업 무료, 출처 표기 의무 없음,
-등장인물 모델 릴리스는 Coverr가 받음(사용자에게 제공하지 않음), 영상 자체를 재판매·영상 제공 서비스로 쓰는 것은 금지.
-유료(premium) 클립과 AI 생성 클립은 쓰지 않았습니다.
+(`public/assets/games/god-life-planner/vlog/<키>.webm|mp4|webp`). 5초 이하로 잘라 640×360·무음으로 다시 인코딩했습니다.
+한국 사용자에게 맞게 동아시아 출연자가 나오는 클립을 골랐습니다(2026-10-21 교체 — 처음엔 Coverr 서양인 클립).
 
-| 파일 키 | 쓰는 곳 | 원본 |
+**Pexels** ([라이선스](https://www.pexels.com/license/)): 웹·앱 포함 무료 사용, 수정 허용, 출처 표기 의무 없음.
+금지: 알아볼 수 있는 인물을 나쁘게·불쾌하게 묘사, 수정 없이 판매, 인물·브랜드가 제품을 보증하는 것처럼 보이게 하기,
+다른 스톡 플랫폼에 재배포. 피곤함·졸음 장면은 원본 영상 자체가 그런 연출(제목 "Exhausted…", "sleeping on her desk")입니다.
+
+| 파일 키 | 쓰는 곳 | 원본 (Pexels 영상 ID) |
 |---|---|---|
-| `wake` | 하루 시작 | https://coverr.co/videos/coverr-morning-stretching-routine-in-park |
-| `sleep` | 수면·낮잠 (0–4.5초만) | https://coverr.co/videos/coverr-girl-waking-up-and-using-phone-2292 |
-| `study` | 공부 | https://coverr.co/videos/coverr-female-student-writing-out-notes-4305 |
-| `exercise` | 운동 | https://coverr.co/videos/coverr-man-starting-his-squatting-workout-4958 |
-| `work` | 일(낮) | https://coverr.co/videos/coverr-working-in-an-office-5254 |
-| `nightWork` | 일(밤)·야근 | https://coverr.co/videos/coverr-a-woman-working-on-her-computer-late-at-night-3699 |
-| `meet` | 약속 | https://coverr.co/videos/coverr-friends-at-a-cafe-5939 |
-| `rest` | 휴식 | https://coverr.co/videos/coverr-a-guy-happily-drinking-coffee-in-a-caf-9822 |
-| `temptation` | 유혹 | https://coverr.co/videos/coverr-girl-laughing-at-her-phone-in-bed-8622 |
-| `tired` | 실패·탈진·번아웃·펑크 | https://coverr.co/videos/coverr-a-girl-working-at-her-office-desk-feeling-tired-2989 |
-| `idle` | 빈칸 | https://coverr.co/videos/coverr-raindrops-on-the-window-7102 |
-| `dusk` | 하루 마감 | https://coverr.co/videos/coverr-a-city-at-night-8720 |
+| `wake` | 하루 시작 (커튼 열기, 세로 영상 얼굴 쪽 크롭) | https://www.pexels.com/video/8517524/ |
+| `sleep` | 수면·낮잠 | https://www.pexels.com/video/6941196/ |
+| `study` | 공부 | https://www.pexels.com/video/9198175/ |
+| `exercise` | 운동 (세로 영상 + 흐린 배경 채우기) | https://www.pexels.com/video/7591713/ |
+| `work` | 일(낮) | https://www.pexels.com/video/8512948/ |
+| `nightWork` | 일(밤)·야근 | https://www.pexels.com/video/9364052/ |
+| `meet` | 약속 성사 | https://www.pexels.com/video/5701066/ |
+| `rest` | 휴식·혼자 나온 약속 | https://www.pexels.com/video/8151836/ |
+| `temptation` | 유혹 (가운데 확대) | https://www.pexels.com/video/7480515/ |
+| `tired` | 실패·약속 펑크 (세로 영상 크롭) | https://www.pexels.com/video/7778488/ |
+| `collapse` | 탈진·번아웃·무효 (인물 쪽 확대) | https://www.pexels.com/video/7844957/ |
+| `dusk` | 하루 마감 (비 오는 강남) | https://www.pexels.com/video/16046525/ |
+| `idle` | 빈칸 | Coverr — https://coverr.co/videos/coverr-raindrops-on-the-window-7102 (인물 없음) |
+
+**Coverr** ([라이선스](https://coverr.co/license)): 상업·비상업 무료, 출처 표기 의무 없음, 영상 재판매·영상 제공 서비스 금지.

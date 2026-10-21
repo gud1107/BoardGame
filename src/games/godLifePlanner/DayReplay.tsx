@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ACTIVITY_INFO, BLOCK_INFO, OPPORTUNITY_BY_ID, TEMPTATIONS, TRACKS, TRACK_INFO, TUNING, type Track } from "./data";
+import { ACTIVITY_INFO, BLOCK_INFO, DAY_NAMES, OPPORTUNITY_BY_ID, TEMPTATIONS, TRACKS, TRACK_INFO, TUNING, type Track } from "./data";
 import { resistCost, type BlockOutcome, type DayRecord, type GameState, type Tracks } from "./engine";
 import { cellArg, getGodLifePlannerSound } from "./godLifePlannerSound";
 import VlogStage, { type VlogClip } from "./VlogStage";
+import { narrate, setVoicePref, speechSupported, unlockVoice, useVoicePref } from "./vlogVoice";
+import { isSfxEffectivelyMuted, useAudioSettingsStore } from "@/lib/audio/audioSettings";
 
 /**
  * 하루 재생 — 내가 짠 계획이 B1(0시)부터 B8(24시)까지 실행되며 체력·멘탈·트랙이 어떻게 변하는지
@@ -55,35 +57,75 @@ function clampG(n: number) {
   return Math.max(0, Math.min(TUNING.gaugeMax, n));
 }
 
-/** 프레임마다 깔 영상과 브이로그 자막. */
-function vlogShot(f: Frame, i: number, last: number, rec: DayRecord, day: number): { clip: VlogClip; caption: string } {
+interface Shot {
+  clip: VlogClip;
+  /** 화면 자막 */
+  caption: string;
+  /** 내레이션 — 브이로거가 카메라에 말하듯 */
+  speech: string;
+  /** 촬영 장소 태그 */
+  place: string;
+}
+
+/** 프레임마다 깔 영상·자막·내레이션. */
+function vlogShot(f: Frame, i: number, last: number, rec: DayRecord, day: number): Shot {
   const o = f.outcome;
-  if (i === 0) return { clip: "wake", caption: `Day ${day + 1}, 오늘도 갓생 시작합니다 🌅` };
-  if (!o || i === last) return { clip: "dusk", caption: rec.exhausted || rec.burnout ? "오늘은 좀 무리했다… 내일은 쉬엄쉬엄 🌙" : "오늘 하루 끝! 수고했어 나 자신 🌙" };
-  if (f.collapse) return { clip: "tired", caption: f.collapse === "exhausted" ? "더는 못 버티겠다… 완전 방전 🥵" : "멘탈 바닥… 아무것도 하기 싫다 😵" };
+  const dayName = `${DAY_NAMES[day]}요일`;
+  if (i === 0)
+    return {
+      clip: "wake",
+      caption: `Day ${day + 1} · ${dayName} 갓생 브이로그 시작 🌅`,
+      speech: day === 0 ? `안녕하세요, 갓생로그예요. 오늘부터 일주일 동안 갓생 살기 도전합니다. 첫날 ${dayName}, 시작해 볼게요.` : `안녕하세요, 갓생로그예요. 오늘은 ${dayName}, 데이 ${day + 1}! 오늘도 시작해 볼게요.`,
+      place: "🏠 내 방",
+    };
+  if (!o || i === last) {
+    const rough = rec.exhausted || rec.burnout;
+    return {
+      clip: "dusk",
+      caption: rough ? "오늘은 좀 무리했다… 내일은 쉬엄쉬엄 🌙" : "오늘 하루 끝! 수고했어 나 자신 🌙",
+      speech: rough ? "오늘은 진짜 좀 무리했네요. 내일은 쉬엄쉬엄 해 볼게요. 다들 푹 쉬세요." : "오늘 하루도 끝! 수고했어요 나 자신. 구독이랑 좋아요는 갓생의 시작이에요. 내일 또 만나요!",
+      place: "🌃 서울의 밤",
+    };
+  }
+  if (f.collapse)
+    return f.collapse === "exhausted"
+      ? { clip: "collapse", caption: "더는 못 버티겠다… 완전 방전 🥵", speech: "아, 더는 못 버티겠어요. 완전히 방전됐어요.", place: "😵 기절 직전" }
+      : { clip: "collapse", caption: "멘탈 바닥… 아무것도 하기 싫다 😵", speech: "멘탈이 바닥났어요. 진짜 아무것도 하기 싫어요.", place: "😵 번아웃" };
   const b = i - 1;
   const lucky = o.opp ? " · 🍀 기회 잡았다!" : "";
-  if (o.kind === "fail") return { clip: "tired", caption: "하려고 했는데… 힘이 없어서 포기 😣" };
-  if (o.kind === "void") return { clip: "tired", caption: "쓰러져서 아무것도 못 했다 🫥" };
-  if (o.kind === "nap") return { clip: "sleep", caption: "잠깐 누웠는데 그대로 기절 💤" };
-  if (o.noShow) return { clip: "tired", caption: "약속 펑크 냈다… 미안해 🙇" };
+  const luckySay = o.opp ? " 그리고 오늘 좋은 기회까지 잡았어요!" : "";
+  if (o.kind === "fail") return { clip: "tired", caption: "하려고 했는데… 힘이 없어서 포기 😣", speech: "하려고 했는데, 너무 힘들어서 결국 포기했어요.", place: "😮‍💨 체력 바닥" };
+  if (o.kind === "void") return { clip: "collapse", caption: "쓰러져서 아무것도 못 했다 🫥", speech: "쓰러져서 아무것도 못 했어요.", place: "😮‍💨 기절" };
+  if (o.kind === "nap") return { clip: "sleep", caption: "잠깐 누웠는데 그대로 기절 💤", speech: "잠깐 눕기만 했는데, 그대로 잠들어 버렸어요.", place: "🛏️ 침대" };
+  if (o.noShow) return { clip: "tired", caption: "약속 펑크 냈다… 미안해 🙇", speech: "약속을 펑크 내 버렸어요. 친구야, 진짜 미안해.", place: "📱 미안 문자 중" };
   switch (o.cell) {
     case "sleep":
-      return { clip: "sleep", caption: NIGHT.has(b) ? "꿀잠 충전 중… 쿨쿨 😴" : "낮잠으로 체력 보충 😴" };
+      return NIGHT.has(b)
+        ? { clip: "sleep", caption: "꿀잠 충전 중… 쿨쿨 😴", speech: "지금은 꿀잠 자는 중이에요. 잠이 보약이죠.", place: "🛏️ 침실" }
+        : { clip: "sleep", caption: "낮잠으로 체력 보충 😴", speech: "잠깐 낮잠으로 체력 충전할게요.", place: "🛏️ 침실" };
     case "study":
-      return { clip: "study", caption: `집중 모드 ON, 오늘도 공부 📘${lucky}` };
+      return { clip: "study", caption: `집중 모드 ON, 오늘도 공부 📘${lucky}`, speech: `지금은 공부 시간이에요. 오늘도 조금씩 쌓아 갑니다.${luckySay}`, place: "📚 책상" };
     case "exercise":
-      return { clip: "exercise", caption: `${b <= 2 ? "새벽 운동 인증 💪 땀 한 바가지" : "오늘 운동 완료 💪 몸이 가볍다"}${lucky}` };
+      return b <= 2
+        ? { clip: "exercise", caption: `아침 운동 인증 💪 땀 한 바가지${lucky}`, speech: `아침 운동 인증! 하고 나면 몸이 확실히 가벼워요.${luckySay}`, place: "🧘 홈트" }
+        : { clip: "exercise", caption: `오늘 운동 완료 💪 몸이 가볍다${lucky}`, speech: `운동 끝! 땀 흘리니까 너무 개운하네요.${luckySay}`, place: "🧘 홈트" };
     case "work":
-      return { clip: o.overtime || NIGHT.has(b) ? "nightWork" : "work", caption: `${o.overtime ? "야근 확정… 아직 퇴근 못 함 🌙" : NIGHT.has(b) ? "밤에도 일하는 중 💼" : "업무 처리 중 💼 오늘도 열일"}${lucky}` };
+      if (o.overtime) return { clip: "nightWork", caption: `야근 확정… 아직 퇴근 못 함 🌙${lucky}`, speech: `결국 야근이에요. 아직 퇴근을 못 했어요.${luckySay}`, place: "🏢 야근 중" };
+      return NIGHT.has(b)
+        ? { clip: "nightWork", caption: `밤에도 일하는 중 💼${lucky}`, speech: `밤인데도 일하는 중이에요. 조금만 더 힘내 볼게요.${luckySay}`, place: "🏢 사무실" }
+        : { clip: "work", caption: `업무 처리 중 💼 오늘도 열일${lucky}`, speech: `지금은 업무 시간! 오늘도 열일하는 중이에요.${luckySay}`, place: "🏢 사무실" };
     case "meet":
-      return { clip: "meet", caption: `${o.matched ? "친구 만나서 수다 타임! 🤝" : "약속 장소 나왔는데 혼자네… 🥲"}${lucky}` };
+      return o.matched
+        ? { clip: "meet", caption: `친구 만나서 수다 타임! 🤝${lucky}`, speech: `친구 만나서 수다 떠는 중! 이런 시간이 진짜 소중하죠.${luckySay}`, place: "☕ 카페" }
+        : { clip: "rest", caption: `약속 장소 나왔는데 혼자네… 🥲${lucky}`, speech: `약속 장소에 나왔는데, 친구가 안 왔네요. 혼자 커피나 마실게요.${luckySay}`, place: "☕ 카페" };
     case "rest":
-      return { clip: "rest", caption: `커피 한 잔의 여유 ☕${lucky}` };
-    case "temptation":
-      return { clip: "temptation", caption: "딱 5분만 보려 했는데… 😈" };
+      return { clip: "rest", caption: `커피 한 잔의 여유 ☕${lucky}`, speech: `커피 한 잔 하면서 잠깐 쉬어 갈게요.${luckySay}`, place: "☕ 휴식" };
+    case "temptation": {
+      const t = TEMPTATIONS[rec.temptationId];
+      return { clip: "temptation", caption: `${t ? `${t.emoji} ${t.name}… ` : ""}딱 5분만 보려 했는데 😈`, speech: `${t ? `${t.name}, ` : ""}딱 오 분만 하려고 했는데, 벌써 시간이 이렇게 됐어요.`, place: "🛏️ 침대 위" };
+    }
     default:
-      return { clip: "idle", caption: "멍… 아무것도 안 하는 중" };
+      return { clip: "idle", caption: "멍… 아무것도 안 하는 중", speech: "잠깐 멍 때리는 중이에요.", place: "🪟 창가" };
   }
 }
 
@@ -207,12 +249,61 @@ export default function DayReplay({ state, rec, endTracks, preview, autoPlay = t
     setPlaying(!reduced);
   }
   const running = playing && idx < last;
+  const shots = useMemo(() => frames.map((fr, i) => vlogShot(fr, i, last, rec, state.day)), [frames, last, rec, state.day]);
 
+  // 내레이션: 켜져 있으면 프레임마다 자막을 읽고, 다 읽은 뒤에 다음 블록으로 넘어간다
+  const voicePref = useVoicePref();
+  const audio = useAudioSettingsStore();
+  const voiceOn = voicePref && speechSupported() && !isSfxEffectivelyMuted(audio);
+  // 다른 사람이 준비를 눌러 상태가 바뀌어도 읽던 문장을 끊지 않게 ref로 읽는다
+  const shotsRef = useRef(shots);
   useEffect(() => {
-    if (!running) return;
-    const t = window.setTimeout(() => setIdx((i) => Math.min(last, i + 1)), (idx === 0 ? 900 : 1150) / speed);
-    return () => window.clearTimeout(t);
-  }, [running, idx, last, speed]);
+    shotsRef.current = shots;
+  }, [shots]);
+  useEffect(() => {
+    if (!playing) return;
+    const minMs = (idx === 0 ? 900 : 1150) / speed;
+    const advance = () => setIdx((i) => Math.min(last, i + 1));
+    if (!voiceOn) {
+      if (idx >= last) return;
+      const t = window.setTimeout(advance, minMs);
+      return () => window.clearTimeout(t);
+    }
+    let minPassed = false;
+    let spoken = false;
+    let gap = 0;
+    const go = () => {
+      if (minPassed && spoken && idx < last) gap = window.setTimeout(advance, 220 / speed);
+    };
+    const t = window.setTimeout(() => {
+      minPassed = true;
+      go();
+    }, minMs);
+    const cancel = narrate(shotsRef.current[idx].speech, speed === 2 ? 1.5 : 1.08, () => {
+      spoken = true;
+      go();
+    });
+    return () => {
+      window.clearTimeout(t);
+      window.clearTimeout(gap);
+      cancel();
+    };
+  }, [playing, idx, last, speed, voiceOn]);
+
+  function toggleVoice() {
+    ui();
+    if (voiceOn) {
+      setVoicePref(false);
+      return;
+    }
+    unlockVoice();
+    setVoicePref(true);
+    // 사이트 전체가 음소거면 효과음 쪽을 같이 켠다(헤더 🔊·HUD 🔔와 같은 설정)
+    if (isSfxEffectivelyMuted(audio)) {
+      audio.setMasterMuted(false);
+      audio.setSfxMuted(false);
+    }
+  }
 
   // 효과음: 블록마다 그 활동 소리, 성사·기회 카드·실패·낮잠·붕괴는 각자 소리
   const soundIdx = useRef(-1);
@@ -230,13 +321,13 @@ export default function DayReplay({ state, rec, endTracks, preview, autoPlay = t
   const dim = !!f.outcome && (f.outcome.kind === "fail" || f.outcome.kind === "void" || f.outcome.kind === "nap");
   const clockPct = blockIdx !== null ? ((blockIdx + 0.5) / 8) * 100 : idx === 0 ? 0 : 100;
   const celestial = blockIdx !== null && !NIGHT.has(blockIdx) ? "☀️" : "🌙";
-  const shots = useMemo(() => frames.map((fr, i) => vlogShot(fr, i, last, rec, state.day)), [frames, last, rec, state.day]);
   const clips = useMemo(() => [...new Set(shots.map((x) => x.clip))], [shots]);
   const shot = shots[idx];
   const stamp = blockIdx !== null ? `${BLOCK_INFO[blockIdx].time.slice(0, 2)}:00` : idx === 0 ? "AM" : "24:00";
 
   function restart() {
     ui();
+    unlockVoice();
     setIdx(0);
     setPlaying(true);
   }
@@ -278,12 +369,36 @@ export default function DayReplay({ state, rec, endTracks, preview, autoPlay = t
               <span className={`h-2 w-2 rounded-full bg-red-500 ${running ? "animate-pulse" : ""}`} />
               {running ? "REC" : "II"}
               <span className="tabular-nums text-white/85">{stamp}</span>
+              <span className="text-white/60">{DAY_NAMES[state.day]}</span>
             </span>
             <span className="flex min-w-0 items-center gap-1 truncate rounded bg-black/45 px-1.5 py-0.5">
               <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-gradient-to-br from-amber-300 to-rose-400 text-[9px]">📅</span>
               <span className="truncate">@갓생로그 · Day {state.day + 1}</span>
             </span>
           </div>
+
+          <span key={`place-${shot.place}`} className="pointer-events-none absolute left-2 top-8 rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-bold text-slate-800 shadow sm:text-[11px]" style={{ animation: "glr-fade 0.35s ease both" }}>
+            📍 {shot.place}
+          </span>
+
+          {/* 인트로 타이틀 · 아웃트로 구독 카드 */}
+          {idx === 0 && (
+            <div className="pointer-events-none absolute inset-x-0 top-[40%] flex items-center justify-center gap-2" style={{ animation: "glr-enter 0.6s cubic-bezier(.2,.9,.3,1.2) both" }}>
+              <span className="rounded-md bg-white/90 px-1.5 py-0.5 text-[9px] font-black tracking-[0.2em] text-rose-500 sm:text-[11px]">VLOG</span>
+              <span className="text-xl font-black sm:text-3xl" style={{ textShadow: "0 2px 10px rgba(0,0,0,.6)" }}>
+                Day {state.day + 1} <span className="text-amber-200">{DAY_NAMES[state.day]}요일</span>
+              </span>
+            </div>
+          )}
+          {idx === last && (
+            <div className="pointer-events-none absolute inset-x-0 top-[30%] flex justify-center gap-1.5 text-[11px] font-bold sm:text-xs">
+              {["👍 좋아요", "🔔 구독", "💬 댓글"].map((t, i) => (
+                <span key={t} className={`rounded-full px-2.5 py-1 shadow-lg ${i === 1 ? "bg-rose-600" : "bg-white/90 text-slate-800"}`} style={{ animation: `glr-pop 0.5s cubic-bezier(.2,.9,.3,1.4) both`, animationDelay: `${200 + i * 160}ms` }}>
+                  {t}
+                </span>
+              ))}
+            </div>
+          )}
 
           {f.collapse && (
             <p className="absolute left-1/2 top-9 -translate-x-1/2 whitespace-nowrap rounded-full bg-rose-600 px-3 py-1 text-sm font-black shadow-lg" style={{ animation: "glr-enter 0.4s ease both" }}>
@@ -292,7 +407,7 @@ export default function DayReplay({ state, rec, endTracks, preview, autoPlay = t
           )}
 
           {/* 떠오르는 변화 */}
-          <div className={`pointer-events-none absolute inset-x-2 flex flex-wrap justify-center gap-1 ${f.collapse ? "top-[4.25rem]" : "top-9"}`}>
+          <div className={`pointer-events-none absolute inset-x-2 flex flex-wrap justify-center gap-1 ${f.collapse ? "top-[4.75rem]" : "top-14"}`}>
             {f.pops.map((p, i) => (
               <span
                 key={`pop-${idx}-${i}`}
@@ -389,11 +504,17 @@ export default function DayReplay({ state, rec, endTracks, preview, autoPlay = t
           <button
             onClick={() => {
               ui();
+              unlockVoice();
               setPlaying(true);
             }}
             className={BTN}
           >
             ▶ 재생
+          </button>
+        )}
+        {speechSupported() && (
+          <button onClick={toggleVoice} aria-pressed={voiceOn} className={`${BTN} ${voiceOn ? "!border-rose-400/60 !text-rose-200 light:!text-rose-600" : ""}`} title={voiceOn ? "내레이션 끄기" : "내레이션 켜기"}>
+            {voiceOn ? "🎙️ 목소리 켜짐" : "🔇 목소리 꺼짐"}
           </button>
         )}
         <button
@@ -441,6 +562,8 @@ const KEYFRAMES = `
 @keyframes glr-enter{0%{opacity:0;transform:translateY(14px) scale(.6)}100%{opacity:1;transform:none}}
 @keyframes glr-fade{0%{opacity:0}100%{opacity:1}}
 @keyframes glr-pop{0%{opacity:0;transform:translateY(10px) scale(.7)}100%{opacity:1;transform:none}}
+@keyframes glr-cam{0%{transform:scale(1.07) translate(0,0) rotate(0)}30%{transform:scale(1.08) translate(-0.7%,0.4%) rotate(-0.3deg)}65%{transform:scale(1.07) translate(0.5%,-0.5%) rotate(0.25deg)}100%{transform:scale(1.09) translate(-0.3%,0.6%) rotate(-0.15deg)}}
+@keyframes glr-grain{0%{transform:translate(0,0)}33%{transform:translate(-6px,4px)}66%{transform:translate(5px,-5px)}100%{transform:translate(0,0)}}
 @keyframes glr-flash{0%{opacity:1}100%{opacity:0}}
 @keyframes glr-shake{0%,100%{transform:none}20%{transform:translateX(-7px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
 @media (prefers-reduced-motion: reduce){[data-glr] *{animation-duration:0.01ms !important;animation-iteration-count:1 !important}}
