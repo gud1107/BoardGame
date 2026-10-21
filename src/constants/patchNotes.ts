@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.82.0",
+    releaseDate: "2026-10-21",
+    title: "🥒 5 오이 3D 플레이어가 진짜 사람처럼",
+    changes: [
+      { game: "five-cucumbers", type: "IMPROVE", desc: "🧑 어른 비율의 사실적인 사람으로 — 코·귀·눈동자·입술이 있는 얼굴, 자연스러운 머리카락, 손가락, 의자에 앉은 다리와 신발" },
+      { game: "five-cucumbers", type: "IMPROVE", desc: "👕 옷감·피부 질감, 숨 쉬는 몸, 테이블에 팔을 얹은 자세, 팔짱·박수 동작도 어른 체형에 맞게" },
+    ],
+  },
+  {
     version: "v1.81.0",
     releaseDate: "2026-10-21",
     title: "🎙️ 갓생 플래너 브이로그 — 한국 출연자·목소리",

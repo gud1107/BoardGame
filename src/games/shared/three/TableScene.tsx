@@ -5,6 +5,7 @@ import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import FirstPersonCamera from "./FirstPersonCamera";
 import SeatedPerson, { defaultLook, type HatKind, type PersonLook, type PersonMood } from "./SeatedPerson";
+import RealisticPerson from "./RealisticPerson";
 import ScreenSprite from "./ScreenSprite";
 import SpeechBubble from "./SpeechBubble";
 import { labelTexture, polar, seatAngle, type BubbleStyle } from "./tableKit";
@@ -99,6 +100,8 @@ export interface TableTheme {
   hats: HatKind[];
   /** Where the name tags sit on the head-local y axis. */
   nameY?: number;
+  /** "realistic" = adult proportions, modelled faces and hands (RealisticPerson); default cartoon rig. */
+  personStyle?: "cartoon" | "realistic";
 }
 
 export interface TableSceneProps {
@@ -264,12 +267,13 @@ function SeatView({ s, geo, theme, lowDetail, ringColor }: { s: TableSeat; geo: 
     return { ...base, ...(s.hat ? { hat: s.hat } : {}), ...s.look };
   }, [s.seat, s.hat, s.look, theme.hats]);
   const lookAt = s.lookSeat === "center" ? new THREE.Vector3(0, TABLE_Y, 0) : s.lookSeat === null || s.lookSeat === undefined ? null : geo.headOf(s.lookSeat);
-  const nameY = theme.nameY ?? 2.18;
+  const nameY = theme.nameY ?? (theme.personStyle === "realistic" ? 1.86 : 2.18);
   // bubble bottom edge (SpeechBubble centres itself above it when anchored)
   const bubbleY = nameY + (s.tag ? 0.34 : 0.14);
   const labelBase = nameY - (s.sub ? 0.29 : 0.11);
   const frontSpot = geo.spotOf(s.seat, isViewer ? 0.45 : 0.38);
   const chair = s.chair ?? theme.chair;
+  const Person = theme.personStyle === "realistic" ? RealisticPerson : SeatedPerson;
 
   return (
     <group>
@@ -302,7 +306,7 @@ function SeatView({ s, geo, theme, lowDetail, ringColor }: { s: TableSeat; geo: 
               <Throne color={theme.chairColor} />
             </group>
           )}
-          <SeatedPerson
+          <Person
             seed={s.seat * 7 + 3}
             look={look}
             color={color}
@@ -322,7 +326,7 @@ function SeatView({ s, geo, theme, lowDetail, ringColor }: { s: TableSeat; geo: 
             {s.sub && <ScreenSprite anchorY={labelBase} position={[0, nameY - 0.2, 0]} scale={[0.7, 0.175]} map={labelTexture(s.sub, color, { bg: "rgba(0,0,0,0.55)" })} />}
             {s.tag && <ScreenSprite anchorY={labelBase} position={[0, nameY + 0.22, 0]} scale={[0.7, 0.175]} map={labelTexture(s.tag.text, s.tag.color, { bg: s.tag.bg ?? "rgba(20,10,10,0.85)" })} />}
             {s.bubble && <SpeechBubble anchorY={labelBase} text={s.bubble.text} style={s.bubble.style} y={bubbleY} popKey={s.bubble.key} width={s.bubble.width ?? 1.0} />}
-          </SeatedPerson>
+          </Person>
           {/* generous invisible hit box so a tap on the chair area counts too */}
           {s.onSelect && (
             <mesh position={polar(angle, geo.seatR, 1.0)}>

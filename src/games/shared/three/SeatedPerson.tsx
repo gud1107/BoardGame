@@ -78,7 +78,7 @@ export function defaultLook(seat: number, hats: readonly HatKind[] = ["none"]): 
 // Shoulder x<0 swings the arm forward/up; L inward is +y/+z, R inward is −y/−z.
 // ---------------------------------------------------------------------------
 
-type Pose = number[];
+export type Pose = number[];
 interface PoseSpec {
   spine?: [number, number, number];
   head?: [number, number, number];
@@ -93,7 +93,7 @@ function P(spec: PoseSpec): Pose {
   return [...s.spine, ...s.head, ...s.lS, s.lE, ...s.rS, s.rE];
 }
 
-const POSES: Record<PersonMood, Pose> = {
+export const POSES: Record<PersonMood, Pose> = {
   rest: P({}),
   think: P({ spine: [0.08, 0, 0], head: [0.05, 0, 0.14], rS: [-1.2, -0.55, 0], rE: -1.95 }),
   talk: P({ spine: [0.05, 0, 0], head: [0.02, 0, 0], rS: [-1.05, -0.3, -0.15], rE: -1.45 }),
@@ -111,13 +111,13 @@ const POSES: Record<PersonMood, Pose> = {
   slump: P({ spine: [0.5, 0, 0.08], head: [0.65, 0, 0.35], lS: [-1.3, 0.35, 0], lE: -0.7, rS: [-1.3, -0.35, 0], rE: -0.7 }),
 };
 
-interface Face {
+export interface Face {
   brow: number; // −1 angry … +1 worried
   mouth: "flat" | "smile" | "grin" | "frown" | "o";
   eye: number;
   sweat: number;
 }
-const FACES: Record<PersonMood, Face> = {
+export const FACES: Record<PersonMood, Face> = {
   rest: { brow: 0, mouth: "flat", eye: 1, sweat: 0 },
   think: { brow: -0.35, mouth: "flat", eye: 0.8, sweat: 0 },
   talk: { brow: 0.15, mouth: "o", eye: 1, sweat: 0 },
@@ -155,7 +155,7 @@ const COAT_PROFILE = [
   [0.0, 0.73],
 ].map(([x, y]) => new THREE.Vector2(x, y));
 
-function Hat({ kind, color, seg }: { kind: HatKind; color: string; seg: number }) {
+export function Hat({ kind, color, seg }: { kind: HatKind; color: string; seg: number }) {
   if (kind === "none") return null;
   const felt = <meshStandardMaterial color={color} roughness={0.85} />;
   if (kind === "crown" || kind === "circlet") {
