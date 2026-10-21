@@ -43,6 +43,12 @@ export interface PatchNoteEntry {
  * one line per game per date, headline features only. Admin-only changes
  * (관리자 허브·통계·알림) never go here; add them to `adminChangelog.ts`.
  *
+ * The page renders one card per date (`patchNoteDays.ts`): a game with
+ * DAY_GROUP_COLLAPSE_AT+ lines on one date — counted across all that day's
+ * versions — starts folded behind a one-line summary, which you must add to
+ * `PATCH_NOTE_DAY_SUMMARIES` (patchNoteDays.test.ts enforces it). Versions
+ * must be unique; check the newest version before adding an entry.
+ *
  * Version bump rule (confirmed with the user 2026-08-27, applied
  * retroactively): a date containing any FEAT → minor (+0.1.0), reset patch to
  * 0; a date with only FIX/IMPROVE → patch (+0.0.1). v1.0.0 is the actual
@@ -58,7 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
-    version: "v1.77.0",
+    version: "v1.78.1",
+    releaseDate: "2026-10-21",
+    title: "📝 패치노트 날짜별 보기",
+    changes: [
+      { game: "common", type: "IMPROVE", desc: "📝 패치노트를 날짜별 한 장으로 — 같은 날 같은 게임 변경이 많으면 한 줄 요약만 보이고 눌러서 펼쳐요" },
+    ],
+  },
+  {
+    version: "v1.78.0",
     releaseDate: "2026-10-21",
     title: "🎧 갓생 플래너 배경음악·효과음",
     changes: [
@@ -128,13 +142,17 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     changes: [
       { game: "common", type: "FEAT", desc: "🎬 PC에서 게임 카드에 마우스를 올리면 실제 플레이 명장면이 재생 — 32개 게임, 체스 체크·젠가 붕괴·코요테 판정 등" },
       { game: "common", type: "IMPROVE", desc: "⚡ 영상은 마우스를 올렸을 때만 받아서 로비 첫 로딩은 그대로 — 휴대폰·움직임 줄이기·데이터 절약 모드에선 사진 유지" },
+      { game: "merge-defense", type: "IMPROVE", desc: "🤖 자동 모드를 켜고 끌 때 버튼 아래 알림·효과음·진동 — 색만 보고 헷갈리지 않게, 설정 메뉴는 자동으로 닫혀요" },
     ],
   },
   {
     version: "v1.71.0",
     releaseDate: "2026-10-20",
-    title: "🧊 랜덤 합성 디펜스 3D 보드",
+    title: "🧊 랜덤 합성 디펜스·체스 3D 보드",
     changes: [
+      { game: "chess", type: "FEAT", desc: "🧊 3D 체스판이 기본 — 입체 기물, 잡기 파편·화면 흔들림·승진 빛기둥·체크메이트 쓰러짐까지 수마다 3D 이펙트" },
+      { game: "chess", type: "IMPROVE", desc: "✨ 광택 흑단·상아 기물과 금 장식, 나뭇결 상감 판 — 검은 기물도 잘 보이게, 헤더 '2D로' 버튼으로 평면 판" },
+      { game: "merge-defense", type: "IMPROVE", desc: "🗿 사색의 석상을 흰 대리석 조각상 + 금 상감 흑요석 받침으로 — 갈색 덩어리처럼 보이던 모습 개선" },
       { game: "merge-defense", type: "FEAT", desc: "🧊 내 보드가 3D 입체 디오라마로 — 타워 10종·몬스터 11종 입체 모델, 포탈 소용돌이, 그림자와 조명" },
       { game: "merge-defense", type: "FEAT", desc: "🖼️ 2D로 / 🧊 3D로 버튼 — 기존 평면 보드로 언제든 전환(기기에 기억), WebGL이 없으면 자동으로 2D" },
       { game: "merge-defense", type: "IMPROVE", desc: "✨ 3D 보드 고급화 — 반사광·윤곽광, 자갈길과 연석, 풀숲·꽃, 금 테두리 받침, 돌 패드 문양" },
@@ -166,8 +184,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.68.1",
     releaseDate: "2026-10-19",
-    title: "🥌 컬링 파티 — AI 스킵 콜은 레벨만큼, 숨기기도 가능",
+    title: "🥌 컬링 AI 스킵 콜 · ♟️ 체스 시간 판정 수정",
     changes: [
+      { game: "chess", type: "FIX", desc: "⏱️ 마지막 순간에 둔 수와 시간 패가 두 화면에서 다르게 판정되던 문제 — 이제 양쪽이 같은 순서로 처리해요" },
+      { game: "chess", type: "FIX", desc: "🤔 시계가 있는 판에서 오래 생각하면 '봇으로 바꿀까요?' 투표가 뜨던 문제 — 무제한 판에서만 3분 뒤에" },
+      { game: "chess", type: "FIX", desc: "대기실을 열자마자 고른 시간·색이 되돌아가던 문제 수정" },
       { game: "curling", type: "IMPROVE", desc: "🤖 봇 팀원의 스킵 콜이 손 떨림 없는 '의도한 샷'으로 — 판단력은 레벨만큼(Lv.1 콜은 자주 틀리고 Lv.7+는 거의 정확)" },
       { game: "curling", type: "FEAT", desc: "🙈 AI 콜 숨기기 — 하우스를 직접 읽고 싶으면 내 화면에서만 봇 콜을 끌 수 있어요(사람 팀원 콜은 그대로)" },
     ],
@@ -227,7 +248,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     ],
   },
   {
-    version: "v1.64.0",
+    version: "v1.64.2",
     releaseDate: "2026-10-18",
     title: "🪵 신규 게임 와르르 타워 — 3D 나무 탑에서 블록 빼기",
     changes: [
@@ -240,7 +261,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     ],
   },
   {
-    version: "v1.64.0",
+    version: "v1.64.1",
     releaseDate: "2026-10-18",
     title: "🍽️ 기억의 만찬 — 빈 접시 숨김 · 사람 같은 봇 배치",
     changes: [
