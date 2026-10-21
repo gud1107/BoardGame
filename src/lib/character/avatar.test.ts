@@ -35,3 +35,22 @@ describe("avatar", () => {
     expect(l.lip).toBe("#c27a6e");
   });
 });
+
+describe("character presets", () => {
+  it("have unique stable ids and only valid fields", async () => {
+    const { CHARACTER_PRESETS } = await import("./avatar");
+    expect(new Set(CHARACTER_PRESETS.map((c) => c.id)).size).toBe(CHARACTER_PRESETS.length);
+    for (const c of CHARACTER_PRESETS) {
+      expect(sanitizeAvatar({ ...c.look, presetId: c.id })).toEqual({ ...c.look, presetId: c.id });
+    }
+  });
+
+  it("two players may share one preset — resolveLook is the same per seat apart from the game's hat", async () => {
+    const { CHARACTER_PRESETS } = await import("./avatar");
+    const c = CHARACTER_PRESETS[0];
+    const a = resolveLook(1, ["none"], { ...c.look, presetId: c.id });
+    const b = resolveLook(4, ["none"], { ...c.look, presetId: c.id });
+    expect({ ...a, hatColor: "" }).toEqual({ ...b, hatColor: "" });
+    expect(a).not.toHaveProperty("presetId");
+  });
+});

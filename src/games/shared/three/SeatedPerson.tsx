@@ -3,6 +3,8 @@
 import { useMemo, useRef, type ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import { createMotion, HANDS, stepMotion, type MotionState } from "./motion";
+import { kpopEyeTexture } from "./kpopEyes";
 
 /**
  * A seated table player for the "real people around a table" 3D boards
@@ -101,6 +103,15 @@ export const FACES: Record<PersonMood, Face> = {
 };
 
 const GREY = new THREE.Color("#57534e");
+/** Natural blinking: irregular gaps (2-6 s) and the occasional double blink. */
+export function blinking(t: number, seed: number): boolean {
+  const T = t + seed * 1.37;
+  const slot = Math.floor(T / 4);
+  const at = 0.4 + hash(seed, slot + 31) * 3;
+  const u = T - slot * 4 - at;
+  if (u >= 0 && u < 0.13) return true;
+  return hash(seed, slot + 57) < 0.2 && u >= 0.26 && u < 0.38;
+}
 const hash = (a: number, b: number) => {
   const x = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
   return x - Math.floor(x);
@@ -279,6 +290,12 @@ export function Hat({ kind, color, seg }: { kind: HatKind; color: string; seg: n
   );
 }
 
+/** The hair's sheen colour: much lighter, a touch warm, so even black hair shows a gloss band. */
+function highlight(hex: string): string {
+  const c = new THREE.Color(hex);
+  return "#" + c.lerp(new THREE.Color("#fff3e6"), 0.55).getHexString();
+}
+
 /** Head sphere radii (0.2 × the head mesh's [0.92, 1.06, 0.95] scale). */
 const HEAD_R = [0.184, 0.212, 0.19] as const;
 /** A point `lift` above the face-side head surface at (x, y), and a YXZ euler laying a y-axis strand flat on it (pointing up the scalp). */
@@ -345,6 +362,14 @@ function Hair({ look, seg }: { look: PersonLook; seg: number }) {
             {mat}
           </mesh>
         ))}
+
+      {/* glossy "angel ring" highlight band across the crown of the idol cuts */}
+      {(st === "straight" || st === "hush" || st === "pony" || st === "comma" || st === "curtain" || st === "dandy") && (
+        <mesh scale={[0.958, 1.098, 0.993]} rotation-x={-0.25}>
+          <sphereGeometry args={[0.2, seg + 6, 4, 0, Math.PI * 2, Math.PI * 0.15, Math.PI * 0.06]} />
+          <meshBasicMaterial color={highlight(look.hair)} transparent opacity={0.4} depthWrite={false} side={THREE.DoubleSide} />
+        </mesh>
+      )}
 
       {/* ── women: sleek long straight hair / layered hush cut / high ponytail, all with see-through bangs ── */}
       {(st === "straight" || st === "hush" || st === "pony") && (
@@ -470,11 +495,16 @@ export default function SeatedPerson(props: SeatedPersonProps) {
   // dyed (light) idol hair keeps darker brows
   const browColor = useMemo(() => "#" + new THREE.Color(look.hair).lerp(new THREE.Color("#2a1c16"), 0.45).getHexString(), [look.hair]);
   const fem = look.gender === "f";
-  const cur = useRef<{ pose: Pose; brow: number; eye: number; sweat: number; look: [number, number]; out: number } | null>(null);
+  const eyeTex = useMemo(() => kpopEyeTexture(look.gender, look.gender === "f" ? "#6a3f24" : "#4a2e1c"), [look.gender]);
+  const lW = useRef<THREE.Group>(null);
+  const rW = useRef<THREE.Group>(null);
+  const lHand = useRef<THREE.Group>(null);
+  const rHand = useRef<THREE.Group>(null);
+  const cur = useRef<{ m: MotionState; brow: number; eye: number; sweat: number; look: [number, number]; out: number } | null>(null);
 
   useFrame(({ clock }, dt) => {
     const now = clock.elapsedTime;
-    if (!cur.current) cur.current = { pose: [...POSES.rest], brow: 0, eye: 1, sweat: 0, look: [0, 0], out: 0 };
+    if (!cur.current) cur.current = { m: createMotion(POSES.rest, HANDS.rest), brow: 0, eye: 1, sweat: 0, look: [0, 0], out: 0 };
     const c = cur.current;
     let mood: PersonMood = props.out ? "slump" : props.mood;
     // idle fidgets when nothing is going on
@@ -487,52 +517,18 @@ export default function SeatedPerson(props: SeatedPersonProps) {
         else if (r < 0.35) mood = "shrug";
       }
     }
-    const target = POSES[mood];
     const face = FACES[mood];
     const rate = 1 - Math.exp(-dt * 7);
-    for (let i = 0; i < target.length; i++) c.pose[i] += (target[i] - c.pose[i]) * rate;
+    // body + hands: key pose, gestures and idle life, chased by springs (motion.ts)
+    const q = stepMotion(c.m, mood, POSES[mood], now, dt, seed);
     c.brow += (face.brow - c.brow) * rate;
     c.eye += (face.eye - c.eye) * rate;
     c.sweat += (face.sweat - c.sweat) * (1 - Math.exp(-dt * 3));
     c.out += ((props.out ? 1 : 0) - c.out) * (1 - Math.exp(-dt * 3));
-    const q = c.pose;
-
-    const osc = (f: number, a: number) => Math.sin(now * f + seed) * a;
-    let spineX = q[0];
-    let headX = q[3];
-    let lSy = q[7];
-    let rSx = q[10];
-    let rSy = q[11];
-    let lEx = q[9];
-    let rEx = q[13];
-    if (mood === "clap") {
-      const s = Math.max(0, Math.sin(now * 14));
-      rSy += s * 0.18;
-      lSy -= s * 0.18;
-    }
-    if (mood === "laugh") {
-      spineX += osc(16, 0.05);
-      headX += osc(16, 0.06);
-    }
-    if (mood === "talk") {
-      rSx += osc(5.5, 0.18);
-      rEx += osc(7, 0.2);
-      headX += osc(4, 0.04);
-    }
-    if (mood === "cheer") {
-      lEx += osc(9, 0.25);
-      rEx += osc(9, 0.25);
-    }
-    if (mood === "write") rEx += osc(13, 0.08);
-    if (mood === "nervous") {
-      lEx += osc(29, 0.02);
-      rEx += osc(31, 0.02);
-    }
-    if (mood === "rest" && hash(seed, Math.floor(now / 9)) > 0.6) rEx += Math.max(0, Math.sin(now * 11)) * 0.05;
 
     if (root.current) root.current.position.y = Math.sin(now * 1.6 + seed) * 0.006 * (1 - c.out);
     if (spine.current) {
-      spine.current.rotation.set(spineX, q[1], q[2]);
+      spine.current.rotation.set(q[0], q[1], q[2]);
       spine.current.scale.y = 1 + Math.sin(now * 1.6 + seed) * 0.006;
     }
     // head turn toward lookAt (in this person's local frame)
@@ -551,16 +547,22 @@ export default function SeatedPerson(props: SeatedPersonProps) {
     }
     c.look[0] += (yaw - c.look[0]) * (1 - Math.exp(-dt * 5));
     c.look[1] += (pitch - c.look[1]) * (1 - Math.exp(-dt * 5));
-    head.current?.rotation.set(headX + c.look[1], q[4] + c.look[0], q[5] + Math.sin(now * 0.7 + seed) * 0.025);
+    // a look target steadies the head: idle drift is mostly cancelled while gazing at someone
+    const drift = la ? 0.35 : 1;
+    head.current?.rotation.set(q[3] + c.look[1], q[4] * drift + c.look[0], q[5]);
     const pointYaw = mood === "point" ? c.look[0] : 0;
-    lS.current?.rotation.set(q[6], lSy, q[8]);
-    lE.current?.rotation.set(lEx, 0, 0);
-    rS.current?.rotation.set(rSx + (mood === "point" ? c.look[1] * 0.6 : 0), rSy + pointYaw * 0.9, q[12]);
-    rE.current?.rotation.set(rEx, 0, 0);
+    lS.current?.rotation.set(q[6], q[7], q[8]);
+    lE.current?.rotation.set(q[9], 0, 0);
+    rS.current?.rotation.set(q[10] + (mood === "point" ? c.look[1] * 0.6 : 0), q[11] + pointYaw * 0.9, q[12]);
+    rE.current?.rotation.set(q[13], 0, 0);
+    lW.current?.rotation.set(q[14], 0, q[15]);
+    rW.current?.rotation.set(q[16], 0, q[17]);
+    // a mitten "curls" by flattening into a fist
+    lHand.current?.scale.set(1, 1 - q[18] * 0.28, 1 + q[18] * 0.12);
+    rHand.current?.scale.set(1, 1 - q[19] * 0.28, 1 + q[19] * 0.12);
 
     if (eyes.current) {
-      const b = (now + seed * 1.37) % 4.2;
-      eyes.current.scale.y = Math.max(0.06, c.eye * (b < 0.12 && c.eye > 0.3 ? 0.12 : 1));
+      eyes.current.scale.y = Math.max(0.06, c.eye * (blinking(now, seed) && c.eye > 0.3 ? 0.12 : 1));
     }
     browL.current?.rotation.set(0, 0, 0.12 + c.brow * 0.38);
     browR.current?.rotation.set(0, 0, -0.12 - c.brow * 0.38);
@@ -578,7 +580,8 @@ export default function SeatedPerson(props: SeatedPersonProps) {
     if (coatMat.current) coatMat.current.color.copy(coatColor).lerp(GREY, c.out * 0.7);
   });
 
-  const skin = <meshStandardMaterial color={look.skin} roughness={0.62} />;
+  // a touch of self-light in the skin tone fakes subsurface warmth (no grey faces on the shadow side)
+  const skin = <meshStandardMaterial color={look.skin} roughness={0.55} emissive={look.skin} emissiveIntensity={0.14} />;
   const sleeve = <meshStandardMaterial color={look.coat} roughness={0.75} />;
   const arm = (side: 1 | -1, sRef: React.RefObject<THREE.Group | null>, eRef: React.RefObject<THREE.Group | null>) => (
     <group ref={sRef} position={[0.34 * side, 0.67, 0.04]}>
@@ -591,10 +594,19 @@ export default function SeatedPerson(props: SeatedPersonProps) {
           <capsuleGeometry args={[0.065, 0.2, 4, lowDetail ? 6 : 10]} />
           {sleeve}
         </mesh>
-        <mesh position={[0, -0.34, 0.01]} scale={[1, 0.8, 1.15]} castShadow>
-          <sphereGeometry args={[0.062, 12, 10]} />
-          {skin}
-        </mesh>
+        <group ref={side === 1 ? rW : lW} position={[0, -0.29, 0.005]}>
+          <group ref={side === 1 ? rHand : lHand}>
+            <mesh position={[0, -0.05, 0.005]} scale={[1, 0.8, 1.15]} castShadow>
+              <sphereGeometry args={[0.062, 12, 10]} />
+              {skin}
+            </mesh>
+            {/* thumb */}
+            <mesh position={[-0.04 * side, -0.035, 0.035]} rotation={[0.6, 0, 0.5 * side]}>
+              <capsuleGeometry args={[0.018, 0.035, 2, 6]} />
+              {skin}
+            </mesh>
+          </group>
+        </group>
       </group>
     </group>
   );
@@ -665,6 +677,13 @@ export default function SeatedPerson(props: SeatedPersonProps) {
               <sphereGeometry args={[0.2, seg + 6, seg]} />
               {skin}
             </mesh>
+            {/* soft cel outline: an inverted hull a hair larger than the head */}
+            {!lowDetail && (
+              <mesh scale={[0.92 * 1.035, 1.06 * 1.03, 0.95 * 1.035]}>
+                <sphereGeometry args={[0.2, seg + 6, seg]} />
+                <meshBasicMaterial color="#3a2420" side={THREE.BackSide} />
+              </mesh>
+            )}
             <Hair look={look} seg={seg} />
             {[-1, 1].map((s) => (
               <mesh key={s} position={[0.185 * s, -0.01, 0]} scale={[0.5, 1, 0.8]}>
@@ -674,32 +693,11 @@ export default function SeatedPerson(props: SeatedPersonProps) {
             ))}
             <group ref={eyes} position={[0, 0.02, 0.165]}>
               {[-1, 1].map((s) => (
-                <group key={s} position={[0.066 * s, 0, 0]}>
-                  <mesh scale={[1, 0.85, 0.6]}>
-                    <sphereGeometry args={[0.033, 14, 10]} />
-                    <meshStandardMaterial color="#fbfaf7" roughness={0.3} />
-                  </mesh>
-                  {/* big dark-brown iris + catchlight */}
-                  <mesh position={[0, -0.002, 0.016]}>
-                    <sphereGeometry args={[fem ? 0.02 : 0.018, 12, 10]} />
-                    <meshStandardMaterial color="#24150d" roughness={0.15} />
-                  </mesh>
-                  <mesh position={[0.007, 0.007, 0.034]}>
-                    <sphereGeometry args={[0.0055, 8, 6]} />
-                    <meshBasicMaterial color="#ffffff" />
-                  </mesh>
-                  {/* upper lash line (+ lifted wing for the women) */}
-                  <mesh position={[0, 0.024, 0.014]} rotation-z={-0.08 * s}>
-                    <boxGeometry args={[0.058, fem ? 0.009 : 0.006, 0.01]} />
-                    <meshStandardMaterial color="#120a08" roughness={0.6} />
-                  </mesh>
-                  {fem && (
-                    <mesh position={[0.033 * s, 0.026, 0.008]} rotation-z={0.55 * s}>
-                      <boxGeometry args={[0.02, 0.007, 0.008]} />
-                      <meshStandardMaterial color="#120a08" roughness={0.6} />
-                    </mesh>
-                  )}
-                </group>
+                // painted anime eye (kpopEyes.ts) on a card that follows the head's curve; the left one is mirrored
+                <mesh key={s} position={[0.066 * s, 0, 0.02]} rotation-y={0.38 * s} scale={[s, 1, 1]} renderOrder={2}>
+                  <planeGeometry args={[0.09, 0.07]} />
+                  <meshStandardMaterial map={eyeTex} transparent roughness={0.25} depthWrite={false} polygonOffset polygonOffsetFactor={-2} side={THREE.DoubleSide} />
+                </mesh>
               ))}
             </group>
             {/* aegyo-sal under the eyes (women) + cheek blush */}

@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
-import { AVATAR_OPTIONS, resolveLook, type AvatarProfile, type PersonGender, type PersonLook } from "@/lib/character/avatar";
+import { AVATAR_OPTIONS, CHARACTER_PRESETS, resolveLook, type AvatarProfile, type PersonGender, type PersonLook } from "@/lib/character/avatar";
 import { useMyCharacter } from "@/lib/character/myCharacter";
 
 const CharacterPreview3D = dynamic(() => import("./CharacterPreview3D"), {
   ssr: false,
   loading: () => <div className="flex h-full items-center justify-center text-xs text-white/40">3D 불러오는 중…</div>,
 });
+
+const CharacterThumbs3D = dynamic(() => import("./CharacterThumbs3D"), { ssr: false });
 
 /** The seat whose default look is shown before any choice (seat 0 = the first K-pop woman). */
 const PREVIEW_SEAT = 0;
@@ -19,7 +21,9 @@ function toProfile(l: PersonLook): AvatarProfile {
 }
 
 /**
- * 3D character picker (profile → 캐릭터 선택). Every tap saves immediately
+ * 3D character picker (profile → 캐릭터 선택): pick one of the listed
+ * characters (`CHARACTER_PRESETS` — the same one as anyone else is fine), or
+ * fine-tune under "직접 꾸미기". Every tap saves immediately
  * (`useMyCharacter`), and the other players see it at the 3D tables via the
  * room's presence (`roomCharacters.ts`). Options come from `AVATAR_OPTIONS`,
  * so adding a colour or cut there shows up here automatically.
@@ -34,7 +38,10 @@ export default function CharacterPicker() {
   }, [init]);
 
   const look = resolveLook(PREVIEW_SEAT, ["none"], character);
+  // a manual tweak means it's no longer exactly that preset
   const update = (patch: AvatarProfile) => save({ ...toProfile(look), ...patch });
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const onShot = useCallback((id: string, url: string) => setThumbs((t) => (t[id] === url ? t : { ...t, [id]: url })), []);
   const setGender = (g: PersonGender) => {
     if (g === look.gender) return;
     const f = g === "f";
@@ -56,6 +63,46 @@ export default function CharacterPicker() {
       <p className="text-center text-[11px] text-white/45 light:text-slate-500">
         {character ? "3D 게임 테이블에서 다른 참가자에게 이 캐릭터로 보여요." : "아직 고르지 않았어요 — 지금은 자리마다 기본 캐릭터가 나와요."}
       </p>
+
+      <Row label="캐릭터 목록 · 다른 사람과 같은 캐릭터도 고를 수 있어요">
+        <div className="grid w-full grid-cols-3 gap-2 sm:grid-cols-4">
+          {CHARACTER_PRESETS.map((c) => {
+            const selected = character?.presetId === c.id;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => save({ ...c.look, presetId: c.id })}
+                className={`flex flex-col items-center gap-0.5 rounded-xl border p-1.5 transition ${
+                  selected
+                    ? "border-rose-400 bg-rose-500/15 ring-2 ring-rose-400/40"
+                    : "border-white/10 bg-white/[0.03] hover:border-white/30 light:border-slate-200 light:bg-white light:hover:border-slate-400"
+                }`}
+              >
+                <div className="aspect-square w-full overflow-hidden rounded-lg" style={{ background: `linear-gradient(160deg, ${c.look.coat}55, #22202e)` }}>
+                  {thumbs[c.id] ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- runtime-rendered data URL
+                    <img src={thumbs[c.id]} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-2xl">{c.look.gender === "f" ? "👩" : "👨"}</div>
+                  )}
+                </div>
+                <span className="text-xs font-semibold text-white light:text-slate-800">
+                  {selected && "✓ "}
+                  {c.name}
+                </span>
+                <span className="line-clamp-1 text-[10px] text-white/50 light:text-slate-500">{c.concept}</span>
+              </button>
+            );
+          })}
+        </div>
+      </Row>
+      <CharacterThumbs3D presets={CHARACTER_PRESETS} onShot={onShot} />
+
+      <details className="group rounded-xl border border-white/10 p-2 light:border-slate-200">
+        <summary className="cursor-pointer select-none text-xs font-semibold text-white/70 light:text-slate-600">✏️ 직접 꾸미기</summary>
+        <div className="mt-2 flex flex-col gap-3">
 
       <Row label="성별">
         {AVATAR_OPTIONS.gender.map((o) => (
@@ -100,6 +147,8 @@ export default function CharacterPicker() {
           👓 동그란 안경
         </Chip>
       </Row>
+        </div>
+      </details>
 
       <button
         type="button"

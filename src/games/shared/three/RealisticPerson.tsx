@@ -3,7 +3,8 @@
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { FACES, Hat, POSES, type PersonMood, type Pose, type SeatedPersonProps } from "./SeatedPerson";
+import { blinking, FACES, Hat, POSES, type PersonMood, type Pose, type SeatedPersonProps } from "./SeatedPerson";
+import { createMotion, HANDS, stepMotion, type MotionState } from "./motion";
 import { eyeBandTexture, mouthTexture, type EyeState, type FaceSpec, type Gender, type MouthShape } from "./glamFace";
 
 /**
@@ -120,7 +121,11 @@ export default function RealisticPerson(props: SeatedPersonProps) {
   const browR = useRef<THREE.Mesh>(null);
   const sweat = useRef<THREE.Mesh>(null);
   const topMat = useRef<THREE.MeshPhysicalMaterial>(null);
-  const cur = useRef<{ pose: Pose; brow: number; eye: number; sweat: number; look: [number, number]; out: number; rest: number } | null>(null);
+  const cur = useRef<{ m: MotionState; brow: number; eye: number; sweat: number; look: [number, number]; out: number; rest: number } | null>(null);
+  const lW = useRef<THREE.Group>(null);
+  const rW = useRef<THREE.Group>(null);
+  /** Finger knuckle hinges: [left little … index, right little … index]. */
+  const fingers = useRef<(THREE.Group | null)[]>([]);
 
   // a stable personal look per seat: the shared look's K-pop woman / man, rendered life-size
   const p = useMemo(() => {
@@ -160,7 +165,7 @@ export default function RealisticPerson(props: SeatedPersonProps) {
 
   useFrame(({ clock }, dt) => {
     const now = clock.elapsedTime;
-    if (!cur.current) cur.current = { pose: [...POSES.rest], brow: 0, eye: 1, sweat: 0, look: [0, 0], out: 0, rest: 1 };
+    if (!cur.current) cur.current = { m: createMotion(OVERRIDES.rest ?? POSES.rest, HANDS.rest), brow: 0, eye: 1, sweat: 0, look: [0, 0], out: 0, rest: 1 };
     const c = cur.current;
     let mood: PersonMood = props.out ? "slump" : props.mood;
     if (mood === "rest") {
@@ -171,46 +176,15 @@ export default function RealisticPerson(props: SeatedPersonProps) {
         else if (r < 0.35) mood = "shrug";
       }
     }
-    const target = OVERRIDES[mood] ?? POSES[mood];
     const face = FACES[mood];
     const rate = 1 - Math.exp(-dt * 6);
-    for (let i = 0; i < target.length; i++) c.pose[i] += (target[i] - c.pose[i]) * rate;
+    // body + hands: key pose, gestures and idle life, chased by springs (motion.ts)
+    const q = stepMotion(c.m, mood, OVERRIDES[mood] ?? POSES[mood], now, dt, seed);
     c.brow += (face.brow - c.brow) * rate;
     c.eye += (face.eye - c.eye) * rate;
     c.sweat += (face.sweat - c.sweat) * (1 - Math.exp(-dt * 3));
     c.out += ((props.out ? 1 : 0) - c.out) * (1 - Math.exp(-dt * 3));
-    const q = c.pose;
-    const osc = (f: number, a: number) => Math.sin(now * f + seed) * a;
-    let spineX = q[0] * 0.8;
-    let headX = q[3];
-    let lSy = q[7];
-    let rSx = q[10];
-    let rSy = q[11];
-    let lEx = q[9];
-    let rEx = q[13];
-    if (mood === "clap") {
-      const s = Math.max(0, Math.sin(now * 12));
-      rSy += s * 0.16;
-      lSy -= s * 0.16;
-    }
-    if (mood === "laugh") {
-      spineX += osc(14, 0.035);
-      headX += osc(14, 0.05);
-    }
-    if (mood === "talk") {
-      rSx += osc(4.5, 0.14);
-      rEx += osc(6, 0.16);
-      headX += osc(3.5, 0.03);
-    }
-    if (mood === "cheer") {
-      lEx += osc(8, 0.2);
-      rEx += osc(8, 0.2);
-    }
-    if (mood === "write") rEx += osc(12, 0.06);
-    if (mood === "nervous") {
-      lEx += osc(27, 0.015);
-      rEx += osc(29, 0.015);
-    }
+    const spineX = q[0] * 0.8;
     // breathing: chest rises a touch, shoulders follow
     const breath = Math.sin(now * 1.35 + seed) * (1 - c.out);
     if (root.current) root.current.position.y = breath * 0.003;
@@ -232,7 +206,8 @@ export default function RealisticPerson(props: SeatedPersonProps) {
     }
     c.look[0] += (yaw - c.look[0]) * (1 - Math.exp(-dt * 4));
     c.look[1] += (pitch - c.look[1]) * (1 - Math.exp(-dt * 4));
-    head.current?.rotation.set(headX * 0.8 + c.look[1], q[4] + c.look[0], q[5] * 0.8 + Math.sin(now * 0.6 + seed) * 0.018);
+    const drift = la ? 0.35 : 1;
+    head.current?.rotation.set(q[3] * 0.8 + c.look[1], q[4] * drift + c.look[0], q[5] * 0.8);
     const pointYaw = mood === "point" ? c.look[0] : 0;
     // adult arms are shorter than the cartoon rig's: in the resting-type poses, lift the upper arm a
     // touch and bend the elbow more so the forearms lie on the table edge (other poses stay as authored)
@@ -241,14 +216,24 @@ export default function RealisticPerson(props: SeatedPersonProps) {
     const lift = -0.08 * c.rest;
     const bend = -0.42 * c.rest;
     const leftOnly = mood === "think" || mood === "talk" || mood === "write";
-    lS.current?.rotation.set(q[6] + lift, lSy, q[8]);
-    lE.current?.rotation.set(lEx + bend, 0, 0);
-    rS.current?.rotation.set(rSx + (leftOnly ? 0 : lift) + (mood === "point" ? c.look[1] * 0.6 : 0), rSy + pointYaw * 0.9, q[12]);
-    rE.current?.rotation.set(rEx + (leftOnly ? 0 : bend), 0, 0);
+    lS.current?.rotation.set(q[6] + lift, q[7], q[8]);
+    lE.current?.rotation.set(q[9] + bend, 0, 0);
+    rS.current?.rotation.set(q[10] + (leftOnly ? 0 : lift) + (mood === "point" ? c.look[1] * 0.6 : 0), q[11] + pointYaw * 0.9, q[12]);
+    rE.current?.rotation.set(q[13] + (leftOnly ? 0 : bend), 0, 0);
+    lW.current?.rotation.set(0.15 + q[14], 0, q[15]);
+    rW.current?.rotation.set(0.15 + q[16], 0, q[17]);
+    // fingers curl at the knuckle; pointing keeps the index straight
+    for (let i = 0; i < 8; i++) {
+      const g = fingers.current[i];
+      if (!g) continue;
+      const right = i >= 4;
+      const index = i % 4 === 3;
+      const curl = right && index && mood === "point" ? 0 : q[right ? 19 : 18];
+      g.rotation.x = 0.35 + curl * 1.45;
+    }
 
     // blink every few seconds; eyes close when laughing/asleep, widen in shock — the painted eye band swaps state
-    const blink = (now + seed * 1.37) % 4.6;
-    const eyeState: EyeState = c.eye < 0.3 || (blink < 0.12 && c.eye > 0.3) ? "closed" : c.eye > 1.25 ? "wide" : "open";
+    const eyeState: EyeState = c.eye < 0.3 || (blinking(now, seed) && c.eye > 0.3) ? "closed" : c.eye > 1.25 ? "wide" : "open";
     const eyeTex = eyeBandTexture(p.face, eyeState);
     if (eyeMat.current && eyeMat.current.map !== eyeTex) eyeMat.current.map = eyeTex;
     const browK = p.gender === "f" ? 0.25 : 0.3;
@@ -274,17 +259,31 @@ export default function RealisticPerson(props: SeatedPersonProps) {
   const hairMat = <meshPhysicalMaterial color={p.hair} roughness={0.55} sheen={0.8} sheenColor={shade(p.hair, 2.2)} sheenRoughness={0.35} />;
 
   const hand = (side: 1 | -1) => (
-    <group position={[0, -0.27, 0.005]} rotation={[0.15, 0, 0]}>
+    <group ref={side === 1 ? rW : lW} position={[0, -0.27, 0.005]} rotation={[0.15, 0, 0]}>
       <mesh position={[0, -0.04, 0]} castShadow>
         <boxGeometry args={[0.062, 0.078, 0.026]} />
         {skin}
       </mesh>
-      {[-0.021, -0.007, 0.007, 0.021].map((x, i) => (
-        <mesh key={i} position={[x, -0.098 + Math.abs(x) * 0.4, 0.004]} rotation={[0.35, 0, 0]}>
-          <capsuleGeometry args={[0.0075, 0.04 - Math.abs(x) * 0.3, 2, 6]} />
-          {skin}
-        </mesh>
-      ))}
+      {/* little → index (the index sits next to the thumb) */}
+      {[0.021, 0.007, -0.007, -0.021].map((dx, i) => {
+        const x = dx * side;
+        const len = 0.04 - Math.abs(dx) * 0.3;
+        return (
+          <group
+            key={i}
+            ref={(g) => {
+              fingers.current[(side === 1 ? 4 : 0) + i] = g;
+            }}
+            position={[x, -0.078 + Math.abs(dx) * 0.4, 0.004]}
+            rotation={[0.35, 0, 0]}
+          >
+            <mesh position={[0, -len / 2 - 0.006, 0]}>
+              <capsuleGeometry args={[0.0075, len, 2, 6]} />
+              {skin}
+            </mesh>
+          </group>
+        );
+      })}
       <mesh position={[0.036 * side * -1, -0.035, 0.014]} rotation={[0.5, 0, 0.7 * side]}>
         <capsuleGeometry args={[0.009, 0.032, 2, 6]} />
         {skin}

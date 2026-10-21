@@ -35,8 +35,8 @@ export interface PersonLook {
   lip: string;
 }
 
-/** The part of a look a player can choose in their profile. */
-export type AvatarProfile = Partial<Pick<PersonLook, "gender" | "skin" | "hair" | "hairStyle" | "coat" | "shirt" | "glasses" | "lip">>;
+/** The part of a look a player can choose in their profile (+ which preset it started from, for the list's highlight). */
+export type AvatarProfile = Partial<Pick<PersonLook, "gender" | "skin" | "hair" | "hairStyle" | "coat" | "shirt" | "glasses" | "lip">> & { presetId?: string };
 
 /** Bump when the stored shape changes incompatibly; sanitizeAvatar can then migrate by version. */
 export const AVATAR_VERSION = 1;
@@ -70,6 +70,38 @@ export const AVATAR_OPTIONS = {
   shirt: [opt("#ffffff", "화이트"), opt("#f5f0e6", "아이보리"), opt("#e8eef8", "연하늘"), opt("#fdf1f4", "연분홍"), opt("#1f1f24", "블랙"), opt("#eeeae2", "오트밀")],
   lip: [opt("#e05a6e", "로즈"), opt("#d8485e", "체리"), opt("#e8766e", "코랄"), opt("#c94a62", "말린 장미"), opt("#ef8a84", "피치"), opt("#d4607a", "핑크"), opt("#c27a6e", "내추럴")],
 } as const;
+
+export interface CharacterPreset {
+  id: string;
+  /** Fictional stage name — never a real idol. */
+  name: string;
+  /** One-line concept shown under the card. */
+  concept: string;
+  look: Required<Omit<AvatarProfile, "presetId">>;
+}
+
+const preset = (id: string, name: string, concept: string, look: CharacterPreset["look"]): CharacterPreset => ({ id, name, concept, look });
+
+/**
+ * The ready-made cast shown as a list in the profile (프로필 → 캐릭터 선택).
+ * Any number of players may pick the same one — the tables never require
+ * unique looks. To add a character, append here (ids must stay stable:
+ * they're stored in profiles).
+ */
+export const CHARACTER_PRESETS: readonly CharacterPreset[] = [
+  preset("haerin", "하린", "청순 생머리 비주얼", { gender: "f", skin: "#fbe4d5", hair: "#16110f", hairStyle: "straight", coat: "#ece4d6", shirt: "#ffffff", glasses: false, lip: "#e05a6e" }),
+  preset("yuna", "유나", "허쉬컷 걸크러시", { gender: "f", skin: "#f6d9c4", hair: "#4a3022", hairStyle: "hush", coat: "#1c1c22", shirt: "#1f1f24", glasses: false, lip: "#d8485e" }),
+  preset("sia", "시아", "핑크 포니테일 막내", { gender: "f", skin: "#f9ddca", hair: "#b8707e", hairStyle: "pony", coat: "#e7b7c4", shirt: "#fdf1f4", glasses: false, lip: "#ef8a84" }),
+  preset("chaewon", "채원", "애쉬 블론드 센터", { gender: "f", skin: "#fbe4d5", hair: "#d7b48c", hairStyle: "straight", coat: "#2b3a5c", shirt: "#e8eef8", glasses: false, lip: "#d4607a" }),
+  preset("minji", "민지", "밀크티 허쉬컷 리더", { gender: "f", skin: "#f2cfb5", hair: "#7a5640", hairStyle: "hush", coat: "#b9a6d6", shirt: "#ffffff", glasses: false, lip: "#e8766e" }),
+  preset("seoa", "서아", "흑발 포니 댄서", { gender: "f", skin: "#ecc6a8", hair: "#2a1c16", hairStyle: "pony", coat: "#7a2238", shirt: "#f5f0e6", glasses: false, lip: "#c94a62" }),
+  preset("doyoon", "도윤", "쉼표머리 비주얼", { gender: "m", skin: "#f6d9c4", hair: "#121010", hairStyle: "comma", coat: "#1c1c22", shirt: "#ffffff", glasses: false, lip: "#c27a6e" }),
+  preset("jun", "준", "플래티넘 가르마펌", { gender: "m", skin: "#fbe4d5", hair: "#d9d6de", hairStyle: "curtain", coat: "#ece4d6", shirt: "#1f1f24", glasses: false, lip: "#c27a6e" }),
+  preset("taeo", "태오", "댄디컷 메인보컬", { gender: "m", skin: "#f2cfb5", hair: "#3a2a22", hairStyle: "dandy", coat: "#2b3a5c", shirt: "#e8eef8", glasses: false, lip: "#c27a6e" }),
+  preset("hyun", "현", "안경 쓴 브레인", { gender: "m", skin: "#f4d6c0", hair: "#1e1714", hairStyle: "comma", coat: "#c9b28f", shirt: "#ffffff", glasses: true, lip: "#c27a6e" }),
+  preset("riku", "리쿠", "블루블랙 가르마펌", { gender: "m", skin: "#f9ddca", hair: "#2a3148", hairStyle: "curtain", coat: "#8fb6d9", shirt: "#eeeae2", glasses: false, lip: "#c27a6e" }),
+  preset("ian", "이안", "애쉬 브라운 댄디 막내", { gender: "m", skin: "#ecc6a8", hair: "#5a4c48", hairStyle: "dandy", coat: "#9fc8b4", shirt: "#ffffff", glasses: false, lip: "#c27a6e" }),
+];
 
 const STYLES_F: HairStyle[] = ["straight", "hush", "pony"];
 const STYLES_M: HairStyle[] = ["comma", "curtain", "dandy"];
@@ -124,6 +156,7 @@ export function sanitizeAvatar(raw: unknown): AvatarProfile {
   }
   if (typeof r.hairStyle === "string" && (ALL_STYLES as readonly string[]).includes(r.hairStyle)) out.hairStyle = r.hairStyle as HairStyle;
   if (typeof r.glasses === "boolean") out.glasses = r.glasses;
+  if (typeof r.presetId === "string" && CHARACTER_PRESETS.some((c) => c.id === r.presetId)) out.presetId = r.presetId;
   return out;
 }
 
@@ -142,5 +175,6 @@ export function resolveLook(seat: number, hats?: readonly HatKind[], profile?: u
     base.lip = other.lip;
     base.hair = other.hair;
   }
+  delete p.presetId;
   return { ...base, ...p };
 }

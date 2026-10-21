@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.87.0",
+    releaseDate: "2026-10-22",
+    title: "💃 3D 캐릭터가 손까지 자연스럽게 — 캐릭터 목록에서 골라요",
+    changes: [
+      { game: "common", type: "FEAT", desc: "📋 프로필에서 K-pop 캐릭터 12명 목록 중 선택 — 다른 사람과 같은 캐릭터도 OK, 세부는 '직접 꾸미기'로" },
+      { game: "common", type: "IMPROVE", desc: "🤲 말할 때 손바닥을 펴는 제스처, 응원 주먹 펌프, 손 흔들기, 손가락 톡톡 — 손목·손가락이 움직이고 동작이 스프링처럼 부드럽게 이어져요" },
+      { game: "common", type: "IMPROVE", desc: "👀 반짝이는 애니 눈, 머릿결 광택 링, 따뜻한 피부 톤과 부드러운 외곽선, 자연스러운 눈 깜빡임·시선 이동" },
+    ],
+  },
+  {
     version: "v1.86.0",
     releaseDate: "2026-10-22",
     title: "🧑‍🎤 3D 게임 캐릭터가 K-pop 아이돌로 — 내 캐릭터도 고를 수 있어요",
