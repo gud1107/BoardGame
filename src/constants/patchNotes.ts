@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.84.0",
+    releaseDate: "2026-10-21",
+    title: "✨ 5 오이 플레이어가 이목구비 뚜렷한 미남·미녀로",
+    changes: [
+      { game: "five-cucumbers", type: "IMPROVE", desc: "👩 여성은 아몬드 눈매·아이라인·속눈썹·립스틱·블러셔와 긴 웨이브/단발/포니테일, 귀걸이" },
+      { game: "five-cucumbers", type: "IMPROVE", desc: "👨 남성은 각진 턱선·짙은 눈썹과 쉼표머리/가르마/크롭 — 매끈한 얼굴형, 큰 눈동자 하이라이트, 표정·깜빡임 그대로" },
+    ],
+  },
+  {
     version: "v1.83.0",
     releaseDate: "2026-10-21",
     title: "⚫ 알까기 — 떨어뜨리면 한 번 더, 횟수를 방장이 정해요",
