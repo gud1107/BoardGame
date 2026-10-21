@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import dynamic from "next/dynamic";
 import Avatar from "@/components/common/Avatar";
+import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import CombinationBadge from "./CombinationBadge";
 import {
@@ -22,6 +24,9 @@ import { useCountdown } from "./useCountdown";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { getLoveWinsAllBgm } from "./loveWinsAllBgm";
+
+// three.js only loads when the 3D salon is shown (🖼️ 2D otherwise / without WebGL).
+const LoveWinsTable3D = dynamic(() => import("./three/LoveWinsTable3D"), { ssr: false, loading: () => <Loading3D /> });
 
 /** Request's "판정 연출 최소 3초 유지" — same length used for both the ordinary tie's next-round countdown and the final KO reveal (see `LoveWinsAllGame.tsx`'s matching host `setTimeout`). */
 export const REVEAL_SECONDS = 3;
@@ -338,6 +343,8 @@ export default function LoveWinsAllBoard({ state, viewerSeat, names, opponentCon
   // Heartbreak Showdown BGM (loveWinsAllBgm.ts) — procedural; this game keeps its own SFX in the shared soundEngine.
   useSuiteBgm(getLoveWinsAllBgm, state.phase !== "gameOver", state.phase === "bet2" || state.phase === "showdown" ? 1 : 0);
   const opponentSeat = otherSeat(viewerSeat);
+  const board3d = useBoardView("love-wins-all-view");
+  const [lowDetail] = useState(preferLowDetail);
   const { timeLeft } = useCountdown(REVEAL_SECONDS, `${state.round}:${state.lastRoundResult?.roundNumber ?? 0}`, state.phase === "showdown" || state.phase === "gameOver");
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const callout = useActionCallout(state);
@@ -359,6 +366,7 @@ export default function LoveWinsAllBoard({ state, viewerSeat, names, opponentCon
           <span className="rounded-full border border-pink-400/30 px-2 py-0.5 text-pink-200">
             {state.variant === "base" ? "러브 윈즈 올" : "러브 윈즈 올 2"}
           </span>
+          <ViewToggle board={board3d} />
           <SuiteSoundHud suite={getLoveWinsAllBgm} icon="💘" label="Heartbreak Showdown" preview="preview" showSfx={false} />
           <button
             type="button"
@@ -411,6 +419,38 @@ export default function LoveWinsAllBoard({ state, viewerSeat, names, opponentCon
           }
         />
       </div>
+
+      {board3d.view === "3d" && (
+        <Frame3D hint="상대 카드는 선언한 1장만 보여요 · 드래그로 둘러보기">
+          <LoveWinsTable3D
+            viewerSeat={viewerSeat === "p1" ? 0 : 1}
+            seats={(["p1", "p2"] as const).map((seat, i) => {
+              const res = state.phase === "showdown" || state.phase === "gameOver" ? state.lastRoundResult : null;
+              const hand = res?.hands?.[seat] ?? state.hands[seat];
+              const revealed = state.revealedIndex[seat];
+              const declared = res?.declaredHand[seat] ?? state.declaredHand[seat];
+              return {
+                seat: i,
+                name: names[seat],
+                chips: state.chips[seat],
+                cards: hand.map((suit, k) => (seat === viewerSeat || res?.hands || revealed === k ? suit : null)),
+                declared: declared ? HAND_CATEGORY_LABEL[declared] : null,
+                bet: state.betsThisStreet[seat],
+                away: seat !== viewerSeat && !opponentConnected,
+              };
+            })}
+            phase={state.phase}
+            acting={state.actingSeat === null ? null : state.actingSeat === "p1" ? 0 : 1}
+            pot={state.pot}
+            community={state.community}
+            winner={state.lastRoundResult?.winnerSeat ? (state.lastRoundResult.winnerSeat === "p1" ? 0 : 1) : null}
+            folder={state.lastRoundResult?.folderSeat ? (state.lastRoundResult.folderSeat === "p1" ? 0 : 1) : null}
+            round={state.round}
+            overview={state.phase === "showdown"}
+            lowDetail={lowDetail}
+          />
+        </Frame3D>
+      )}
 
       {/* Opponent's hand — face-down until their §4 reveal, then that one slot flips to its true suit. Never shows the other two slots' true suits before showdown, matching the online trust model's UI-side info hiding. */}
       {isBetting || state.phase === "declare" ? (

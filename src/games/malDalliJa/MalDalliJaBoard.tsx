@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import dynamic from "next/dynamic";
-import { preferLowDetail, useBoardView } from "@/games/shared/three/tableKit";
+import { preferLowDetail, useBoardView } from "@/games/shared/three/viewPref";
 import { useEffect, useRef, useState } from "react";
 import Avatar from "@/components/common/Avatar";
 import { AnimatedHorse, MoveParticleLayer, buildMoveAnim, type MoveAnim, type MoveEvent, type MoveParticle } from "./MoveEffects";

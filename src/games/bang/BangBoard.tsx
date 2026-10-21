@@ -1,7 +1,9 @@
 "use client";
 
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { bangCenterCue, bangIntensity, bangSoundCues, getBangSound } from "./bangSound";
 import RulebookModal from "./RulebookModal";
@@ -244,6 +246,9 @@ function seatPosition(relativeIndex: number, total: number): CSSProperties {
   return { left: `${x}%`, top: `${y}%`, transform: "translate(-50%, -50%)" };
 }
 
+// three.js only loads when the 3D saloon is shown (🖼️ 2D otherwise / without WebGL).
+const BangTable3D = dynamic(() => import("./three/BangTable3D"), { ssr: false, loading: () => <Loading3D /> });
+
 /** Seat-badge padding/gap/text sizing, scaled down as the table gets more
  * crowded (7-8 players) so badges keep clear of each other around the oval —
  * at 4-6 players this matches the original fixed sizing exactly. */
@@ -265,6 +270,12 @@ export default function BangBoard({
 }: BangBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const board3d = useBoardView("bang-view");
+  const [lowDetail] = useState(preferLowDetail);
+  // the 3D table keeps showing the latest play after the 2D banner has finished
+  const [lastPlay3D, setLastPlay3D] = useState<CenterPlayEvent | null>(null);
+  const newestCenter = centerEvents[centerEvents.length - 1] ?? null;
+  if (newestCenter && newestCenter.id !== lastPlay3D?.id) setLastPlay3D(newestCenter);
   // Which hand card currently has the mouse over it, so its wrapper's
   // z-index can be bumped above sibling cards on hover — a CSS `:hover`
   // class alone can't do this (see CardFace.tsx's module doc: every fanned
@@ -415,13 +426,49 @@ export default function BangBoard({
           {state.playerCount}인 · 턴 {state.turnNumber} · 남은 카드 {state.deck.length}장
         </span>
         <div className="flex flex-wrap items-center gap-1.5">
+          <ViewToggle board={board3d} />
           <SuiteSoundHud suite={getBangSound} icon="🤠" label="Dusty Saloon" preview="bang" />
           {rulebookButton}
         </div>
       </div>
 
+      {board3d.view === "3d" && (
+        <Frame3D hint={isTargeting ? "빨간 고리의 사람을 눌러 지목하세요" : "역할은 보안관만 공개 · 드래그로 둘러보기"}>
+          <BangTable3D
+            order={state.turnOrder}
+            viewerSeat={viewerSeat}
+            seats={state.players.map((p) => ({
+              seat: p.seat,
+              name: names[p.seat] ?? `${p.seat + 1}번`,
+              role: p.role === "sheriff" || p.roleRevealed || p.seat === viewerSeat ? p.role : null,
+              alive: p.alive,
+              life: p.life,
+              maxLife: p.maxLife,
+              handCount: p.hand.length,
+              equipment: Object.fromEntries(EQUIP_ORDER.filter((slot) => p.equipment[slot]).map((slot) => [slot, p.equipment[slot]!.type])),
+              targetable: isTargeting && targets.includes(p.seat) && !(selectedCard?.type === "panic" || selectedCard?.type === "cat-balou"),
+              away: !connectedSeats.has(p.seat),
+            }))}
+            turnSeat={state.turnPhase === "game-end" ? null : state.turnSeat}
+            responders={
+              state.pending?.kind === "group" ? state.pending.outstanding : state.pending?.kind === "duel" ? [state.pending.turnToRespond] : []
+            }
+            lastPlay={
+              lastPlay3D
+                ? { id: lastPlay3D.id, actor: lastPlay3D.actorSeat, target: lastPlay3D.targetSeat, card: lastPlay3D.cardType, note: lastPlay3D.note, effect: lastPlay3D.effect }
+                : null
+            }
+            deckCount={state.deck.length}
+            onTarget={isTargeting ? (seat) => pickTarget(seat) : null}
+            overview={state.turnPhase === "game-end"}
+            lowDetail={lowDetail}
+          />
+        </Frame3D>
+      )}
+
       {/* Oval saloon table: every other seat placed around an ellipse, viewer always at the bottom.
           Container grows a bit past 6 players so seatPosition's wider radius has more room to work with. */}
+      {(board3d.view === "2d" || (isTargeting && (selectedCard?.type === "panic" || selectedCard?.type === "cat-balou"))) && (
       <div
         className={`relative z-10 mx-auto w-full max-w-md ${
           state.playerCount >= 7 ? "h-[320px] sm:h-[380px]" : "h-[280px] sm:h-[320px]"
@@ -502,6 +549,7 @@ export default function BangBoard({
           <span className="text-[10px] text-amber-100/70 light:text-slate-500">{state.deck.length}장</span>
         </div>
       </div>
+      )}
 
       {/* Response modal: shown only to whoever currently owes a response. */}
       {iOweGroupResponse && pending?.kind === "group" && (

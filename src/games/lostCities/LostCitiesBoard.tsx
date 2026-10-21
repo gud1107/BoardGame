@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import dynamic from "next/dynamic";
+import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import Avatar from "@/components/common/Avatar";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
@@ -63,6 +65,9 @@ import {
  * 턴 제한 시간 타이머는 이 세션에서 의도적으로 추가하지 않음(engine.ts에
  * 시간제한 개념 자체가 없고, AskUserQuestion으로 범위 밖 확정).
  */
+// three.js only loads when the 3D camp table is shown (🖼️ 2D otherwise / without WebGL).
+const LostCitiesTable3D = dynamic(() => import("./three/LostCitiesTable3D"), { ssr: false, loading: () => <Loading3D /> });
+
 export interface LostCitiesBoardProps {
   state: LostCitiesState;
   viewerSeat: Seat;
@@ -190,6 +195,8 @@ function centerOf(rect: DOMRect): { x: number; y: number } {
 export default function LostCitiesBoard({ state, viewerSeat, names, opponentConnected, onAction, onLeave, onRematch }: LostCitiesBoardProps) {
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const opponentSeat = otherSeat(viewerSeat);
+  const board3d = useBoardView("lost-cities-view");
+  const [lowDetail] = useState(preferLowDetail);
   const isGamePlaying = state.phase === "playing";
   const isMyTurn = isGamePlaying && state.activeSeat === viewerSeat;
   const isOpponentTurn = isGamePlaying && state.activeSeat === opponentSeat;
@@ -337,6 +344,34 @@ export default function LostCitiesBoard({ state, viewerSeat, names, opponentConn
       <MyTurnOverlay isMyTurn={isMyTurn} />
       <LostCitiesEffects effects={effects} onEffectDone={removeEffect} />
 
+      <div className="flex justify-end">
+        <ViewToggle board={board3d} />
+      </div>
+      {board3d.view === "3d" && (
+        <Frame3D tall hint={myPhaseIsPlay ? (selectedCard ? "빛나는 내 원정 줄 또는 버림 더미를 누르세요" : "아래 손패에서 카드를 먼저 고르세요") : myPhaseIsDraw ? "덱 또는 버림 더미를 눌러 1장 보충" : "드래그로 둘러보기"}>
+          <LostCitiesTable3D
+            viewerSeat={viewerSeat === "p1" ? 0 : 1}
+            names={[names.p1, names.p2]}
+            away={[viewerSeat !== "p1" && !opponentConnected, viewerSeat !== "p2" && !opponentConnected]}
+            expeditions={[state.expeditions.p1, state.expeditions.p2]}
+            discards={state.discardPiles}
+            handCounts={[state.hands.p1.length, state.hands.p2.length]}
+            deckCount={state.deck.length}
+            activeSeat={isGamePlaying ? (state.activeSeat === "p1" ? 0 : 1) : null}
+            laneTarget={selectedCard ? selectedCard.color : null}
+            discardTarget={selectedCard ? selectedCard.color : null}
+            drawableDiscards={myPhaseIsDraw ? COLORS.filter((c) => c !== state.justDiscardedColor) : []}
+            canDrawDeck={myPhaseIsDraw && state.deck.length > 0}
+            onLane={handleLaneClick}
+            onDiscard={handleCenterPileClick}
+            onDeck={handleDrawDeck}
+            status={statusText}
+            overview={state.phase === "gameOver"}
+            lowDetail={lowDetail}
+          />
+        </Frame3D>
+      )}
+
       {/* Opponent header + expeditions — active-turn glow + badge, or dimmed while waiting (2026-09-05 턴 인디케이터). */}
       <div
         ref={opponentHeaderRef}
@@ -354,6 +389,7 @@ export default function LostCitiesBoard({ state, viewerSeat, names, opponentConn
         </span>
         <span className="whitespace-nowrap break-keep text-xs text-white/40 light:text-slate-500">손패 {state.hands[opponentSeat].length}장</span>
       </div>
+      {board3d.view === "2d" && (
       <ExpeditionRow
         seat={opponentSeat}
         state={state}
@@ -363,7 +399,10 @@ export default function LostCitiesBoard({ state, viewerSeat, names, opponentConn
         }}
       />
 
+      )}
+
       {/* Center: deck + discard piles */}
+      {board3d.view === "2d" && (
       <CenterPiles
         state={state}
         canDraw={myPhaseIsDraw}
@@ -378,7 +417,10 @@ export default function LostCitiesBoard({ state, viewerSeat, names, opponentConn
         }}
       />
 
+      )}
+
       {/* My expeditions */}
+      {board3d.view === "2d" && (
       <ExpeditionRow
         seat={viewerSeat}
         state={state}
@@ -388,6 +430,8 @@ export default function LostCitiesBoard({ state, viewerSeat, names, opponentConn
           laneRefs.current[seat][color] = el ?? undefined;
         }}
       />
+
+      )}
 
       {/* Status + my hand — same active-turn glow + badge treatment as the opponent header, mirrored (2026-09-05 턴 인디케이터). */}
       <div

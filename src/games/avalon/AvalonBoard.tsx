@@ -2,7 +2,7 @@
 
 import { type CSSProperties, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { preferLowDetail, useBoardView } from "@/games/shared/three/tableKit";
+import { preferLowDetail, useBoardView } from "@/games/shared/three/viewPref";
 import RulebookModal from "./RulebookModal";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";

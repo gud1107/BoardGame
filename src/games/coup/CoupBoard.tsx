@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import { preferLowDetail, useBoardView } from "@/games/shared/three/tableKit";
+import { preferLowDetail, useBoardView } from "@/games/shared/three/viewPref";
 import type { CoupBeat } from "./three/CoupTable3D";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";

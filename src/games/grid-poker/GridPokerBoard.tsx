@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Overlay from "@/components/Overlay";
+import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import Avatar from "@/components/common/Avatar";
 import RulebookModal from "./RulebookModal";
 import DealerReveal from "./DealerReveal";
@@ -30,6 +32,9 @@ import {
 } from "./engine";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { getGridPokerBgm } from "./gridPokerBgm";
+
+// three.js only loads when the 3D lounge is shown (🖼️ 2D otherwise / without WebGL).
+const GridPokerTable3D = dynamic(() => import("./three/GridPokerTable3D"), { ssr: false, loading: () => <Loading3D /> });
 
 const URGENT_THRESHOLD = 5;
 
@@ -235,11 +240,14 @@ export default function GridPokerBoard({
   // (see the opponent tab strip below) — null means no popup is open.
   // Desktop never sets this; it renders every opponent's board inline.
   const [viewedSeat, setViewedSeat] = useState<SeatIndex | null>(null);
+  const board3d = useBoardView("grid-poker-view");
+  const [lowDetail] = useState(preferLowDetail);
   const viewer = state.players[viewerSeat];
   const opponents = state.players.filter((p) => p.seat !== viewerSeat);
 
   const rulebookButton = (
     <>
+      <ViewToggle board={board3d} />
       <SuiteSoundHud suite={getGridPokerBgm} icon="🃏" label="Deep House Table" preview="preview" showSfx={false} />
       <button
       onClick={() => setRulebookOpen(true)}
@@ -462,6 +470,39 @@ export default function GridPokerBoard({
           {rulebookButton}
         </div>
       </div>
+
+      {board3d.view === "3d" && (
+        <Frame3D hint="모두의 5×5 판이 공개돼요 · 드래그로 둘러보기">
+          <GridPokerTable3D
+            playerCount={state.playerCount}
+            viewerSeat={viewerSeat}
+            seats={state.players.map((p) => ({
+              seat: p.seat,
+              name: names[p.seat] ?? `${p.seat + 1}번`,
+              board: p.board,
+              lastPlaced: p.lastPlacedCell,
+              placed: state.placedThisRound[p.seat],
+              submitted: state.submissions[p.seat] !== null,
+              score: p.score,
+              away: !connectedSeats.has(p.seat),
+            }))}
+            phase={state.phase}
+            currentCard={state.phase === "placing" ? state.currentCard : null}
+            winnerSeat={state.phase === "round-result" ? (state.lastRoundResult?.winnerSeat ?? null) : null}
+            sign={
+              state.phase === "placing"
+                ? `공통 카드 배치 · ${filledCells}/${BOARD_SIZE}칸`
+                : state.phase === "submitting"
+                  ? `제출 라운드 ${Math.min(state.roundNumber, state.totalScoringRounds)}/${state.totalScoringRounds}
+라인을 몰래 고르는 중`
+                  : `${state.lastRoundResult?.roundNumber ?? state.roundNumber}라운드 결과`
+            }
+            threshold={state.winThreshold}
+            overview={state.phase === "round-result"}
+            lowDetail={lowDetail}
+          />
+        </Frame3D>
+      )}
 
       {/* Always-visible leaderboard strip — ranked, not seat order, so an
           8-player game reads as standings at a glance without an extra tap.

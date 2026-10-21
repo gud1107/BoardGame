@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import dynamic from "next/dynamic";
 import Avatar from "@/components/common/Avatar";
+import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import RulebookModal from "./RulebookModal";
 import CucumberSoundHud from "./CucumberSoundHud";
 import { getCucumberSound } from "./cucumberSound";
@@ -229,6 +231,9 @@ function TrickHoldCountdown({ durationMs }: { durationMs: number }) {
   return <>{remaining}</>;
 }
 
+// three.js only loads when the 3D table is shown (🖼️ 2D otherwise / without WebGL).
+const CucumberTable3D = dynamic(() => import("./three/CucumberTable3D"), { ssr: false, loading: () => <Loading3D /> });
+
 /** Slight arc + overlap so a hand of cards reads like it's fanned out by hand, not stacked in a grid — same technique as hanamikoji/HanamikojiBoard.tsx's `fanStyle`. */
 function fanStyle(index: number, total: number, overlapPx: number): CSSProperties {
   if (total <= 1) return { zIndex: index };
@@ -242,6 +247,8 @@ function fanStyle(index: number, total: number, overlapPx: number): CSSPropertie
 }
 
 export default function FiveCucumbersBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: FiveCucumbersBoardProps) {
+  const board3d = useBoardView("five-cucumbers-view");
+  const [lowDetail] = useState(preferLowDetail);
   const [rulebookOpen, setRulebookOpen] = useState(false);
 
   // Whenever `state` changes, notice freshly-resolved tricks/rounds and flash
@@ -494,6 +501,7 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
           </span>
         </span>
         <div className="flex items-center gap-1.5">
+          <ViewToggle board={board3d} />
           <CucumberSoundHud />
           {rulebookButton}
         </div>
@@ -547,6 +555,28 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
                   : "🫵 당신 차례입니다! 현재 최댓값 이상이거나, 손패 중 가장 낮은 카드만 낼 수 있어요."
                 : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
       </p>
+
+      {board3d.view === "3d" && (
+        <Frame3D hint="남의 손패는 장수만 · 드래그로 둘러보기">
+          <CucumberTable3D
+            playerCount={state.playerCount}
+            viewerSeat={viewerSeat}
+            seats={seatOrder.map((seat) => {
+              const p = state.players.find((pl) => pl.seat === seat)!;
+              return { seat, name: names[seat] ?? `${seat + 1}번`, handCount: p.hand.length, cucumbers: p.cucumbers, eliminated: p.eliminated, away: !connectedSeats.has(seat) };
+            })}
+            activeSeat={isHoldActive || gameJustEnded ? null : state.activeSeat}
+            plays={displayedTrickPlays.map((pl) => ({ seat: pl.seat, value: pl.card.value, id: pl.card.id }))}
+            winnerSeat={heldWinnerSeat}
+            finalTrick={isHoldActive ? heldIsFinalTrick : state.trickNumber === FINAL_TRICK_NUMBER}
+            trickNumber={isHoldActive ? trickFlash!.trickNumber : state.trickNumber}
+            roundNumber={state.roundNumber}
+            threshold={state.eliminationThreshold}
+            overview={gameJustEnded}
+            lowDetail={lowDetail}
+          />
+        </Frame3D>
+      )}
 
       {/* Current trick — during a hold this renders the just-resolved trick's
           fixed snapshot (`trickFlash.plays`) instead of the live (already

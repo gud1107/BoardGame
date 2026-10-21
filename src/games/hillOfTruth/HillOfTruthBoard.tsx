@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Avatar from "@/components/common/Avatar";
+import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import {
   ANSWER_COOLDOWN_MS,
@@ -22,6 +24,9 @@ import RulebookModal from "./RulebookModal";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { getHillOfTruthBgm } from "./hillOfTruthBgm";
+
+// three.js only loads when the 3D interrogation room is shown (🖼️ 2D otherwise / without WebGL).
+const HillTable3D = dynamic(() => import("./three/HillTable3D"), { ssr: false, loading: () => <Loading3D /> });
 
 const VERDICT_META = {
   green: { label: "초록불", ring: "shadow-[0_0_28px_8px_rgba(52,211,153,0.55)]", dot: "bg-emerald-400" },
@@ -75,6 +80,8 @@ export default function HillOfTruthBoard({
   // Truth Seeker BGM (hillOfTruthBgm.ts) — procedural noir lounge while the questioning runs.
   useSuiteBgm(getHillOfTruthBgm, state.phase === "playing");
   const scenario = getScenario(state.scenarioId);
+  const board3d = useBoardView("hill-of-truth-view");
+  const [lowDetail] = useState(preferLowDetail);
   const [askText, setAskText] = useState("");
   const [askMode, setAskMode] = useState<QuestionMode>("public");
   const [answerText, setAnswerText] = useState("");
@@ -232,6 +239,7 @@ export default function HillOfTruthBoard({
           </span>
         </div>
         <span className="flex items-center gap-1.5 text-white/70 light:text-slate-600">
+        <ViewToggle board={board3d} />
         <SuiteSoundHud suite={getHillOfTruthBgm} icon="🕵️" label="Truth Seeker" preview="preview" showSfx={false} />
         <button
           onClick={() => setRulebookOpen(true)}
@@ -247,6 +255,37 @@ export default function HillOfTruthBoard({
         <p className="mt-1.5 break-keep text-sm leading-relaxed text-white/60 light:text-slate-600">{scenario.synopsis}</p>
       </div>
 
+      {board3d.view === "3d" && (
+        <Frame3D hint="히든 질문은 판정 색만 공개 🔒 · 드래그로 둘러보기">
+          <HillTable3D
+            order={[...state.turnOrder]}
+            viewerSeat={viewerSeat}
+            seats={state.turnOrder.map((seat) => {
+              const player = state.players.find((p) => p.seat === seat)!;
+              const recent = state.questionLog.slice(-Math.max(2, Math.min(4, state.seatCount)));
+              const q = [...recent].reverse().find((e) => e.seat === seat);
+              const lastAnswer = state.answerLog[state.answerLog.length - 1];
+              return {
+                seat,
+                name: names[seat] ?? `${seat + 1}번`,
+                question: q ? { text: visibleQuestionText(q, viewerSeat, state.phase) ?? "", hidden: q.mode === "hidden" && !visibleQuestionText(q, viewerSeat, state.phase), verdict: q.verdict, key: q.id } : null,
+                coolingDown: player.cooldownUntilMs !== null && player.cooldownUntilMs > nowMs,
+                wrongRecently: !!lastAnswer && lastAnswer.seat === seat && !lastAnswer.correct && lastAnswer.turnNumber >= state.turnNumber - 1,
+                away: !connectedSeats.has(seat),
+              };
+            })}
+            activeSeat={state.phase === "playing" ? state.turnOrder[state.turnIndex] : null}
+            verdict={latestEntry?.verdict ?? null}
+            verdictKey={state.questionLog.length}
+            winnerSeat={state.winnerSeat}
+            title={scenario.title}
+            overview={state.phase === "ended"}
+            lowDetail={lowDetail}
+          />
+        </Frame3D>
+      )}
+
+      {board3d.view === "2d" && (
       <div className="flex flex-wrap gap-2">
         {state.turnOrder.map((seat) => {
           const player = state.players.find((p) => p.seat === seat)!;
@@ -276,7 +315,9 @@ export default function HillOfTruthBoard({
         })}
       </div>
 
-      <SignalLight verdict={latestEntry?.verdict ?? null} flashKey={state.questionLog.length} />
+      )}
+
+      {board3d.view === "2d" && <SignalLight verdict={latestEntry?.verdict ?? null} flashKey={state.questionLog.length} />}
 
       <div className="flex max-h-64 flex-col-reverse gap-2 overflow-y-auto rounded-2xl border border-white/10 bg-black/20 p-3 light:border-slate-200 light:bg-slate-50">
         {state.questionLog.length === 0 && <p className="break-keep text-center text-xs text-white/30 light:text-slate-400">아직 나온 질문이 없습니다.</p>}

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Avatar from "@/components/common/Avatar";
-import { preferLowDetail, useBoardView } from "@/games/shared/three/tableKit";
+import { preferLowDetail, useBoardView } from "@/games/shared/three/viewPref";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import { isBgmEffectivelyMuted, useAudioSettingsStore } from "@/lib/audio/audioSettings";

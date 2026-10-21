@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import Avatar from "@/components/common/Avatar";
 import { detectAuctionEvent, FlyingToken, type AnimEvent } from "./AuctionEffects";
 import RulebookModal from "./RulebookModal";
@@ -16,6 +18,9 @@ import {
   type SeatIndex,
 } from "./engine";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+
+// three.js only loads when the 3D table is shown (🖼️ 2D otherwise / without WebGL).
+const NoThanksTable3D = dynamic(() => import("./three/NoThanksTable3D"), { ssr: false, loading: () => <Loading3D /> });
 import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { getNoThanksSound, noThanksSoundCues } from "./noThanksSound";
 
@@ -137,6 +142,8 @@ function DeckStack({ count }: { count: number }) {
 
 export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: NoThanksBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  const board3d = useBoardView("no-thanks-view");
+  const [lowDetail] = useState(preferLowDetail);
   // Polite Refusal Swing sound suite (noThanksSound.ts) — state-diff cues heard by every client.
   useSoundCues(state, getNoThanksSound, noThanksSoundCues);
   useSuiteBgm(getNoThanksSound, state.phase === "playing", state.deck.length <= 5 ? 1 : 0);
@@ -206,11 +213,13 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
   // -------------------------------------------------------------------------
   const [trackedState, setTrackedState] = useState(state);
   const [effects, setEffects] = useState<AnimEvent[]>([]);
+  const [lastEvent3D, setLastEvent3D] = useState<{ id: number; kind: "pass" | "take"; seat: SeatIndex } | null>(null);
   if (trackedState !== state) {
     const detected = detectAuctionEvent(trackedState, state);
     setTrackedState(state);
     if (detected) {
       setEffects((prev) => [...prev, { ...detected, id: (prev.at(-1)?.id ?? 0) + 1 }]);
+      setLastEvent3D((prev) => ({ id: (prev?.id ?? 0) + 1, kind: detected.kind, seat: detected.seat }));
     }
   }
   const handleEffectDone = useCallback((id: number) => {
@@ -355,11 +364,40 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
           </span>
         </span>
         <div className="flex flex-wrap items-center gap-1.5">
+          <ViewToggle board={board3d} />
           <SuiteSoundHud suite={getNoThanksSound} icon="🎷" label="Polite Refusal Swing" preview="pass" />
           {!publicMode && revealChipsButton}
           {rulebookButton}
         </div>
       </div>
+
+      {board3d.view === "3d" && (
+        <Frame3D hint={publicMode ? "드래그로 둘러보기" : "🔒 남의 칩은 주머니 속 · 드래그로 둘러보기"}>
+          <NoThanksTable3D
+            playerCount={state.playerCount}
+            viewerSeat={viewerSeat}
+            seats={seatOrder.map((seat) => {
+              const p = state.players[seat];
+              return {
+                seat,
+                name: names[seat] ?? `${seat + 1}번`,
+                chips: seat === viewerSeat || publicMode || revealOpponentChips ? p.chips : null,
+                cards: p.cards,
+                penaltyCards: computeGroups(p.cards).map((g) => g.penaltyCard),
+                score: null,
+                away: !connectedSeats.has(seat),
+              };
+            })}
+            activeSeat={state.activeSeat}
+            currentCard={state.currentCard}
+            chipsOnCard={state.chipsOnCard}
+            deckCount={state.deck.length}
+            lastEvent={lastEvent3D}
+            overview={false}
+            lowDetail={lowDetail}
+          />
+        </Frame3D>
+      )}
 
       {/* Central auction area */}
       <div className="relative z-10 flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-6 light:border-slate-200 light:bg-white/70">

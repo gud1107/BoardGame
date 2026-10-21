@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import dynamic from "next/dynamic";
 import Avatar from "@/components/common/Avatar";
+import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import {
   commitRange,
@@ -30,6 +32,9 @@ import { useCountdown } from "./useCountdown";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { getShowMeTheCoinBgm } from "./showMeTheCoinBgm";
+
+// three.js only loads when the 3D vault is shown (🖼️ 2D otherwise / without WebGL).
+const CoinTable3D = dynamic(() => import("./three/CoinTable3D"), { ssr: false, loading: () => <Loading3D /> });
 
 /** Request's "결과/연출 3초 유지" — confirmed length of the showdown reveal before the host auto-advances (see `ShowMeTheCoinGame.tsx`'s matching `setTimeout`). */
 export const SHOWDOWN_SECONDS = 3;
@@ -385,6 +390,8 @@ export default function ShowMeTheCoinBoard({
   // 2026-09-01 세션: Phase 2 "COIN_COUNT_REVEALED" 전용 별도 카운트다운 — 라운드당 한 번뿐이라 `state.round`를 resetKey로 사용.
   const { timeLeft: countRevealTimeLeft } = useCountdown(COUNT_REVEAL_SECONDS, state.round, state.phase === "countReveal");
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  const board3d = useBoardView("show-me-the-coin-view");
+  const [lowDetail] = useState(preferLowDetail);
 
   // Chip-clink spark on the vault every time the pot grows (ante/bet/raise/call) — see VaultPot's doc.
   const prevPotRef = useRef(state.pot);
@@ -495,6 +502,7 @@ export default function ShowMeTheCoinBoard({
         <span>ROUND {state.round}</span>
         <div className="flex items-center gap-2">
           <span className="rounded-full border border-pink-400/30 px-2 py-0.5 text-pink-200 light:border-pink-300 light:text-pink-700">쇼 미 더 코인</span>
+          <ViewToggle board={board3d} />
           <SuiteSoundHud suite={getShowMeTheCoinBgm} icon="🎤" label="Cypher Vault" preview="preview" showSfx={false} />
           <button
             type="button"
@@ -505,6 +513,38 @@ export default function ShowMeTheCoinBoard({
           </button>
         </div>
       </div>
+
+      {board3d.view === "3d" && (
+        <Frame3D hint="상대 숫자 코인은 가림판 뒤 🔒 · 드래그로 둘러보기">
+          <CoinTable3D
+            viewerSeat={viewerSeat === "p1" ? 0 : 1}
+            seats={(["p1", "p2"] as const).map((seat, i) => {
+              const showdown = (state.phase === "showdown" || state.phase === "gameOver") && state.lastRoundResult?.committed;
+              const count = state.committed[seat]?.length;
+              const visibleCount = state.phase === "commit" ? (seat === viewerSeat ? count : undefined) : count;
+              return {
+                seat: i,
+                name: names[seat],
+                chips: state.chips[seat],
+                coinsLeft: state.coins[seat].length,
+                committedCount: visibleCount ?? null,
+                committedValues: showdown ? state.lastRoundResult!.committed![seat].map((c) => c.value) : null,
+                bet: state.betsThisRound[seat],
+                dealer: state.dealerSeat === seat,
+                away: seat !== viewerSeat && !opponentConnected,
+              };
+            })}
+            phase={state.phase}
+            acting={state.actingSeat === null ? null : state.actingSeat === "p1" ? 0 : 1}
+            pot={state.pot}
+            winner={state.lastRoundResult?.winnerSeat ? (state.lastRoundResult.winnerSeat === "p1" ? 0 : 1) : null}
+            folder={state.lastRoundResult?.folderSeat ? (state.lastRoundResult.folderSeat === "p1" ? 0 : 1) : null}
+            round={state.round}
+            overview={state.phase === "showdown"}
+            lowDetail={lowDetail}
+          />
+        </Frame3D>
+      )}
 
       {/* Private per-viewer HUD — never rendered for the opponent (see `ChipStatsPanel`'s doc). */}
       <ChipStatsPanel coins={state.coins[viewerSeat]} />

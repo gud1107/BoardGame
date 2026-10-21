@@ -1,5 +1,7 @@
 "use client";
 
+import dynamic from "next/dynamic";
+import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import { useCallback, useRef, useState } from "react";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
@@ -19,6 +21,9 @@ import {
   type PassFlyEvent,
 } from "./ForSaleEffects";
 import { BID_INCREMENT, computeRankings, getPlayerView, type EngineAction, type ForSaleState, type SeatIndex } from "./engine";
+
+// three.js only loads when the 3D table is shown (🖼️ 2D otherwise / without WebGL).
+const ForSaleTable3D = dynamic(() => import("./three/ForSaleTable3D"), { ssr: false, loading: () => <Loading3D /> });
 
 /**
  * Pure game UI + rules driver — same controlled-component contract as every
@@ -44,6 +49,8 @@ export interface ForSaleBoardProps {
 }
 
 export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: ForSaleBoardProps) {
+  const board3d = useBoardView("for-sale-view");
+  const [lowDetail] = useState(preferLowDetail);
   const [rulebookOpen, setRulebookOpen] = useState(false);
 
   // Same "diff consecutive lockstep snapshots on render" pattern every other
@@ -207,10 +214,47 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
           <span className="shrink-0 font-semibold whitespace-nowrap text-emerald-300 light:text-emerald-600">{formatDollars(me.checks.reduce((s, c) => s + c, 0))}</span>
         </span>
         <div className="flex flex-wrap items-center gap-1.5">
+          <ViewToggle board={board3d} />
           <SuiteSoundHud suite={getForSaleSound} icon="🏡" label="Open House Bossa" preview="sold" />
           {rulebookButton}
         </div>
       </div>
+
+      {board3d.view === "3d" && (state.phase === "buying" || state.phase === "selling") && (
+        <Frame3D hint="남의 현금·부동산 값은 비공개 🔒 · 드래그로 둘러보기">
+          <ForSaleTable3D
+            playerCount={state.playerCount}
+            viewerSeat={viewerSeat}
+            names={names}
+            seats={state.players.map((p) => {
+              const passed = state.auction?.passesThisRound.find((x) => x.seat === p.seat);
+              const won = state.sale?.revealed ? state.lastSaleResult?.assignments.find((a) => a.seat === p.seat) : undefined;
+              return {
+                seat: p.seat,
+                name: names[p.seat] ?? `${p.seat + 1}번`,
+                cash: p.seat === viewerSeat ? p.cash : null,
+                propertyCount: p.properties.length,
+                checkCount: p.checks.length,
+                claimed: passed ? passed.card : null,
+                stillBidding: state.auction?.activeSeats.includes(p.seat) ?? false,
+                submitted: state.sale?.submissions[p.seat] !== undefined,
+                submittedValue: saleView.find((v) => v.seat === p.seat)?.property ?? null,
+                wonCheck: won ? won.check : null,
+                away: !connectedSeats.has(p.seat),
+              };
+            })}
+            phase={state.phase}
+            activeSeat={state.auction?.activeSeat ?? null}
+            openCards={state.auction?.openCards ?? []}
+            currentBid={state.auction?.currentBid ?? 0}
+            highBidder={state.auction?.highBidderSeat ?? null}
+            openChecks={state.sale?.openChecks ?? []}
+            revealed={state.sale?.revealed ?? false}
+            deckCount={state.phase === "buying" ? state.propertyDeck.length : state.checkDeck.length}
+            lowDetail={lowDetail}
+          />
+        </Frame3D>
+      )}
 
       {/* Phase 1 — auction */}
       {state.phase === "buying" && state.auction && (

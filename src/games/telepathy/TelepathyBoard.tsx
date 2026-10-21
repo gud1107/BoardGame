@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { getTelepathyBgm, MISTAKE_MOOD } from "./telepathyBgm";
@@ -23,6 +25,9 @@ import Timeline, { SEAT_COLORS } from "./Timeline";
 import { telepathySound } from "./telepathySound";
 import RulebookModal from "./RulebookModal";
 import HistoryModal from "./HistoryModal";
+
+// three.js only loads when the 3D room is shown (🖼️ 2D otherwise / without WebGL).
+const TelepathyTable3D = dynamic(() => import("./three/TelepathyTable3D"), { ssr: false, loading: () => <Loading3D /> });
 
 /**
  * In-game screen for 텔레파시. Purely a view of the host's snapshot + intent
@@ -284,6 +289,8 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
   const sound = telepathySound();
 
   const [rulebook, setRulebook] = useState<null | "all" | "star">(null);
+  const board3d = useBoardView("telepathy-view");
+  const [lowDetail] = useState(preferLowDetail);
   const [historyAt, setHistoryAt] = useState<number | null>(null);
   // 🤖 자동 내기: when nobody else holds a card nothing can be a mistake, so
   // (if switched on) play my remaining cards for me. Remembered per browser.
@@ -559,6 +566,7 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
           >
             ⚡ 번뜩임 {state.practice ? "∞" : state.stars} <span className="text-[10px] opacity-70">ⓘ</span>
           </button>
+          <ViewToggle board={board3d} />
           <SuiteSoundHud suite={getTelepathyBgm} icon="🎐" label="Quiet Signal" preview="chime" />
           <button
             type="button"
@@ -579,7 +587,37 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
 
       {state.phase !== "won" && state.phase !== "lost" && <RewardTrack state={state} scoreShown={scoreShown} bestScore={bestScore} />}
 
+      {board3d.view === "3d" && (
+        <Frame3D hint="손패는 장수만 — 말없이 타이밍을 맞춰요 · 드래그로 둘러보기">
+          <TelepathyTable3D
+            playerCount={state.playerCount}
+            viewerSeat={mySeat}
+            seats={state.hands.map((hand, seat) => ({
+              seat,
+              name: names[seat] ?? `${seat + 1}번`,
+              handCount: hand.length,
+              holding: state.holds[seat],
+              reaching: state.reaching[seat] && state.phase === "playing",
+              ready: state.readies[seat],
+              away: state.away[seat],
+              color: seatColor(seat),
+            }))}
+            phase={state.phase}
+            pile={state.pile}
+            mistakeId={state.lastMistake?.id ?? null}
+            lastPlaySeat={lastPlay?.seat ?? null}
+            level={state.level}
+            maxLevel={state.maxLevel}
+            lives={state.practice ? null : state.lives}
+            stars={state.practice ? null : state.stars}
+            overview={state.phase === "won" || state.phase === "lost"}
+            lowDetail={lowDetail}
+          />
+        </Frame3D>
+      )}
+
       {/* Seats */}
+      {board3d.view === "2d" && (
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {state.hands.map((hand, seat) => {
           const reaching = state.reaching[seat] && state.phase === "playing";
@@ -627,6 +665,7 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
           );
         })}
       </div>
+      )}
 
       {/* Center stage */}
       <div className="relative flex min-h-[18rem] flex-col items-center justify-center gap-3 overflow-hidden rounded-3xl border border-indigo-400/20 bg-[radial-gradient(circle_at_50%_40%,rgba(99,102,241,0.25),rgba(15,23,42,0.6)_70%)] p-4 light:border-indigo-200 light:bg-[radial-gradient(circle_at_50%_40%,rgba(199,210,254,0.9),rgba(248,250,252,1)_70%)]">

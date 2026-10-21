@@ -49,7 +49,8 @@ export const TABLE_Y = 0.92;
 const HEAD_Y = 1.52;
 
 export function tableDims(n: number) {
-  const seatR = 2.3 + Math.max(0, n - 4) * 0.3;
+  // face-to-face duels sit closer so the opponent isn't a speck across an empty table
+  const seatR = n <= 2 ? 1.9 : n === 3 ? 2.1 : 2.3 + Math.max(0, n - 4) * 0.3;
   return { seatR, tableR: seatR - 0.72 };
 }
 
@@ -74,6 +75,8 @@ export interface TableSeat {
   chair?: "wood" | "stool" | "throne";
   headSlot?: ReactNode;
   front?: ReactNode;
+  /** Overrides the theme's seat colour (name tag, tie, my placard). */
+  color?: string;
   /** 연결 끊김 — the name tag gets a 📴 mark. */
   away?: boolean;
   /** Click/tap the person (or the viewer's placard) to pick this seat. */
@@ -254,7 +257,7 @@ function useSelect(onSelect: (() => void) | null | undefined) {
 function SeatView({ s, geo, theme, lowDetail, ringColor }: { s: TableSeat; geo: TableGeo; theme: TableTheme; lowDetail: boolean; ringColor: string }) {
   const angle = geo.angleOf(s.seat);
   const isViewer = s.seat === geo.viewerSeat;
-  const color = theme.seatColors[s.seat % theme.seatColors.length];
+  const color = s.color ?? theme.seatColors[s.seat % theme.seatColors.length];
   const { hover, handlers } = useSelect(s.onSelect);
   const look = useMemo(() => {
     const base = defaultLook(s.seat, theme.hats);

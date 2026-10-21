@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { preferLowDetail, useBoardView } from "@/games/shared/three/tableKit";
+import { preferLowDetail, useBoardView } from "@/games/shared/three/viewPref";
 import type { ChatMessage } from "@/lib/chat/types";
 import type { MafiaSeat3D } from "./three/MafiaTable3D";
 import RulebookModal from "./RulebookModal";

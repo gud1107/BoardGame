@@ -1,11 +1,16 @@
 "use client";
 
 import { type CSSProperties, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import Tooltip from "@/components/Tooltip";
+import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { getHanamikojiSound, hanamikojiSoundCues } from "./hanamikojiSound";
 import RulebookModal from "./RulebookModal";
+
+// three.js only loads when the 3D teahouse is shown (🖼️ 2D otherwise / without WebGL).
+const HanamikojiTable3D = dynamic(() => import("./three/HanamikojiTable3D"), { ssr: false, loading: () => <Loading3D /> });
 import {
   ACTION_TYPES,
   GEISHAS,
@@ -48,6 +53,9 @@ const GEISHA_EMOJI: Record<string, string> = {
   g2b: "💮",
   g2c: "🏵️",
 };
+
+/** Solid accents for the 3D cards (the Tailwind gradients above can't feed a canvas). */
+const GEISHA_3D_COLOR: Record<string, string> = { g5: "#4f46e5", g4: "#ea580c", g3a: "#e11d48", g3b: "#db2777", g2a: "#d97706", g2b: "#c026d3", g2c: "#7c3aed" };
 
 // Each geisha's item cards get a distinct color family so a fanned hand
 // reads at a glance, like the printed card backs of a real card set.
@@ -270,6 +278,8 @@ export default function HanamikojiBoard({
 }: HanamikojiBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const opponentRole = other(viewerRole);
+  const board3d = useBoardView("hanamikoji-view");
+  const [lowDetail] = useState(preferLowDetail);
   const myTurn = state.activePlayer === viewerRole;
   // Gion Teahouse sound suite (hanamikojiSound.ts) — state-diff cues heard by both players.
   useSoundCues(state, getHanamikojiSound, hanamikojiSoundCues);
@@ -430,12 +440,48 @@ export default function HanamikojiBoard({
             {state.roundNumber}라운드 · 남은 카드 {state.deck.length}장
           </span>
           <div className="flex flex-wrap items-center gap-1.5">
+            <ViewToggle board={board3d} />
             <SuiteSoundHud suite={getHanamikojiSound} icon="🌸" label="Gion Teahouse" preview="offer" />
             {rulebookButton}
           </div>
         </div>
 
         {connectionBanner}
+
+        {board3d.view === "3d" && (
+          <Frame3D hint="상대 손패·숨긴 카드는 뒷면 · 드래그로 둘러보기">
+            <HanamikojiTable3D
+              viewerSeat={viewerRole === "p1" ? 0 : 1}
+              names={[names.p1, names.p2]}
+              away={[viewerRole !== "p1" && !opponentConnected, viewerRole !== "p2" && !opponentConnected]}
+              geishas={GEISHAS.map((g) => ({ ...g, emoji: GEISHA_EMOJI[g.id] ?? "🌸", color: GEISHA_3D_COLOR[g.id] ?? "#9d174d" }))}
+              won={Object.fromEntries(
+                GEISHAS.map((g) => [
+                  g.id,
+                  [state.players.p1.wonCards.filter((c) => c.geishaId === g.id).length, state.players.p2.wonCards.filter((c) => c.geishaId === g.id).length] as [number, number],
+                ]),
+              )}
+              ownership={Object.fromEntries(GEISHAS.map((g) => [g.id, state.geishaOwnership[g.id] === null ? null : state.geishaOwnership[g.id] === "p1" ? 0 : 1]))}
+              handCounts={[state.players.p1.hand.length, state.players.p2.hand.length]}
+              actionsUsed={[state.players.p1.actionsUsed, state.players.p2.actionsUsed]}
+              hasSecret={[state.players.p1.secretCard !== null, state.players.p2.secretCard !== null]}
+              discardCount={[state.players.p1.discarded.length, state.players.p2.discarded.length]}
+              activeSeat={state.phase === "awaiting-action" || state.phase === "awaiting-draw" ? (state.activePlayer === "p1" ? 0 : 1) : null}
+              offer={
+                state.pendingOffer
+                  ? {
+                      kind: state.pendingOffer.kind,
+                      by: state.pendingOffer.offeredBy === "p1" ? 0 : 1,
+                      cards: state.pendingOffer.kind === "gift" ? [state.pendingOffer.cards.map((c) => c.geishaId)] : state.pendingOffer.sets.map((set) => set.map((c) => c.geishaId)),
+                    }
+                  : null
+              }
+              round={state.roundNumber}
+              overview={false}
+              lowDetail={lowDetail}
+            />
+          </Frame3D>
+        )}
 
         {/* Opponent's side of the table: count-only face-down hand + which
             actions they've already spent this round, both up top since

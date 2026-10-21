@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ASSET_DEFS, countAuctionCards, EXCLUDE_COUNT, MARKETS, SECTORS } from "./constants";
+import dynamic from "next/dynamic";
+import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
+import { ASSET_DEFS, countAuctionCards, EXCLUDE_COUNT, MARKETS, purseValue, SECTORS } from "./constants";
 import { computeRankings } from "./engine";
 import ActionPanel from "./ActionPanel";
 import PlayerArea from "./PlayerArea";
@@ -18,6 +20,9 @@ import RulebookModal from "./RulebookModal";
 import { detectCoinEvents, FlyingCoins, type CoinAnimEvent } from "./AuctionCoinEffects";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import type { EngineAction, GreatLegacyState, SeatIndex } from "./types";
+
+// three.js only loads when the 3D trading floor is shown (🖼️ 2D otherwise / without WebGL).
+const InvestTable3D = dynamic(() => import("./three/InvestTable3D"), { ssr: false, loading: () => <Loading3D /> });
 
 const MARKET_EMOJI: Record<string, string> = { 미장: "🇺🇸", 국장: "🇰🇷", 코인: "🪙" };
 const SECTOR_EMOJI: Record<string, string> = { "빅테크&AI": "🤖", 블루칩: "🏆", "밈&테마주": "🎢" };
@@ -82,6 +87,8 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
   const me = state.players.find((p) => p.seat === viewerSeat)!;
   const ownedAssetIds = useMemo(() => new Set(me.assets.filter((a) => !a.discarded).map((a) => a.assetId)), [me.assets]);
   const auction = state.auction;
+  const board3d = useBoardView("great-legacy-view");
+  const [lowDetail] = useState(preferLowDetail);
   const totalLots = countAuctionCards(state.mode) - EXCLUDE_COUNT[state.mode];
 
   const rankings = state.phase === "gameOver" ? computeRankings(state) : null;
@@ -195,6 +202,7 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
             <h2 className="text-sm font-bold text-white/80 light:text-slate-800">📈 최고의 투자 — {state.mode === "4p" ? "4인" : "8인"} 경매</h2>
             <div className="flex items-center gap-2">
               <span className="text-xs text-white/40 light:text-slate-400">남은 매물 {state.deck.length + (auction ? 1 : 0)}장</span>
+              <ViewToggle board={board3d} />
               <InvestmentSoundHud />
               <button
                 type="button"
@@ -205,6 +213,34 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
               </button>
             </div>
           </div>
+
+          {board3d.view === "3d" && (
+            <div className="mb-4">
+              <Frame3D hint={state.coinVisibility === "public" ? "입찰한 코인은 모두 공개 · 드래그로 둘러보기" : "남의 지갑은 비공개 🔒 · 입찰 코인은 공개"}>
+                <InvestTable3D
+                  playerCount={state.players.length}
+                  viewerSeat={viewerSeat}
+                  seats={state.players.map((p) => ({
+                    seat: p.seat,
+                    name: names[p.seat] ?? `${p.seat + 1}번`,
+                    purse: p.seat === viewerSeat || state.coinVisibility === "public" ? purseValue(p.purse) : null,
+                    committed: auction?.committed[p.seat] ? purseValue(auction.committed[p.seat]!) : 0,
+                    passed: auction?.passed.includes(p.seat) ?? false,
+                    assets: p.assets.map((a) => ({ id: a.assetId, market: a.market, score: a.currentScore, discarded: a.discarded })),
+                    away: !connectedSeats.has(p.seat),
+                  }))}
+                  card={auction?.card ?? null}
+                  reverse={auction?.kind === "reverse"}
+                  activeSeat={auction?.activeSeat ?? null}
+                  highestBidder={auction?.highestBidder ?? null}
+                  highestBid={auction?.highestBid ?? 0}
+                  lotsLeft={state.deck.length + (auction ? 1 : 0)}
+                  overview={state.phase === "gameOver"}
+                  lowDetail={lowDetail}
+                />
+              </Frame3D>
+            </div>
+          )}
 
           {auction && (
             <div className="mb-4">

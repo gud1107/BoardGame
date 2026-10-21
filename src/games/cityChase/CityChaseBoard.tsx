@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
-import { preferLowDetail, useBoardView } from "@/games/shared/three/tableKit";
+import { preferLowDetail, useBoardView } from "@/games/shared/three/viewPref";
 import CityMap, { cellLabel, HELI_STYLES, TOKEN_CLASS, TokenChip } from "./CityMap";
 import {
   currentActor,

@@ -1,6 +1,5 @@
 "use client";
 
-import { useCallback, useState } from "react";
 import * as THREE from "three";
 
 /**
@@ -13,53 +12,7 @@ import * as THREE from "three";
  * it, so every device may render at its own frame rate.
  */
 
-export function webglAvailable(): boolean {
-  if (typeof document === "undefined") return false;
-  try {
-    const c = document.createElement("canvas");
-    return !!(c.getContext("webgl2") ?? c.getContext("webgl"));
-  } catch {
-    return false;
-  }
-}
-
-export type BoardView = "3d" | "2d";
-
-function readView(key: string): BoardView {
-  try {
-    return window.localStorage.getItem(key) === "2d" ? "2d" : "3d";
-  } catch {
-    return "3d";
-  }
-}
-
-/**
- * The board's 3D/2D choice, remembered per game in localStorage. Without
- * WebGL the board is always 2D and `canToggle` is false (hide the button).
- */
-export function useBoardView(storageKey: string): { view: BoardView; setView: (v: BoardView) => void; canToggle: boolean } {
-  const [hasWebgl] = useState(webglAvailable);
-  const [view, setViewState] = useState<BoardView>(() => (typeof window === "undefined" ? "3d" : readView(storageKey)));
-  const setView = useCallback(
-    (v: BoardView) => {
-      setViewState(v);
-      try {
-        window.localStorage.setItem(storageKey, v);
-      } catch {
-        /* private mode — keep the in-memory choice */
-      }
-    },
-    [storageKey],
-  );
-  return { view: hasWebgl ? view : "2d", setView, canToggle: hasWebgl };
-}
-
-/** Low detail on narrow / weak devices (fewer segments, no shadows). */
-export function preferLowDetail(): boolean {
-  if (typeof window === "undefined") return true;
-  const cores = navigator.hardwareConcurrency ?? 4;
-  return window.innerWidth < 640 || cores < 4;
-}
+export { webglAvailable, useBoardView, preferLowDetail, type BoardView } from "./viewPref";
 
 // ---------------------------------------------------------------------------
 // Geometry + easing
@@ -261,3 +214,167 @@ export function paintedTexture(key: string, w: number, h: number, draw: (ctx: Ca
 }
 
 export const FONTS = { emoji: EMOJI_FONT, text: TEXT_FONT };
+
+export interface SimpleCardSpec {
+  /** Big centre text (number / name). */
+  big?: string;
+  /** Emoji / glyph above the big text. */
+  icon?: string;
+  /** Small caption at the bottom. */
+  caption?: string;
+  /** Corner index (top-left). */
+  corner?: string;
+  bg: [string, string];
+  edge: string;
+  fg?: string;
+}
+
+/** A generic painted card face (gradient, double border, icon / big text / caption). Cached by `key`. */
+export function simpleCardTexture(key: string, c: SimpleCardSpec): THREE.CanvasTexture {
+  return paintedTexture(`card:${key}`, 256, 360, (ctx, W, H) => {
+    ctx.beginPath();
+    ctx.roundRect(4, 4, W - 8, H - 8, 22);
+    ctx.save();
+    ctx.clip();
+    const g = ctx.createLinearGradient(0, 0, W * 0.6, H);
+    g.addColorStop(0, c.bg[0]);
+    g.addColorStop(1, c.bg[1]);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = "rgba(255,255,255,0.06)";
+    ctx.lineWidth = 2;
+    for (let i = -H; i < W + H; i += 24) {
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i + H, H);
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.strokeStyle = c.edge;
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.roundRect(9, 9, W - 18, H - 18, 18);
+    ctx.stroke();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const fg = c.fg ?? "#ffffff";
+    const hasIcon = !!c.icon;
+    if (c.icon) {
+      ctx.font = `${c.big ? 80 : 120}px ${EMOJI_FONT}`;
+      ctx.fillText(c.icon, W / 2, c.big ? 92 : H / 2 - 16);
+    }
+    if (c.big) {
+      const len = [...c.big].length;
+      const size = len <= 2 ? 128 : len <= 3 ? 96 : len <= 5 ? 58 : 42;
+      ctx.fillStyle = fg;
+      ctx.shadowColor = "rgba(0,0,0,0.55)";
+      ctx.shadowBlur = 10;
+      ctx.font = `900 ${size}px ${TEXT_FONT}`;
+      ctx.fillText(c.big, W / 2, hasIcon ? 208 : H / 2 - 10);
+      ctx.shadowBlur = 0;
+    }
+    if (c.caption) {
+      ctx.fillStyle = "rgba(255,255,255,0.88)";
+      ctx.font = `700 ${[...c.caption].length > 6 ? 26 : 32}px ${TEXT_FONT}, ${EMOJI_FONT}`;
+      ctx.fillText(c.caption, W / 2, H - 58);
+    }
+    if (c.corner) {
+      ctx.fillStyle = c.edge;
+      ctx.font = `800 34px ${TEXT_FONT}`;
+      ctx.fillText(c.corner, 40, 44);
+    }
+  });
+}
+
+/** A generic card back: radial gradient, rings and a centre emblem. */
+export function simpleBackTexture(key: string, a: string, b: string, edge: string, emblem: string): THREE.CanvasTexture {
+  return paintedTexture(`back:${key}`, 256, 360, (ctx, W, H) => {
+    ctx.beginPath();
+    ctx.roundRect(4, 4, W - 8, H - 8, 22);
+    ctx.save();
+    ctx.clip();
+    const g = ctx.createRadialGradient(W / 2, H / 2, 20, W / 2, H / 2, H * 0.7);
+    g.addColorStop(0, a);
+    g.addColorStop(1, b);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = edge;
+    ctx.globalAlpha = 0.28;
+    ctx.lineWidth = 3;
+    for (let r = 30; r < 220; r += 26) {
+      ctx.beginPath();
+      ctx.arc(W / 2, H / 2, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    ctx.strokeStyle = edge;
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.roundRect(10, 10, W - 20, H - 20, 18);
+    ctx.stroke();
+    ctx.font = `92px ${EMOJI_FONT}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(emblem, W / 2, H / 2 + 6);
+  });
+}
+
+/**
+ * A card face built from a real image (cover-fit into the card) plus an
+ * optional number band. Paints a placeholder immediately and repaints once
+ * the image loads, so it can be used synchronously from render.
+ */
+export function imageCardTexture(key: string, src: string, band: { text: string; bg: string; fg: string } | null, edge = "#f5efe0"): THREE.CanvasTexture {
+  const id = `img:${key}`;
+  const hit = paintedCache.get(id);
+  if (hit) return hit;
+  const W = 256;
+  const H = 360;
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const ctx = c.getContext("2d")!;
+  const paint = (img: HTMLImageElement | null) => {
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(4, 4, W - 8, H - 8, 20);
+    ctx.clip();
+    ctx.fillStyle = "#2a2a2a";
+    ctx.fillRect(0, 0, W, H);
+    if (img && img.naturalWidth > 0) {
+      const s = Math.max(W / img.naturalWidth, H / img.naturalHeight);
+      const w = img.naturalWidth * s;
+      const h = img.naturalHeight * s;
+      ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+    }
+    ctx.restore();
+    ctx.strokeStyle = edge;
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.roundRect(5, 5, W - 10, H - 10, 18);
+    ctx.stroke();
+    if (band) {
+      ctx.fillStyle = band.bg;
+      ctx.beginPath();
+      ctx.roundRect(18, 16, 96, 64, 14);
+      ctx.fill();
+      ctx.fillStyle = band.fg;
+      ctx.font = `900 46px ${TEXT_FONT}`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(band.text, 66, 50);
+    }
+  };
+  paint(null);
+  const t = makeTexture(c);
+  paintedCache.set(id, t);
+  const img = new Image();
+  img.onload = () => {
+    paint(img);
+    t.needsUpdate = true;
+  };
+  img.src = src;
+  return t;
+}

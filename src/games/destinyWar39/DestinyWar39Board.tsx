@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import dynamic from "next/dynamic";
+import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import RulebookModal from "./RulebookModal";
 import PredictionStatusBoard from "./PredictionStatusBoard";
 import RankedLeaderboard from "./RankedLeaderboard";
@@ -9,9 +11,12 @@ import { CardFace } from "./CardFace";
 import { HiddenRevealCell, PlayedCardSlot, ReverseSwishOverlay, RoundResultBadge, TurnOrderBadge, type RoundOutcome } from "./DestinyWar39Effects";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
-import { TOTAL_ROUNDS, type DestinyWar39State, type EngineAction, type SeatIndex, type TurnRecord } from "./engine";
+import { TOTAL_ROUNDS, visibleCurrentPrediction, type DestinyWar39State, type EngineAction, type SeatIndex, type TurnRecord } from "./engine";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { getDestinyWar39Bgm } from "./destinyWar39Bgm";
+
+// three.js only loads when the 3D rooftop is shown (🖼️ 2D otherwise / without WebGL).
+const DestinyTable3D = dynamic(() => import("./three/DestinyTable3D"), { ssr: false, loading: () => <Loading3D /> });
 
 /**
  * Minimum time a just-finished trick stays on screen (winner glowing) before
@@ -67,6 +72,8 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
   const round = state.round;
   const R = round.roundNumber;
   const playerCount = state.playerCount;
+  const board3d = useBoardView("destiny-war-39-view");
+  const [lowDetail] = useState(preferLowDetail);
 
   // Freeze-frame the trick that just resolved (winner glowing) for
   // TRICK_REVEAL_MS before letting the next turn / round-end summary render
@@ -157,6 +164,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
 
   const rulebookButton = (
     <>
+      <ViewToggle board={board3d} />
       <SuiteSoundHud suite={getDestinyWar39Bgm} icon="🌃" label="Neon Fate" preview="preview" showSfx={false} />
       <button
       onClick={() => setRulebookOpen(true)}
@@ -532,7 +540,44 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
     >
       <MyTurnOverlay isMyTurn={isMyBattleTurn} />
       <RankedLeaderboard state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} />
-      <div className="flex min-w-0 flex-1 flex-col gap-5">{centerContent}</div>
+      <div className="flex min-w-0 flex-1 flex-col gap-5">
+        {board3d.view === "3d" && (state.phase === "predicting" || state.phase === "playing" || state.phase === "roundEnd") && (
+          <Frame3D hint="손패는 뒷면 · 예측은 공개 전까지 ✓만 · 드래그로 둘러보기">
+            <DestinyTable3D
+              order={state.seatOrder}
+              viewerSeat={viewerSeat}
+              playerCount={playerCount}
+              seats={Array.from({ length: playerCount }, (_, seat) => ({
+                seat,
+                name: names[seat] ?? `${seat + 1}번`,
+                handCount: round.hands[seat]?.length ?? 0,
+                prediction: visibleCurrentPrediction(state, viewerSeat, seat),
+                wins: round.winsThisRound[seat] ?? 0,
+                played: state.phase === "playing" ? (round.playsThisTurn.find((p) => p.seat === seat)?.card ?? null) : null,
+                away: !connectedSeats.has(seat),
+              }))}
+              phase={state.phase}
+              round={R}
+              turn={round.turnNumber}
+              actingSeat={(() => {
+                if (state.phase !== "playing" || R === 1) return null;
+                const played = new Set(round.playsThisTurn.map((p) => p.seat));
+                const start = state.seatOrder.indexOf(round.turnLeader);
+                for (let i = 0; i < playerCount; i++) {
+                  const seat = state.seatOrder[(start + i) % playerCount];
+                  if (!played.has(seat)) return seat;
+                }
+                return null;
+              })()}
+              lastTurnWinner={round.playsThisTurn.length === 0 ? (round.turnRecords[round.turnRecords.length - 1]?.winnerSeat ?? null) : null}
+              lastTurnKey={`${R}-${round.turnRecords.length}`}
+              overview={state.phase === "roundEnd"}
+              lowDetail={lowDetail}
+            />
+          </Frame3D>
+        )}
+        {centerContent}
+      </div>
       {showPredictionPanel && (
         <PredictionStatusBoard state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} onAction={onAction} />
       )}

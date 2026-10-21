@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import dynamic from "next/dynamic";
-import { preferLowDetail, useBoardView } from "@/games/shared/three/tableKit";
+import { preferLowDetail, useBoardView } from "@/games/shared/three/viewPref";
 import type { PersonMood } from "@/games/shared/three/SeatedPerson";
 import type { LiarSeat3D } from "./three/LiarTable3D";
 import { getSoundEngine } from "@/lib/audio/soundEngine";

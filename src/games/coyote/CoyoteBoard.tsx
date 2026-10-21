@@ -3,7 +3,7 @@
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Avatar from "@/components/common/Avatar";
-import { preferLowDetail, useBoardView } from "@/games/shared/three/tableKit";
+import { preferLowDetail, useBoardView } from "@/games/shared/three/viewPref";
 import type { CoyoteSeat3D } from "./three/CoyoteTable3D";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { getSoundEngine } from "@/lib/audio/soundEngine";

@@ -1,0 +1,181 @@
+"use client";
+
+import * as THREE from "three";
+import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
+import { FlatCard, FlyIn, ImpactRing, PopIn, StandingCard, TableSign } from "@/games/shared/three/tablePieces";
+import { OutdoorPlaza } from "@/games/shared/three/environments";
+import { simpleBackTexture, simpleCardTexture, type BubbleStyle } from "@/games/shared/three/tableKit";
+import type { PersonMood } from "@/games/shared/three/SeatedPerson";
+
+/**
+ * 5 오이 3D — 해 질 녘 텃밭 옆 나무 테이블. 각자 손패는 뒷면 부채꼴(장수만),
+ * 낸 카드는 그 자리에서 가운데로 날아와 앞면으로 눕고, 트릭을 가져간 사람의
+ * 카드가 빛난다. 각자 앞에는 먹은 오이가 실제 오이 모양으로 쌓이고(탈락 기준이
+ * 가까우면 땀), 마지막 7번째 트릭은 붉은 경고 팻말.
+ */
+
+export interface CucumberSeat3D {
+  seat: number;
+  name: string;
+  handCount: number;
+  cucumbers: number;
+  eliminated: boolean;
+  away?: boolean;
+}
+
+export interface CucumberTable3DProps {
+  playerCount: number;
+  viewerSeat: number;
+  seats: CucumberSeat3D[];
+  activeSeat: number | null;
+  plays: { seat: number; value: number; id: string }[];
+  winnerSeat: number | null;
+  finalTrick: boolean;
+  trickNumber: number;
+  roundNumber: number;
+  threshold: number;
+  overview: boolean;
+  lowDetail: boolean;
+}
+
+const SEAT_COLORS = ["#4ade80", "#fbbf24", "#38bdf8", "#f472b6", "#a78bfa", "#fb923c"];
+const back = () => simpleBackTexture("cucumber", "#166534", "#052e16", "#bbf7d0", "🥒");
+const face = (v: number) =>
+  simpleCardTexture(`cucumber:${v}`, {
+    big: String(v),
+    corner: String(v),
+    caption: v === 1 ? "×2 배수!" : "🥒".repeat(Math.min(5, Math.ceil(v / 3))),
+    bg: v === 1 ? ["#b91c1c", "#450a0a"] : v >= 12 ? ["#a16207", "#3f2a04"] : ["#15803d", "#052e16"],
+    edge: "#dcfce7",
+  });
+
+const cucumberGeo = new THREE.CapsuleGeometry(0.03, 0.12, 4, 8);
+
+function Cucumbers({ count, threshold }: { count: number; threshold: number }) {
+  return (
+    <group>
+      {Array.from({ length: Math.min(count, 12) }, (_, i) => (
+        <mesh key={i} geometry={cucumberGeo} position={[(i % 4) * 0.07 - 0.1, 0.03 + Math.floor(i / 4) * 0.055, Math.sin(i * 3.1) * 0.02]} rotation={[0, Math.sin(i * 5.3) * 0.4, Math.PI / 2]} castShadow>
+          <meshStandardMaterial color={count >= threshold - 1 ? "#4d7c0f" : "#16a34a"} roughness={0.55} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function HandFan({ count }: { count: number }) {
+  const b = back();
+  return (
+    <group position={[0, 0.02, 0.08]}>
+      {Array.from({ length: count }, (_, i) => (
+        <group key={i} rotation-z={(i - (count - 1) / 2) * 0.12} position={[0, 0, i * -0.003]}>
+          <group position={[0, 0.06, 0]}>
+            <StandingCard face={b} back={b} w={0.15} h={0.21} tilt={-0.45} />
+          </group>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+function Trick({ plays, winnerSeat }: { plays: CucumberTable3DProps["plays"]; winnerSeat: number | null }) {
+  const geo = useTableGeo();
+  return (
+    <group>
+      {plays.map((p, i) => {
+        const from = geo.spotOf(p.seat, 0.4).sub(new THREE.Vector3(0, geo.tableY, 0));
+        const a = (i / Math.max(1, plays.length)) * Math.PI * 2;
+        const win = p.seat === winnerSeat;
+        return (
+          <group key={p.id} position={[Math.sin(a) * 0.28 * Math.min(1, plays.length / 3), 0.004 + i * 0.004, Math.cos(a) * 0.22 * Math.min(1, plays.length / 3)]}>
+            <FlyIn from={from} dur={0.45} arc={0.45}>
+              <group rotation-y={geo.angleOf(p.seat)}>
+                <FlatCard face={face(p.value)} back={back()} w={0.24} h={0.34} glow={win ? "#fde68a" : null} />
+              </group>
+            </FlyIn>
+            {i === plays.length - 1 && <ImpactRing color="#86efac" size={0.7} />}
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
+const THEME: TableTheme = {
+  background: "#2a2a3a",
+  fog: [12, 34],
+  ambient: ["#fff0d6", 0.38],
+  hemi: ["#ffe2b0", "#1a2414", 0.55],
+  fills: [
+    ["#ffb070", 0.7, -10, 5, -12],
+    ["#c7d2fe", 0.2, 6, 6, 8],
+  ],
+  lamp: { color: "#fff1d0", intensity: 14, height: 3.4 },
+  table: { top: "#7a5230", rim: "#5a3a1e", felt: "#6b4a2a", inlay: "#a3e635", base: "#3a2412" },
+  chair: "wood",
+  chairColor: "#6b4a2a",
+  seatColors: SEAT_COLORS,
+  hats: ["cap", "none", "beret", "none", "cowboy", "none"],
+};
+
+const SIGN: BubbleStyle = { bg: "rgba(20,40,20,0.9)", fg: "#ecfccb", border: "#84cc16" };
+const WARN: BubbleStyle = { bg: "rgba(127,29,29,0.94)", fg: "#fff1f2", border: "#fca5a5" };
+const WIN: BubbleStyle = { bg: "rgba(254,249,195,0.97)", fg: "#3f6212", border: "#a3e635" };
+
+export default function CucumberTable3D(props: CucumberTable3DProps) {
+  const { viewerSeat, activeSeat, winnerSeat } = props;
+  const seats: TableSeat[] = props.seats.map((s) => {
+    let mood: PersonMood = activeSeat === s.seat ? "think" : "rest";
+    if (s.cucumbers >= props.threshold - 1 && !s.eliminated) mood = activeSeat === s.seat ? "nervous" : mood;
+    if (winnerSeat === s.seat) mood = props.finalTrick ? "shock" : "smug";
+    return {
+      seat: s.seat,
+      name: s.name,
+      away: s.away,
+      sub: s.eliminated ? "💀 탈락" : `🥒 ${s.cucumbers}/${props.threshold}`,
+      mood,
+      out: s.eliminated,
+      lookSeat: activeSeat !== null && activeSeat !== s.seat ? activeSeat : "center",
+      active: activeSeat === s.seat && !s.eliminated,
+      bubble: winnerSeat === s.seat ? { text: props.finalTrick ? "오이 먹었다… 🥒" : "이 트릭은 내 거!", style: props.finalTrick ? WARN : WIN, key: `w${props.roundNumber}-${props.trickNumber}`, width: 0.78 } : null,
+      tag: s.seat === viewerSeat ? { text: `🥒 내 오이 ${s.cucumbers}/${props.threshold}`, color: "#84cc16" } : null,
+      front: (
+        <group>
+          {s.seat !== viewerSeat && !s.eliminated && s.handCount > 0 && <HandFan count={s.handCount} />}
+          <group position={[0.38, 0, 0.05]}>
+            <Cucumbers count={s.cucumbers} threshold={props.threshold} />
+          </group>
+        </group>
+      ),
+    };
+  });
+
+  return (
+    <TableScene
+      seatCount={props.playerCount}
+      viewerSeat={viewerSeat}
+      seats={seats}
+      theme={THEME}
+      environment={
+        <OutdoorPlaza
+          lowDetail={props.lowDetail}
+          ground="#3f5a2a"
+          plaza="#6b5a3a"
+          trim="#a3e635"
+          skyline={{ kind: "trees", color: "#2f5a2a" }}
+          sun={{ color: "#ffb36b", position: [-12, 4, -22], size: 2.2 }}
+        />
+      }
+      center={
+        <group>
+          <Trick plays={props.plays} winnerSeat={winnerSeat} />
+          <PopIn key={props.trickNumber}>
+            <TableSign text={props.finalTrick ? "⚠️ 마지막 7번째 트릭 — 이기면 오이!" : `라운드 ${props.roundNumber} · 트릭 ${props.trickNumber}/7`} style={props.finalTrick ? WARN : SIGN} y={1.0} />
+          </PopIn>
+        </group>
+      }
+      overview={props.overview}
+      lowDetail={props.lowDetail}
+    />
+  );
+}

@@ -3,7 +3,7 @@
 import { useMemo, useRef, type ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { clamp01, easeInOut, easeOutBack, emojiTexture } from "./tableKit";
+import { bubbleTexture, clamp01, easeInOut, easeOutBack, emojiTexture, type BubbleStyle } from "./tableKit";
 import { distanceBoost } from "./ScreenSprite";
 
 /**
@@ -179,6 +179,120 @@ export function GlowDisc({ color, r = 0.4, opacity = 0.35, pulse = true }: { col
     <mesh rotation-x={-Math.PI / 2} position={[0, 0.008, 0]}>
       <circleGeometry args={[r, 32]} />
       <meshBasicMaterial ref={mat} color={color} transparent opacity={opacity} depthWrite={false} />
+    </mesh>
+  );
+}
+
+/** The floating sign over the table centre (phase / current bid …). */
+export function TableSign({ text, y = 0.95, width = 1.15, style }: { text: string; y?: number; width?: number; style: BubbleStyle }) {
+  const { tex, aspect } = useMemo(() => bubbleTexture(text, { size: 42, ...style }), [text, style]);
+  const ref = useRef<THREE.Sprite>(null);
+  useFrame(({ clock }) => {
+    if (ref.current) ref.current.position.y = y + Math.sin(clock.elapsedTime * 1.3) * 0.03;
+  });
+  return (
+    <sprite ref={ref} position={[0, y, 0]} scale={[width, width * aspect, 1]} renderOrder={9}>
+      <spriteMaterial map={tex} transparent depthWrite={false} depthTest={false} />
+    </sprite>
+  );
+}
+
+/** A closed leather pouch — "has chips, count hidden". */
+export function ChipPouch({ color = "#7c4a24" }: { color?: string }) {
+  return (
+    <group>
+      <mesh position={[0, 0.07, 0]} scale={[1, 0.85, 1]} castShadow>
+        <sphereGeometry args={[0.08, 16, 12]} />
+        <meshStandardMaterial color={color} roughness={0.8} />
+      </mesh>
+      <mesh position={[0, 0.145, 0]}>
+        <cylinderGeometry args={[0.025, 0.045, 0.04, 12]} />
+        <meshStandardMaterial color={color} roughness={0.8} />
+      </mesh>
+      <mesh position={[0, 0.13, 0]} rotation-x={Math.PI / 2}>
+        <torusGeometry args={[0.035, 0.006, 6, 16]} />
+        <meshStandardMaterial color="#e9b949" metalness={0.6} roughness={0.4} />
+      </mesh>
+    </group>
+  );
+}
+
+/** A face-down deck pile (height ∝ count). */
+export function DeckPile({ count, back, w = 0.22, h = 0.31, max = 24 }: { count: number; back: THREE.Texture; w?: number; h?: number; max?: number }) {
+  const shown = Math.min(count, max);
+  return (
+    <group>
+      {Array.from({ length: shown }, (_, i) => (
+        <group key={i} position={[Math.sin(i * 7.1) * 0.004, i * 0.006, 0]} rotation-y={Math.sin(i * 3.3) * 0.04}>
+          <FlatCard face={null} back={back} w={w} h={h} lift={0} />
+        </group>
+      ))}
+    </group>
+  );
+}
+
+/** A row of small face-up cards (a player's collected / played cards), wrapping into rows. */
+export function CardRow({ faces, back, w = 0.12, h = 0.17, perRow = 8, gap = 0.02 }: { faces: THREE.Texture[]; back: THREE.Texture; w?: number; h?: number; perRow?: number; gap?: number }) {
+  return (
+    <group>
+      {faces.map((f, i) => {
+        const row = Math.floor(i / perRow);
+        const col = i % perRow;
+        const inRow = Math.min(perRow, faces.length - row * perRow);
+        return (
+          <group key={i} position={[(col - (inRow - 1) / 2) * (w + gap), 0.002 + i * 0.0005, -row * (h * 0.55)]}>
+            <PopIn delay={0}>
+              <FlatCard face={f} back={back} w={w} h={h} lift={0} />
+            </PopIn>
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
+/**
+ * Makes a table prop tappable: ignores drags (the canvas drag looks around),
+ * shows a pointer + slight lift on hover. Children render normally when disabled.
+ */
+export function Clickable({ onClick, children, lift = 0.02 }: { onClick: (() => void) | null | undefined; children: ReactNode; lift?: number }) {
+  const ref = useRef<THREE.Group>(null);
+  const hover = useRef(false);
+  useFrame(() => {
+    const g = ref.current;
+    if (!g) return;
+    g.position.y += ((hover.current && onClick ? lift : 0) - g.position.y) * 0.25;
+  });
+  if (!onClick) return <group>{children}</group>;
+  return (
+    <group
+      ref={ref}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (e.delta > 8) return;
+        onClick();
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        hover.current = true;
+        document.body.style.cursor = "pointer";
+      }}
+      onPointerOut={() => {
+        hover.current = false;
+        document.body.style.cursor = "";
+      }}
+    >
+      {children}
+    </group>
+  );
+}
+
+/** An invisible, generous tap target (box) — wrap with `Clickable`. */
+export function HitBox({ size }: { size: [number, number, number] }) {
+  return (
+    <mesh position={[0, size[1] / 2, 0]}>
+      <boxGeometry args={size} />
+      <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
     </mesh>
   );
 }

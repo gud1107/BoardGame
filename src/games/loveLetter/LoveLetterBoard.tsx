@@ -1,5 +1,7 @@
 "use client";
 
+import dynamic from "next/dynamic";
+import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import { useState } from "react";
 import RulebookModal from "./RulebookModal";
 import { CardBack, CardFace, CardSlot, cardLabel } from "./CardArt";
@@ -21,6 +23,9 @@ import {
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { getLoveLetterSound, loveLetterIntensity, loveLetterSoundCues } from "./loveLetterSound";
+
+// three.js only loads when the 3D table is shown (🖼️ 2D otherwise / without WebGL).
+const LoveLetterTable3D = dynamic(() => import("./three/LoveLetterTable3D"), { ssr: false, loading: () => <Loading3D /> });
 
 /**
  * Pure game UI + rules driver — same controlled-component contract as every
@@ -80,6 +85,8 @@ function describeLastEvent(event: LoveLetterView["lastEvent"], names: Record<Sea
 }
 
 export default function LoveLetterBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: LoveLetterBoardProps) {
+  const board3d = useBoardView("love-letter-view");
+  const [lowDetail] = useState(preferLowDetail);
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const [pendingCard, setPendingCard] = useState<Card | null>(null);
   const [confirmPrincess, setConfirmPrincess] = useState<Card | null>(null);
@@ -242,6 +249,7 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
           {state.playerCount}인 · 단판 승부 · 덱 {state.deck.length}장 남음
         </span>
         <div className="flex flex-wrap items-center gap-1.5">
+          <ViewToggle board={board3d} />
           <SuiteSoundHud suite={getLoveLetterSound} icon="💌" label="Courtly Waltz" preview="handmaid" />
           {rulebookButton}
         </div>
@@ -262,7 +270,35 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
         </div>
       )}
 
+      {board3d.view === "3d" && state.phase === "playing" && (
+        <Frame3D hint="남의 손패는 뒷면만 🤫 · 드래그로 둘러보기">
+          <LoveLetterTable3D
+            playerCount={state.playerCount}
+            viewerSeat={viewerSeat}
+            names={names}
+            seats={view.players.map((v) => ({
+              seat: v.seat,
+              name: names[v.seat] ?? `${v.seat + 1}번`,
+              handSize: v.handSize,
+              hand: v.seat === viewerSeat && v.hand ? v.hand.map((c) => c.number) : null,
+              discards: v.discardPile.map((c) => c.number),
+              alive: v.alive,
+              protectedNow: v.protectedUntilNextTurn,
+              away: !connectedSeats.has(v.seat),
+            }))}
+            activeSeat={state.activeSeat}
+            lastEvent={view.lastEvent}
+            eventKey={`${state.deck.length}-${view.lastEvent?.type ?? ""}`}
+            deckCount={state.deck.length}
+            visibleRemoved={state.visibleRemovedCards.map((c) => c.number)}
+            overview={false}
+            lowDetail={lowDetail}
+          />
+        </Frame3D>
+      )}
+
       {/* Scoreboard */}
+      {board3d.view === "2d" && (
       <section className="flex flex-col gap-1.5">
         {state.players.map((p) => {
           const v = view.players.find((x) => x.seat === p.seat)!;
@@ -301,6 +337,7 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
           );
         })}
       </section>
+      )}
 
       {/* My hand */}
       <section

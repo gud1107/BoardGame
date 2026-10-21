@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import Avatar from "@/components/common/Avatar";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import CardFlightEffect, { type CardFlight } from "./CardFlightEffect";
@@ -10,6 +12,9 @@ import RatATatCatCallModal from "./RatATatCatCallModal";
 import { getRatSound } from "./ratSound";
 import { ratSoundCues } from "./ratSneakScore";
 import { getValidMoves, SLOTS, type EngineAction, type RatATatCatState, type SeatIndex, type SlotIndex } from "./engine";
+
+// three.js only loads when the 3D table is shown (🖼️ 2D otherwise / without WebGL).
+const RatTable3D = dynamic(() => import("./three/RatTable3D"), { ssr: false, loading: () => <Loading3D /> });
 
 /**
  * Controlled component — state comes in via props only, every user action
@@ -137,6 +142,8 @@ const SPECIAL_INSTRUCTIONS: Record<"peek" | "swap" | "drawTwo", string> = {
 
 export default function RatATatCatBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: RatATatCatBoardProps) {
   const [swapMySlot, setSwapMySlot] = useState<SlotIndex | null>(null);
+  const board3d = useBoardView("rat-a-tat-cat-view");
+  const [lowDetail] = useState(preferLowDetail);
 
   // ---------------------------------------------------------------------
   // Peek temporary-reveal timers (setup end-cards + the Peek power card) —
@@ -563,7 +570,35 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
         </div>
       )}
 
-      {/* Opponents */}
+      <div className="flex justify-end">
+        <ViewToggle board={board3d} />
+      </div>
+      {board3d.view === "3d" && (
+        <Frame3D hint={inSwapPickTarget ? "아래에서 바꿀 상대 카드를 고르세요" : "모든 카드는 뒷면 — 내 카드는 아래에서 엿보기 · 드래그로 둘러보기"}>
+          <RatTable3D
+            playerCount={state.playerCount}
+            viewerSeat={viewerSeat}
+            seats={Array.from({ length: state.playerCount }, (_, seat) => ({
+              seat,
+              name: names[seat] ?? `${seat + 1}번`,
+              slots: state.hands[seat].map((h) => (h.isRevealed ? h.card : null)),
+              away: !connectedSeats.has(seat),
+            }))}
+            activeSeat={state.currentTurn}
+            held={state.drawnCard ? { visible: state.drawSource === "discard" ? state.drawnCard : null } : null}
+            discardTop={state.discardPile[state.discardPile.length - 1] ?? null}
+            deckCount={state.deck.length}
+            callerSeat={state.callerId}
+            turnsLeft={state.finalRoundTurnsLeft}
+            setup={false}
+            overview={false}
+            lowDetail={lowDetail}
+          />
+        </Frame3D>
+      )}
+
+      {/* Opponents (the 3D table shows them; kept for picking a swap target) */}
+      {(board3d.view === "2d" || inSwapPickTarget) && (
       <div className="flex flex-wrap justify-center gap-4">
         {opponents.map((seat) => {
           const isTurn = state.phase === "playing" && state.currentTurn === seat;
@@ -610,6 +645,7 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
           );
         })}
       </div>
+      )}
 
       {/* Center: deck / discard / drawn-card decision zone */}
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white/90 light:shadow-sm p-4">

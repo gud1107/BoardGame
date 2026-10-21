@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
-import { preferLowDetail, useBoardView } from "@/games/shared/three/tableKit";
+import { preferLowDetail, useBoardView } from "@/games/shared/three/viewPref";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import RulebookModal from "./RulebookModal";
 import PerudoSoundHud from "./PerudoSoundHud";
