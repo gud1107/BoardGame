@@ -171,7 +171,7 @@ export default function CucumberTable3D(props: CucumberTable3DProps) {
         <group>
           <Trick plays={props.plays} winnerSeat={winnerSeat} />
           <PopIn key={props.trickNumber}>
-            <TableSign text={props.finalTrick ? "⚠️ 마지막 7번째 트릭 — 이기면 오이!" : `라운드 ${props.roundNumber} · 트릭 ${props.trickNumber}/7`} style={props.finalTrick ? WARN : SIGN} y={1.0} />
+            <TableSign text={props.finalTrick ? "⚠️ 마지막 7번째 트릭 — 이기면 오이!" : `라운드 ${props.roundNumber} · 트릭 ${props.trickNumber}/7`} style={props.finalTrick ? WARN : SIGN} y={0.24} width={0.62} />
           </PopIn>
         </group>
       }

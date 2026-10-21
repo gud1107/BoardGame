@@ -49,10 +49,12 @@ export function useTableGeo(): TableGeo {
 export const TABLE_Y = 0.92;
 const HEAD_Y = 1.52;
 
-export function tableDims(n: number) {
+export function tableDims(n: number, lifelike = false) {
   // face-to-face duels sit closer so the opponent isn't a speck across an empty table
   const seatR = n <= 2 ? 1.9 : n === 3 ? 2.1 : 2.3 + Math.max(0, n - 4) * 0.3;
-  return { seatR, tableR: seatR - 0.72 };
+  // life-size people next to a table sized for the big-headed rig look tiny — pull everyone in
+  const r = lifelike ? Math.max(1.6, seatR * 0.82) : seatR;
+  return { seatR: r, tableR: r - 0.72 };
 }
 
 export interface TableSeat {
@@ -296,7 +298,8 @@ function SeatView({ s, geo, theme, lowDetail, ringColor }: { s: TableSeat; geo: 
               <meshBasicMaterial map={labelTexture(`${s.name} (나)`, color)} transparent />
             </mesh>
           </group>
-          {s.tag && <ScreenSprite position={[0, 0.45, -0.1]} scale={[0.66, 0.165]} map={labelTexture(s.tag.text, s.tag.color, { bg: s.tag.bg })} />}
+          {/* with the low lifelike camera, keep my own tag on the table so it doesn't cover faces opposite */}
+          {s.tag && <ScreenSprite position={theme.personStyle === "realistic" ? [0, 0.1, 0.12] : [0, 0.45, -0.1]} scale={theme.personStyle === "realistic" ? [0.5, 0.125] : [0.66, 0.165]} map={labelTexture(s.tag.text, s.tag.color, { bg: s.tag.bg })} />}
           {s.bubble && <SpeechBubble text={s.bubble.text} style={s.bubble.style} y={0.82} popKey={s.bubble.key} width={s.bubble.width ?? 0.9} />}
         </group>
       ) : (
@@ -366,7 +369,7 @@ function Lamp({ lamp, lowDetail, dim }: { lamp: NonNullable<TableTheme["lamp"]>;
 function SceneContents(props: TableSceneProps) {
   const { seatCount: n, viewerSeat, theme, lowDetail } = props;
   const geo = useMemo<TableGeo>(() => {
-    const { seatR, tableR } = tableDims(n);
+    const { seatR, tableR } = tableDims(n, theme.personStyle === "realistic");
     const angleOf = (seat: number) => seatAngle(seat, viewerSeat, n);
     return {
       n,
@@ -378,7 +381,7 @@ function SceneContents(props: TableSceneProps) {
       spotOf: (seat, inset = 0.4) => polar(angleOf(seat), tableR - inset, TABLE_Y),
       headOf: (seat) => (seat === viewerSeat ? new THREE.Vector3(0, 1.9, seatR + 0.6) : polar(angleOf(seat), seatR - 0.05, HEAD_Y)),
     };
-  }, [n, viewerSeat]);
+  }, [n, viewerSeat, theme.personStyle]);
 
   return (
     <GeoContext.Provider value={geo}>
@@ -397,7 +400,11 @@ function SceneContents(props: TableSceneProps) {
         <SeatView key={s.seat} s={s} geo={geo} theme={theme} lowDetail={lowDetail} ringColor={props.ringColor ?? "#fbbf24"} />
       ))}
       {props.extras}
-      <FirstPersonCamera seatR={geo.seatR} tableY={TABLE_Y} overview={props.overview} seats={n} />
+      {theme.personStyle === "realistic" && (
+        // a soft key light from my side so faces across the table read clearly
+        <directionalLight position={[0, 2.6, geo.seatR + 2]} intensity={0.9} color="#fff4e6" />
+      )}
+      <FirstPersonCamera seatR={geo.seatR} tableY={TABLE_Y} overview={props.overview} seats={n} eyeLevel={theme.personStyle === "realistic"} />
     </GeoContext.Provider>
   );
 }
