@@ -47,6 +47,16 @@
 - 최신화: 빠져 있던 체스 3D(10-20)·체스 시간 판정 수정 3건(10-19)·사색의 석상 디자인(10-20)·자동 모드 ON/OFF 알림(10-21) 추가. 버전 중복 정리: 갓생 사운드 v1.77.0→**v1.78.0**, 10-18의 v1.64.0 세 개 → v1.64.2/v1.64.1/v1.64.0. 이번 개편 v1.78.1.
 - 확인: constants 테스트 68개, eslint, tsc(기존 proceduralSuites 오류만). 컴포넌트를 SSR→헤드리스 Chromium 1장 스크린샷으로 10-21 묶음·접힘 확인. 바쁜 날은 카드 제목(여러 버전 제목 이어붙임)이 3줄까지 길어짐.
 
+## 🧊 24개 게임 추가 3D (A 테이블 15 + B 보드 9) — 2026-10-21 (커밋/푸시, 배포는 웹훅 자동)
+
+"3D로 만들 수 있는 게임 전부 → A, B 먼저, 출시 수준, 효율적으로" → 24게임 기본 3D, 헤더 `🖼️ 2D로`/`🧊 3D로`(localStorage `<게임id>-view`, WebGL 없으면 2D). 엔진·규칙·네트워크 무변경. A는 커밋 `3dcf610`, B는 그 다음 커밋.
+
+- **공용 키트 확장(`shared/three/`)**: `viewPref.tsx` = three 없는 `useBoardView`/`preferLowDetail`/`ViewToggle`/`Frame3D`/`Loading3D` — **보드는 반드시 여기서 import**(예전 `tableKit` import는 three.js를 2D 청크에 끌어올 수 있어 9개 기존 보드도 옮김; `tableKit`은 재수출만). `environments.tsx` = 파라미터형 `IndoorRoom`/`OutdoorPlaza`(벽·바닥 종류·창·깃발·액자·횃불·기둥 / 산·도시·사구·숲 스카이라인·해). `tableKit` += `simpleCardTexture`/`simpleBackTexture`/`imageCardTexture`(실제 그림, 로드 후 다시 칠함)/`paintedTexture`. `tablePieces` += `TableSign`/`DeckPile`/`CardRow`/`ChipPouch`(비공개 칩)/`Clickable`(드래그 무시 클릭)/`HitBox`/`PipDie`. `TableScene`: 2~3인 테이블 가까이(seatR 1.9/2.1), 좌석 `color` 덮어쓰기.
+- **A 테이블형 15**: 노 땡스(비밀 모드 → 남의 칩 지갑), 포 세일(현금·보유 부동산 값 비공개), 러브레터(사제가 본 카드 안 보냄), 랫어탯캣(내 카드도 뒷면, 스왑 대상 고를 땐 2D 상대 줄 다시 보임), 5 오이, 텔레파시(손패 장수만), 쇼미더코인(코인 값은 쇼다운 전 비공개), 러브 윈즈 올(선언한 1장만), 로스트 시티(**원정 줄·버림 더미·덱을 3D에서 클릭**, 3D면 2D 줄 숨김), 그리드 포커(판 텍스처는 캐시 말고 판마다 생성·dispose), 뱅!(**turnOrder 순서 착석, 사람 눌러 지목**; 강탈/캣벌루는 2D 테이블로 손패/장비 선택), 운명전쟁39(`visibleCurrentPrediction` 그대로), 최고의 투자(지갑 비공개 시 지갑), 진실의 고개(히든 질문은 🔒만), 하나미코지.
+- **B 9**: 라스베가스(**빛나는 카지노 클릭으로 배치**, `CASINO_PHOTOS` export), 스플렌더(**시장 카드·보석 은행·덱 3D 클릭**, 3D면 2D 귀족·시장·남 패널 숨김, 토큰 확정은 2D 은행 버튼), 스플렌더 듀얼(`DuelGrid3D` = SpiralGridBoard와 같은 props로 5×5판만 교체), 센추리(PC 레이아웃만, 모바일 무스크롤 대시보드는 2D), 소환사의 협곡(뽑은 몬스터 뒷면), 망각의 광산 1·2(`mineOfOblivion/three/MineField3D` 공용, 2편은 `MineOfOblivion2Grid` 안에서 분기 → PC·모바일 둘 다), 반지의 제왕(`MiddleEarth3D` = MiddleEarthMap과 같은 props), 컬링(**`CurlingBroadcast3D` = 3D 중계 창만 추가**, 같은 `live` ref를 매 프레임 읽고 입력은 2D 시트 그대로 — 손맛 위험 때문에 일부러 교체 안 함).
+- 확인: tsc(기존 `proceduralSuites.test.ts` 오류만)·eslint 통과, A 15게임 테스트 755개·B 9게임 351개·패치노트 68개 통과. 헤드리스 SwiftShader로 24장 모의 데이터 렌더 → 콘솔 오류 0(파일 경로 이미지 404만, 실서버에선 정상) → 콘택트 시트로 확인: 2인 테이블 너무 멂, 광산 숫자 뒤집힘·가까운 줄 잘림, 반지 지도 카메라 멂 → 수정 후 재확인.
+- **안 한 것**: 실제 방(Supabase) 플레이, 실기기 FPS/발열, 모바일 폭 스크린샷, 3D 클릭 조작(로스트 시티·스플렌더·라스베가스·뱅!·광산·반지·듀얼) 실제 탭 테스트, 연출 단계별 캡처, 결과 화면은 2D. C(실시간 액션 4종)·D 그룹은 미착수.
+
 ## 🧊 달무티·마피아·페루도·아발론·쿠 3D 테이블 — 2026-10-21 (커밋/푸시, 배포는 웹훅 자동)
 
 "달무티, 마피아, 페루도, 아발론, 쿠 3D로, 실제 출시 수준" → 다섯 게임 기본 3D, 헤더 `🖼️ 2D로`/`🧊 3D로`(localStorage `dalmuti-view`/`mafia-view`/`perudo-view`/`avalon-view`/`coup-view`, WebGL 없으면 2D). 엔진·네트워크·규칙 무변경, 조작(손패 선택·베팅 트랙·액션 버튼·모달)은 기존 2D 그대로 아래에 남김.

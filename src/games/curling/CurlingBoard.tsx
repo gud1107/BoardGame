@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import dynamic from "next/dynamic";
+import { Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import {
   AIM_LIMIT,
@@ -27,6 +29,9 @@ import RulebookModal from "./RulebookModal";
 import { curlingCues, getCurlingSound } from "./curlingSound";
 import type { LiveEvent, LiveView } from "./live";
 import { BACK_Y, HOG_Y, HOUSE_R, RELEASE_Y, STONE_R, weightForTravel, type PartyKind } from "./physics";
+
+// three.js only loads when the 3D broadcast view is shown (🖼️ 2D otherwise / without WebGL).
+const CurlingBroadcast3D = dynamic(() => import("./three/CurlingBroadcast3D"), { ssr: false, loading: () => <Loading3D label="3D 중계 준비 중…" /> });
 
 const PANEL = "rounded-2xl border border-white/10 bg-white/[0.04] p-3 light:border-slate-200 light:bg-white light:shadow-sm";
 const PRIMARY = "rounded-xl bg-sky-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-sky-500 disabled:opacity-40";
@@ -438,6 +443,8 @@ interface Props {
 }
 
 export default function CurlingBoard({ state, viewerSeat, names, connectedSeats, botSeats, canDrive, deadlineMs, nowMs, live, liveInfo, aim, myIntensity, onThrow, onAimLive, onSweep, onAction, onGameEnd, reactions, onReact, onEvent, calls, onCall, predictions, predictLocked, onPredict, seer }: Props) {
+  const board3d = useBoardView("curling-view");
+  const [lowDetail] = useState(preferLowDetail);
   const lt = state.lastThrow;
   const [rules, setRules] = useState(false);
   // §21 first-time help: the tour opens by itself once per device, coach tips show once each
@@ -672,6 +679,7 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
           {state.phase === "aim" && ` · ${state.throwIndex + 1}/${state.order.length}번째 스톤`}
         </span>
         <span className="ml-auto flex items-center gap-1.5">
+          <ViewToggle board={board3d} />
           <SuiteSoundHud suite={getCurlingSound} icon="🥌" label="Ice Party" preview="hit" />
           <button onClick={() => setTourOpen(true)} className={CHIP} title="처음 하는 사람을 위한 안내">
             🔰 안내
@@ -695,6 +703,14 @@ export default function CurlingBoard({ state, viewerSeat, names, connectedSeats,
           </div>
         )}
       </div>
+
+      {/* 3D 중계 — 같은 live 스냅샷을 읽기만 한다(입력은 아래 2D 시트) */}
+      {board3d.view === "3d" && (
+        <div className="relative h-[26vh] max-h-[320px] min-h-[180px] overflow-hidden rounded-2xl border border-white/10 light:border-slate-300">
+          <CurlingBroadcast3D stones={state.stones} live={live} lowDetail={lowDetail} />
+          <span className="pointer-events-none absolute top-2 left-2 rounded-full bg-black/60 px-2.5 py-0.5 text-[10px] font-bold text-white/85">📺 3D 중계</span>
+        </div>
+      )}
 
       {/* 무대 */}
       <div className="relative h-[54vh] max-h-[660px] min-h-[320px] overflow-hidden rounded-2xl border border-white/10 light:border-slate-300">

@@ -38,6 +38,11 @@ import { CardChoiceModal, LandmarkConfirmModal, PendingChoiceModal } from "./Act
 import AllianceTokenSelectModal from "./AllianceTokenSelectModal";
 import HistoryLogDrawer from "./HistoryLogDrawer";
 import MiddleEarthMap from "./MiddleEarthMap";
+import dynamic from "next/dynamic";
+import { Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
+
+// three.js only loads when the 3D map is shown (🖼️ 2D otherwise / without WebGL).
+const MiddleEarth3D = dynamic(() => import("./three/MiddleEarth3D"), { ssr: false, loading: () => <div className="aspect-[10/9] w-full"><Loading3D label="3D 가운데땅 준비 중…" /></div> });
 import RingTrackBoard, { raceDanger } from "./RingTrackBoard";
 import type { PassiveTrigger } from "./PlayerPassivesHUD";
 import PlayerTechHUD from "./PlayerTechHUD";
@@ -153,6 +158,8 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
 
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [moveFrom, setMoveFrom] = useState<RegionId | null>(null);
+  const board3d = useBoardView("lotr-duel-view");
+  const [lowDetail] = useState(preferLowDetail);
   const [victoryClosed, setVictoryClosed] = useState(false);
   const [showCompendium, setShowCompendium] = useState(false);
   const [choiceHidden, setChoiceHidden] = useState(false);
@@ -578,7 +585,22 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(0,0.9fr)]">
         {/* ---- map ---- */}
         <div className="order-2 flex flex-col gap-2 lg:order-1">
+          <div className="flex justify-end">
+            <ViewToggle board={board3d} />
+          </div>
           <div key={shakeKey} className={shakeKey > 0 ? "lotrfx-shake" : undefined}>
+            {board3d.view === "3d" ? (
+            <MiddleEarth3D
+              state={state}
+              targets={targets}
+              selectedFrom={moveFrom}
+              onRegion={onRegion}
+              rise={rise}
+              drops={drops}
+              preview={preview?.regions ? { regions: preview.regions, tone: preview.regionTone ?? "red" } : null}
+              lowDetail={lowDetail}
+            />
+            ) : (
             <MiddleEarthMap
               state={state}
               targets={targets}
@@ -588,6 +610,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
               drops={drops}
               preview={preview?.regions ? { regions: preview.regions, tone: preview.regionTone ?? "red" } : null}
             />
+            )}
           </div>
           <p className="text-[11px] text-white/40 light:text-slate-500">
             <b className="text-amber-300">💍 원정대 xN</b> · <b className="text-red-300">👁️ 사우론 xN</b> 유닛 · 🏰 원정대 / 🌋 사우론 요새 (전투로 파괴되지 않음). 같은 지역에 양측 유닛이 모이면 1:1로 동시에 사라집니다.

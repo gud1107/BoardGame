@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Avatar from "@/components/common/Avatar";
+import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import RulebookModal from "./RulebookModal";
 import SummonersRiftLastRoundModal from "./SummonersRiftLastRoundModal";
@@ -26,6 +28,9 @@ import {
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { getSummonersRiftBgm } from "./summonersRiftBgm";
+
+// three.js only loads when the 3D rift altar is shown (🖼️ 2D otherwise / without WebGL).
+const RiftTable3D = dynamic(() => import("./three/RiftTable3D"), { ssr: false, loading: () => <Loading3D /> });
 
 /**
  * Pure game UI + rules driver — same controlled-component contract as every
@@ -371,6 +376,8 @@ function MonsterHistoryPanel({ state, entries }: { state: SummonersRiftState; en
 export default function SummonersRiftBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: SummonersRiftBoardProps) {
   // Rift Battle Hymn BGM (summonersRiftBgm.ts) — choir climax while the rift resolves.
   useSuiteBgm(getSummonersRiftBgm, state.phase !== "gameOver", state.phase === "resolvingRift" ? 1 : 0);
+  const board3d = useBoardView("summoners-rift-view");
+  const [lowDetail] = useState(preferLowDetail);
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const [lastRoundOpen, setLastRoundOpen] = useState(false);
 
@@ -561,6 +568,7 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
 
   const rulebookButton = (
     <>
+      <ViewToggle board={board3d} />
       <SuiteSoundHud suite={getSummonersRiftBgm} icon="⚔️" label="Rift Battle Hymn" preview="preview" showSfx={false} />
       <button
       onClick={() => setRulebookOpen(true)}
@@ -747,6 +755,37 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
               </div>
             )}
           </div>
+        )}
+
+        {board3d.view === "3d" && state.phase !== "gameOver" && (
+          <Frame3D hint="뽑은 몬스터는 뒷면으로만 · 드래그로 둘러보기">
+            <RiftTable3D
+              playerCount={state.playerCount}
+              viewerSeat={viewerSeat}
+              seats={state.players.map((p) => ({
+                seat: p.seat,
+                name: names[p.seat] ?? `${p.seat + 1}번`,
+                success: p.successTokens,
+                failure: p.failureTokens,
+                eliminated: p.eliminated,
+                passed: p.passed,
+                removedItems: p.removedItemIds,
+                holding: state.pendingDraw?.seat === p.seat,
+                away: !connectedSeats.has(p.seat),
+              }))}
+              phase={state.phase}
+              activeSeat={state.activeSeat}
+              challenger={state.challengerSeat}
+              equipped={state.equippedItemIds}
+              deckCount={state.deck.length}
+              riftCount={state.riftPile.length}
+              revealed={state.combatLog.map((e, i) => ({ threat: e.monster.threat, killed: e.killedBy !== null, key: `${state.roundNumber}-${i}-${e.monster.id}` }))}
+              hp={state.currentHp !== null && state.totalHp !== null ? { current: state.currentHp, total: state.totalHp } : null}
+              round={state.roundNumber}
+              overview={state.phase === "resolvingRift"}
+              lowDetail={lowDetail}
+            />
+          </Frame3D>
         )}
 
         {/* Shared champion + item HUD */}

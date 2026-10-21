@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
+import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import RulebookModal from "./RulebookModal";
 import { RESOURCE_ORDER, bundleTotal, type MerchantCard, type Resource, type ResourceBundle } from "./cards";
 import { detectAcquireEvent, FlyingResourceBurst, type AcquireAnimEvent } from "./MerchantEffects";
@@ -26,6 +28,10 @@ import {
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { centurySoundCues, getCenturySound } from "./centurySound";
+import { computePlayerScore } from "./engine";
+
+// three.js only loads when the 3D caravan camp is shown (🖼️ 2D otherwise / without WebGL).
+const CenturyTable3D = dynamic(() => import("./three/CenturyTable3D"), { ssr: false, loading: () => <Loading3D /> });
 
 /**
  * Pure game UI + rules driver — same controlled-component contract as every
@@ -154,6 +160,8 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
 
   const me = state.players.find((p) => p.seat === viewerSeat)!;
   const isMyTurn = state.phase === "playing" && state.activeSeat === viewerSeat;
+  const board3d = useBoardView("century-view");
+  const [lowDetail] = useState(preferLowDetail);
   const mustDiscard = state.phase === "discarding" && state.awaitingDiscardSeat === viewerSeat;
 
   const rulebookButton = (
@@ -283,6 +291,7 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
             {state.endTriggered && <span className="ml-1 text-rose-300">· 마지막 라운드</span>}
           </span>
           <div className="flex flex-wrap items-center gap-1.5">
+            {!compact && <ViewToggle board={board3d} />}
             <SuiteSoundHud suite={getCenturySound} icon="🐪" label="Silk Road Caravan" preview="claim" />
             {rulebookButton}
           </div>
@@ -363,6 +372,36 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
     <div className={`${MAT} flex flex-col gap-3`} style={MAT_STYLE}>
       {statusBar(false)}
 
+      {board3d.view === "3d" && (
+        <Frame3D hint={isMyTurn ? "점수 카드를 눌러 완성 — 상인 카드는 아래 시장에서" : "드래그로 둘러보기"}>
+          <CenturyTable3D
+            playerCount={state.playerCount}
+            viewerSeat={viewerSeat}
+            seats={state.players.map((p) => ({
+              seat: p.seat,
+              name: names[p.seat] ?? `${p.seat + 1}번`,
+              resources: p.resources,
+              pointCards: p.pointCards.length,
+              gold: p.gold,
+              silver: p.silver,
+              score: computePlayerScore(p).total,
+              away: !connectedSeats.has(p.seat),
+            }))}
+            pointMarket={state.pointMarket}
+            pointDeck={state.pointDeck.length}
+            gold={state.goldSupply}
+            silver={state.silverSupply}
+            activeSeat={state.activeSeat}
+            affordable={state.pointMarket.map((c) => !!c && isMyTurn && canClaimPoint(me, c))}
+            onPoint={isMyTurn ? previewPoint : null}
+            goal={state.pointCardGoal}
+            endTriggered={state.endTriggered}
+            overview={false}
+            lowDetail={lowDetail}
+          />
+        </Frame3D>
+      )}
+
       {/* Central market board — a felt/carpet surface holding the spice
           bowls, the point-card market, and the merchant-card market. */}
       <section className={FELT} style={FELT_STYLE}>
@@ -383,7 +422,7 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
       <MyCaravan me={me} forwardedRef={cartRef} />
       <MyHandCards hand={me.hand} playedCards={me.playedCards} isMyTurn={isMyTurn} highlightedCardId={highlightedCardId} onPlayCard={playCard} onRest={() => onAction({ type: "rest", seat: viewerSeat })} cardWidth={handCardWidth} />
 
-      <OpponentsSummary players={otherPlayers} names={names} activeSeat={state.activeSeat} connectedSeats={connectedSeats} setRef={setPlayerSummaryRef} />
+      {board3d.view === "2d" && <OpponentsSummary players={otherPlayers} names={names} activeSeat={state.activeSeat} connectedSeats={connectedSeats} setRef={setPlayerSummaryRef} />}
 
       {flyingEffects}
     </div>

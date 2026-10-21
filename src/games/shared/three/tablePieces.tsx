@@ -3,7 +3,8 @@
 import { useMemo, useRef, type ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { bubbleTexture, clamp01, easeInOut, easeOutBack, emojiTexture, type BubbleStyle } from "./tableKit";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+import { bubbleTexture, clamp01, easeInOut, easeOutBack, emojiTexture, paintedTexture, type BubbleStyle } from "./tableKit";
 import { distanceBoost } from "./ScreenSprite";
 
 /**
@@ -295,4 +296,40 @@ export function HitBox({ size }: { size: [number, number, number] }) {
       <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
     </mesh>
   );
+}
+
+const PIP_LAYOUT: Record<number, [number, number][]> = {
+  1: [[0.5, 0.5]],
+  2: [[0.28, 0.28], [0.72, 0.72]],
+  3: [[0.25, 0.25], [0.5, 0.5], [0.75, 0.75]],
+  4: [[0.28, 0.28], [0.72, 0.28], [0.28, 0.72], [0.72, 0.72]],
+  5: [[0.27, 0.27], [0.73, 0.27], [0.5, 0.5], [0.27, 0.73], [0.73, 0.73]],
+  6: [[0.28, 0.24], [0.72, 0.24], [0.28, 0.5], [0.72, 0.5], [0.28, 0.76], [0.72, 0.76]],
+};
+function pipTexture(v: number, body: string, ink: string): THREE.CanvasTexture {
+  return paintedTexture(`pip:${v}:${body}:${ink}`, 96, 96, (ctx, W) => {
+    ctx.fillStyle = body;
+    ctx.fillRect(0, 0, W, W);
+    ctx.fillStyle = ink;
+    for (const [x, y] of PIP_LAYOUT[v]) {
+      ctx.beginPath();
+      ctx.arc(x * W, y * W, W * (v === 1 ? 0.13 : 0.09), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+}
+const pipDieGeo = new RoundedBoxGeometry(1, 1, 1, 2, 0.16);
+// box material order: +x, -x, +y(top), -y, +z, -z — opposite faces sum to 7
+const PIP_SIDES: Record<number, number[]> = { 1: [3, 4, 1, 6, 2, 5], 2: [3, 4, 2, 5, 1, 6], 3: [1, 6, 3, 4, 2, 5], 4: [6, 1, 4, 3, 2, 5], 5: [3, 4, 5, 2, 6, 1], 6: [4, 3, 6, 1, 2, 5] };
+const pipMatCache = new Map<string, THREE.MeshStandardMaterial[]>();
+
+/** A rounded pip die showing `value` on top (materials cached per colour/value). */
+export function PipDie({ value, body, ink = "#111111", size = 0.1 }: { value: number; body: string; ink?: string; size?: number }) {
+  const key = `${value}:${body}:${ink}`;
+  let mats = pipMatCache.get(key);
+  if (!mats) {
+    mats = PIP_SIDES[value].map((v) => new THREE.MeshStandardMaterial({ map: pipTexture(v, body, ink), roughness: 0.35 }));
+    pipMatCache.set(key, mats);
+  }
+  return <mesh geometry={pipDieGeo} material={mats} scale={size} position={[0, size / 2, 0]} castShadow />;
 }

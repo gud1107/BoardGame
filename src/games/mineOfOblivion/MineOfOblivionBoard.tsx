@@ -1,5 +1,8 @@
 "use client";
 
+import dynamic from "next/dynamic";
+import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
+import type { MineCell3D } from "./three/MineField3D";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Avatar from "@/components/common/Avatar";
@@ -44,6 +47,9 @@ export interface MineOfOblivionBoardProps {
 }
 
 /** Number color ramp for a revealed adjacent-mine-count tile — mirrors classic minesweeper's escalating alarm, restyled for this game's dark-cyber palette. */
+// three.js only loads when the 3D mine field is shown (🖼️ 2D otherwise / without WebGL).
+const MineField3D = dynamic(() => import("./three/MineField3D"), { ssr: false, loading: () => <Loading3D /> });
+
 function countColor(n: number): string {
   if (n <= 0) return "text-white/25";
   if (n === 1) return "text-cyan-300";
@@ -90,6 +96,8 @@ export default function MineOfOblivionBoard({ state, viewerSeat, names, opponent
   const opponentSeat = otherSeat(viewerSeat);
   const [selectedMines, setSelectedMines] = useState<TileId[]>([]);
   const [zoom, setZoom] = useState(1);
+  const board3d = useBoardView("mine-of-oblivion-view");
+  const [lowDetail] = useState(preferLowDetail);
 
   const iAmReady = state.mineReady[viewerSeat];
   const opponentReady = state.mineReady[opponentSeat];
@@ -202,6 +210,34 @@ export default function MineOfOblivionBoard({ state, viewerSeat, names, opponent
           ? "내 차례 · 이동할 인접 칸(8방향)을 선택하세요"
           : `${names[opponentSeat]}님의 차례`;
 
+  // 3D field — the same per-tile rules as RowCells below, flattened
+  const cells3D: MineCell3D[] = BOARD_ROWS.flatMap((row) =>
+    BOARD_COLS.map((col): MineCell3D => {
+      const tile = `${col}${row}`;
+      const treasure = state.treasures.find((t) => t.tileId === tile);
+      const isTreasureTile = TREASURE_TILES.includes(tile);
+      const visited = state.visitedTiles.includes(tile);
+      const mineSelectable = state.phase === "SETUP_MINE" && !iAmReady && canPlaceMine(viewerSeat, tile);
+      return {
+        id: tile,
+        kind: isTreasureTile ? (treasure?.holder === null ? "treasure" : "treasureTaken") : visited ? "dug" : "rock",
+        count: !isTreasureTile && visited ? state.revealedCounts[tile] : undefined,
+        treasurePoints: treasure?.points ?? null,
+        safe: isSafeZoneTile(tile),
+        forbidden: state.phase === "SETUP_MINE" && !canPlaceMine(viewerSeat, tile),
+        reachable: reachable.has(tile),
+        selected: selectedMines.includes(tile) ? "mine" : null,
+        myMine: myArmedMines.has(tile) && state.phase !== "SETUP_MINE",
+        myBomb: null,
+        danger: false,
+        crater: disarmedTiles.has(tile),
+        scorched: false,
+        clickable: state.phase === "SETUP_MINE" ? mineSelectable : reachable.has(tile),
+      };
+    }),
+  );
+  const tileIndex = (tile: string) => cells3D.findIndex((c) => c.id === tile);
+
   const gridColPx = CELL_PX * zoom;
   const gutterPx = 22 * zoom;
 
@@ -217,6 +253,24 @@ export default function MineOfOblivionBoard({ state, viewerSeat, names, opponent
         connected={opponentConnected}
       />
 
+      <div className="flex justify-end">
+        <ViewToggle board={board3d} />
+      </div>
+      {board3d.view === "3d" && (
+        <Frame3D tall hint={state.phase === "SETUP_MINE" ? "칸을 눌러 지뢰 매설 (상대 지뢰는 안 보여요)" : isMyTurn ? "초록 칸을 눌러 이동" : "드래그로 둘러보기"}>
+          <MineField3D
+            cells={cells3D}
+            pawns={{ p1: tileIndex(state.players.p1.position), p2: tileIndex(state.players.p2.position) }}
+            viewerIsP1={viewerSeat === "p1"}
+            activeSeat={state.phase === "PLAYER_MOVE" ? state.activeSeat : null}
+            onTap={handleTileTap}
+            event={state.lastEvent ? { kind: state.lastEvent.kind, index: tileIndex(state.lastEvent.tile), key: `${state.actionsPlayed}` } : null}
+            lowDetail={lowDetail}
+          />
+        </Frame3D>
+      )}
+
+      {board3d.view === "2d" && (
       <div className="relative mx-auto w-full max-w-2xl">
         {/* Zoom controls — 모바일 줌 요구사항. Panning is native touch/scroll on the wrapper below. */}
         <div className="absolute right-1.5 top-1.5 z-10 flex flex-col gap-1">
@@ -273,6 +327,7 @@ export default function MineOfOblivionBoard({ state, viewerSeat, names, opponent
           </div>
         </div>
       </div>
+      )}
 
       <SeatHud
         seat={viewerSeat}

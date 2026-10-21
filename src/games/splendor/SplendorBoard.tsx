@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import dynamic from "next/dynamic";
+import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import RulebookModal from "./RulebookModal";
 import { GemChip, GemCountBadge } from "./GemToken";
 import { GEM_ORDER, type DevelopmentCard, type GemColor, type Noble, type TokenColor, type Tier } from "./cards";
@@ -28,6 +30,9 @@ import {
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { getSplendorSound, splendorSoundCues } from "./splendorSound";
+
+// three.js only loads when the 3D jeweller's table is shown (🖼️ 2D otherwise / without WebGL).
+const SplendorTable3D = dynamic(() => import("./three/SplendorTable3D"), { ssr: false, loading: () => <Loading3D /> });
 
 /**
  * Pure game UI + rules driver — same controlled-component contract as every
@@ -268,6 +273,8 @@ export default function SplendorBoard({ state, viewerSeat, names, connectedSeats
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const [tokenPick, setTokenPick] = useState<GemColor[]>([]);
   const [selectedCard, setSelectedCard] = useState<{ card: DevelopmentCard; source: "market" | "reserved" } | null>(null);
+  const board3d = useBoardView("splendor-view");
+  const [lowDetail] = useState(preferLowDetail);
   const [discardPick, setDiscardPick] = useState<TokenBundle>({});
   // Venetian Jewel Market sound suite (splendorSound.ts) — per-seat state-diff cues heard by every client.
   useSoundCues(state, getSplendorSound, splendorSoundCues);
@@ -425,6 +432,7 @@ export default function SplendorBoard({ state, viewerSeat, names, connectedSeats
           {state.endTriggered && <span className="ml-1 text-rose-300">· 마지막 라운드 진행 중</span>}
         </span>
         <div className="flex flex-wrap items-center gap-1.5">
+          <ViewToggle board={board3d} />
           <SuiteSoundHud suite={getSplendorSound} icon="💎" label="Jewel Market" preview="noble" />
           {rulebookButton}
         </div>
@@ -440,14 +448,48 @@ export default function SplendorBoard({ state, viewerSeat, names, connectedSeats
               : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
       </p>
 
+      {board3d.view === "3d" && (
+        <Frame3D tall hint={isMyTurn ? "카드를 눌러 구매·예약, 보석을 눌러 가져오기, 덱을 눌러 비공개 예약" : "남의 예약 카드는 뒷면 · 드래그로 둘러보기"}>
+          <SplendorTable3D
+            playerCount={state.playerCount}
+            viewerSeat={viewerSeat}
+            seats={state.players.map((p) => ({
+              seat: p.seat,
+              name: names[p.seat] ?? `${p.seat + 1}번`,
+              score: computePlayerScore(p),
+              tokens: p.tokens,
+              bonuses: p.purchasedCards.reduce<Partial<Record<GemColor, number>>>((acc, c) => ({ ...acc, [c.bonus]: (acc[c.bonus] ?? 0) + 1 }), {}),
+              nobles: p.nobles.length,
+              reserved: p.reservedCards.length,
+              away: !connectedSeats.has(p.seat),
+            }))}
+            markets={state.markets}
+            deckCounts={{ 1: state.decks[1].length, 2: state.decks[2].length, 3: state.decks[3].length }}
+            nobles={state.nobles}
+            bank={state.tokenSupply}
+            activeSeat={state.activeSeat}
+            affordable={isMyTurn ? affordableIds : new Set<string>()}
+            picked={tokenPick}
+            onCard={isMyTurn ? (card) => setSelectedCard({ card, source: "market" }) : null}
+            onDeck={isMyTurn && canReserve(me) ? reserveBlind : null}
+            onToken={isMyTurn ? clickToken : null}
+            overview={false}
+            lowDetail={lowDetail}
+          />
+        </Frame3D>
+      )}
+
       {/* Nobles row */}
+      {board3d.view === "2d" && (
       <section className="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 p-2">
         {state.nobles.map((n) => (
           <NobleTile key={n.id} noble={n} qualifies={computeQualifyingNobles(state, viewerSeat).some((q) => q.id === n.id)} />
         ))}
       </section>
+      )}
 
       {/* Development card markets — tier III (top) down to tier I (bottom), mirroring the physical board's vertical layout. */}
+      {board3d.view === "2d" && (
       <section className="flex flex-col gap-1.5 rounded-2xl border border-white/10 bg-black/25 p-2 sm:p-2.5">
         {([3, 2, 1] as Tier[]).map((tier) => (
           <TierMarketRow
@@ -463,6 +505,7 @@ export default function SplendorBoard({ state, viewerSeat, names, connectedSeats
           />
         ))}
       </section>
+      )}
 
       {/* Token bank + take-tokens picker */}
       <TokenBank state={state} isMyTurn={isMyTurn} pick={tokenPick} onClickToken={clickToken} onConfirm={confirmTokenPick} onClear={() => setTokenPick([])} />
@@ -500,6 +543,7 @@ export default function SplendorBoard({ state, viewerSeat, names, connectedSeats
       </section>
 
       {/* Other players */}
+      {board3d.view === "2d" && (
       <section className="flex flex-col gap-1.5">
         {state.players
           .filter((p) => p.seat !== viewerSeat)
@@ -507,6 +551,7 @@ export default function SplendorBoard({ state, viewerSeat, names, connectedSeats
             <PlayerSummaryRow key={p.seat} player={p} name={names[p.seat]} isActive={state.activeSeat === p.seat} connected={connectedSeats.has(p.seat)} />
           ))}
       </section>
+      )}
 
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
 

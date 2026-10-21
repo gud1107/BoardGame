@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
+import { Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
+import type { MineCell3D } from "@/games/mineOfOblivion/three/MineField3D";
 import ChessPawn from "./ChessPawn";
 import { BombTickBadge } from "./MineOfOblivion2Effects";
 import { BOARD_COLS, BOARD_ROWS, canPlaceHazard, isSafeZoneTile, TREASURE_TILES, type MineOfOblivion2State, type Seat, type TileId } from "./engine";
@@ -19,6 +22,9 @@ import { BOARD_COLS, BOARD_ROWS, canPlaceHazard, isSafeZoneTile, TREASURE_TILES,
  * since 121 cells at a fully-visible size would otherwise be unreadably tiny
  * on a phone.
  */
+
+// three.js only loads when the 3D mine field is shown (🖼️ 2D otherwise / without WebGL) — shared with 망각의 광산 1.
+const MineField3D = dynamic(() => import("@/games/mineOfOblivion/three/MineField3D"), { ssr: false, loading: () => <Loading3D /> });
 
 const ZOOM_MIN = 0.55;
 const ZOOM_MAX = 1.5;
@@ -87,9 +93,61 @@ export default function MineOfOblivion2Grid({
       ? "h-full w-full overflow-auto rounded-xl border border-white/10 bg-black/40 p-1"
       : "max-h-[62vh] w-full overflow-auto rounded-xl border border-white/10 bg-black/40 p-1.5";
   const zoomBtnSizeClassName = variant === "mobile" ? "h-6 w-6 text-xs" : "h-7 w-7 text-sm";
+  const board3d = useBoardView("mine-of-oblivion-2-view");
+  const [lowDetail] = useState(preferLowDetail);
+
+  if (board3d.view === "3d") {
+    // same per-tile rules as RowCells below, flattened for the 3D field
+    const cells: MineCell3D[] = BOARD_ROWS.flatMap((row) =>
+      BOARD_COLS.map((col): MineCell3D => {
+        const tile = `${col}${row}`;
+        const treasure = state.treasures.find((t) => t.tileId === tile);
+        const isTreasureTile = TREASURE_TILES.includes(tile);
+        const visited = state.visitedTiles.includes(tile);
+        const myBomb = myBombByTile.get(tile);
+        const selectable = state.phase === "SETUP_MINE" && !iAmReady && canPlaceHazard(viewerSeat, tile);
+        return {
+          id: tile,
+          kind: isTreasureTile ? (treasure?.holder === null ? "treasure" : "treasureTaken") : visited ? "dug" : "rock",
+          count: !isTreasureTile && visited ? state.revealedCounts[tile] : undefined,
+          treasurePoints: treasure?.points ?? null,
+          safe: isSafeZoneTile(tile),
+          forbidden: state.phase === "SETUP_MINE" && !canPlaceHazard(viewerSeat, tile),
+          reachable: reachable.has(tile),
+          selected: selectedMines.includes(tile) ? "mine" : selectedBombTiles.has(tile) ? "bomb" : null,
+          myMine: myArmedMines.has(tile) && state.phase !== "SETUP_MINE",
+          myBomb: myBomb ? myBomb.remaining : null,
+          danger: myDangerZone.has(tile) && !myBomb,
+          crater: disarmedTiles.has(tile),
+          scorched: explodedBombTiles.has(tile),
+          clickable: state.phase === "SETUP_MINE" ? selectable : reachable.has(tile) || (!!myBomb && isMyTurn),
+        };
+      }),
+    );
+    const idx = (tile: string) => cells.findIndex((c) => c.id === tile);
+    return (
+      <div className={variant === "mobile" ? "relative mx-auto aspect-square w-[min(88vw,42dvh)] overflow-hidden rounded-xl border border-white/10" : "relative mx-auto h-[380px] w-full max-w-2xl overflow-hidden rounded-xl border border-white/10 sm:h-[480px]"}>
+        <MineField3D
+          cells={cells}
+          pawns={{ p1: idx(state.players.p1.position), p2: idx(state.players.p2.position) }}
+          viewerIsP1={viewerSeat === "p1"}
+          activeSeat={state.phase === "PLAYER_MOVE" ? state.activeSeat : null}
+          onTap={onTap}
+          event={state.lastEvent ? { kind: state.lastEvent.kind, index: idx(state.lastEvent.tile), key: `${state.actionsPlayed}-${explodedBombTiles.size}` } : null}
+          lowDetail={lowDetail}
+        />
+        <div className="absolute right-1 top-1 z-10">
+          <ViewToggle board={board3d} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={frameClassName}>
+      <div className="absolute left-1 top-1 z-10">
+        <ViewToggle board={board3d} />
+      </div>
       <div className="absolute right-1 top-1 z-10 flex flex-col gap-1">
         <button
           type="button"

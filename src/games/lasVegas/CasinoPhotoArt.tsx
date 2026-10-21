@@ -18,7 +18,7 @@ import type { CasinoNumber } from "./engine";
  * photo doesn't clear trademarks visible in it. Record every photo's source
  * below and in CREDITS.md.
  */
-const CASINO_PHOTOS: Partial<Record<CasinoNumber, { src: string; position: string; source: string }>> = {
+export const CASINO_PHOTOS: Partial<Record<CasinoNumber, { src: string; position: string; source: string }>> = {
   // CC0 — "City of lights (Unsplash).jpg" by Luca Bravo lucabravo
   1: {
     src: "/images/lasVegas/casino-1-manhattan.jpg",

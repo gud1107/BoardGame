@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Avatar from "@/components/common/Avatar";
+import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
+import { CASINO_PHOTOS } from "./CasinoPhotoArt";
+import { CASINO_THEME_NAMES } from "./CasinoEmblem";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import RulebookModal from "./RulebookModal";
 import { CasinoTile, money } from "./CasinoTile";
@@ -23,6 +27,9 @@ import {
 } from "./engine";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { getLasVegasBgm } from "./lasVegasBgm";
+
+// three.js only loads when the 3D casino table is shown (🖼️ 2D otherwise / without WebGL).
+const VegasTable3D = dynamic(() => import("./three/VegasTable3D"), { ssr: false, loading: () => <Loading3D /> });
 
 /**
  * Pure game UI + rules driver — same controlled-component contract as every
@@ -171,6 +178,8 @@ function RollViewerPanel({
 }
 
 export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: LasVegasBoardProps) {
+  const board3d = useBoardView("las-vegas-view");
+  const [lowDetail] = useState(preferLowDetail);
   const [rulebookOpen, setRulebookOpen] = useState(false);
   // Mobile-only compact zero-scroll dashboard branch (2026-09-07 요청) — see
   // useIsMobile.ts's doc for why only one of the two layout trees below is
@@ -477,7 +486,10 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
       <MyTurnOverlay isMyTurn={isMyTurn} />
       <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs text-amber-100/70">
         <span>🎰 {state.playerCount}인 · 단판 승부 · 모든 주사위를 카지노에 배치하면 정산됩니다</span>
-        <div className="flex gap-1.5">{rulebookButton}</div>
+        <div className="flex gap-1.5">
+          <ViewToggle board={board3d} />
+          {rulebookButton}
+        </div>
       </div>
 
       <p className={`text-center text-xs font-medium ${isMyTurn ? "text-amber-200" : "text-white/50"}`}>
@@ -488,7 +500,45 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
           : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
       </p>
 
+      {board3d.view === "3d" && (
+        <Frame3D hint={isMyTurn && state.currentRoll ? "빛나는 카지노를 눌러 그 눈의 주사위를 전부 놓아요" : "드래그로 둘러보기"}>
+          <VegasTable3D
+            playerCount={state.playerCount}
+            viewerSeat={viewerSeat}
+            seats={state.players.map((p) => ({
+              seat: p.seat,
+              name: names[p.seat] ?? `${p.seat + 1}번`,
+              color: diceColorForSeat(p.seat),
+              diceLeft: p.ownDiceInHand,
+              neutralLeft: p.neutralDiceInHand,
+              total: p.money.reduce((sum, v) => sum + v, 0),
+              away: !connectedSeats.has(p.seat),
+            }))}
+            casinos={state.casinos.map((c) => ({
+              number: c.number,
+              photo: CASINO_PHOTOS[c.number]?.src ?? null,
+              name: CASINO_THEME_NAMES[c.number].ko,
+              topBill: c.bills[0] ?? null,
+              billCount: c.bills.length,
+              stacks: (Object.entries(c.diceCounts) as [string, number][])
+                .filter(([, n]) => n > 0)
+                .sort((a, b) => b[1] - a[1])
+                .map(([owner, count]) => ({ color: owner === NEUTRAL_OWNER ? NEUTRAL_DICE_COLOR : diceColorForSeat(Number(owner)), count })),
+              canPlace: isMyTurn && rollGroups.some((g) => g.face === c.number),
+            }))}
+            activeSeat={state.phase === "playing" ? state.activeSeat : null}
+            roll={state.currentRoll ? state.currentRoll.map((d) => ({ face: d.face, color: d.owner === "own" ? diceColorForSeat(state.activeSeat) : NEUTRAL_DICE_COLOR })) : null}
+            rollKey={`${state.activeSeat}-${state.currentRoll?.map((d) => d.face).join("") ?? ""}`}
+            lastPlacement={state.lastPlacement ? { seat: state.lastPlacement.seat, casino: state.lastPlacement.casino, key: `${state.lastPlacement.seat}-${state.lastPlacement.casino}-${state.lastPlacement.ownCount}-${state.lastPlacement.neutralCount}-${state.players.reduce((n, p) => n + p.ownDiceInHand, 0)}` } : null}
+            onPlace={isMyTurn && state.currentRoll ? (face) => place(face as Face) : null}
+            overview={state.phase === "gameOver"}
+            lowDetail={lowDetail}
+          />
+        </Frame3D>
+      )}
+
       {/* Casino boards — table-mat tiles, full theme art with dice/money laid on top. */}
+      {board3d.view === "2d" && (
       <section className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
         {state.casinos.map((casino) => (
           <CasinoTile
@@ -503,6 +553,7 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
           />
         ))}
       </section>
+      )}
 
       {/* Roll viewer — shared panel between the betting cards and the player list (2026-08-23 요청 "플레이어와 배팅카드 가운데로 배치"), shows whoever just rolled. */}
       <RollViewerPanel
