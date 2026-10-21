@@ -2734,7 +2734,7 @@ html {
 }
 
 /* 레지스탕스 쿠's 의심(Challenge)/방어(Counter) response window countdown
-   gauge (see ResponseModal.tsx) — a client-local UX affordance (this game's
+   gauge (see ResponseDock.tsx) — a client-local UX affordance (this game's
    rulebook has no wall-clock timer rule of its own; "패스" is always a fully
    legal choice at any point, this bar just adds table tension and, if it
    drains, auto-submits that same safe pass). Pure width transition driven

@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.85.0",
+    releaseDate: "2026-10-22",
+    title: "🕵️ 쿠 — 의심·방어 선택이 화면 아래로, 남은 초도 보여요",
+    changes: [
+      { game: "coup", type: "IMPROVE", desc: "⬇️ 의심·방어 팝업 대신 화면 하단 패널 — 테이블을 가리지 않고 내 카드·코인을 보면서 바로 결정" },
+      { game: "coup", type: "IMPROVE", desc: "⏱️ 남은 시간을 숫자로 표시, 10초로 단축 — 3초 남으면 빨갛게 깜빡이고 0초면 자동 패스" },
+    ],
+  },
+  {
     version: "v1.84.0",
     releaseDate: "2026-10-21",
     title: "✨ 5 오이 플레이어가 이목구비 뚜렷한 미남·미녀로",

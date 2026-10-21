@@ -9,7 +9,7 @@ import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { coupIntensity, coupSoundCues, getCoupSound } from "./coupSound";
 import RulebookModal from "./RulebookModal";
 import TargetModal from "./TargetModal";
-import ResponseModal from "./ResponseModal";
+import ResponseDock from "./ResponseDock";
 import ExchangeModal from "./ExchangeModal";
 import LoseInfluenceModal from "./LoseInfluenceModal";
 import { CardBack, CharacterCardFace, CoinStack } from "./CardArt";
@@ -44,7 +44,7 @@ const CoupTable3D = dynamic(() => import("./three/CoupTable3D"), {
  * via `onAction`). Every client holds the FULL state (every seat's actual
  * influence cards) per this project's lockstep trust model; hidden-hand
  * secrecy is enforced only here, at render time, via `getPlayerView`. The 5
- * decision-driving popups (target/response/exchange/lose-influence, plus the
+ * decision-driving overlays (target/response dock/exchange/lose-influence, plus the
  * rulebook) each live in their own file per ARCHITECTURE.md's 3-layer split.
  */
 export interface CoupBoardProps {
@@ -278,7 +278,7 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
   return (
     <div
       onPointerDownCapture={() => getCoupSound().unlock()}
-      className="flex flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4 light:border-slate-200 light:shadow-md"
+      className={`flex flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4 light:border-slate-200 light:shadow-md ${iAmResponding ? "pb-60" : ""}`}
       // TODO(theme): hardcoded dark gradient background — not trivial to branch via a CSS class variant, left dark in light mode for now.
       style={{ background: "linear-gradient(160deg,#201408 0%,#140c04 45%,#0a0602 100%)" }}
     >
@@ -459,7 +459,17 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
         />
       )}
 
-      {iAmResponding && <ResponseModal state={state} viewerSeat={viewerSeat} names={names} onAction={onAction} />}
+      {iAmResponding && (
+        <ResponseDock
+          state={state}
+          viewerSeat={viewerSeat}
+          names={names}
+          myCards={myView.influence ?? []}
+          myRevealed={me.revealed}
+          myCoins={me.coins}
+          onAction={onAction}
+        />
+      )}
 
       {iAmLosingInfluence && myView.influence && (
         <LoseInfluenceModal
