@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getSoundEngine } from "@/lib/audio/soundEngine";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import {
   ACTIVITY_INFO,
   BLOCK_INFO,
@@ -43,6 +44,7 @@ import {
 } from "./engine";
 import { ACTIVITY_HELP, EVENT_TIPS, situationNotes, type GuideTone } from "./guide";
 import DayReplay from "./DayReplay";
+import { cellArg, getGodLifePlannerSound, godLifePlannerCues } from "./godLifePlannerSound";
 import RulebookModal from "./RulebookModal";
 
 interface Props {
@@ -452,20 +454,19 @@ export default function GodLifePlannerBoard({ state, viewerSeat, names, connecte
     onCommit(draft);
   }, [state.phase, state.stage, committed, deadlineMs, nowMs, draft, onCommit]);
 
-  // 효과음
-  const lastStageRef = useRef(state.stage);
+  // 사운드: 상태 변화 효과음(모든 자리의 행동) + BGM(마지막 날엔 글로켄·플루트가 더해짐)
+  const cues = useMemo(() => godLifePlannerCues(viewerSeat), [viewerSeat]);
+  useSoundCues(state, getGodLifePlannerSound, cues);
+  useSuiteBgm(getGodLifePlannerSound, state.phase !== "ended", state.day === days - 1 ? 1 : 0);
+
+  // 계획 마감 10초 전부터 초침
+  const tickSecRef = useRef(-1);
   useEffect(() => {
-    if (lastStageRef.current === state.stage) return;
-    lastStageRef.current = state.stage;
-    const sound = getSoundEngine();
-    if (state.phase === "dayResult") {
-      const rec = state.seats[viewerSeat].days[state.day];
-      if (rec && (rec.exhausted || rec.burnout)) sound.playWrongBuzz();
-      else if (rec && rec.notes.some((n) => n.includes("습관 형성") || n.includes("주간 도전"))) sound.playCorrectDing();
-      else sound.playCardFlick();
-    } else if (state.phase === "ended") sound.playFinishFanfare();
-    else if (state.phase === "planning") sound.playUiClickTick();
-  }, [state, viewerSeat]);
+    if (state.phase !== "planning" || committed || secondsLeft === null || secondsLeft > 10 || secondsLeft <= 0) return;
+    if (tickSecRef.current === secondsLeft) return;
+    tickSecRef.current = secondsLeft;
+    getGodLifePlannerSound().play("tick", secondsLeft);
+  }, [state.phase, committed, secondsLeft]);
 
   const preview = useMemo(() => (state.phase === "planning" ? previewDay(state, viewerSeat, draft) : null), [state, viewerSeat, draft]);
   const banned = bannedActivities(state, viewerSeat);
@@ -477,7 +478,12 @@ export default function GodLifePlannerBoard({ state, viewerSeat, names, connecte
   const resistOk = state.phase === "planning" && canResist(state, viewerSeat);
 
   function paint(b: number) {
-    if (committed || forced.has(b)) return;
+    if (committed) return;
+    if (forced.has(b)) {
+      getGodLifePlannerSound().play("nope");
+      return;
+    }
+    getGodLifePlannerSound().play("paint", cellArg(activeBrush));
     setDraft((d) => {
       const cells = [...d.cells];
       cells[b] = activeBrush;
@@ -486,6 +492,7 @@ export default function GodLifePlannerBoard({ state, viewerSeat, names, connecte
   }
 
   function chooseTemptation(mode: "resist" | "yield", blocks?: number[]) {
+    getGodLifePlannerSound().play(mode);
     setDraft((d) => {
       const cells = d.cells.map((c) => (c === "temptation" ? "empty" : c)) as Cell[];
       if (mode === "yield" && blocks) for (const b of blocks) cells[b] = "temptation";
@@ -521,7 +528,14 @@ export default function GodLifePlannerBoard({ state, viewerSeat, names, connecte
               ⏱ {secondsLeft}초
             </span>
           )}
-          <button onClick={() => setRulebookOpen(true)} className={GHOST}>
+          <SuiteSoundHud suite={getGodLifePlannerSound} icon="🎧" label="Morning Routine" preview="habit" />
+          <button
+            onClick={() => {
+              getGodLifePlannerSound().play("page");
+              setRulebookOpen(true);
+            }}
+            className={GHOST}
+          >
             📖 룰북
           </button>
         </div>
@@ -704,7 +718,13 @@ export default function GodLifePlannerBoard({ state, viewerSeat, names, connecte
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-bold text-white light:text-slate-900">✏️ 오늘의 계획</p>
             {!committed && state.day > 0 && (
-              <button onClick={() => setDraft(defaultDraft(state, viewerSeat))} className={GHOST}>
+              <button
+                onClick={() => {
+                  getGodLifePlannerSound().play("rewind");
+                  setDraft(defaultDraft(state, viewerSeat));
+                }}
+                className={GHOST}
+              >
                 ↺ 어제 계획
               </button>
             )}
@@ -720,7 +740,7 @@ export default function GodLifePlannerBoard({ state, viewerSeat, names, connecte
                     disabled={disabled}
                     onClick={() => {
                       setBrush(a);
-                      getSoundEngine().playUiClickTick();
+                      getGodLifePlannerSound().play("brush", cellArg(a));
                     }}
                     className={`rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition disabled:opacity-30 ${CELL_TONE[a]} ${
                       activeBrush === a ? "ring-2 ring-emerald-400" : ""
@@ -801,7 +821,12 @@ export default function GodLifePlannerBoard({ state, viewerSeat, names, connecte
             previewReplay ? (
               <DayReplay state={state} rec={rec} endTracks={shownAfter.tracks} preview onClose={() => setPreviewReplay(false)} />
             ) : (
-              <button onClick={() => setPreviewReplay(true)} className={`${GHOST} self-start !border-sky-400/40 !text-sky-200 light:!text-sky-700`}>
+              <button
+                onClick={() => {
+                  getGodLifePlannerSound().play("ui");
+                  setPreviewReplay(true);
+                }}
+                className={`${GHOST} self-start !border-sky-400/40 !text-sky-200 light:!text-sky-700`}>
                 🎬 이 계획대로 하루 미리 재생
               </button>
             )
@@ -877,7 +902,10 @@ export default function GodLifePlannerBoard({ state, viewerSeat, names, connecte
                   <button
                     key={id}
                     disabled={committed}
-                    onClick={() => setDraft((d) => ({ ...d, opportunityId: d.opportunityId === id ? null : id }))}
+                    onClick={() => {
+                      getGodLifePlannerSound().play(selected ? "oppOff" : "oppOn");
+                      setDraft((d) => ({ ...d, opportunityId: d.opportunityId === id ? null : id }));
+                    }}
                     className={`flex flex-col items-start gap-0.5 rounded-xl border p-2.5 text-left text-xs transition ${
                       selected ? "border-lime-400 bg-lime-400/10" : "border-white/10 hover:border-white/25 light:border-slate-200"
                     }`}
@@ -1071,7 +1099,13 @@ export default function GodLifePlannerBoard({ state, viewerSeat, names, connecte
             </tbody>
           </table>
         </div>
-        <button onClick={onGameEnd} className={`${PRIMARY} self-center`}>
+        <button
+          onClick={() => {
+            getGodLifePlannerSound().play("ui");
+            onGameEnd();
+          }}
+          className={`${PRIMARY} self-center`}
+        >
           결과 확정하고 계속하기
         </button>
       </div>

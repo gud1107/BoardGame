@@ -60,6 +60,16 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.77.0",
     releaseDate: "2026-10-21",
+    title: "🎧 갓생 플래너 배경음악·효과음",
+    changes: [
+      { game: "god-life-planner", type: "FEAT", desc: "🎧 전용 BGM 'Morning Routine' — 일렉 피아노·칼림바 로파이 비트, 마지막 날엔 글로켄·플루트가 더해져요" },
+      { game: "god-life-planner", type: "FEAT", desc: "🖌️ 활동마다 다른 효과음 — 수면·공부·운동·일·약속·휴식·빈칸·유혹을 칠할 때와 하루 재생 블록마다 그 활동 소리" },
+      { game: "god-life-planner", type: "IMPROVE", desc: "🔔 목표 선택·계획 확정·공개·아침 알람·습관 형성·주간 도전·붕괴·마감 10초 초침·승패까지 모든 행동에 소리, 다른 사람 확정도 들려요" },
+    ],
+  },
+  {
+    version: "v1.77.0",
+    releaseDate: "2026-10-21",
     title: "🧊 달무티·마피아·페루도·아발론·쿠 3D 테이블",
     changes: [
       { game: "dalmuti", type: "FEAT", desc: "👑 왕궁 원탁 — 왕은 왕좌에 왕관, 노예는 두건. 남은 손패는 뒷면 부채꼴, 낸 카드는 가운데로 날아와 쌓이고 패스는 말풍선" },

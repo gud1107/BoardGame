@@ -52,6 +52,15 @@
 - 확인: tsc(기존 `proceduralSuites.test.ts` 오류 2건은 무관)·eslint 통과, 5게임 테스트 316개 통과. 실제 장면을 rolldown 번들+헤드리스 Chromium(SwiftShader) 900×560 스크린샷 5장, 콘솔 오류 0. 라벨 잘림/겹침 발견→수정→달무티·마피아 재확인.
 - **안 한 것**: 실제 방(Supabase)에서 사람끼리 플레이, 실기기 FPS/발열, 모바일 폭 스크린샷, 3D 클릭 선택(아발론) 실제 탭 테스트, 공개/혁명/처형 등 연출 단계별 캡처, 게임 종료 화면은 2D 그대로.
 
+## 🎧 갓생 플래너 전용 BGM·모든 행동 효과음 — 2026-10-21 (커밋/푸시, 배포는 웹훅 자동)
+
+- **요청**: "갓생플래너에 어울리는 배경음악, 모든 액션에 대한 효과음" + "BGM·효과음 없는 게임 리스트". 그전엔 공용 `soundEngine`의 딩/버즈/틱 4종만 쓰고 BGM이 없었다(10-11 출시 때 "남은 것"으로 적혀 있던 항목).
+- **[godLifePlannerSound.ts](./src/games/godLifePlanner/godLifePlannerSound.ts)**: 공용 절차적 엔진(`proceduralSuite`) 스위트. BGM "Morning Routine" = F장조 82BPM 로파이(일렉 피아노 Fmaj7–Em7–Dm7–Cmaj7, 업라이트 베이스, 스윙 소프트 킥·브러시·셰이커, 칼림바 멜로디), 마지막 날 강도 1에서 글로켄 아르페지오·플루트. 효과음: 활동별 칠하기(`paint`, arg=`cellArg` — 수면 베개·공부 연필·운동 바운스·일 타자·약속 문 차임·휴식 컵·빈칸 지우개·유혹 악마), 붓 고르기, 금지 칸(nope), 어제 계획(rewind), 유혹 참기/넘어가기, 기회 카드 선택/해제, 확정(내 것/남의 것), 목표 선택, 준비, 공개, 아침 알람, 마감 10초 초침, 하루 결과(dayGood/habit/challenge/collapse), 하루 재생용(wake/fail/nap/match/lucky/dayEnd), 승리/패배/솔로 완주, 룰북 넘김, UI 클릭.
+- **연결**: 보드는 `useSoundCues(godLifePlannerCues(viewer))`로 모든 자리의 목표 선택·확정·준비와 단계 전환을 상태 diff로 듣고(마지막 확정자도 들리게 `prev.phase === "planning"` 기준), UI 전용 클릭(붓·칸·유혹·기회·룰북)은 클릭에서 바로 재생한다. 헤더 룰북 옆에 `SuiteSoundHud`(🎧 Morning Routine / 🔔). [DayReplay.tsx](./src/games/godLifePlanner/DayReplay.tsx)는 프레임마다 `playFrameSound`(블록 띠 클릭·⏭ 결과로도 그 프레임 소리). 공용 `getSoundEngine` 호출은 이 게임에서 모두 제거.
+- **알려진 한계**: 마지막으로 "준비"를 누른 사람의 준비음은 단계가 바로 넘어가 알람만 울린다. 하루 결과로 넘어갈 때 결과 요약음과 재생 첫 프레임(wake)이 겹친다.
+- **검증**: `proceduralSuites.test.ts`(스위트 수 34→35) + 갓생 테스트 22건 통과, eslint 통과(tsc는 테스트 파일의 기존 `import.meta.glob` 오류만). 임시 테스트로 1인/4인 봇 완주 시 큐 집계 확인(7일 → 알람·확정·공개 7회씩, 남의 확정 21회, 끝에 승패/완주음). **사람 귀로는 안 들어봤다** — 볼륨·분위기는 `gain`/패턴만 고치면 된다.
+- **BGM·효과음 조사(전 49개 게임 폴더)**: 전용 BGM이 없는 게임은 이제 **라이어를 찾아라** 하나(공용 딩/버즈/팡파레/틱만). 꽃게 서바이벌은 `audio.ts` 자체 음악 루프, 나머지는 전용 스위트나 직접 만든 엔진이 있다. 그리드 포커 보드에 mp3가 없는 `useGameBgm("gridPoker")` 호출이 남아 있지만 `GridPokerGame`의 스위트 BGM이 실제로 재생된다(무해한 잔재).
+
 ## 🧊 코요테·라이어를 찾아라·말달리자·시티 체이스 3D 전환 — 2026-10-21 (커밋/푸시, 배포는 웹훅 자동)
 
 "코요테 3D로 실제 사람이랑 하는 것처럼, 라이어게임·말달리자·시티체이스도 3D로" → 네 게임 모두 기본 3D, 헤더 `🖼️ 2D로`/`🧊 3D로` 토글(localStorage `coyote-view`/`liar-game-view`/`mal-dalli-ja-view`/`city-chase-view`, WebGL 없으면 2D·버튼 숨김). 엔진·네트워크·규칙은 손대지 않음 — 장면은 보드가 이미 계산한 표시 정보만 받는다(숨김 정보 그대로 보호).

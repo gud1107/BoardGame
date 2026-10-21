@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getSoundEngine } from "@/lib/audio/soundEngine";
 import { ACTIVITY_INFO, BLOCK_INFO, OPPORTUNITY_BY_ID, TEMPTATIONS, TRACKS, TRACK_INFO, TUNING, type Track } from "./data";
 import { resistCost, type BlockOutcome, type DayRecord, type GameState, type Tracks } from "./engine";
+import { cellArg, getGodLifePlannerSound } from "./godLifePlannerSound";
 
 /**
  * 하루 재생 — 내가 짠 계획이 B1(0시)부터 B8(24시)까지 실행되며 체력·멘탈·트랙이 어떻게 변하는지
@@ -63,6 +63,25 @@ const MOTION: Record<string, string> = {
 
 function clampG(n: number) {
   return Math.max(0, Math.min(TUNING.gaugeMax, n));
+}
+
+function ui() {
+  getGodLifePlannerSound().play("ui");
+}
+
+/** 프레임 하나의 효과음 — 0 = 하루 시작, last = 마감, 그 사이는 블록. */
+function playFrameSound(f: Frame, i: number, last: number) {
+  const sound = getGodLifePlannerSound();
+  const o = f.outcome;
+  if (f.collapse) sound.play("collapse");
+  else if (i === 0) sound.play("wake");
+  else if (i === last || !o) sound.play("dayEnd");
+  else if (o.kind === "fail" || o.kind === "void") sound.play("fail");
+  else if (o.kind === "nap") sound.play("nap");
+  else if (o.kind === "empty") sound.play("ui");
+  else if (o.opp) sound.play("lucky");
+  else if (o.matched) sound.play("match");
+  else sound.play("paint", cellArg(o.cell));
 }
 
 function buildFrames(state: GameState, rec: DayRecord, endTracks: Tracks): Frame[] {
@@ -173,18 +192,14 @@ export default function DayReplay({ state, rec, endTracks, preview, autoPlay = t
     return () => window.clearTimeout(t);
   }, [running, idx, last, speed]);
 
-  // 효과음: 블록마다 작은 틱, 성사·기회 카드는 딩, 붕괴는 버즈
+  // 효과음: 블록마다 그 활동 소리, 성사·기회 카드·실패·낮잠·붕괴는 각자 소리
   const soundIdx = useRef(-1);
   useEffect(() => {
     if (!playing || soundIdx.current === idx) return;
     // 재생 중 지나간 프레임만(마지막 프레임 도착 포함)
     soundIdx.current = idx;
-    const f = frames[idx];
-    const sound = getSoundEngine();
-    if (f.collapse) sound.playWrongBuzz();
-    else if (f.outcome?.matched || f.outcome?.opp) sound.playCorrectDing();
-    else sound.playUiClickTick();
-  }, [idx, playing, frames]);
+    playFrameSound(frames[idx], idx, last);
+  }, [idx, playing, frames, last]);
 
   const f = frames[idx];
   const prev = frames[Math.max(0, idx - 1)];
@@ -198,6 +213,7 @@ export default function DayReplay({ state, rec, endTracks, preview, autoPlay = t
   const celestial = blockIdx !== null && !NIGHT.has(blockIdx) ? "☀️" : "🌙";
 
   function restart() {
+    ui();
     setIdx(0);
     setPlaying(true);
   }
@@ -304,6 +320,7 @@ export default function DayReplay({ state, rec, endTracks, preview, autoPlay = t
                 onClick={() => {
                   setPlaying(false);
                   setIdx(b + 1);
+                  playFrameSound(frames[b + 1], b + 1, last);
                 }}
                 className={`flex flex-col items-center rounded-md py-0.5 text-[10px] transition ${now ? "bg-white/30 ring-1 ring-white" : shown ? "bg-white/10" : "bg-white/[0.03] opacity-50"}`}
                 aria-label={`${BLOCK_INFO[b].label} 보기`}
@@ -319,7 +336,13 @@ export default function DayReplay({ state, rec, endTracks, preview, autoPlay = t
       {/* 조작 */}
       <div className="flex flex-wrap items-center gap-1.5">
         {running ? (
-          <button onClick={() => setPlaying(false)} className={BTN}>
+          <button
+            onClick={() => {
+              ui();
+              setPlaying(false);
+            }}
+            className={BTN}
+          >
             ⏸ 일시정지
           </button>
         ) : idx >= last ? (
@@ -327,11 +350,23 @@ export default function DayReplay({ state, rec, endTracks, preview, autoPlay = t
             🔁 다시 보기
           </button>
         ) : (
-          <button onClick={() => setPlaying(true)} className={BTN}>
+          <button
+            onClick={() => {
+              ui();
+              setPlaying(true);
+            }}
+            className={BTN}
+          >
             ▶ 재생
           </button>
         )}
-        <button onClick={() => setSpeed((s) => (s === 1 ? 2 : 1))} className={BTN}>
+        <button
+          onClick={() => {
+            ui();
+            setSpeed((s) => (s === 1 ? 2 : 1));
+          }}
+          className={BTN}
+        >
           ⏩ {speed}배속
         </button>
         {idx < last && (
@@ -339,6 +374,7 @@ export default function DayReplay({ state, rec, endTracks, preview, autoPlay = t
             onClick={() => {
               setPlaying(false);
               setIdx(last);
+              playFrameSound(frames[last], last, last);
             }}
             className={BTN}
           >
@@ -346,7 +382,13 @@ export default function DayReplay({ state, rec, endTracks, preview, autoPlay = t
           </button>
         )}
         {onClose && (
-          <button onClick={onClose} className={BTN}>
+          <button
+            onClick={() => {
+              ui();
+              onClose();
+            }}
+            className={BTN}
+          >
             ✕ 닫기
           </button>
         )}
