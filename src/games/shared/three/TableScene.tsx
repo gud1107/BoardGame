@@ -4,7 +4,9 @@ import { createContext, useContext, useMemo, useRef, useState, type ReactNode } 
 import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import FirstPersonCamera from "./FirstPersonCamera";
-import SeatedPerson, { defaultLook, type HatKind, type PersonLook, type PersonMood } from "./SeatedPerson";
+import SeatedPerson, { type HatKind, type PersonLook, type PersonMood } from "./SeatedPerson";
+import { resolveLook, type AvatarProfile } from "@/lib/character/avatar";
+import { useRoomCharacter } from "@/lib/character/roomCharacters";
 import RealisticPerson from "./RealisticPerson";
 import ScreenSprite from "./ScreenSprite";
 import SpeechBubble from "./SpeechBubble";
@@ -74,6 +76,9 @@ export interface TableSeat {
   /** A badge above the name (🎭 라이어, 👑 리더 …). */
   tag?: { text: string; color: string; bg?: string } | null;
   hat?: HatKind;
+  /** Explicit avatar override (sanitized). Missing → the character this seat's player chose in their profile (looked up by `name`), else the seat's default K-pop look. */
+  avatar?: AvatarProfile | null;
+  /** Game-specific look overrides, applied on top of the avatar (e.g. a role costume). */
   look?: Partial<PersonLook>;
   chair?: "wood" | "stool" | "throne";
   headSlot?: ReactNode;
@@ -264,10 +269,11 @@ function SeatView({ s, geo, theme, lowDetail, ringColor }: { s: TableSeat; geo: 
   const isViewer = s.seat === geo.viewerSeat;
   const color = s.color ?? theme.seatColors[s.seat % theme.seatColors.length];
   const { hover, handlers } = useSelect(s.onSelect);
+  const chosen = useRoomCharacter(s.name);
   const look = useMemo(() => {
-    const base = defaultLook(s.seat, theme.hats);
+    const base = resolveLook(s.seat, theme.hats, s.avatar ?? chosen);
     return { ...base, ...(s.hat ? { hat: s.hat } : {}), ...s.look };
-  }, [s.seat, s.hat, s.look, theme.hats]);
+  }, [s.seat, s.hat, s.avatar, chosen, s.look, theme.hats]);
   const lookAt = s.lookSeat === "center" ? new THREE.Vector3(0, TABLE_Y, 0) : s.lookSeat === null || s.lookSeat === undefined ? null : geo.headOf(s.lookSeat);
   const nameY = theme.nameY ?? (theme.personStyle === "realistic" ? 1.86 : 2.18);
   // bubble bottom edge (SpeechBubble centres itself above it when anchored)

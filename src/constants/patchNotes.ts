@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.86.0",
+    releaseDate: "2026-10-22",
+    title: "🧑‍🎤 3D 게임 캐릭터가 K-pop 아이돌로 — 내 캐릭터도 고를 수 있어요",
+    changes: [
+      { game: "common", type: "IMPROVE", desc: "👩‍🎤 3D 테이블 사람들이 예쁜 K-pop 여자·잘생긴 K-pop 남자로 — 시스루뱅·허쉬컷·포니테일, 쉼표머리·가르마펌·댄디컷, 애교살·블러셔·틴트" },
+      { game: "common", type: "FEAT", desc: "🎨 프로필·방 입장 화면에서 내 3D 캐릭터 고르기 — 성별·헤어·머리색·피부톤·옷·입술·안경, 3D 미리보기로 바로 확인" },
+      { game: "common", type: "FEAT", desc: "👀 고른 캐릭터가 같은 방 다른 사람의 3D 테이블에 그대로 보여요 (게스트도 가능, 로그인하면 다른 기기에서도 유지)" },
+    ],
+  },
+  {
     version: "v1.85.0",
     releaseDate: "2026-10-22",
     title: "🕵️ 쿠 — 의심·방어 선택이 화면 아래로, 남은 초도 보여요",

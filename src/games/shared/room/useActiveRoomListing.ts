@@ -12,6 +12,7 @@ import {
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import { pushRoomToast } from "@/lib/activeRooms/roomToasts";
+import { useRoomCharacterSync } from "@/lib/character/roomCharacters";
 
 /**
  * Re-upsert cadence while a room stays in its waiting lobby. Comfortably
@@ -76,6 +77,8 @@ export function useActiveRoomListing({
 }: UseActiveRoomListingInput): void {
   useRoomFunnelEvents({ gameId, roomCode, isHost, isWaiting, isPlaying });
   useWaitingRoomArrivals({ roomCode, isWaiting, playerCount, occupants });
+  // everyone's chosen 3D character, shared for the tables (see roomCharacters.ts)
+  useRoomCharacterSync({ gameId, roomCode, occupants });
 
   // Heartbeat reads the latest counts without needing to restart the
   // interval every time they change. Synced in its own effect (not during

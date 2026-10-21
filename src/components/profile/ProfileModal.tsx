@@ -5,6 +5,7 @@ import Overlay from "@/components/Overlay";
 import Avatar from "@/components/common/Avatar";
 import { DEFAULT_AVATAR } from "@/constants/avatar";
 import { PUBLIC_NAME_RULE, useProfileStore } from "@/store/profileStore";
+import CharacterPicker from "./CharacterPicker";
 
 /**
  * Profile editor: the public ranking nickname + avatar — logged-in accounts only (see `profileStore.ts`;
@@ -61,6 +62,12 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
           PNG · JPG · WEBP · GIF, 최대 2MB. 기본 이미지는 `{DEFAULT_AVATAR}`이며, 게임 방의 다른 참가자에게는 보이지 않고
           공개 랭킹에만 함께 표시돼요.
         </p>
+
+        <div className="w-full border-t border-white/10 light:border-slate-200" />
+        <div className="flex w-full flex-col gap-2">
+          <span className="text-xs font-semibold text-white/70 light:text-slate-600">🧑‍🎤 3D 게임 캐릭터</span>
+          <CharacterPicker />
+        </div>
       </div>
     </Overlay>
   );

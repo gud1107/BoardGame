@@ -8,7 +8,8 @@ import { coyoteCardTexture } from "./cardTexture";
 import ScreenSprite, { distanceBoost } from "@/games/shared/three/ScreenSprite";
 import SpeechBubble from "@/games/shared/three/SpeechBubble";
 import FirstPersonCamera from "@/games/shared/three/FirstPersonCamera";
-import SeatedPerson, { defaultLook, type PersonMood } from "@/games/shared/three/SeatedPerson";
+import SeatedPerson, { resolveLook, type PersonMood } from "@/games/shared/three/SeatedPerson";
+import { roomCharacterOf, useRoomCharacters } from "@/lib/character/roomCharacters";
 import { bubbleTexture, clamp01, easeInOut, easeOutBack, labelTexture, polar, seatAngle } from "@/games/shared/three/tableKit";
 
 /**
@@ -408,6 +409,7 @@ function BidSign({ bid, name }: { bid: CoyoteTable3DProps["currentBid"]; name: s
 
 function SceneContents(props: CoyoteTable3DProps) {
   const { playerCount: n, viewerSeat, seats, revealed, lowDetail, currentBid } = props;
+  const chars = useRoomCharacters((st) => st.byName);
   const { seatR, tableR } = dims(n);
   const camZ = seatR + 1.5;
 
@@ -464,7 +466,7 @@ function SceneContents(props: CoyoteTable3DProps) {
             {!isViewer && (
               <SeatedPerson
                 seed={s.seat * 3 + 1}
-                look={defaultLook(s.seat, ["none", "none", "beret", "none"])}
+                look={resolveLook(s.seat, ["none", "none", "beret", "none"], roomCharacterOf(chars, s.name))}
                 color={color}
                 position={pos}
                 facing={angle + Math.PI}

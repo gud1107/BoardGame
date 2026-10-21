@@ -82,13 +82,9 @@ const OVERRIDES: Partial<Record<PersonMood, Pose>> = {
 
 const RESTING = new Set<PersonMood>(["rest", "think", "talk", "write", "nervous", "sad"]);
 
-// natural palettes
-const SKIN = ["#f1c9a5", "#e0ac84", "#c68c62", "#9c6644", "#7a4b30", "#f6d7bf"];
-const HAIR = ["#14100d", "#2e1f15", "#4a2a18", "#6b3f22", "#a8743e", "#d8b070", "#6a2a1a", "#0e0e0e"];
-const IRIS = ["#5a3b22", "#7a4a26", "#3a6a8a", "#4a7a4a", "#6a5a3a", "#2a4a7a", "#8a6a3a"];
-const LIPSTICK = ["#c2405a", "#b8323f", "#d06a7a", "#a83a5a", "#d8706a", "#9a2a3a"];
-const TOPS = ["#3f4a5a", "#7a2e2e", "#2f4a3a", "#c9b79c", "#4a3a5a", "#1f2937", "#8a5a3a", "#5a6a7a"];
-const PANTS = ["#2a2f3a", "#3a3026", "#1f2430", "#4a4036", "#2b2b2b"];
+// skin, hair, lip and top come from the shared PersonLook (@/lib/character/avatar); these stay per-seat
+const IRIS = ["#3a2416", "#4a2e1a", "#2e1d12", "#553620", "#3f2a1c"];
+const PANTS = ["#1f2430", "#2b2b2b", "#d8d2c4", "#3a4a66", "#1c1c22"];
 
 function shade(hex: string, k: number) {
   return "#" + new THREE.Color(hex).multiplyScalar(k).getHexString();
@@ -126,13 +122,13 @@ export default function RealisticPerson(props: SeatedPersonProps) {
   const topMat = useRef<THREE.MeshPhysicalMaterial>(null);
   const cur = useRef<{ pose: Pose; brow: number; eye: number; sweat: number; look: [number, number]; out: number; rest: number } | null>(null);
 
-  // a stable personal look per seat: alternating feminine / masculine styling, any ethnicity
+  // a stable personal look per seat: the shared look's K-pop woman / man, rendered life-size
   const p = useMemo(() => {
     const h = (k: number) => hash(seed, k);
-    const gender: Gender = seed % 2 === 0 ? "f" : "m";
-    const skin = SKIN[Math.floor(h(1) * SKIN.length)];
-    const hair = HAIR[Math.floor(h(2) * HAIR.length)];
-    const lip = gender === "f" ? LIPSTICK[Math.floor(h(7) * LIPSTICK.length)] : shade(skin, 0.72);
+    const gender: Gender = look.gender;
+    const skin = look.skin;
+    const hair = look.hair;
+    const lip = gender === "f" ? look.lip : shade(skin, 0.72);
     const face: FaceSpec = {
       id: `${seed}`,
       gender,
@@ -140,24 +136,24 @@ export default function RealisticPerson(props: SeatedPersonProps) {
       iris: IRIS[Math.floor(h(3) * IRIS.length)],
       lip,
       liner: gender === "f" ? "#120a08" : shade(hair, 0.8),
-      shadow: ["#a8607a", "#8a5a3a", "#7a5a8a", "#b07a5a"][Math.floor(h(8) * 4)],
-      blush: ["#e8768a", "#e88a6a", "#d86a7a"][Math.floor(h(10) * 3)],
+      // soft K-beauty tones: peach / coral / rose-brown shadow, pink blush
+      shadow: ["#d8907a", "#c98a7a", "#b9808a", "#d0a080"][Math.floor(h(8) * 4)],
+      blush: ["#f49aa6", "#f6a08a", "#ee8ea0"][Math.floor(h(10) * 3)],
     };
-    const fStyles = ["long", "bob", "pony"] as const;
-    const mStyles = ["quiff", "part", "crop"] as const;
+    // long sleek / layered hush / ponytail (women); comma / curtain / dandy fringe (men)
+    const STYLE: Partial<Record<string, string>> = { straight: "long", hush: "bob", pony: "pony", comma: "part", curtain: "curtain", dandy: "dandy" };
     return {
       gender,
       face,
       skin,
       hair,
-      top: look.coat && h(9) < 0.35 ? look.coat : TOPS[Math.floor(h(4) * TOPS.length)],
+      top: look.coat,
       shirt: look.shirt,
       pants: PANTS[Math.floor(h(5) * PANTS.length)],
       shoes: h(6) < 0.5 ? "#1c1917" : "#5a3a22",
-      // hair: feminine = long waves / bob / high ponytail; masculine = textured quiff / side part / short crop
-      style: (gender === "f" ? fStyles[Math.floor(h(11) * 3)] : mStyles[Math.floor(h(11) * 3)]) as string,
+      style: STYLE[look.hairStyle] ?? (gender === "f" ? "long" : "part"),
     };
-  }, [seed, look.coat, look.shirt]);
+  }, [seed, look.coat, look.shirt, look.gender, look.skin, look.hair, look.hairStyle, look.lip]);
   const topColor = useMemo(() => new THREE.Color(p.top), [p.top]);
   const headGeo = headGeometry(p.gender, lowDetail ? 14 : 28);
   const torsoGeo = useMemo(() => new THREE.LatheGeometry(TORSO, lowDetail ? 14 : 28), [lowDetail]);
@@ -478,13 +474,16 @@ export default function RealisticPerson(props: SeatedPersonProps) {
               <sphereGeometry args={[0.116, seg, seg, Math.PI * 0.82, Math.PI * 1.36, Math.PI * 0.3, Math.PI * 0.28]} />
               {hairMat}
             </mesh>
+            {(p.style === "long" || p.style === "pony") && (
+              // light, wispy bangs: one thin fringe sheet just above the brows
+              <mesh position={[0, 0.08, 0.072]} rotation={[0.98, 0, 0]} scale={[2.1, 0.3, 0.8]}>
+                <sphereGeometry args={[0.04, 16, 12]} />
+                {hairMat}
+              </mesh>
+            )}
             {p.style === "long" && (
               <>
-                {/* side-swept fringe + long waves over the shoulders */}
-                <mesh position={[-0.03, 0.078, 0.066]} rotation={[0.85, -0.3, 0.5]} scale={[1.8, 0.42, 0.9]}>
-                  <sphereGeometry args={[0.04, 16, 12]} />
-                  {hairMat}
-                </mesh>
+                {/* sleek long straight hair over the shoulders */}
                 <mesh position={[0, -0.1, -0.045]} scale={[1.05, 1, 0.75]}>
                   <cylinderGeometry args={[0.108, 0.125, 0.24, seg, 1, true, Math.PI * 0.55, Math.PI * 1.9]} />
                   <meshPhysicalMaterial color={p.hair} roughness={0.5} sheen={0.9} sheenColor={shade(p.hair, 2.4)} side={THREE.DoubleSide} />
@@ -521,22 +520,32 @@ export default function RealisticPerson(props: SeatedPersonProps) {
                 </mesh>
               </>
             )}
-            {p.style === "quiff" && (
-              <mesh position={[0.004, 0.105, 0.045]} rotation={[0.5, 0, 0.08]} scale={[1.35, 0.6, 1]}>
-                <sphereGeometry args={[0.045, 16, 12]} />
+            {/* men: volume on top for every K-pop cut */}
+            {p.gender === "m" && look.hat === "none" && (
+              <mesh position={[0, 0.088, -0.012]} scale={[1.2, 0.42, 1.15]}>
+                <sphereGeometry args={[0.07, seg, 12]} />
                 {hairMat}
               </mesh>
             )}
-            {p.style === "crop" &&
-              [-0.04, -0.013, 0.014, 0.041].map((x, i) => (
-                <mesh key={i} position={[x, 0.094 - Math.abs(x) * 0.25, 0.07 - Math.abs(x) * 0.3]} rotation={[0.75, x * 3, 0]} scale={[0.8, 0.42, 0.7]}>
-                  <sphereGeometry args={[0.026, 12, 10]} />
+            {p.style === "curtain" &&
+              // middle-parted curtain bangs sweeping out to both temples
+              [-1, 1].map((s) => (
+                <mesh key={s} position={[0.032 * s, 0.078, 0.07]} rotation={[0.85, 0.25 * s, -0.55 * s]} scale={[1.6, 0.42, 0.9]}>
+                  <sphereGeometry args={[0.038, 16, 12]} />
                   {hairMat}
                 </mesh>
               ))}
+            {p.style === "dandy" && (
+              // full, soft fringe brushed down to the brows
+              <mesh position={[0, 0.074, 0.072]} rotation={[0.98, 0, 0]} scale={[2.25, 0.42, 0.85]}>
+                <sphereGeometry args={[0.04, 16, 12]} />
+                {hairMat}
+              </mesh>
+            )}
             {p.style === "part" && (
-              <mesh position={[0.03, 0.088, 0.058]} rotation={[0.8, 0.25, -0.5]} scale={[1.7, 0.45, 0.9]}>
-                <sphereGeometry args={[0.042, 16, 12]} />
+              // comma: fringe swept to one side, dipping toward the brow
+              <mesh position={[0.02, 0.078, 0.068]} rotation={[0.95, 0.2, -0.4]} scale={[1.9, 0.42, 0.9]}>
+                <sphereGeometry args={[0.04, 16, 12]} />
                 {hairMat}
               </mesh>
             )}

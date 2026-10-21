@@ -33,45 +33,10 @@ export type PersonMood =
   | "shrug"
   | "slump";
 
-export type HatKind = "none" | "cowboy" | "fedora" | "beret" | "cap" | "bowler" | "crown" | "circlet" | "hood" | "helmet";
-export type HairStyle = "short" | "long" | "bun" | "spiky";
-
-export interface PersonLook {
-  skin: string;
-  hair: string;
-  hairStyle: HairStyle;
-  coat: string;
-  shirt: string;
-  hat: HatKind;
-  hatColor: string;
-  beard: boolean;
-  glasses: boolean;
-}
-
-const SKINS = ["#f3d2b6", "#e8bd98", "#d7a37b", "#b57a52", "#8a5638", "#f6dcc8"];
-const HAIRS = ["#2a1a10", "#121212", "#5a3a22", "#8a5a2b", "#c99a5b", "#3b2a20", "#6b4a3a", "#a14b2a"];
-const COATS = ["#7c2d12", "#1e3a8a", "#14532d", "#581c87", "#7f1d1d", "#155e75", "#3f3f46", "#854d0e", "#334155", "#9d174d"];
-const SHIRTS = ["#f5f0e6", "#e0e7ff", "#fef3c7", "#dcfce7", "#fde2e4", "#e5e7eb"];
-const STYLES: HairStyle[] = ["short", "long", "bun", "spiky", "long", "short"];
-
-/**
- * A stable, varied default look per seat. `hats` restricts the hat pool
- * (e.g. the 코요테 desert table wants cowboy hats, the 라이어 room none).
- */
-export function defaultLook(seat: number, hats: readonly HatKind[] = ["none"]): PersonLook {
-  const h = (k: number) => Math.abs(Math.floor(Math.sin(seat * 91.7 + k * 13.3) * 10000));
-  return {
-    skin: SKINS[h(1) % SKINS.length],
-    hair: HAIRS[(seat * 3 + 1) % HAIRS.length],
-    hairStyle: STYLES[seat % STYLES.length],
-    coat: COATS[seat % COATS.length],
-    shirt: SHIRTS[h(4) % SHIRTS.length],
-    hat: hats[seat % hats.length],
-    hatColor: ["#5b3a1e", "#2b2118", "#8b5a2b", "#3a2a1a", "#6b4423"][h(5) % 5],
-    beard: seat % 4 === 2,
-    glasses: seat % 5 === 3,
-  };
-}
+// The look data (types, palettes, seat defaults, profile validation) lives in the
+// three-free @/lib/character/avatar module so profile UIs and storage can use it without three.js.
+import type { HatKind, PersonLook } from "@/lib/character/avatar";
+export { defaultLook, resolveLook, type HairStyle, type HatKind, type PersonGender, type PersonLook } from "@/lib/character/avatar";
 
 // ---------------------------------------------------------------------------
 // Poses: [spineX, spineY, spineZ, headX, headY, headZ, lSx, lSy, lSz, lE, rSx, rSy, rSz, rE]
@@ -314,13 +279,52 @@ export function Hat({ kind, color, seg }: { kind: HatKind; color: string; seg: n
   );
 }
 
+/** Head sphere radii (0.2 × the head mesh's [0.92, 1.06, 0.95] scale). */
+const HEAD_R = [0.184, 0.212, 0.19] as const;
+/** A point `lift` above the face-side head surface at (x, y), and a YXZ euler laying a y-axis strand flat on it (pointing up the scalp). */
+function onHead(x: number, y: number, lift = 0.012, roll = 0): { position: [number, number, number]; rotation: [number, number, number, "YXZ"] } {
+  const [rx, ry, rz] = HEAD_R;
+  const z = rz * Math.sqrt(Math.max(0.02, 1 - (x / rx) ** 2 - (y / ry) ** 2));
+  let nx = x / (rx * rx);
+  let ny = y / (ry * ry);
+  let nz = z / (rz * rz);
+  const l = Math.hypot(nx, ny, nz);
+  nx /= l;
+  ny /= l;
+  nz /= l;
+  return { position: [x + nx * lift, y + ny * lift, z + nz * lift], rotation: [Math.atan2(-ny, Math.hypot(nx, nz)), Math.atan2(nx, nz), roll, "YXZ"] };
+}
+
+function Strand({ x, y, len, r = 0.016, roll = 0, mat }: { x: number; y: number; len: number; r?: number; roll?: number; mat: ReactNode }) {
+  const t = onHead(x, y, 0.006, roll);
+  return (
+    <mesh position={t.position} rotation={t.rotation} scale={[1.6, 1, 0.32]}>
+      <capsuleGeometry args={[r, len, 3, 8]} />
+      {mat}
+    </mesh>
+  );
+}
+
+/** K-pop hairline shells: full-round cap down to polar angle `t·π` (y ≈ 0.218·cos), a hair's breadth outside the head. */
+function Hairline({ t, seg, mat, phi = [0, Math.PI * 2] }: { t: number; seg: number; mat: ReactNode; phi?: [number, number] }) {
+  return (
+    <mesh scale={[0.95, 1.09, 0.985]}>
+      <sphereGeometry args={[0.2, seg + 6, 10, phi[0], phi[1], 0, Math.PI * t]} />
+      {mat}
+    </mesh>
+  );
+}
+
 function Hair({ look, seg }: { look: PersonLook; seg: number }) {
   const mat = <meshStandardMaterial color={look.hair} roughness={0.9} />;
+  // idol hair: glossier, double-sided so open shells read from inside too
+  const gloss = <meshStandardMaterial color={look.hair} roughness={0.5} metalness={0.05} side={THREE.DoubleSide} />;
+  const st = look.hairStyle;
   return (
     <group>
       <mesh position={[0, 0.03, -0.03]} scale={[0.97, 0.92, 0.96]}>
         <sphereGeometry args={[0.2, seg, 12, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
-        {mat}
+        {st === "short" || st === "long" || st === "bun" || st === "spiky" ? mat : gloss}
       </mesh>
       {look.hairStyle === "long" && (
         <mesh position={[0, -0.1, -0.07]} scale={[1, 1, 0.75]}>
@@ -341,6 +345,81 @@ function Hair({ look, seg }: { look: PersonLook; seg: number }) {
             {mat}
           </mesh>
         ))}
+
+      {/* ── women: sleek long straight hair / layered hush cut / high ponytail, all with see-through bangs ── */}
+      {(st === "straight" || st === "hush" || st === "pony") && (
+        <>
+          <Hairline t={st === "pony" ? 0.31 : 0.29} seg={seg} mat={gloss} />
+          {[-0.075, -0.045, -0.015, 0.015, 0.045, 0.075].map((x, i) => (
+            <Strand key={i} x={x} y={0.13} len={0.045} r={0.017} roll={x * 0.8} mat={gloss} />
+          ))}
+        </>
+      )}
+      {st === "straight" && (
+        <>
+          <mesh position={[0, -0.17, -0.05]} scale={[1, 1, 0.8]}>
+            <cylinderGeometry args={[0.2, 0.205, 0.5, seg, 1, true, Math.PI * 0.6, Math.PI * 1.8]} />
+            {gloss}
+          </mesh>
+          {[-1, 1].map((s) => (
+            <mesh key={s} position={[0.168 * s, -0.14, 0.07]} rotation-z={0.06 * s} scale={[0.7, 1, 1]}>
+              <capsuleGeometry args={[0.034, 0.3, 4, 8]} />
+              {gloss}
+            </mesh>
+          ))}
+        </>
+      )}
+      {st === "hush" && (
+        <>
+          <mesh position={[0, -0.13, -0.05]} scale={[1, 1, 0.8]}>
+            <cylinderGeometry args={[0.2, 0.25, 0.4, seg, 1, true, Math.PI * 0.6, Math.PI * 1.8]} />
+            {gloss}
+          </mesh>
+          {[-1, 1].map((s) => (
+            <group key={s}>
+              <mesh position={[0.17 * s, -0.1, 0.07]} rotation-z={-0.22 * s} scale={[0.75, 1, 1]}>
+                <capsuleGeometry args={[0.036, 0.2, 4, 8]} />
+                {gloss}
+              </mesh>
+              {/* outward-flicked layered ends */}
+              <mesh position={[0.2 * s, -0.25, 0.02]} rotation-z={-0.9 * s} scale={[0.7, 1, 1]}>
+                <capsuleGeometry args={[0.03, 0.08, 4, 8]} />
+                {gloss}
+              </mesh>
+            </group>
+          ))}
+        </>
+      )}
+      {st === "pony" && (
+        <>
+          <mesh position={[0, 0.15, -0.16]}>
+            <sphereGeometry args={[0.05, 12, 10]} />
+            {gloss}
+          </mesh>
+          <mesh position={[0, 0.0, -0.23]} rotation-x={0.3} scale={[0.85, 1, 0.75]}>
+            <capsuleGeometry args={[0.055, 0.26, 4, 10]} />
+            {gloss}
+          </mesh>
+          {/* scrunchie */}
+          <mesh position={[0, 0.14, -0.17]} rotation-x={1.2}>
+            <torusGeometry args={[0.045, 0.014, 6, 14]} />
+            <meshStandardMaterial color="#f9a8d4" roughness={0.8} />
+          </mesh>
+        </>
+      )}
+
+      {/* ── men: comma hair / curtain (middle-part) bangs / full dandy fringe, volume on top ── */}
+      {(st === "comma" || st === "curtain" || st === "dandy") && (
+        <Hairline t={st === "dandy" ? 0.355 : st === "comma" ? 0.32 : 0.3} seg={seg} mat={gloss} />
+      )}
+      {/* comma: fringe swept to one side, its tip dipping lowest at the brow */}
+      {st === "comma" &&
+        [-0.07, -0.038, -0.006, 0.026, 0.056].map((x, i) => <Strand key={i} x={x} y={0.13 - i * 0.007} len={0.05} r={0.018} roll={0.5} mat={gloss} />)}
+      {st === "curtain" &&
+        [-1, 1].map((s) =>
+          [0.035, 0.075].map((x, i) => <Strand key={`${s}${i}`} x={x * s} y={0.125 - i * 0.008} len={0.06} r={0.02} roll={-0.75 * s} mat={gloss} />),
+        )}
+      {st === "dandy" && [-0.075, -0.035, 0.005, 0.045, 0.08].map((x, i) => <Strand key={i} x={x} y={0.115} len={0.035} r={0.016} roll={0.2} mat={gloss} />)}
     </group>
   );
 }
@@ -388,6 +467,9 @@ export default function SeatedPerson(props: SeatedPersonProps) {
   const coatMat = useRef<THREE.MeshStandardMaterial>(null);
   const coatGeo = useMemo(() => new THREE.LatheGeometry(COAT_PROFILE, lowDetail ? 12 : 22), [lowDetail]);
   const coatColor = useMemo(() => new THREE.Color(look.coat), [look.coat]);
+  // dyed (light) idol hair keeps darker brows
+  const browColor = useMemo(() => "#" + new THREE.Color(look.hair).lerp(new THREE.Color("#2a1c16"), 0.45).getHexString(), [look.hair]);
+  const fem = look.gender === "f";
   const cur = useRef<{ pose: Pose; brow: number; eye: number; sweat: number; look: [number, number]; out: number } | null>(null);
 
   useFrame(({ clock }, dt) => {
@@ -597,13 +679,50 @@ export default function SeatedPerson(props: SeatedPersonProps) {
                     <sphereGeometry args={[0.033, 14, 10]} />
                     <meshStandardMaterial color="#fbfaf7" roughness={0.3} />
                   </mesh>
-                  <mesh position={[0, 0, 0.018]}>
-                    <sphereGeometry args={[0.017, 10, 8]} />
-                    <meshStandardMaterial color="#2b1a10" roughness={0.2} />
+                  {/* big dark-brown iris + catchlight */}
+                  <mesh position={[0, -0.002, 0.016]}>
+                    <sphereGeometry args={[fem ? 0.02 : 0.018, 12, 10]} />
+                    <meshStandardMaterial color="#24150d" roughness={0.15} />
                   </mesh>
+                  <mesh position={[0.007, 0.007, 0.034]}>
+                    <sphereGeometry args={[0.0055, 8, 6]} />
+                    <meshBasicMaterial color="#ffffff" />
+                  </mesh>
+                  {/* upper lash line (+ lifted wing for the women) */}
+                  <mesh position={[0, 0.024, 0.014]} rotation-z={-0.08 * s}>
+                    <boxGeometry args={[0.058, fem ? 0.009 : 0.006, 0.01]} />
+                    <meshStandardMaterial color="#120a08" roughness={0.6} />
+                  </mesh>
+                  {fem && (
+                    <mesh position={[0.033 * s, 0.026, 0.008]} rotation-z={0.55 * s}>
+                      <boxGeometry args={[0.02, 0.007, 0.008]} />
+                      <meshStandardMaterial color="#120a08" roughness={0.6} />
+                    </mesh>
+                  )}
                 </group>
               ))}
             </group>
+            {/* aegyo-sal under the eyes (women) + cheek blush */}
+            {fem &&
+              [-1, 1].map((s) => (
+                <mesh key={`a${s}`} position={[0.066 * s, -0.009, 0.172]} scale={[1.15, 0.32, 0.4]}>
+                  <sphereGeometry args={[0.028, 12, 8]} />
+                  <meshStandardMaterial color="#ffe3d8" roughness={0.5} />
+                </mesh>
+              ))}
+            {[-1, 1].map((s) => (
+              <mesh key={`b${s}`} position={[0.11 * s, -0.045, 0.148]} rotation-y={0.62 * s} scale={[1.3, 0.75, 0.3]}>
+                <sphereGeometry args={[0.03, 12, 8]} />
+                <meshStandardMaterial color="#f48a9b" transparent opacity={fem ? 0.5 : 0.2} depthWrite={false} roughness={0.8} />
+              </mesh>
+            ))}
+            {fem &&
+              [-1, 1].map((s) => (
+                <mesh key={`e${s}`} position={[0.19 * s, -0.058, 0.004]}>
+                  <sphereGeometry args={[0.011, 10, 8]} />
+                  <meshStandardMaterial color="#f5d27a" metalness={0.9} roughness={0.2} />
+                </mesh>
+              ))}
             {look.glasses &&
               [-1, 1].map((s) => (
                 <mesh key={s} position={[0.066 * s, 0.02, 0.19]}>
@@ -611,13 +730,14 @@ export default function SeatedPerson(props: SeatedPersonProps) {
                   <meshStandardMaterial color="#1f2937" metalness={0.6} roughness={0.3} />
                 </mesh>
               ))}
+            {/* soft, slim brows (women) / straight, fuller brows (men) */}
             <mesh ref={browL} position={[-0.066, 0.075, 0.172]}>
-              <boxGeometry args={[0.062, 0.013, 0.012]} />
-              <meshStandardMaterial color={look.hair} roughness={0.9} />
+              <boxGeometry args={fem ? [0.056, 0.009, 0.01] : [0.066, 0.016, 0.013]} />
+              <meshStandardMaterial color={browColor} roughness={0.9} />
             </mesh>
             <mesh ref={browR} position={[0.066, 0.075, 0.172]}>
-              <boxGeometry args={[0.062, 0.013, 0.012]} />
-              <meshStandardMaterial color={look.hair} roughness={0.9} />
+              <boxGeometry args={fem ? [0.056, 0.009, 0.01] : [0.066, 0.016, 0.013]} />
+              <meshStandardMaterial color={browColor} roughness={0.9} />
             </mesh>
             <mesh position={[0, -0.025, 0.19]} scale={[0.8, 1.1, 1]}>
               <sphereGeometry args={[0.026, 10, 8]} />
@@ -631,12 +751,12 @@ export default function SeatedPerson(props: SeatedPersonProps) {
             )}
             <group ref={mouth} position={[0, -0.088, 0.174]}>
               <mesh name="flat">
-                <boxGeometry args={[0.06, 0.009, 0.01]} />
-                <meshStandardMaterial color="#7c2d2d" roughness={0.6} />
+                <boxGeometry args={fem ? [0.05, 0.014, 0.012] : [0.056, 0.009, 0.01]} />
+                <meshStandardMaterial color={look.lip} roughness={0.35} />
               </mesh>
               <mesh name="smile" rotation={[0, 0, Math.PI * 1.15]} position={[0, 0.02, 0]}>
-                <torusGeometry args={[0.035, 0.007, 6, 12, Math.PI * 0.7]} />
-                <meshStandardMaterial color="#7c2d2d" roughness={0.6} />
+                <torusGeometry args={[0.035, fem ? 0.009 : 0.007, 6, 12, Math.PI * 0.7]} />
+                <meshStandardMaterial color={look.lip} roughness={0.35} />
               </mesh>
               <group name="grin">
                 <mesh position={[0, 0.004, 0]} rotation={[0, 0, Math.PI]}>
@@ -650,7 +770,7 @@ export default function SeatedPerson(props: SeatedPersonProps) {
               </group>
               <mesh name="frown" rotation={[0, 0, Math.PI * 0.15]} position={[0, -0.025, 0]}>
                 <torusGeometry args={[0.035, 0.007, 6, 12, Math.PI * 0.7]} />
-                <meshStandardMaterial color="#7c2d2d" roughness={0.6} />
+                <meshStandardMaterial color={look.lip} roughness={0.35} />
               </mesh>
               <mesh name="o" scale={[0.75, 1, 0.4]}>
                 <sphereGeometry args={[0.024, 10, 8]} />

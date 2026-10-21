@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useBettingStore } from "@/store/bettingStore";
 import { rememberRoomNickname } from "@/lib/identity/lastNickname";
+import CharacterButton from "@/components/profile/CharacterButton";
 
 export interface RoomIdentityValue {
   name: string;
@@ -94,6 +95,7 @@ export default function RoomNicknameField({ value, onChange: onChangeProp, place
         >
           다른 이름으로 입장 (내기 참가자 아님)
         </button>
+        <CharacterButton />
       </div>
     );
   }
@@ -121,6 +123,7 @@ export default function RoomNicknameField({ value, onChange: onChangeProp, place
           내기 참가자 목록에서 선택
         </button>
       )}
+      <CharacterButton />
     </div>
   );
 }

@@ -4,7 +4,8 @@ import { useMemo, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import FirstPersonCamera from "@/games/shared/three/FirstPersonCamera";
-import SeatedPerson, { defaultLook, type PersonMood } from "@/games/shared/three/SeatedPerson";
+import SeatedPerson, { resolveLook, type PersonMood } from "@/games/shared/three/SeatedPerson";
+import { roomCharacterOf, useRoomCharacters } from "@/lib/character/roomCharacters";
 import ScreenSprite from "@/games/shared/three/ScreenSprite";
 import SpeechBubble from "@/games/shared/three/SpeechBubble";
 import { labelTexture, polar, seatAngle, type BubbleStyle } from "@/games/shared/three/tableKit";
@@ -216,6 +217,7 @@ function VoteArrow({ from, to, color }: { from: THREE.Vector3; to: THREE.Vector3
 
 function SceneContents(props: LiarTable3DProps) {
   const { seatCount: n, viewerSeat, seats, lowDetail } = props;
+  const chars = useRoomCharacters((st) => st.byName);
   const { seatR, tableR } = dims(n);
   const viewerHead = new THREE.Vector3(0, 1.9, seatR + 0.6);
   const headOf = (seat: number) => (seat === viewerSeat ? viewerHead : polar(seatAngle(seat, viewerSeat, n), seatR - 0.05, HEAD_Y));
@@ -257,7 +259,7 @@ function SceneContents(props: LiarTable3DProps) {
             ) : (
               <SeatedPerson
                 seed={s.seat * 5 + 2}
-                look={defaultLook(s.seat, ["none", "cap", "none", "fedora", "none", "beret"])}
+                look={resolveLook(s.seat, ["none", "cap", "none", "fedora", "none", "beret"], roomCharacterOf(chars, s.name))}
                 color={color}
                 position={polar(angle, seatR)}
                 facing={angle + Math.PI}
