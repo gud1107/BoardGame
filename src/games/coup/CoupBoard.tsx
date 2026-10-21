@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
+import { preferLowDetail, useBoardView } from "@/games/shared/three/tableKit";
+import type { CoupBeat } from "./three/CoupTable3D";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { coupIntensity, coupSoundCues, getCoupSound } from "./coupSound";
@@ -28,6 +31,12 @@ import {
   type LastEvent,
   type SeatIndex,
 } from "./engine";
+
+// three.js only loads when the 3D court is actually shown (🖼️ 2D otherwise / without WebGL).
+const CoupTable3D = dynamic(() => import("./three/CoupTable3D"), {
+  ssr: false,
+  loading: () => <div className="flex h-full items-center justify-center text-xs text-amber-100/50">3D 궁정 준비 중…</div>,
+});
 
 /**
  * Pure game UI + rules driver — same controlled-component contract as every
@@ -92,8 +101,46 @@ function describeLastEvent(event: LastEvent | null, names: Record<SeatIndex, str
   }
 }
 
+/** The last public event as a "beat" the 3D table acts out (bubbles + poses). */
+function beatOf(state: CoupState, names: Record<SeatIndex, string>): CoupBeat | null {
+  const e = state.lastEvent;
+  if (!e) return null;
+  switch (e.type) {
+    case "declare": {
+      const claim = state.pendingAction?.actorSeat === e.seat ? state.pendingAction.claimedCharacter : null;
+      const target = e.targetSeat !== null ? ` → ${names[e.targetSeat] ?? "상대"}` : "";
+      return { kind: "declare", seat: e.seat, target: e.targetSeat, claim, label: `${ACTION_EMOJI[e.action]} ${ACTION_NAMES[e.action]}${target}${claim ? `
+(${CHARACTER_NAMES[claim]} 주장)` : ""}` };
+    }
+    case "challengeAction":
+      return { kind: "challenge", challenger: e.challengerSeat, accused: e.actorSeat, caught: !e.actorHadCard, character: e.character };
+    case "challengeBlock":
+      return { kind: "challenge", challenger: e.challengerSeat, accused: e.blockerSeat, caught: !e.blockerHadCard, character: e.character };
+    case "block":
+      return { kind: "block", seat: e.blockerSeat, actor: e.actorSeat, character: e.character };
+    case "actionResolved": {
+      const coins = e.action === "income" ? 1 : e.action === "foreignAid" ? 2 : e.action === "tax" ? 3 : e.action === "steal" ? (e.amount ?? 0) : 0;
+      return { kind: "resolved", seat: e.actorSeat, target: e.targetSeat, label: ACTION_NAMES[e.action], blocked: e.blocked, coins };
+    }
+    case "influenceLost":
+      return { kind: "lost", seat: e.seat, character: e.character };
+    case "cardReplaced":
+      return { kind: "other", seat: e.seat, label: "🔄 증명한 카드 교체" };
+    case "exchangeStarted":
+      return { kind: "other", seat: e.seat, label: "🕊️ 카드 교환 중…" };
+    case "exchangeResolved":
+      return { kind: "other", seat: e.seat, label: "🕊️ 교환 완료" };
+    default:
+      return null;
+  }
+}
+
+const ATTACK_COLOR: Partial<Record<ActionKind, string>> = { coup: "#ef4444", assassinate: "#be123c", steal: "#38bdf8" };
+
 export default function CoupBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: CoupBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  const { view: boardView, setView: setBoardView, canToggle } = useBoardView("coup-view");
+  const [lowDetail] = useState(preferLowDetail);
   const [pendingTargetAction, setPendingTargetAction] = useState<ActionKind | null>(null);
 
   const [trackedState, setTrackedState] = useState(state);
@@ -240,10 +287,71 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
           {state.playerCount}인 · 단판 승부 · 턴 {state.turnNumber}
         </span>
         <div className="flex flex-wrap items-center gap-1.5">
+          {canToggle && (
+            <button
+              onClick={() => setBoardView(boardView === "3d" ? "2d" : "3d")}
+              className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:bg-white/80 light:text-slate-600"
+            >
+              {boardView === "3d" ? "🖼️ 2D로" : "🧊 3D로"}
+            </button>
+          )}
           <SuiteSoundHud suite={getCoupSound} icon="👑" label="Palace Intrigue" preview="coin3" />
           {rulebookButton}
         </div>
       </div>
+
+      {/* 3D 궁정 — getPlayerView로 가린 정보만(남의 숨은 카드는 장수만). */}
+      {boardView === "3d" && (
+        <div className="relative h-[340px] w-full overflow-hidden rounded-2xl border border-black/50 sm:h-[440px]">
+          <CoupTable3D
+            playerCount={state.playerCount}
+            viewerSeat={viewerSeat}
+            seats={state.players.map((p) => {
+              const v = view.players.find((x) => x.seat === p.seat)!;
+              return {
+                seat: p.seat,
+                name: names[p.seat] ?? "상대",
+                coins: p.coins,
+                hiddenCount: v.influenceCount,
+                myCards: p.seat === viewerSeat && v.influence ? v.influence.map((c) => c.character) : null,
+                lost: v.revealed.map((c) => c.character),
+                away: !connectedSeats.has(p.seat),
+              };
+            })}
+            activeSeat={state.activeSeat}
+            awaiting={state.phase === "action" ? [] : responders}
+            attack={
+              state.pendingAction && state.pendingAction.targetSeat !== null && ATTACK_COLOR[state.pendingAction.action]
+                ? { from: state.pendingAction.actorSeat, to: state.pendingAction.targetSeat, color: ATTACK_COLOR[state.pendingAction.action]! }
+                : null
+            }
+            beat={beatOf(state, names)}
+            beatKey={`${state.turnNumber}-${JSON.stringify(state.lastEvent)}`}
+            deckCount={state.deck.length}
+            sign={
+              state.phase === "action"
+                ? `${names[state.activeSeat] ?? "상대"}님의 차례`
+                : state.phase === "actionChallengeWindow"
+                  ? "🤨 의심할 사람?"
+                  : state.phase === "blockWindow"
+                    ? "🛡️ 방어할 사람?"
+                    : state.phase === "blockChallengeWindow"
+                      ? "🤨 방어를 의심?"
+                      : state.phase === "exchange"
+                        ? "🕊️ 제상 교환 중"
+                        : state.pendingLoseInfluence
+                          ? `💀 ${names[state.pendingLoseInfluence.seat] ?? "상대"}님
+잃을 카드 선택`
+                          : ""
+            }
+            overview={false}
+            lowDetail={lowDetail}
+          />
+          <span className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-amber-100/80">
+            남의 카드는 뒷면만 보여요 🤫 · 드래그로 둘러보기
+          </span>
+        </div>
+      )}
 
       {narration && (
         <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-center text-xs text-white/70 light:border-slate-200 light:bg-white/70 light:text-slate-600">
@@ -251,7 +359,8 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
         </div>
       )}
 
-      {/* Seats */}
+      {/* Seats (the 3D court shows the same thing around the table) */}
+      {boardView === "2d" && (
       <section className="flex flex-col gap-1.5">
         {state.players.map((p) => {
           const v = view.players.find((x) => x.seat === p.seat)!;
@@ -288,6 +397,7 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
           );
         })}
       </section>
+      )}
 
       {/* My hand */}
       <section

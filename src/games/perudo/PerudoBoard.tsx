@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
+import { preferLowDetail, useBoardView } from "@/games/shared/three/tableKit";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import RulebookModal from "./RulebookModal";
 import PerudoSoundHud from "./PerudoSoundHud";
@@ -35,6 +37,12 @@ import {
   playerColorwayForSeat,
   type DiceColorway,
 } from "./dice/colorways";
+
+// three.js only loads when the 3D table is actually shown (🖼️ 2D otherwise / without WebGL).
+const PerudoTable3D = dynamic(() => import("./three/PerudoTable3D"), {
+  ssr: false,
+  loading: () => <div className="flex h-full items-center justify-center text-xs text-amber-100/50">3D 테이블 준비 중…</div>,
+});
 
 /**
  * Pure game UI + rules driver — mirrors every other board in this project
@@ -138,6 +146,8 @@ export default function PerudoBoard({
   onGameEnd,
 }: PerudoBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  const { view: boardView, setView: setBoardView, canToggle } = useBoardView("perudo-view");
+  const [lowDetail] = useState(preferLowDetail);
   const me = state.players.find((p) => p.seat === viewerSeat)!;
   const isMyTurn = state.activeSeat === viewerSeat && state.phase === "playing";
   const iAmAlive = me.diceCount > 0;
@@ -480,6 +490,64 @@ export default function PerudoBoard({
   // -------------------------------------------------------------------------
   // Game over
   // -------------------------------------------------------------------------
+  // 3D 테이블 — 진행 중엔 내 주사위만, 공개 단계에선 공개된 주사위만 넘긴다.
+  const viewToggle = canToggle ? (
+    <button
+      onClick={() => setBoardView(boardView === "3d" ? "2d" : "3d")}
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:bg-white/80 light:text-slate-600"
+    >
+      {boardView === "3d" ? "🖼️ 2D로" : "🧊 3D로"}
+    </button>
+  ) : null;
+  function renderTable3D() {
+    if (boardView !== "3d") return null;
+    const res = state.phase === "reveal" ? state.lastResolution : null;
+    return (
+      <div className="relative z-10 h-[330px] w-full overflow-hidden rounded-2xl border border-black/50 sm:h-[430px]">
+        <PerudoTable3D
+          playerCount={state.playerCount}
+          viewerSeat={viewerSeat}
+          names={names}
+          seats={state.players.map((p) => {
+            const cw = colorways[p.seat] ?? playerColorwayForSeat(p.seat);
+            return {
+              seat: p.seat,
+              name: names[p.seat] ?? `${p.seat + 1}번`,
+              diceCount: p.diceCount,
+              dice: res ? (res.revealedDice[p.seat] ?? []) : p.seat === viewerSeat ? p.dice : null,
+              color: cw,
+              away: !connectedSeats.has(p.seat),
+              out: p.diceCount <= 0 && !(res && (res.revealedDice[p.seat]?.length ?? 0) > 0),
+            };
+          })}
+          activeSeat={state.phase === "playing" ? state.activeSeat : null}
+          bid={state.currentBid}
+          reveal={
+            res
+              ? {
+                  kind: res.kind,
+                  actorSeat: res.actorSeat,
+                  bidSeat: res.bid.seat,
+                  face: res.bid.face,
+                  quantity: res.bid.quantity,
+                  actualCount: res.actualCount,
+                  affectedSeat: res.affectedSeat,
+                  diceDelta: res.diceDelta,
+                  exactHitSeats: res.exactHitPenaltySeats,
+                }
+              : null
+          }
+          roundNumber={state.roundNumber}
+          overview={!!res}
+          lowDetail={lowDetail}
+        />
+        <span className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-amber-100/80">
+          {res ? "모든 컵이 열렸어요 🎲" : "남의 컵 속은 안 보여요 🤫 · 드래그로 둘러보기"}
+        </span>
+      </div>
+    );
+  }
+
   if (state.phase === "gameOver") {
     const rankings = computeRankings(state);
     return (
@@ -570,10 +638,12 @@ export default function PerudoBoard({
             {state.playerCount}인 · {state.roundNumber}라운드 결과
           </span>
           <div className="flex items-center gap-1.5">
+            {viewToggle}
             {muteButton}
             {rulebookButton}
           </div>
         </div>
+        {renderTable3D()}
         <div className="relative z-10 rounded-2xl border border-white/10 bg-black/30 p-4 text-center light:border-slate-200 light:bg-white/70">
           <p className="text-sm font-semibold text-amber-100 light:text-amber-700">
             {names[res.actorSeat]}님이 {res.kind === "dudo" ? "🚨 페루도!" : "🎯 맞아!"}를 외쳤습니다
@@ -647,6 +717,7 @@ export default function PerudoBoard({
           {state.playerCount}인 · {state.roundNumber}라운드
         </span>
         <div className="flex items-center gap-1.5">
+          {viewToggle}
           {muteButton}
           {rulebookButton}
         </div>
@@ -656,6 +727,8 @@ export default function PerudoBoard({
           "당신의 차례입니다!" 배너보다 위, 라운드 판단에 필요한 숫자를 먼저
           보고 베팅을 결정하도록. 원래 이 자리엔 아무것도 없었음(바로 턴
           배너로 이어졌음). */}
+      {renderTable3D()}
+
       <MyDiceStatsPanel state={state} myDice={me.dice} />
 
       {/* 턴 배너 — 하단 상태 텍스트는 이제 조용한 안내문 고정(한 번 튀는

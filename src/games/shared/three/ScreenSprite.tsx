@@ -16,7 +16,20 @@ export function distanceBoost(obj: THREE.Object3D, camera: THREE.Camera, near = 
 }
 
 /** A name tag / badge sprite that grows with distance so the far side of the table stays legible. */
-export default function ScreenSprite({ map, position, scale, renderOrder }: { map: THREE.Texture; position: [number, number, number]; scale: [number, number]; renderOrder?: number }) {
+export default function ScreenSprite({
+  map,
+  position,
+  scale,
+  renderOrder,
+  anchorY,
+}: {
+  map: THREE.Texture;
+  position: [number, number, number];
+  scale: [number, number];
+  renderOrder?: number;
+  /** When set, the gap above this height grows with the tag too, so stacked tags never overlap. */
+  anchorY?: number;
+}) {
   const ref = useRef<THREE.Sprite>(null);
   useFrame(({ camera }) => {
     const s = ref.current;
@@ -24,7 +37,8 @@ export default function ScreenSprite({ map, position, scale, renderOrder }: { ma
     const k = distanceBoost(s, camera);
     s.scale.set(scale[0] * k, scale[1] * k, 1);
     // grow upward so a bigger tag doesn't sink into the head below it
-    s.position.y = position[1] + (scale[1] * (k - 1)) / 2;
+    // with an anchor the whole stack scales uniformly about it (gaps grow with the tags)
+    s.position.y = anchorY === undefined ? position[1] + (scale[1] * (k - 1)) / 2 : anchorY + (position[1] - anchorY) * k;
   });
   return (
     <sprite ref={ref} position={position} scale={[scale[0], scale[1], 1]} renderOrder={renderOrder}>

@@ -33,7 +33,7 @@ export type PersonMood =
   | "shrug"
   | "slump";
 
-export type HatKind = "none" | "cowboy" | "fedora" | "beret" | "cap" | "bowler";
+export type HatKind = "none" | "cowboy" | "fedora" | "beret" | "cap" | "bowler" | "crown" | "circlet" | "hood" | "helmet";
 export type HairStyle = "short" | "long" | "bun" | "spiky";
 
 export interface PersonLook {
@@ -158,6 +158,89 @@ const COAT_PROFILE = [
 function Hat({ kind, color, seg }: { kind: HatKind; color: string; seg: number }) {
   if (kind === "none") return null;
   const felt = <meshStandardMaterial color={color} roughness={0.85} />;
+  if (kind === "crown" || kind === "circlet") {
+    // gold band with points (+ gems); the circlet is a thin, low version for nobles
+    const crown = kind === "crown";
+    const gold = <meshStandardMaterial color="#f5c542" metalness={0.85} roughness={0.25} emissive="#5a3a00" emissiveIntensity={0.25} />;
+    const points = crown ? 8 : 5;
+    return (
+      <group position={[0, crown ? 0.16 : 0.12, -0.01]} rotation={[-0.06, 0, 0]}>
+        <mesh castShadow>
+          <cylinderGeometry args={[crown ? 0.17 : 0.2, crown ? 0.175 : 0.205, crown ? 0.07 : 0.03, seg, 1, true]} />
+          {gold}
+        </mesh>
+        {Array.from({ length: points }, (_, i) => {
+          const a = (i / points) * Math.PI * 2;
+          return (
+            <mesh key={i} position={[Math.sin(a) * (crown ? 0.168 : 0.2), crown ? 0.08 : 0.03, Math.cos(a) * (crown ? 0.168 : 0.2)]}>
+              <coneGeometry args={[crown ? 0.032 : 0.018, crown ? 0.09 : 0.04, 4]} />
+              {gold}
+            </mesh>
+          );
+        })}
+        {crown && (
+          <>
+            <mesh position={[0, 0.02, 0.172]}>
+              <sphereGeometry args={[0.026, 10, 8]} />
+              <meshStandardMaterial color="#dc2626" roughness={0.15} metalness={0.2} emissive="#7f1d1d" emissiveIntensity={0.6} />
+            </mesh>
+            {[-1, 1].map((s) => (
+              <mesh key={s} position={[Math.sin(s * 0.9) * 0.17, 0.02, Math.cos(s * 0.9) * 0.17]}>
+                <sphereGeometry args={[0.016, 8, 6]} />
+                <meshStandardMaterial color="#2563eb" roughness={0.15} emissive="#1e3a8a" emissiveIntensity={0.5} />
+              </mesh>
+            ))}
+            {/* velvet cap inside the band */}
+            <mesh position={[0, 0.02, 0]} scale={[1, 0.55, 1]}>
+              <sphereGeometry args={[0.165, seg, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
+              <meshStandardMaterial color={color} roughness={0.9} />
+            </mesh>
+          </>
+        )}
+        {!crown && (
+          <mesh position={[0, 0.0, 0.205]}>
+            <sphereGeometry args={[0.018, 8, 6]} />
+            <meshStandardMaterial color="#a78bfa" roughness={0.15} emissive="#4c1d95" emissiveIntensity={0.5} />
+          </mesh>
+        )}
+      </group>
+    );
+  }
+  if (kind === "hood") {
+    // a deep cloak hood that shadows the forehead (mafia / slave)
+    return (
+      <group position={[0, 0.02, -0.03]}>
+        <mesh castShadow scale={[1.08, 1.12, 1.1]}>
+          <sphereGeometry args={[0.215, seg, 12, Math.PI * 0.18, Math.PI * 1.64, 0, Math.PI * 0.78]} />
+          <meshStandardMaterial color={color} roughness={0.95} side={THREE.DoubleSide} />
+        </mesh>
+        <mesh position={[0, -0.2, -0.04]} scale={[1, 1, 0.8]}>
+          <cylinderGeometry args={[0.21, 0.27, 0.16, seg, 1, true, Math.PI * 0.75, Math.PI * 1.5]} />
+          <meshStandardMaterial color={color} roughness={0.95} side={THREE.DoubleSide} />
+        </mesh>
+      </group>
+    );
+  }
+  if (kind === "helmet") {
+    const steel = <meshStandardMaterial color="#b8c0cc" metalness={0.9} roughness={0.3} />;
+    return (
+      <group position={[0, 0.03, -0.01]}>
+        <mesh castShadow scale={[1.06, 1.05, 1.08]}>
+          <sphereGeometry args={[0.21, seg, 12, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
+          {steel}
+        </mesh>
+        {/* nose guard + crest */}
+        <mesh position={[0, -0.02, 0.215]}>
+          <boxGeometry args={[0.03, 0.13, 0.02]} />
+          {steel}
+        </mesh>
+        <mesh position={[0, 0.2, -0.02]} rotation-x={0.2}>
+          <boxGeometry args={[0.025, 0.08, 0.3]} />
+          <meshStandardMaterial color={color} roughness={0.8} />
+        </mesh>
+      </group>
+    );
+  }
   if (kind === "beret") {
     return (
       <group position={[0.02, 0.15, -0.02]} rotation={[0.15, 0, -0.25]}>

@@ -10,7 +10,7 @@ import { bubbleTexture, clamp01, easeOutBack, type BubbleStyle } from "./tableKi
  * A speech-bubble sprite that pops in (overshoot) whenever `popKey` changes
  * and bobs gently. Always drawn on top so it never hides behind a head.
  */
-export default function SpeechBubble({ text, style, y, popKey, width = 0.95 }: { text: string; style: BubbleStyle; y: number; popKey: string; width?: number }) {
+export default function SpeechBubble({ text, style, y, popKey, width = 0.95, anchorY }: { text: string; style: BubbleStyle; y: number; popKey: string; width?: number; anchorY?: number }) {
   const ref = useRef<THREE.Sprite>(null);
   const born = useRef<{ key: string; at: number }>({ key: "", at: 0 });
   const { tex, aspect } = useMemo(() => bubbleTexture(text, { size: 52, ...style }), [text, style]);
@@ -22,7 +22,8 @@ export default function SpeechBubble({ text, style, y, popKey, width = 0.95 }: {
     const k = distanceBoost(s, camera, 3.4, 2.2);
     const w = width * pop * k;
     s.scale.set(w, w * aspect, 1);
-    s.position.y = y + (width * aspect * (k - 1)) / 2 + Math.sin(clock.elapsedTime * 2 + y) * 0.02;
+    const bob = Math.sin(clock.elapsedTime * 2 + y) * 0.02;
+    s.position.y = (anchorY === undefined ? y + (width * aspect * (k - 1)) / 2 : anchorY + (y + (width * aspect) / 2 - anchorY) * k) + bob;
   });
   return (
     <sprite ref={ref} position={[0, y, 0]} renderOrder={10}>

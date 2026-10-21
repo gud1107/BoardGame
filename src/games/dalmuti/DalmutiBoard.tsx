@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Avatar from "@/components/common/Avatar";
+import { preferLowDetail, useBoardView } from "@/games/shared/three/tableKit";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import { isBgmEffectivelyMuted, useAudioSettingsStore } from "@/lib/audio/audioSettings";
@@ -52,6 +54,12 @@ import {
   type TrickResult,
 } from "./engine";
 
+// three.js only loads when the 3D throne room is actually shown (🖼️ 2D otherwise / without WebGL).
+const DalmutiTable3D = dynamic(() => import("./three/DalmutiTable3D"), {
+  ssr: false,
+  loading: () => <div className="flex h-full items-center justify-center text-xs text-purple-100/50">3D 왕궁 준비 중…</div>,
+});
+
 /**
  * Pure game UI + rules driver — same controlled-component contract as every
  * other `<Game>Board.tsx` in this project (state via props only, intent out
@@ -72,6 +80,8 @@ export interface DalmutiBoardProps {
 
 export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: DalmutiBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  const { view: boardView, setView: setBoardView, canToggle } = useBoardView("dalmuti-view");
+  const [lowDetail] = useState(preferLowDetail);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   // Card-exchange VFX (2026-08-25 후속 세션) added this game's first sound —
@@ -217,7 +227,8 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
       getSoundEngine().playDalmutiFinishFanfare();
     }
     if (newPlayImpacts.length > 0) {
-      setPlayImpacts((prev) => {
+      // the 3D pile plays its own landing ring — only queue the 2D burst when it's on screen
+      if (boardView === "2d") setPlayImpacts((prev) => {
         let nextId = (prev.at(-1)?.id ?? 0) + 1;
         return [...prev, ...newPlayImpacts.map((e) => ({ ...e, id: nextId++ }))];
       });
@@ -637,6 +648,63 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     dispatch({ type: "commonerOfferCard", seat: viewerSeat, cardId });
   }
 
+  // 3D 왕궁에 넘길 공개 정보만(손패는 장수만, 낸 카드·순위·패스 말풍선).
+  const deciding3D: SeatIndex[] =
+    state.phase === "revolutionOption" && state.pendingRevolution
+      ? [state.pendingRevolution.seat]
+      : state.phase === "taxReturn"
+        ? state.tributes.filter((t) => !t.resolved).map((t) => t.toSeat)
+        : state.phase === "commonerExchange" && state.commonerExchange
+          ? state.commonerExchange.participants
+              .filter((p) => p.participate === null || state.commonerExchange!.pairs.some((pr) => !pr.resolved && (pr.seatA === p.seat || pr.seatB === p.seat)))
+              .map((p) => p.seat)
+          : [];
+  const lastPlay3D = state.trick.plays[state.trick.plays.length - 1];
+  const sign3D =
+    state.phase === "revolutionOption" && state.pendingRevolution
+      ? `🃏 ${names[state.pendingRevolution.seat]}님
+혁명 고민 중…`
+      : state.phase === "taxReturn"
+        ? "💰 세금 바치기"
+        : state.phase === "commonerExchange"
+          ? "🌾 평민 카드 교환"
+          : lastPlay3D && state.trick.rankValue !== null
+            ? `${state.trick.rankValue === 13 ? "조커" : `${state.trick.rankValue}번`} × ${state.trick.count}장
+${names[lastPlay3D.seat]}`
+            : `새 트릭 — ${names[state.activeSeat]}님 선`;
+  const table3D =
+    boardView === "3d" ? (
+      <div className="relative h-[340px] w-full overflow-hidden rounded-2xl border border-black/50 sm:h-[440px]">
+        <DalmutiTable3D
+          playerCount={state.playerCount}
+          viewerSeat={viewerSeat}
+          seats={seatOrder.map((seat, position) => {
+            const p = state.players.find((pl) => pl.seat === seat)!;
+            return {
+              seat,
+              name: names[seat] ?? `${seat + 1}번`,
+              title: rankTitle(position, state.playerCount),
+              rankPos: position,
+              handCount: p.hand.length,
+              finishedOrder: p.finishedAtOrder,
+              passing: passBubbles.some((b) => b.seat === seat),
+              away: !connectedSeats.has(seat),
+            };
+          })}
+          plays={state.phase === "trick" ? state.trick.plays : []}
+          activeSeat={state.phase === "trick" ? state.activeSeat : null}
+          sign={sign3D}
+          revolution={revolutionBanner}
+          deciding={deciding3D}
+          overview={false}
+          lowDetail={lowDetail}
+        />
+        <span className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-purple-100/80">
+          드래그로 둘러보기 · 내 손패는 아래에서 골라요
+        </span>
+      </div>
+    ) : null;
+
   const cardIsClickable = (state.phase === "trick" && isMyTrickTurn) || (state.phase === "taxReturn" && isMyTaxTurn);
   const cardIsHighlighted = (card: Card) => {
     if (selected.has(card.id)) return true;
@@ -668,12 +736,22 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
           <RoleBadge title={myTitle} />
         </span>
         <div className="flex flex-wrap gap-1.5">
+          {canToggle && (
+            <button
+              onClick={() => setBoardView(boardView === "3d" ? "2d" : "3d")}
+              className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:bg-white/80 light:text-slate-600"
+            >
+              {boardView === "3d" ? "🖼️ 2D로" : "🧊 3D로"}
+            </button>
+          )}
           {autoPassButton}
           {bgmButton}
           {muteButton}
           {rulebookButton}
         </div>
       </div>
+
+      {table3D}
 
       {/* Revolution option */}
       {state.phase === "revolutionOption" && state.pendingRevolution && (
@@ -793,6 +871,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
                 : `🫵 당신 차례입니다! 같은 장수(${state.trick.count}장)이면서 더 높은 계급(숫자 < ${state.trick.rankValue})만 낼 수 있어요.`
               : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
           </p>
+          {boardView === "2d" && (
           <section className="flex flex-wrap items-start justify-center gap-2.5 rounded-2xl border border-white/10 bg-black/25 p-3 light:border-slate-200 light:bg-slate-50">
             {state.trick.plays.length === 0 ? (
               <p className="py-6 text-xs text-white/30 light:text-slate-400">아직 아무도 카드를 내지 않았어요. 이 트릭의 선입니다.</p>
@@ -825,6 +904,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
               })
             )}
           </section>
+          )}
         </>
       )}
 

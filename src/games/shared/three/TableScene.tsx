@@ -1,0 +1,414 @@
+"use client";
+
+import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
+import * as THREE from "three";
+import FirstPersonCamera from "./FirstPersonCamera";
+import SeatedPerson, { defaultLook, type HatKind, type PersonLook, type PersonMood } from "./SeatedPerson";
+import ScreenSprite from "./ScreenSprite";
+import SpeechBubble from "./SpeechBubble";
+import { labelTexture, polar, seatAngle, type BubbleStyle } from "./tableKit";
+
+/**
+ * The shared "real people around a table" scene for the card / social
+ * games that sit everyone at one round table (달무티, 마피아, 페루도, 아발론,
+ * 쿠). The game hands in already-filtered display data per seat — mood,
+ * gaze, bubble, tags, and whatever sits on the table in front of them — plus
+ * a themed environment and a centrepiece; this file owns the table, chairs,
+ * people, name tags, turn ring, click-to-pick, lights and the first-person
+ * camera. It never sees hidden state, so it can't leak it.
+ *
+ * Coordinates: the viewer sits at +z (angle 0) and has no body (first
+ * person). `front` children are placed on the table in front of their seat
+ * in a local frame where +z points toward that seat's player and y = 0 is
+ * the table top.
+ */
+
+export interface TableGeo {
+  n: number;
+  viewerSeat: number;
+  seatR: number;
+  tableR: number;
+  tableY: number;
+  angleOf: (seat: number) => number;
+  /** Point on the table top in front of `seat`, `inset` in from the edge. */
+  spotOf: (seat: number, inset?: number) => THREE.Vector3;
+  /** Head position (the viewer's is the camera's neighbourhood). */
+  headOf: (seat: number) => THREE.Vector3;
+}
+
+const GeoContext = createContext<TableGeo | null>(null);
+/** Seat geometry for centrepieces / extras rendered inside a `TableScene`. */
+export function useTableGeo(): TableGeo {
+  const g = useContext(GeoContext);
+  if (!g) throw new Error("useTableGeo outside TableScene");
+  return g;
+}
+
+export const TABLE_Y = 0.92;
+const HEAD_Y = 1.52;
+
+export function tableDims(n: number) {
+  const seatR = 2.3 + Math.max(0, n - 4) * 0.3;
+  return { seatR, tableR: seatR - 0.72 };
+}
+
+export interface TableSeat {
+  seat: number;
+  name: string;
+  /** Second, smaller tag line under the name (coins, dice, hand size …). */
+  sub?: string | null;
+  mood: PersonMood;
+  /** Seat to look at, "center" for the table, null for straight ahead / default. */
+  lookSeat?: number | "center" | null;
+  out?: boolean;
+  /** Pulsing turn ring on the table in front of this seat. */
+  active?: boolean;
+  /** Coloured floor ring around the chair (selection, team …). */
+  ring?: string | null;
+  bubble?: { text: string; style: BubbleStyle; key: string; width?: number } | null;
+  /** A badge above the name (🎭 라이어, 👑 리더 …). */
+  tag?: { text: string; color: string; bg?: string } | null;
+  hat?: HatKind;
+  look?: Partial<PersonLook>;
+  chair?: "wood" | "stool" | "throne";
+  headSlot?: ReactNode;
+  front?: ReactNode;
+  /** 연결 끊김 — the name tag gets a 📴 mark. */
+  away?: boolean;
+  /** Click/tap the person (or the viewer's placard) to pick this seat. */
+  onSelect?: (() => void) | null;
+}
+
+export interface TableTheme {
+  background: string;
+  fog: [number, number];
+  ambient: [string, number];
+  hemi: [string, string, number];
+  /** Extra directional fills: [color, intensity, x, y, z]. */
+  fills: [string, number, number, number, number][];
+  /** Hanging lamp above the table (the shadow caster). */
+  lamp: { color: string; intensity: number; height: number } | null;
+  table: { top: string; rim: string; felt: string; inlay: string; base: string; feltMap?: () => THREE.Texture };
+  chair: "wood" | "stool" | "throne";
+  chairColor: string;
+  seatColors: string[];
+  hats: HatKind[];
+  /** Where the name tags sit on the head-local y axis. */
+  nameY?: number;
+}
+
+export interface TableSceneProps {
+  seatCount: number;
+  viewerSeat: number;
+  seats: TableSeat[];
+  theme: TableTheme;
+  environment?: ReactNode;
+  /** Rendered at the table centre, y = table top. */
+  center?: ReactNode;
+  /** Free-form scene content (arrows, flying props) — may call `useTableGeo`. */
+  extras?: ReactNode;
+  overview: boolean;
+  lowDetail: boolean;
+  ringColor?: string;
+  /** 0..1 multiplier for the hanging lamp (eases toward it), e.g. dimmed at night. */
+  lampDim?: number;
+}
+
+// ---------------------------------------------------------------------------
+
+function Table({ tableR, theme, lowDetail }: { tableR: number; theme: TableTheme; lowDetail: boolean }) {
+  const seg = lowDetail ? 32 : 72;
+  const t = theme.table;
+  const feltMap = useMemo(() => t.feltMap?.() ?? null, [t]);
+  return (
+    <group>
+      <mesh position={[0, TABLE_Y - 0.06, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[tableR + 0.14, tableR + 0.1, 0.12, seg]} />
+        <meshStandardMaterial color={t.rim} roughness={0.38} metalness={0.08} />
+      </mesh>
+      {/* rounded bull-nose edge */}
+      <mesh position={[0, TABLE_Y - 0.005, 0]} rotation-x={Math.PI / 2}>
+        <torusGeometry args={[tableR + 0.1, 0.035, 8, seg]} />
+        <meshStandardMaterial color={t.rim} roughness={0.32} metalness={0.1} />
+      </mesh>
+      <mesh position={[0, TABLE_Y + 0.004, 0]} rotation-x={-Math.PI / 2} receiveShadow>
+        <circleGeometry args={[tableR - 0.04, seg]} />
+        <meshStandardMaterial color={feltMap ? "#ffffff" : t.felt} map={feltMap} roughness={0.96} />
+      </mesh>
+      <mesh position={[0, TABLE_Y + 0.006, 0]} rotation-x={-Math.PI / 2}>
+        <ringGeometry args={[tableR - 0.12, tableR - 0.09, seg]} />
+        <meshStandardMaterial color={t.inlay} roughness={0.5} metalness={0.6} />
+      </mesh>
+      <mesh position={[0, TABLE_Y + 0.006, 0]} rotation-x={-Math.PI / 2}>
+        <ringGeometry args={[0.55, 0.57, seg]} />
+        <meshStandardMaterial color={t.inlay} roughness={0.5} metalness={0.6} transparent opacity={0.6} />
+      </mesh>
+      <mesh position={[0, TABLE_Y / 2 - 0.05, 0]} castShadow>
+        <cylinderGeometry args={[0.24, 0.42, TABLE_Y - 0.1, 20]} />
+        <meshStandardMaterial color={t.base} roughness={0.55} />
+      </mesh>
+      <mesh position={[0, 0.04, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.75, 0.85, 0.08, 24]} />
+        <meshStandardMaterial color={t.base} roughness={0.55} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Tall gilded throne back drawn behind a person whose own chair is "none". */
+function Throne({ color }: { color: string }) {
+  const gold = <meshStandardMaterial color="#d4a52c" metalness={0.85} roughness={0.3} />;
+  return (
+    <group>
+      <mesh position={[0, 1.2, -0.38]} castShadow>
+        <boxGeometry args={[0.86, 1.4, 0.1]} />
+        <meshStandardMaterial color={color} roughness={0.85} />
+      </mesh>
+      <mesh position={[0, 1.95, -0.38]}>
+        <coneGeometry args={[0.2, 0.32, 4]} />
+        {gold}
+      </mesh>
+      {[-1, 1].map((s) => (
+        <group key={s}>
+          <mesh position={[0.45 * s, 1.15, -0.38]} castShadow>
+            <boxGeometry args={[0.08, 1.5, 0.14]} />
+            {gold}
+          </mesh>
+          <mesh position={[0.45 * s, 1.95, -0.38]}>
+            <sphereGeometry args={[0.07, 12, 10]} />
+            {gold}
+          </mesh>
+          <mesh position={[0.4 * s, 0.68, 0]}>
+            <boxGeometry args={[0.08, 0.1, 0.62]} />
+            {gold}
+          </mesh>
+        </group>
+      ))}
+      <mesh position={[0, 0.48, 0]} castShadow>
+        <boxGeometry args={[0.8, 0.12, 0.68]} />
+        <meshStandardMaterial color={color} roughness={0.9} />
+      </mesh>
+      <mesh position={[0, 0.22, 0]}>
+        <boxGeometry args={[0.76, 0.42, 0.6]} />
+        <meshStandardMaterial color="#3b2412" roughness={0.6} />
+      </mesh>
+    </group>
+  );
+}
+
+function TurnRing({ position, color }: { position: THREE.Vector3; color: string }) {
+  const mat = useRef<THREE.MeshBasicMaterial>(null);
+  const mesh = useRef<THREE.Mesh>(null);
+  useFrame(({ clock }) => {
+    const p = Math.sin(clock.elapsedTime * 5);
+    if (mat.current) mat.current.opacity = 0.55 + p * 0.3;
+    mesh.current?.scale.setScalar(1 + p * 0.06);
+  });
+  return (
+    <mesh ref={mesh} position={[position.x, TABLE_Y + 0.012, position.z]} rotation-x={-Math.PI / 2}>
+      <ringGeometry args={[0.24, 0.31, 40]} />
+      <meshBasicMaterial ref={mat} color={color} transparent opacity={0.8} depthWrite={false} />
+    </mesh>
+  );
+}
+
+function FloorRing({ color }: { color: string }) {
+  const mat = useRef<THREE.MeshBasicMaterial>(null);
+  useFrame(({ clock }) => {
+    if (mat.current) mat.current.opacity = 0.5 + Math.sin(clock.elapsedTime * 3.2) * 0.2;
+  });
+  return (
+    <mesh position={[0, 0.02, 0]} rotation-x={-Math.PI / 2}>
+      <ringGeometry args={[0.5, 0.62, 40]} />
+      <meshBasicMaterial ref={mat} color={color} transparent opacity={0.6} depthWrite={false} />
+    </mesh>
+  );
+}
+
+/** Pointer handlers that ignore drags (the canvas drag looks around). */
+function useSelect(onSelect: (() => void) | null | undefined) {
+  const [hover, setHover] = useState(false);
+  if (!onSelect) return { hover: false, handlers: {} };
+  return {
+    hover,
+    handlers: {
+      onClick: (e: ThreeEvent<MouseEvent>) => {
+        e.stopPropagation();
+        if (e.delta > 8) return;
+        onSelect();
+      },
+      onPointerOver: (e: ThreeEvent<PointerEvent>) => {
+        e.stopPropagation();
+        setHover(true);
+        document.body.style.cursor = "pointer";
+      },
+      onPointerOut: () => {
+        setHover(false);
+        document.body.style.cursor = "";
+      },
+    },
+  };
+}
+
+function SeatView({ s, geo, theme, lowDetail, ringColor }: { s: TableSeat; geo: TableGeo; theme: TableTheme; lowDetail: boolean; ringColor: string }) {
+  const angle = geo.angleOf(s.seat);
+  const isViewer = s.seat === geo.viewerSeat;
+  const color = theme.seatColors[s.seat % theme.seatColors.length];
+  const { hover, handlers } = useSelect(s.onSelect);
+  const look = useMemo(() => {
+    const base = defaultLook(s.seat, theme.hats);
+    return { ...base, ...(s.hat ? { hat: s.hat } : {}), ...s.look };
+  }, [s.seat, s.hat, s.look, theme.hats]);
+  const lookAt = s.lookSeat === "center" ? new THREE.Vector3(0, TABLE_Y, 0) : s.lookSeat === null || s.lookSeat === undefined ? null : geo.headOf(s.lookSeat);
+  const nameY = theme.nameY ?? 2.18;
+  // bubble bottom edge (SpeechBubble centres itself above it when anchored)
+  const bubbleY = nameY + (s.tag ? 0.34 : 0.14);
+  const labelBase = nameY - (s.sub ? 0.29 : 0.11);
+  const frontSpot = geo.spotOf(s.seat, isViewer ? 0.45 : 0.38);
+  const chair = s.chair ?? theme.chair;
+
+  return (
+    <group>
+      {s.front && (
+        <group position={frontSpot} rotation-y={angle}>
+          {s.front}
+        </group>
+      )}
+      {s.active && <TurnRing position={geo.spotOf(s.seat, 0.16)} color={ringColor} />}
+      {isViewer ? (
+        <group position={geo.spotOf(s.seat, 0.08).toArray()} rotation-y={angle}>
+          {/* my placard — tap target for picking myself */}
+          <group {...handlers} position={[0, 0.06, 0]} rotation-x={-0.5}>
+            <mesh>
+              <boxGeometry args={[0.5, 0.12, 0.02]} />
+              <meshStandardMaterial color={hover ? "#fde68a" : theme.table.inlay} metalness={0.6} roughness={0.35} emissive={s.ring ?? "#000"} emissiveIntensity={s.ring ? 0.7 : 0} />
+            </mesh>
+            <mesh position={[0, 0, 0.012]}>
+              <planeGeometry args={[0.48, 0.12]} />
+              <meshBasicMaterial map={labelTexture(`${s.name} (나)`, color)} transparent />
+            </mesh>
+          </group>
+          {s.tag && <ScreenSprite position={[0, 0.45, -0.1]} scale={[0.66, 0.165]} map={labelTexture(s.tag.text, s.tag.color, { bg: s.tag.bg })} />}
+          {s.bubble && <SpeechBubble text={s.bubble.text} style={s.bubble.style} y={0.82} popKey={s.bubble.key} width={s.bubble.width ?? 0.9} />}
+        </group>
+      ) : (
+        <group {...handlers}>
+          {chair === "throne" && (
+            <group position={polar(angle, geo.seatR)} rotation-y={angle + Math.PI}>
+              <Throne color={theme.chairColor} />
+            </group>
+          )}
+          <SeatedPerson
+            seed={s.seat * 7 + 3}
+            look={look}
+            color={color}
+            position={polar(angle, geo.seatR)}
+            facing={angle + Math.PI}
+            mood={s.mood}
+            lookAt={lookAt}
+            out={s.out}
+            lowDetail={lowDetail}
+            chair={chair === "throne" ? "none" : chair}
+            chairColor={theme.chairColor}
+            headSlot={s.headSlot}
+          >
+            {(s.ring || hover) && <FloorRing color={hover && !s.ring ? "#fde68a" : (s.ring ?? "#fde68a")} />}
+            {/* the stack (sub · name · tag · bubble) grows as one block with distance */}
+            <ScreenSprite anchorY={labelBase} position={[0, nameY, 0]} scale={[0.86, 0.21]} map={labelTexture(s.away ? `📴 ${s.name}` : s.name, s.away ? "#71717a" : color)} />
+            {s.sub && <ScreenSprite anchorY={labelBase} position={[0, nameY - 0.2, 0]} scale={[0.7, 0.175]} map={labelTexture(s.sub, color, { bg: "rgba(0,0,0,0.55)" })} />}
+            {s.tag && <ScreenSprite anchorY={labelBase} position={[0, nameY + 0.22, 0]} scale={[0.7, 0.175]} map={labelTexture(s.tag.text, s.tag.color, { bg: s.tag.bg ?? "rgba(20,10,10,0.85)" })} />}
+            {s.bubble && <SpeechBubble anchorY={labelBase} text={s.bubble.text} style={s.bubble.style} y={bubbleY} popKey={s.bubble.key} width={s.bubble.width ?? 1.0} />}
+          </SeatedPerson>
+          {/* generous invisible hit box so a tap on the chair area counts too */}
+          {s.onSelect && (
+            <mesh position={polar(angle, geo.seatR, 1.0)}>
+              <boxGeometry args={[0.9, 2.0, 0.9]} />
+              <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
+            </mesh>
+          )}
+        </group>
+      )}
+    </group>
+  );
+}
+
+function Lamp({ lamp, lowDetail, dim }: { lamp: NonNullable<TableTheme["lamp"]>; lowDetail: boolean; dim: number }) {
+  const light = useRef<THREE.PointLight>(null);
+  const level = useRef(dim);
+  useFrame(({ clock }, dt) => {
+    level.current += (dim - level.current) * (1 - Math.exp(-dt * 1.4));
+    if (light.current) light.current.intensity = (lamp.intensity + Math.sin(clock.elapsedTime * 2.1) * lamp.intensity * 0.025) * level.current;
+  });
+  return (
+    <pointLight
+      ref={light}
+      position={[0, lamp.height, 0]}
+      color={lamp.color}
+      intensity={lamp.intensity}
+      distance={14}
+      decay={2}
+      castShadow={!lowDetail}
+      shadow-mapSize-width={1024}
+      shadow-mapSize-height={1024}
+      shadow-bias={-0.002}
+    />
+  );
+}
+
+function SceneContents(props: TableSceneProps) {
+  const { seatCount: n, viewerSeat, theme, lowDetail } = props;
+  const geo = useMemo<TableGeo>(() => {
+    const { seatR, tableR } = tableDims(n);
+    const angleOf = (seat: number) => seatAngle(seat, viewerSeat, n);
+    return {
+      n,
+      viewerSeat,
+      seatR,
+      tableR,
+      tableY: TABLE_Y,
+      angleOf,
+      spotOf: (seat, inset = 0.4) => polar(angleOf(seat), tableR - inset, TABLE_Y),
+      headOf: (seat) => (seat === viewerSeat ? new THREE.Vector3(0, 1.9, seatR + 0.6) : polar(angleOf(seat), seatR - 0.05, HEAD_Y)),
+    };
+  }, [n, viewerSeat]);
+
+  return (
+    <GeoContext.Provider value={geo}>
+      <color attach="background" args={[theme.background]} />
+      <fog attach="fog" args={[theme.background, theme.fog[0], theme.fog[1]]} />
+      <ambientLight color={theme.ambient[0]} intensity={theme.ambient[1]} />
+      <hemisphereLight args={theme.hemi} />
+      {theme.fills.map(([c, i, x, y, z], k) => (
+        <directionalLight key={k} color={c} intensity={i} position={[x, y, z]} />
+      ))}
+      {theme.lamp && <Lamp lamp={theme.lamp} lowDetail={lowDetail} dim={props.lampDim ?? 1} />}
+      {props.environment}
+      <Table tableR={geo.tableR} theme={theme} lowDetail={lowDetail} />
+      <group position={[0, TABLE_Y, 0]}>{props.center}</group>
+      {props.seats.map((s) => (
+        <SeatView key={s.seat} s={s} geo={geo} theme={theme} lowDetail={lowDetail} ringColor={props.ringColor ?? "#fbbf24"} />
+      ))}
+      {props.extras}
+      <FirstPersonCamera seatR={geo.seatR} tableY={TABLE_Y} overview={props.overview} seats={n} />
+    </GeoContext.Provider>
+  );
+}
+
+export default function TableScene(props: TableSceneProps) {
+  const high = !props.lowDetail;
+  return (
+    <Canvas
+      shadows={high}
+      dpr={high ? [1, 1.75] : [1, 1.25]}
+      gl={{ antialias: high, powerPreference: "high-performance" }}
+      camera={{ fov: 58, position: [0, 2.4, 4.2], near: 0.05, far: 120 }}
+      style={{ touchAction: "pan-y" }}
+      onPointerMissed={() => {
+        document.body.style.cursor = "";
+      }}
+    >
+      <SceneContents {...props} />
+    </Canvas>
+  );
+}

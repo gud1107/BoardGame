@@ -1,6 +1,8 @@
 "use client";
 
 import { type CSSProperties, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
+import { preferLowDetail, useBoardView } from "@/games/shared/three/tableKit";
 import RulebookModal from "./RulebookModal";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
@@ -26,6 +28,12 @@ import {
   type Team,
   type WinReason,
 } from "./engine";
+
+// three.js only loads when the 3D round table is actually shown (🖼️ 2D otherwise / without WebGL).
+const AvalonTable3D = dynamic(() => import("./three/AvalonTable3D"), {
+  ssr: false,
+  loading: () => <div className="flex h-full items-center justify-center text-xs text-amber-100/50">3D 원탁 준비 중…</div>,
+});
 
 /**
  * Pure game UI + rules driver — mirrors BangBoard/GridPokerBoard's contract:
@@ -102,6 +110,8 @@ export default function AvalonBoard({
   onGameEnd,
 }: AvalonBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  const { view: boardView, setView: setBoardView, canToggle } = useBoardView("avalon-view");
+  const [lowDetail] = useState(preferLowDetail);
   const [roleModalOpen, setRoleModalOpen] = useState(true);
   const [selection, setSelection] = useState<SeatIndex[]>([]);
   // Snap-lock animation state for the vote/quest-card buttons themselves —
@@ -282,6 +292,14 @@ export default function AvalonBoard({
               : ""}
           </span>
           <div className="flex flex-wrap gap-1.5">
+            {canToggle && (
+              <button
+                onClick={() => setBoardView(boardView === "3d" ? "2d" : "3d")}
+                className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600"
+              >
+                {boardView === "3d" ? "🖼️ 2D로" : "🧊 3D로"}
+              </button>
+            )}
             <SuiteSoundHud suite={getAvalonSound} icon="🏰" label="Round Table" preview="approved" />
             {roleReopenButton}
             {rulebookButton}
@@ -327,7 +345,59 @@ export default function AvalonBoard({
           })}
         </div>
 
+        {/* 3D 원탁 — 공개 정보만(투표는 전원 투표 후, 원정 카드는 장수만). 리더는 사람을 눌러 원정대를 고른다. */}
+        {boardView === "3d" && state.phase !== "gameOver" && (
+          <div className="relative z-10 h-[340px] w-full overflow-hidden rounded-2xl border border-black/50 sm:h-[440px]">
+            <AvalonTable3D
+              playerCount={state.playerCount}
+              viewerSeat={viewerSeat}
+              names={names}
+              seats={state.players.map((p) => {
+                const votesPublic = state.phase !== "voting" && Object.keys(state.votes).length > 0;
+                const canPick = state.phase === "team-proposal" && isLeader;
+                const canAssassinate = state.phase === "assassination" && isAssassin && p.seat !== viewerSeat && slashTarget === null;
+                return {
+                  seat: p.seat,
+                  name: names[p.seat] ?? `${p.seat + 1}번`,
+                  isLeader: state.leader === p.seat,
+                  onTeam: state.proposedTeam.includes(p.seat),
+                  selected: state.phase === "team-proposal" && selection.includes(p.seat),
+                  voted: state.phase === "voting" && state.votes[p.seat] !== undefined,
+                  vote: votesPublic ? (state.votes[p.seat] ?? null) : null,
+                  questSubmitted: state.phase === "quest" && state.questCards[p.seat] !== undefined,
+                  away: !connectedSeats.has(p.seat),
+                  onSelect: canPick ? () => toggleSeatForProposal(p.seat) : canAssassinate ? () => confirmAssassinate(p.seat) : null,
+                };
+              })}
+              phase={state.phase as "team-proposal" | "voting" | "quest" | "assassination"}
+              round={state.round}
+              teamSizes={state.teamSizes}
+              twoFails={state.teamSizes.map((_, i) => failThreshold(state.playerCount, i + 1) > 1)}
+              results={state.questResults.map((r) => ({ success: r.success, failCount: r.failCount, teamSize: r.teamSize }))}
+              consecutiveRejects={state.consecutiveRejects}
+              questCardsIn={state.phase === "quest" ? questSubmittedCount : 0}
+              lastQuestReveal={(() => {
+                const last = state.questResults[state.questResults.length - 1];
+                if (!last || state.phase === "quest" || state.phase === "voting") return null;
+                if (last.round !== state.round - 1 && state.phase !== "assassination") return null;
+                return { success: last.teamSize - last.failCount, fail: last.failCount, round: last.round };
+              })()}
+              assassinSeat={state.phase === "assassination" ? assassinSeat : null}
+              overview={state.phase === "assassination"}
+              lowDetail={lowDetail}
+            />
+            <span className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-amber-100/80">
+              {state.phase === "team-proposal" && isLeader
+                ? "기사(또는 내 명패)를 눌러 원정대 선택"
+                : state.phase === "assassination" && isAssassin
+                  ? "메를린이라 생각하는 사람을 눌러 암살"
+                  : "드래그로 둘러보기"}
+            </span>
+          </div>
+        )}
+
         {/* Round table: every seat placed around an ellipse, viewer always at the bottom. */}
+        {boardView === "2d" && (
         <div className="relative z-10 mx-auto h-[260px] w-full max-w-md sm:h-[300px]">
           <div className="absolute inset-[8%] rounded-[50%] border-4 border-indigo-900/60 bg-gradient-to-b from-indigo-950/70 to-black/70 shadow-inner light:border-indigo-200 light:from-indigo-100 light:to-white" />
           {/* Viewer's own seat, pinned at the bottom center. */}
@@ -355,6 +425,7 @@ export default function AvalonBoard({
             />
           ))}
         </div>
+        )}
 
         {/* Phase-specific action panel */}
         <div className="relative z-10 rounded-xl border border-white/10 bg-black/30 p-3 text-center light:border-slate-200 light:bg-slate-50">

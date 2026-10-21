@@ -58,6 +58,19 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.77.0",
+    releaseDate: "2026-10-21",
+    title: "🧊 달무티·마피아·페루도·아발론·쿠 3D 테이블",
+    changes: [
+      { game: "dalmuti", type: "FEAT", desc: "👑 왕궁 원탁 — 왕은 왕좌에 왕관, 노예는 두건. 남은 손패는 뒷면 부채꼴, 낸 카드는 가운데로 날아와 쌓이고 패스는 말풍선" },
+      { game: "mafia", type: "FEAT", desc: "🌙 마을 회관 — 낮/밤에 따라 창밖과 조명이 바뀌고 밤엔 모두 잠들어요. 채팅은 말풍선, 최후 변론자에게 스포트라이트" },
+      { game: "perudo", type: "FEAT", desc: "🎲 해 질 녘 안데스 마당 — 가죽 컵 속 주사위, 내 컵만 살짝 들려 보이고 페루도!/맞아! 땐 모든 컵이 열리며 맞는 눈이 빛나요" },
+      { game: "avalon", type: "FEAT", desc: "🏰 카멜롯 원탁 — 엑스칼리버와 원정 트랙, 리더는 기사를 눌러 원정대 선택, 투표 토큰이 뒤집히고 원정 카드가 펼쳐져요" },
+      { game: "coup", type: "FEAT", desc: "🗡️ 르네상스 궁정 — 영향력 카드와 금화 더미, 선언·의심·방어가 말풍선과 동작으로, 공격 대상에게 붉은 화살표" },
+      { game: "common", type: "IMPROVE", desc: "🖼️ 다섯 게임 모두 헤더 '2D로' 버튼으로 예전 화면 전환(기기에 저장), 끊긴 플레이어는 📴 표시, 3D 미지원 기기는 자동 2D" },
+    ],
+  },
+  {
     version: "v1.76.0",
     releaseDate: "2026-10-21",
     title: "🎬 하이라이트 영상 17개 게임 추가",

@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
+import { preferLowDetail, useBoardView } from "@/games/shared/three/tableKit";
+import type { ChatMessage } from "@/lib/chat/types";
+import type { MafiaSeat3D } from "./three/MafiaTable3D";
 import RulebookModal from "./RulebookModal";
 import RoleInspector from "./RoleInspector";
 import RoleRosterTable from "./RoleRosterTable";
@@ -19,6 +23,12 @@ import {
   type Team,
 } from "./engine";
 
+// three.js only loads when the 3D village hall is actually shown (🖼️ 2D otherwise / without WebGL).
+const MafiaTable3D = dynamic(() => import("./three/MafiaTable3D"), {
+  ssr: false,
+  loading: () => <div className="flex h-full items-center justify-center text-xs text-rose-100/50">3D 회관 준비 중…</div>,
+});
+
 export interface MafiaBoardProps {
   state: MafiaState;
   viewerSeat: SeatIndex;
@@ -30,6 +40,8 @@ export interface MafiaBoardProps {
   isChatInputFocused?: boolean;
   /** 직업 공개 팝업의 "이미 봤음" 여부를 localStorage에 영구 기록하는 키로 쓰인다(2026-09-20 요청) — 재접속/새로고침에도 다시 뜨지 않게 하려면 방 코드 단위로 남겨야 한다. */
   roomCode: string;
+  /** 공개 방 채팅(유령 채팅 제외) — 3D 회관의 말풍선에만 쓴다. */
+  publicChat?: readonly ChatMessage[];
 }
 
 /** 이 방에서 직업 공개 팝업을 이미 본 적 있는지 — 새로고침/재접속으로 컴포넌트가 통째로 다시 마운트돼도 살아남도록 localStorage에 남긴다. */
@@ -142,8 +154,10 @@ const PHASE_LABEL: Record<MafiaState["phase"], string> = {
   gameOver: "🏁 게임 종료",
 };
 
-export default function MafiaBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd, isChatInputFocused = false, roomCode }: MafiaBoardProps) {
+export default function MafiaBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd, isChatInputFocused = false, roomCode, publicChat = [] }: MafiaBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  const { view: boardView, setView: setBoardView, canToggle } = useBoardView("mafia-view");
+  const [lowDetail] = useState(preferLowDetail);
   // 게임 시작 직후 딱 1회만 노출(2026-09-20 요청) — 예전엔 `state.players`
   // 배열 레퍼런스가 바뀔 때마다(사망/방탄 소모/스파이 접선 등 어떤 플레이어
   // 상태 변화든) 팝업을 재오픈하는 버그가 있었다. 이제는 게임당 1회만 열고,
@@ -208,6 +222,47 @@ export default function MafiaBoard({ state, viewerSeat, names, connectedSeats, o
     return () => getMafiaBgm().stop();
   }, []);
 
+  // 3D 회관 좌석 — SeatGrid와 같은 공개 규칙(직업 공개·내가 알게 된 정체 배지)만 쓴다.
+  // 지목/찬반은 "했다"는 사실만, 채팅은 공개 채널의 최근 3개만 말풍선으로.
+  const recentChat = publicChat.filter((m) => m.type !== "SYSTEM").slice(-3);
+  function mafiaSeat3D(seat: SeatIndex): MafiaSeat3D {
+    const p = state.players[seat];
+    const showRole = iAmGhost || (!p.alive && state.config.revealRoleOnDeath);
+    const m = ROLE_META[p.role];
+    const known = iAmGhost ? null : (knownRoleFor(state, viewerSeat, seat) ?? (knowledge.mafiaTeammates.includes(seat) ? { isMafia: true as const, role: p.role } : null));
+    const acted =
+      p.alive &&
+      ((state.phase === "nomination" && state.nominations[seat] !== undefined) ||
+        (state.phase === "finalVote" && state.finalVotes[seat] !== undefined) ||
+        (state.phase === "dayDiscuss" && !!state.skipVotes[seat]));
+    let chat: MafiaSeat3D["chat"] = null;
+    for (let i = recentChat.length - 1; i >= 0; i--) {
+      const msg = recentChat[i];
+      if (names[seat] && msg.senderName === names[seat]) {
+        chat = { text: msg.body, key: msg.id };
+        break;
+      }
+    }
+    const death = state.deaths.find((d) => d.seat === seat);
+    return {
+      seat,
+      name: names[seat] ?? `${seat + 1}번`,
+      alive: p.alive,
+      tag: known
+        ? known.isMafia
+          ? { text: knowledge.mafiaTeammates.includes(seat) ? "🔪 마피아 동료" : "🚨 마피아", color: "#ef4444" }
+          : { text: "🛡️ 시민 확인", color: "#22d3ee" }
+        : !p.alive && death
+          ? { text: death.cause === "execution" ? "⚖️ 처형됨" : death.cause === "terroristRevenge" ? "💣 길동무" : "🌙 밤에 희생", color: "#a8a29e" }
+          : null,
+      roleCard: showRole ? { icon: m.icon, label: m.label, mafia: m.team === "mafia" } : null,
+      acted,
+      isSuspect: state.suspect === seat && (state.phase === "defense" || state.phase === "finalVote"),
+      chat: p.alive && state.phase !== "night" ? chat : null,
+      disconnected: !connectedSeats.has(seat),
+    };
+  }
+
   if (state.phase === "gameOver" && state.winner) {
     return (
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
@@ -266,6 +321,14 @@ export default function MafiaBoard({ state, viewerSeat, names, connectedSeats, o
                 onToggleSkip={() => onAction({ type: "toggleSkipVote", seat: viewerSeat, atMs: Date.now() })}
               />
             )}
+            {canToggle && (
+              <button
+                onClick={() => setBoardView(boardView === "3d" ? "2d" : "3d")}
+                className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600"
+              >
+                {boardView === "3d" ? "🖼️ 2D로" : "🧊 3D로"}
+              </button>
+            )}
             <button
               onClick={() => setRoleModalOpen(true)}
               className="rounded-full border border-amber-300/30 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-200 transition hover:border-amber-300/50 light:bg-amber-50 light:text-amber-700 light:border-amber-300"
@@ -288,7 +351,33 @@ export default function MafiaBoard({ state, viewerSeat, names, connectedSeats, o
           </div>
         )}
 
-        <SeatGrid state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} revealAll={iAmGhost} mafiaTeammates={knowledge.mafiaTeammates} />
+        {boardView === "3d" ? (
+          <div className="relative z-10 h-[340px] w-full overflow-hidden rounded-2xl border border-black/50 sm:h-[440px]">
+            <MafiaTable3D
+              playerCount={state.players.length}
+              viewerSeat={viewerSeat}
+              seats={state.players.map((p) => mafiaSeat3D(p.seat))}
+              night={state.phase === "night"}
+              phase={state.phase}
+              sign={`${PHASE_LABEL[state.phase]}${state.dayNumber > 0 ? ` · ${state.dayNumber}일차` : ""}
+생존 ${aliveCount}명`}
+              focusSeat={
+                state.phase === "execution" && state.lastExecution?.executed
+                  ? state.lastExecution.suspect
+                  : state.phase === "dayAnnounce"
+                    ? (state.lastNightOutcome?.victim ?? null)
+                    : null
+              }
+              overview={iAmGhost}
+              lowDetail={lowDetail}
+            />
+            <span className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-rose-100/80">
+              {state.phase === "night" ? "🌙 모두 잠든 밤… 아래에서 행동하세요" : "드래그로 둘러보기"}
+            </span>
+          </div>
+        ) : (
+          <SeatGrid state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} revealAll={iAmGhost} mafiaTeammates={knowledge.mafiaTeammates} />
+        )}
 
         <div className="relative z-10 rounded-xl border border-white/10 bg-black/30 p-3 text-center light:border-slate-200 light:bg-slate-50">
           <PhasePanel state={state} viewerSeat={viewerSeat} names={names} knowledge={knowledge} onAction={onAction} />

@@ -120,10 +120,15 @@ export function labelTexture(text: string, color: string, opts: { bg?: string; f
   ctx.lineWidth = 6;
   ctx.stroke();
   ctx.fillStyle = opts.fg ?? "#fef3c7";
-  ctx.font = `700 50px ${TEXT_FONT}, ${EMOJI_FONT}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const shown = [...text].length > 10 ? `${[...text].slice(0, 9).join("")}…` : text;
+  const shown = [...text].length > 16 ? `${[...text].slice(0, 15).join("")}…` : text;
+  // shrink long tags to fit instead of cutting them
+  let size = 50;
+  for (; size > 30; size -= 2) {
+    ctx.font = `700 ${size}px ${TEXT_FONT}, ${EMOJI_FONT}`;
+    if (ctx.measureText(shown).width <= 456) break;
+  }
   ctx.fillText(shown, 256, 66);
   t = makeTexture(c);
   labelCache.set(key, t);
@@ -237,3 +242,22 @@ export function bubbleTexture(text: string, style: BubbleStyle): { tex: THREE.Ca
   bubbleCache.set(key, out);
   return out;
 }
+
+const paintedCache = new Map<string, THREE.CanvasTexture>();
+/**
+ * A cached canvas texture painted once by `draw` — card faces, dice pips,
+ * table felt patterns. `key` must capture everything `draw` depends on.
+ */
+export function paintedTexture(key: string, w: number, h: number, draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void): THREE.CanvasTexture {
+  let t = paintedCache.get(key);
+  if (t) return t;
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  draw(c.getContext("2d")!, w, h);
+  t = makeTexture(c);
+  paintedCache.set(key, t);
+  return t;
+}
+
+export const FONTS = { emoji: EMOJI_FONT, text: TEXT_FONT };

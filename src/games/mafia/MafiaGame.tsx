@@ -1225,6 +1225,7 @@ export default function MafiaGame({ onComplete }: PlayableGameProps) {
         onGameEnd={handleGameEnd}
         isChatInputFocused={isChatInputFocused}
         roomCode={roomCode}
+        publicChat={chatMessages}
       />
       <div className="hidden sm:block">
         <ChatDrawer
