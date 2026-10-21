@@ -19,6 +19,7 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
   "2026-10-21": {
     "god-life-planner": "🎧 전용 BGM·활동별 효과음, 🎬 하루 다시 보기·미리 재생, 🏆 목표 카드·상황 안내·결과 변화 보기",
+    "five-cucumbers": "🥒 텃밭 3D 테이블, 🧑 어른 비율의 사실적인 인물, ✨ 이목구비 뚜렷한 미남·미녀 얼굴",
     common: "🎬 49개 게임 카드에 마우스오버 하이라이트 영상, 🖼️ 3D 게임은 '2D로' 버튼으로 예전 화면, 📝 패치노트 날짜별 보기",
   },
   "2026-10-20": {
