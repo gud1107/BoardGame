@@ -60,7 +60,9 @@ function ResponseTimer({ onTimeout }: { onTimeout: () => void }) {
     <div className="flex items-center gap-2">
       <span
         className={`flex h-8 min-w-8 items-center justify-center rounded-full border px-1.5 text-sm font-black tabular-nums ${
-          urgent ? "border-rose-400/70 bg-rose-500/20 text-rose-200" : "border-amber-300/50 bg-amber-400/10 text-amber-100"
+          urgent
+            ? "border-rose-400/70 bg-rose-500/20 text-rose-200 light:border-rose-400 light:bg-rose-50 light:text-rose-600"
+            : "border-amber-300/50 bg-amber-400/10 text-amber-100 light:border-amber-400 light:bg-amber-50 light:text-amber-700"
         }`}
         style={{ animation: urgent ? "coup-response-warn 0.6s ease-in-out infinite" : undefined }}
         aria-label={`남은 시간 ${secondsLeft}초`}
@@ -182,7 +184,7 @@ export default function ResponseDock({
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[45] flex justify-center px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
       <div className="pointer-events-auto flex w-full max-w-2xl flex-col gap-2 rounded-2xl border border-amber-300/40 bg-[#1c1206]/95 p-3 text-sm text-white/80 shadow-[0_-12px_40px_-12px_rgba(0,0,0,0.9)] backdrop-blur-md light:border-amber-300 light:bg-white/95 light:text-slate-700">
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-bold text-amber-100 light:text-amber-800">{title}</span>
