@@ -2,6 +2,7 @@
 
 import { type CSSProperties, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import { usePortrait } from "@/games/shared/portrait/usePortrait";
 import { preferLowDetail, useBoardView } from "@/games/shared/three/viewPref";
 import RulebookModal from "./RulebookModal";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
@@ -62,6 +63,32 @@ const ROLE_META: Record<Role, { label: string; icon: string; team: Team }> = {
   oberon: { label: "오베론", icon: "🏝️", team: "evil" },
   assassin: { label: "암살자", icon: "🏹", team: "evil" },
 };
+
+/**
+ * Original oil portraits (`public/images/avalon/<role>.webp`), shown only where
+ * a role is already visible to the viewer (own reveal, end-of-game roster), so
+ * art never leaks hidden roles. Fill only once all 7 exist.
+ */
+const ROLE_PORTRAIT: Partial<Record<Role, string>> = {};
+
+function RolePortrait({ role, size }: { role: Role; size: "sm" | "lg" }) {
+  const meta = ROLE_META[role];
+  const art = usePortrait(ROLE_PORTRAIT[role]);
+  if (!art.show) return size === "lg" ? <div className="mb-3 text-5xl">{meta.icon}</div> : null;
+  const box = size === "lg" ? "mx-auto mb-3 h-44 w-[7.33rem] border-2" : "h-12 w-8 border";
+  return (
+    <div
+      className={`relative shrink-0 overflow-hidden rounded-lg bg-black/40 ${box} ${
+        meta.team === "good" ? "border-sky-300/60" : "border-rose-400/60"
+      }`}
+    >
+      {art.img}
+      {size === "lg" && (
+        <span className="absolute top-1 left-1 rounded-md bg-black/55 px-1 text-base leading-tight">{meta.icon}</span>
+      )}
+    </div>
+  );
+}
 
 const TEAM_LABEL: Record<Team, string> = {
   good: "선한 세력 승리!",
@@ -214,6 +241,7 @@ export default function AvalonBoard({
                     : "border-rose-400/40 bg-rose-400/10"
                 }`}
               >
+                <RolePortrait role={p.role} size="sm" />
                 <span className="text-white/80 light:text-slate-700">{names[p.seat]}</span>
                 <span>
                   {meta.icon} {meta.label}
@@ -693,7 +721,7 @@ function RoleModal({
           <p className="mb-1 text-xs text-white/40 light:text-slate-500">
             {names[viewerSeat]}님의 비밀 정보
           </p>
-          <div className="mb-3 text-5xl">{meta.icon}</div>
+          <RolePortrait role={viewer.role} size="lg" />
           <h2
             className={`mb-1 text-xl font-bold ${meta.team === "good" ? "text-sky-300 light:text-sky-600" : "text-rose-300 light:text-rose-600"}`}
           >

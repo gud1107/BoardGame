@@ -7,8 +7,16 @@
  * card faces here are drawn purely with CSS/inline SVG like most other games
  * in this project).
  */
+import { usePortrait } from "../shared/portrait/usePortrait";
 import type { Card } from "./engine";
 import { JOKER_RANK } from "./engine";
+
+/**
+ * Original oil portraits per rank (`public/images/dalmuti/<rank|joker>.webp`).
+ * Fill only once all 13 exist — a half-painted hand reads as two decks. The
+ * rank number stays code-drawn on top: it is the card's whole game value.
+ */
+const PORTRAIT: Partial<Record<number, string>> = {};
 
 /** Rulebook §1's official card-rank titles (1 = 위대한 달무티 .. 12 = 농노), plus the joker. */
 export const CARD_RANK_INFO: Record<number, { title: string; short: string; emoji: string }> = {
@@ -53,16 +61,32 @@ export function CardFace({
   highlight?: boolean;
 }) {
   const info = CARD_RANK_INFO[card.rank];
+  const art = usePortrait(PORTRAIT[card.rank]);
+  const rankLabel = card.isJoker ? "★" : card.rank;
   return (
     <div
-      className={`relative flex h-24 w-16 shrink-0 flex-col items-center justify-between rounded-lg border p-1 transition light:shadow-sm ${cardTierBorder(card.rank)} ${
-        highlight ? "shadow-[0_0_14px_-2px_rgba(251,191,36,0.85)] ring-2 ring-amber-300/70" : ""
-      } ${className}`}
+      className={`relative flex h-24 w-16 shrink-0 flex-col items-center overflow-hidden rounded-lg border transition light:shadow-sm ${
+        art.show ? "justify-end p-0" : "justify-between p-1"
+      } ${cardTierBorder(card.rank)} ${highlight ? "shadow-[0_0_14px_-2px_rgba(251,191,36,0.85)] ring-2 ring-amber-300/70" : ""} ${className}`}
       style={{ background: cardTierBg(card.rank) }}
     >
-      <span className="text-base leading-none">{info.emoji}</span>
-      <span className="text-2xl leading-none font-black text-white">{card.isJoker ? "★" : card.rank}</span>
-      <span className="max-w-full truncate text-center text-[8px] leading-tight text-white/70">{info.short}</span>
+      {art.img}
+      {art.show ? (
+        <>
+          <span className="absolute top-0.5 left-0.5 min-w-[1.5rem] rounded-md bg-black/65 px-1 text-center text-xl leading-tight font-black text-white [text-shadow:0_1px_2px_#000]">
+            {rankLabel}
+          </span>
+          <span className="relative w-full truncate bg-gradient-to-b from-transparent to-black/85 px-0.5 pt-4 pb-1 text-center text-[9px] leading-tight font-bold text-white/90 [text-shadow:0_1px_2px_#000]">
+            {info.short}
+          </span>
+        </>
+      ) : (
+        <>
+          <span className="text-base leading-none">{info.emoji}</span>
+          <span className="text-2xl leading-none font-black text-white">{rankLabel}</span>
+          <span className="max-w-full truncate text-center text-[8px] leading-tight text-white/70">{info.short}</span>
+        </>
+      )}
     </div>
   );
 }
