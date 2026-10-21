@@ -1068,6 +1068,7 @@ export default function GodLifePlannerGame({ onComplete }: PlayableGameProps) {
           names={names}
           connectedSeats={connectedSeats}
           deadlineMs={deadlineMs}
+          phaseMs={phaseDurationMs(gameState)}
           nowMs={nowMs}
           committedPlan={myCommittedPlan}
           onAction={handleAction}

@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.79.0",
+    releaseDate: "2026-10-21",
+    title: "📹 갓생 플래너 브이로그 재생 · 남은 시간 표시",
+    changes: [
+      { game: "god-life-planner", type: "FEAT", desc: "📹 하루 다시 보기가 실제 사람이 찍은 브이로그 영상으로 — 활동마다 다른 실사 클립, REC·시각·채널 표시와 자막" },
+      { game: "god-life-planner", type: "FEAT", desc: "⏱ 남은 시간 막대 + 확정·다음 날 버튼에 남은 초 표시, 10초 이하면 빨간 경고와 '시간이 끝나면 어떻게 되는지' 안내" },
+      { game: "god-life-planner", type: "IMPROVE", desc: "🔔 목표 고르기·하루 결과에서도 마감 10초 전부터 초침이 울려요" },
+    ],
+  },
+  {
     version: "v1.78.1",
     releaseDate: "2026-10-21",
     title: "📝 패치노트 날짜별 보기",

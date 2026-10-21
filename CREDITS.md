@@ -67,3 +67,26 @@ Wikimedia Commons의 CC0/퍼블릭 도메인 파일(최대 1280×1400 축소본)
 | `casino-6-harbourfront.jpg` | 6 하버프론트 타워 | https://commons.wikimedia.org/wiki/File:Hong_Kong_skyscrapers_in_a_night_of_typhoon.jpg | Wilfredor | CC0 |
 
 자체 제작 SVG(`CasinoEmblem.tsx`)는 사진이 없는 카지노용 대체 이미지로 남아 있습니다.
+
+## 영상 (갓생 플래너 하루 재생 브이로그)
+
+[src/games/godLifePlanner/VlogStage.tsx](src/games/godLifePlanner/VlogStage.tsx)가 쓰는 짧은 실사 클립
+(`public/assets/games/god-life-planner/vlog/<키>.webm|mp4|webp`). 모두 [Coverr](https://coverr.co/license) 무료
+영상을 5초 이하로 잘라 640×360·무음으로 다시 인코딩했습니다. Coverr 라이선스: 상업·비상업 무료, 출처 표기 의무 없음,
+등장인물 모델 릴리스는 Coverr가 받음(사용자에게 제공하지 않음), 영상 자체를 재판매·영상 제공 서비스로 쓰는 것은 금지.
+유료(premium) 클립과 AI 생성 클립은 쓰지 않았습니다.
+
+| 파일 키 | 쓰는 곳 | 원본 |
+|---|---|---|
+| `wake` | 하루 시작 | https://coverr.co/videos/coverr-morning-stretching-routine-in-park |
+| `sleep` | 수면·낮잠 (0–4.5초만) | https://coverr.co/videos/coverr-girl-waking-up-and-using-phone-2292 |
+| `study` | 공부 | https://coverr.co/videos/coverr-female-student-writing-out-notes-4305 |
+| `exercise` | 운동 | https://coverr.co/videos/coverr-man-starting-his-squatting-workout-4958 |
+| `work` | 일(낮) | https://coverr.co/videos/coverr-working-in-an-office-5254 |
+| `nightWork` | 일(밤)·야근 | https://coverr.co/videos/coverr-a-woman-working-on-her-computer-late-at-night-3699 |
+| `meet` | 약속 | https://coverr.co/videos/coverr-friends-at-a-cafe-5939 |
+| `rest` | 휴식 | https://coverr.co/videos/coverr-a-guy-happily-drinking-coffee-in-a-caf-9822 |
+| `temptation` | 유혹 | https://coverr.co/videos/coverr-girl-laughing-at-her-phone-in-bed-8622 |
+| `tired` | 실패·탈진·번아웃·펑크 | https://coverr.co/videos/coverr-a-girl-working-at-her-office-desk-feeling-tired-2989 |
+| `idle` | 빈칸 | https://coverr.co/videos/coverr-raindrops-on-the-window-7102 |
+| `dusk` | 하루 마감 | https://coverr.co/videos/coverr-a-city-at-night-8720 |

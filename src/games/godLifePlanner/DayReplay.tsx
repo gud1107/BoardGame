@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ACTIVITY_INFO, BLOCK_INFO, OPPORTUNITY_BY_ID, TEMPTATIONS, TRACKS, TRACK_INFO, TUNING, type Track } from "./data";
 import { resistCost, type BlockOutcome, type DayRecord, type GameState, type Tracks } from "./engine";
 import { cellArg, getGodLifePlannerSound } from "./godLifePlannerSound";
+import VlogStage, { type VlogClip } from "./VlogStage";
 
 /**
  * 하루 재생 — 내가 짠 계획이 B1(0시)부터 B8(24시)까지 실행되며 체력·멘탈·트랙이 어떻게 변하는지
@@ -50,19 +51,40 @@ const SKY_START = "linear-gradient(180deg,#334155,#475569)";
 const SKY_END = "linear-gradient(180deg,#111827,#1f2937)";
 const NIGHT = new Set([0, 1, 7]);
 
-const MOTION: Record<string, string> = {
-  sleep: "glr-sleep 2.4s ease-in-out infinite",
-  study: "glr-bob 1.1s ease-in-out infinite",
-  exercise: "glr-jump 0.55s ease-in-out infinite",
-  work: "glr-type 0.25s linear infinite",
-  meet: "glr-sway 1.2s ease-in-out infinite",
-  rest: "glr-bob 2.2s ease-in-out infinite",
-  temptation: "glr-wobble 0.9s ease-in-out infinite",
-  empty: "none",
-};
-
 function clampG(n: number) {
   return Math.max(0, Math.min(TUNING.gaugeMax, n));
+}
+
+/** 프레임마다 깔 영상과 브이로그 자막. */
+function vlogShot(f: Frame, i: number, last: number, rec: DayRecord, day: number): { clip: VlogClip; caption: string } {
+  const o = f.outcome;
+  if (i === 0) return { clip: "wake", caption: `Day ${day + 1}, 오늘도 갓생 시작합니다 🌅` };
+  if (!o || i === last) return { clip: "dusk", caption: rec.exhausted || rec.burnout ? "오늘은 좀 무리했다… 내일은 쉬엄쉬엄 🌙" : "오늘 하루 끝! 수고했어 나 자신 🌙" };
+  if (f.collapse) return { clip: "tired", caption: f.collapse === "exhausted" ? "더는 못 버티겠다… 완전 방전 🥵" : "멘탈 바닥… 아무것도 하기 싫다 😵" };
+  const b = i - 1;
+  const lucky = o.opp ? " · 🍀 기회 잡았다!" : "";
+  if (o.kind === "fail") return { clip: "tired", caption: "하려고 했는데… 힘이 없어서 포기 😣" };
+  if (o.kind === "void") return { clip: "tired", caption: "쓰러져서 아무것도 못 했다 🫥" };
+  if (o.kind === "nap") return { clip: "sleep", caption: "잠깐 누웠는데 그대로 기절 💤" };
+  if (o.noShow) return { clip: "tired", caption: "약속 펑크 냈다… 미안해 🙇" };
+  switch (o.cell) {
+    case "sleep":
+      return { clip: "sleep", caption: NIGHT.has(b) ? "꿀잠 충전 중… 쿨쿨 😴" : "낮잠으로 체력 보충 😴" };
+    case "study":
+      return { clip: "study", caption: `집중 모드 ON, 오늘도 공부 📘${lucky}` };
+    case "exercise":
+      return { clip: "exercise", caption: `${b <= 2 ? "새벽 운동 인증 💪 땀 한 바가지" : "오늘 운동 완료 💪 몸이 가볍다"}${lucky}` };
+    case "work":
+      return { clip: o.overtime || NIGHT.has(b) ? "nightWork" : "work", caption: `${o.overtime ? "야근 확정… 아직 퇴근 못 함 🌙" : NIGHT.has(b) ? "밤에도 일하는 중 💼" : "업무 처리 중 💼 오늘도 열일"}${lucky}` };
+    case "meet":
+      return { clip: "meet", caption: `${o.matched ? "친구 만나서 수다 타임! 🤝" : "약속 장소 나왔는데 혼자네… 🥲"}${lucky}` };
+    case "rest":
+      return { clip: "rest", caption: `커피 한 잔의 여유 ☕${lucky}` };
+    case "temptation":
+      return { clip: "temptation", caption: "딱 5분만 보려 했는데… 😈" };
+    default:
+      return { clip: "idle", caption: "멍… 아무것도 안 하는 중" };
+  }
 }
 
 function ui() {
@@ -205,12 +227,13 @@ export default function DayReplay({ state, rec, endTracks, preview, autoPlay = t
   const prev = frames[Math.max(0, idx - 1)];
   const blockIdx = idx >= 1 && idx <= 8 ? idx - 1 : null;
   const sky = blockIdx !== null ? SKY[blockIdx] : idx === 0 ? SKY_START : SKY_END;
-  const cell = f.outcome?.cell ?? null;
-  const dim = f.outcome && (f.outcome.kind === "fail" || f.outcome.kind === "void" || f.outcome.kind === "nap");
-  const actor = !f.outcome ? (idx === 0 ? "🥱" : "😌") : f.outcome.kind === "nap" ? "💤" : f.outcome.kind === "void" ? "🫥" : f.outcome.kind === "fail" ? "😣" : cell === "temptation" ? (TEMPTATIONS[rec.temptationId]?.emoji ?? "😈") : ACTIVITY_INFO[cell!].emoji;
-  const motion = !f.outcome || dim ? "none" : MOTION[cell!];
+  const dim = !!f.outcome && (f.outcome.kind === "fail" || f.outcome.kind === "void" || f.outcome.kind === "nap");
   const clockPct = blockIdx !== null ? ((blockIdx + 0.5) / 8) * 100 : idx === 0 ? 0 : 100;
   const celestial = blockIdx !== null && !NIGHT.has(blockIdx) ? "☀️" : "🌙";
+  const shots = useMemo(() => frames.map((fr, i) => vlogShot(fr, i, last, rec, state.day)), [frames, last, rec, state.day]);
+  const clips = useMemo(() => [...new Set(shots.map((x) => x.clip))], [shots]);
+  const shot = shots[idx];
+  const stamp = blockIdx !== null ? `${BLOCK_INFO[blockIdx].time.slice(0, 2)}:00` : idx === 0 ? "AM" : "24:00";
 
   function restart() {
     ui();
@@ -241,32 +264,35 @@ export default function DayReplay({ state, rec, endTracks, preview, autoPlay = t
           <span>24시</span>
         </div>
 
-        {/* 무대 */}
-        <div key={`stage-${idx}`} className="relative flex h-40 flex-col items-center justify-center sm:h-44" style={f.collapse ? { animation: "glr-shake 0.5s ease both" } : undefined}>
-          {f.collapse && <div className="pointer-events-none absolute inset-0 bg-rose-600/40" style={{ animation: "glr-flash 0.9s ease-out both" }} />}
-          {cell === "sleep" && !dim && (
-            <span className="pointer-events-none absolute left-1/2 top-6 ml-8 text-lg font-bold text-white/90" style={{ animation: "glr-zzz 1.6s ease-out infinite" }}>
-              Z
+        {/* 무대 — 브이로그 영상 */}
+        <div className="relative aspect-video max-h-80 w-full overflow-hidden bg-black" style={f.collapse ? { animation: "glr-shake 0.5s ease both" } : undefined}>
+          <VlogStage clips={clips} active={shot.clip} playing={playing} dim={dim} />
+          {blockIdx !== null && NIGHT.has(blockIdx) && shot.clip !== "sleep" && <div className="pointer-events-none absolute inset-0 bg-indigo-950/30" />}
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-black/55 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/75 to-transparent" />
+          {f.collapse && <div key={`flash-${idx}`} className="pointer-events-none absolute inset-0 bg-rose-600/40" style={{ animation: "glr-flash 0.9s ease-out both" }} />}
+
+          {/* 촬영 UI: REC · 시각 · 채널 */}
+          <div className="pointer-events-none absolute inset-x-2 top-2 flex items-center justify-between gap-2 text-[10px] font-bold sm:text-[11px]">
+            <span className="flex items-center gap-1.5 rounded bg-black/45 px-1.5 py-0.5">
+              <span className={`h-2 w-2 rounded-full bg-red-500 ${running ? "animate-pulse" : ""}`} />
+              {running ? "REC" : "II"}
+              <span className="tabular-nums text-white/85">{stamp}</span>
             </span>
-          )}
-          {cell === "rest" && !dim && (
-            <span className="pointer-events-none absolute left-1/2 top-6 ml-6 text-base" style={{ animation: "glr-zzz 1.8s ease-out infinite" }}>
-              ♨️
+            <span className="flex min-w-0 items-center gap-1 truncate rounded bg-black/45 px-1.5 py-0.5">
+              <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-gradient-to-br from-amber-300 to-rose-400 text-[9px]">📅</span>
+              <span className="truncate">@갓생로그 · Day {state.day + 1}</span>
             </span>
-          )}
-          <span key={`actor-${idx}`} className={`text-6xl drop-shadow-lg sm:text-7xl ${dim ? "opacity-70 grayscale" : ""}`} style={{ animation: `glr-enter 0.45s cubic-bezier(.2,.9,.3,1.3) both${motion !== "none" ? `, ${motion} 0.45s` : ""}` }}>
-            {actor}
-          </span>
-          <p key={`label-${idx}`} className="mt-2 rounded-full bg-black/35 px-3 py-0.5 text-xs font-bold drop-shadow" style={{ animation: "glr-fade 0.35s ease both" }}>
-            {f.label} · {f.sub}
-          </p>
+          </div>
+
           {f.collapse && (
-            <p className="absolute top-3 rounded-full bg-rose-600 px-3 py-1 text-sm font-black shadow-lg" style={{ animation: "glr-enter 0.4s ease both" }}>
+            <p className="absolute left-1/2 top-9 -translate-x-1/2 whitespace-nowrap rounded-full bg-rose-600 px-3 py-1 text-sm font-black shadow-lg" style={{ animation: "glr-enter 0.4s ease both" }}>
               {f.collapse === "exhausted" ? "🥵 탈진! −3점" : "😵 번아웃! −3점"}
             </p>
           )}
+
           {/* 떠오르는 변화 */}
-          <div className="pointer-events-none absolute inset-x-2 bottom-2 flex flex-wrap justify-center gap-1">
+          <div className={`pointer-events-none absolute inset-x-2 flex flex-wrap justify-center gap-1 ${f.collapse ? "top-[4.25rem]" : "top-9"}`}>
             {f.pops.map((p, i) => (
               <span
                 key={`pop-${idx}-${i}`}
@@ -276,6 +302,16 @@ export default function DayReplay({ state, rec, endTracks, preview, autoPlay = t
                 {p.text}
               </span>
             ))}
+          </div>
+
+          {/* 자막 */}
+          <div className="pointer-events-none absolute inset-x-3 bottom-2.5 flex flex-col items-center gap-1 text-center">
+            <p key={`cap-${idx}`} className="break-keep text-sm font-black leading-snug sm:text-lg" style={{ animation: "glr-fade 0.35s ease both", textShadow: "0 0 3px #000, 0 1px 2px #000, 0 2px 8px rgba(0,0,0,.6)" }}>
+              {shot.caption}
+            </p>
+            <span key={`label-${idx}`} className="rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-semibold text-white/85" style={{ animation: "glr-fade 0.35s ease both" }}>
+              {f.label} · {f.sub}
+            </span>
           </div>
         </div>
 
@@ -407,12 +443,5 @@ const KEYFRAMES = `
 @keyframes glr-pop{0%{opacity:0;transform:translateY(10px) scale(.7)}100%{opacity:1;transform:none}}
 @keyframes glr-flash{0%{opacity:1}100%{opacity:0}}
 @keyframes glr-shake{0%,100%{transform:none}20%{transform:translateX(-7px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
-@keyframes glr-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
-@keyframes glr-jump{0%,100%{transform:translateY(0) scaleY(1)}40%{transform:translateY(-16px) scaleY(1.05)}90%{transform:translateY(0) scaleY(.92)}}
-@keyframes glr-type{0%,100%{transform:translateX(0)}50%{transform:translateX(2px) rotate(-2deg)}}
-@keyframes glr-sway{0%,100%{transform:rotate(-7deg)}50%{transform:rotate(7deg)}}
-@keyframes glr-wobble{0%,100%{transform:rotate(0) scale(1)}25%{transform:rotate(-10deg) scale(1.05)}75%{transform:rotate(10deg) scale(1.05)}}
-@keyframes glr-sleep{0%,100%{transform:rotate(-4deg) translateY(0)}50%{transform:rotate(4deg) translateY(3px)}}
-@keyframes glr-zzz{0%{opacity:0;transform:translate(0,8px) scale(.6)}30%{opacity:1}100%{opacity:0;transform:translate(14px,-26px) scale(1.2)}}
 @media (prefers-reduced-motion: reduce){[data-glr] *{animation-duration:0.01ms !important;animation-iteration-count:1 !important}}
 `;

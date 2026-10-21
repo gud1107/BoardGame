@@ -54,6 +54,8 @@ interface Props {
   connectedSeats: ReadonlySet<Seat>;
   /** 지금 단계가 끝나는 시각(이 기기 기준). 제한 없음/알 수 없음이면 null. */
   deadlineMs: number | null;
+  /** 지금 단계의 전체 제한 시간(ms). 0이면 무제한. */
+  phaseMs: number;
   nowMs: number;
   committedPlan: Plan | null;
   onAction: (action: EngineAction) => void;
@@ -424,7 +426,7 @@ function DayChangePanel({ state, seat, rec }: { state: GameState; seat: Seat; re
   );
 }
 
-export default function GodLifePlannerBoard({ state, viewerSeat, names, connectedSeats, deadlineMs, nowMs, committedPlan, onAction, onCommit, onGameEnd }: Props) {
+export default function GodLifePlannerBoard({ state, viewerSeat, names, connectedSeats, deadlineMs, phaseMs, nowMs, committedPlan, onAction, onCommit, onGameEnd }: Props) {
   const me = state.seats[viewerSeat];
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const [previewReplay, setPreviewReplay] = useState(false);
@@ -436,6 +438,13 @@ export default function GodLifePlannerBoard({ state, viewerSeat, names, connecte
   const days = totalDays(state);
   const event = EVENTS[state.events[state.day]];
   const committed = state.commits[viewerSeat] !== null;
+  // 내가 아직 뭔가 해야 하는 단계인가(마감 경고·초침 기준)
+  const myMove =
+    (state.phase === "goalDraft" && state.seats[viewerSeat].goalPick === null) ||
+    (state.phase === "planning" && !committed) ||
+    (state.phase === "dayResult" && !state.ready[viewerSeat]);
+  const lowTime = secondsLeft !== null && secondsLeft <= 10 && myMove;
+  const timeTag = secondsLeft !== null && myMove ? ` · ${secondsLeft}초` : "";
 
   // 새 날이 되면 초안을 어제 계획으로 다시 채운다(습관은 같은 시간 반복이 핵심이라).
   useEffect(() => {
@@ -459,14 +468,14 @@ export default function GodLifePlannerBoard({ state, viewerSeat, names, connecte
   useSoundCues(state, getGodLifePlannerSound, cues);
   useSuiteBgm(getGodLifePlannerSound, state.phase !== "ended", state.day === days - 1 ? 1 : 0);
 
-  // 계획 마감 10초 전부터 초침
+  // 내 차례 마감 10초 전부터 초침
   const tickSecRef = useRef(-1);
   useEffect(() => {
-    if (state.phase !== "planning" || committed || secondsLeft === null || secondsLeft > 10 || secondsLeft <= 0) return;
+    if (!lowTime || secondsLeft === null || secondsLeft <= 0) return;
     if (tickSecRef.current === secondsLeft) return;
     tickSecRef.current = secondsLeft;
     getGodLifePlannerSound().play("tick", secondsLeft);
-  }, [state.phase, committed, secondsLeft]);
+  }, [lowTime, secondsLeft]);
 
   const preview = useMemo(() => (state.phase === "planning" ? previewDay(state, viewerSeat, draft) : null), [state, viewerSeat, draft]);
   const banned = bannedActivities(state, viewerSeat);
@@ -514,7 +523,7 @@ export default function GodLifePlannerBoard({ state, viewerSeat, names, connecte
               {state.phase !== "goalDraft" && state.phase !== "ended" && <span className="ml-1.5 font-normal text-white/50 light:text-slate-500">Day {state.day + 1}/{days}</span>}
             </p>
             <p className={SUB}>
-              {state.phase === "goalDraft" && "비밀 목표 1장을 골라요"}
+              {state.phase === "goalDraft" && `비밀 목표 1장을 골라요${timeTag}`}
               {state.phase === "planning" && (committed ? "계획 확정 — 다른 사람을 기다리는 중" : "오늘 8블록을 계획하세요")}
               {state.phase === "revealing" && "계획 공개 중..."}
               {state.phase === "dayResult" && "오늘의 결과"}
@@ -524,7 +533,12 @@ export default function GodLifePlannerBoard({ state, viewerSeat, names, connecte
         </div>
         <div className="flex items-center gap-2">
           {secondsLeft !== null && state.phase !== "ended" && (
-            <span className={`rounded-full px-2.5 py-1 text-xs font-bold tabular-nums ${secondsLeft <= 10 ? "bg-rose-500/20 text-rose-200 light:text-rose-700" : "bg-white/10 text-white/80 light:bg-slate-100 light:text-slate-700"}`}>
+            <span
+              className={`rounded-full px-2.5 py-1 text-sm font-black tabular-nums ${
+                secondsLeft <= 10 ? "animate-pulse bg-rose-500/25 text-rose-200 light:bg-rose-100 light:text-rose-700" : secondsLeft <= 30 ? "bg-amber-500/20 text-amber-200 light:bg-amber-100 light:text-amber-700" : "bg-white/10 text-white/85 light:bg-slate-100 light:text-slate-700"
+              }`}
+              title="이 단계 남은 시간"
+            >
               ⏱ {secondsLeft}초
             </span>
           )}
@@ -540,6 +554,29 @@ export default function GodLifePlannerBoard({ state, viewerSeat, names, connecte
           </button>
         </div>
       </div>
+      {secondsLeft !== null && phaseMs > 0 && state.phase !== "ended" && (
+        <div className="h-1.5 overflow-hidden rounded-full bg-white/10 light:bg-slate-200" role="progressbar" aria-label="남은 시간" aria-valuenow={secondsLeft} aria-valuemin={0} aria-valuemax={Math.round(phaseMs / 1000)}>
+          <div
+            className={`h-full rounded-full ${secondsLeft <= 10 ? "bg-rose-500" : secondsLeft <= 30 ? "bg-amber-400" : "bg-emerald-400"}`}
+            style={{ width: `${Math.min(100, (secondsLeft * 1000 * 100) / phaseMs)}%`, transition: "width 1s linear" }}
+          />
+        </div>
+      )}
+      {lowTime && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4" role="status" aria-live="assertive">
+          <div className="flex max-w-md items-center gap-3 rounded-2xl bg-rose-600/95 px-4 py-2.5 text-white shadow-2xl ring-2 ring-rose-300/60">
+            <span className="animate-pulse text-3xl font-black tabular-nums leading-none">{secondsLeft}</span>
+            <span className="break-keep text-xs font-semibold leading-snug sm:text-sm">
+              ⏰ 시간이 얼마 안 남았어요!
+              <span className="block font-normal text-white/90">
+                {state.phase === "goalDraft" && "안 고르면 첫 번째 목표가 자동으로 선택돼요"}
+                {state.phase === "planning" && "시간이 끝나면 지금 짠 계획 그대로 자동 확정돼요"}
+                {state.phase === "dayResult" && (state.day + 1 >= days ? "시간이 끝나면 최종 점수로 넘어가요" : "시간이 끝나면 자동으로 다음 날로 넘어가요")}
+              </span>
+            </span>
+          </div>
+        </div>
+      )}
       {state.phase !== "goalDraft" && state.phase !== "ended" && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl bg-white/[0.04] px-3 py-2 text-xs light:bg-slate-50">
           <span className="font-semibold text-white light:text-slate-800">
@@ -930,7 +967,7 @@ export default function GodLifePlannerBoard({ state, viewerSeat, names, connecte
 
         {!committed ? (
           <button onClick={() => onCommit(draft)} className={`${PRIMARY} py-3 text-base`}>
-            🔒 계획 확정
+            🔒 계획 확정{timeTag}
           </button>
         ) : (
           <p className="text-center text-sm text-white/60 light:text-slate-500">
@@ -1011,6 +1048,7 @@ export default function GodLifePlannerBoard({ state, viewerSeat, names, connecte
         </div>
         <button disabled={ready} onClick={() => onAction({ type: "READY", seat: viewerSeat })} className={`${PRIMARY} py-3 text-base`}>
           {ready ? `다른 사람 기다리는 중 (${state.seatCount - pending.length}/${state.seatCount})` : state.day + 1 >= days ? "🏁 최종 점수 보기" : `☀️ ${DAY_NAMES[state.day + 1]}요일로`}
+          {!ready && timeTag}
         </button>
         {myPanel}
         {challengesPanel}
