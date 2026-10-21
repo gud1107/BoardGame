@@ -8,7 +8,7 @@ import {
   AIM_TIMEOUT_MS,
   aliveCount,
   computeRankings,
-  MAX_CHAIN,
+  maxChain,
   quantizeShot,
   ROUND_SHOT_LIMIT,
   sideOf,
@@ -471,7 +471,7 @@ export default function AlkkagiBoard({ state, viewerSeat, names, connectedSeats,
       {/* 상단 */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-white/80 light:bg-slate-100 light:text-slate-700">
-          {state.options.rounds > 1 ? `${state.round + 1}/${state.options.rounds}판` : "단판"} · 튕기기 {state.roundShots}번{state.options.king ? " · 👑 왕알" : ""}
+          {state.options.rounds > 1 ? `${state.round + 1}/${state.options.rounds}판` : "단판"} · 튕기기 {state.roundShots}번{state.options.king ? " · 👑 왕알" : ""}{state.options.bonusShots > 0 ? ` · 🔥 보너스 ${state.options.bonusShots}회` : " · 보너스 없음"}
         </span>
         {shotsLeft <= 10 && state.phase === "aim" && <span className="text-xs text-rose-300 light:text-rose-600">⏳ {shotsLeft}번 남음</span>}
         <span className="ml-auto flex items-center gap-1.5">
@@ -536,7 +536,7 @@ export default function AlkkagiBoard({ state, viewerSeat, names, connectedSeats,
           <div className="pointer-events-none absolute top-2 left-2 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1 text-xs font-bold text-white">
             <SeatChip seat={state.activeSeat} />
             {busy ? "🎬 결과 보는 중" : myTurn ? "🫵 내 차례" : `${activeIsBot ? "🤖 " : ""}${activeName}`}
-            {!busy && state.chain > 0 && <span className="text-amber-300">🔥 연속 {state.chain + 1}/{MAX_CHAIN}</span>}
+            {!busy && state.chain > 0 && <span className="text-amber-300">🔥 연속 {state.chain + 1}/{maxChain(state.options)}</span>}
             {!busy && remaining !== null && <span className={`tabular-nums ${remaining <= 8 ? "text-rose-300" : "text-white/60"}`}>{remaining}s</span>}
           </div>
         )}

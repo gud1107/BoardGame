@@ -4,7 +4,8 @@ import {
   applyAction,
   computeRankings,
   currentActor,
-  MAX_CHAIN,
+  DEFAULT_OPTIONS,
+  maxChain,
   ROUND_SHOT_LIMIT,
   setupStones,
   startGame,
@@ -158,11 +159,26 @@ describe("turns", () => {
     expect(s.chain).toBe(1);
   });
 
-  it("chain stops after MAX_CHAIN shots", () => {
-    const s = applyAction(withStones(lineup(), { chain: MAX_CHAIN - 1 }), { type: "flick", seat: 0, stone: 0, vx: 0, vy: 15000 });
+  it("chain stops after the bonus-shot option runs out", () => {
+    const base = withStones(lineup());
+    const s = applyAction({ ...base, chain: maxChain(base.options) - 1 }, { type: "flick", seat: 0, stone: 0, vx: 0, vy: 15000 });
     expect(s.lastShot!.bonus).toBe(false);
     expect(s.activeSeat).toBe(1);
     expect(s.chain).toBe(0);
+  });
+
+  it("bonus-shot option: 0 turns the chain off, N allows N extra shots", () => {
+    const base = withStones(lineup());
+    const off = applyAction({ ...base, options: { ...base.options, bonusShots: 0 } }, { type: "flick", seat: 0, stone: 0, vx: 0, vy: 15000 });
+    expect(off.lastShot!.knocked).toBe(1);
+    expect(off.lastShot!.bonus).toBe(false);
+    expect(off.activeSeat).toBe(1);
+    const five = { ...base, options: { ...base.options, bonusShots: 5 } };
+    expect(maxChain(five.options)).toBe(6);
+    const s = applyAction({ ...five, chain: 4 }, { type: "flick", seat: 0, stone: 0, vx: 0, vy: 15000 });
+    expect(s.lastShot!.bonus).toBe(true);
+    expect(s.chain).toBe(5);
+    expect(maxChain(startGame(2, 1).options)).toBe(3);
   });
 
   it("a miss passes the turn; wrong seat / foreign stone is ignored", () => {
@@ -223,7 +239,7 @@ describe("turns", () => {
           { owner: 1, x: 5, y: -5, king: false },
           { owner: 0, x: -5, y: -5, king: false },
         ],
-        { options: { stones: "normal", rounds: 1, king: true } },
+        { options: { ...DEFAULT_OPTIONS, king: true } },
       ),
       { type: "flick", seat: 0, stone: 0, vx: 0, vy: 16000 },
     );

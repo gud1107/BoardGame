@@ -9,7 +9,7 @@
  */
 
 import { clampBotLevel, pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
-import { aliveSeats, edgeDistance, quantizeShot, resolveShot, type AlkkagiState, type EngineAction, type Seat, type Stone } from "./engine";
+import { aliveSeats, edgeDistance, maxChain, quantizeShot, resolveShot, type AlkkagiState, type EngineAction, type Seat, type Stone } from "./engine";
 import { V_MAX } from "./physics";
 
 interface Params {
@@ -64,7 +64,7 @@ export function evaluateShot(state: AlkkagiState, seat: Seat, c: Candidate): num
   }
   const shooterFell = out.falls.some((f) => f.id === c.stone);
   if (shooterFell) score -= 3;
-  else if (knocked > 0) score += 3;
+  else if (knocked > 0 && state.chain + 1 < maxChain(state.options)) score += 3;
   const was = aliveSeats(state);
   const now = new Set(aliveSeats({ stones: out.stones, playerCount: state.playerCount }));
   for (const s of was) if (!now.has(s)) score += s === seat ? -40 : 8;

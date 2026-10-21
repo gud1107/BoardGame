@@ -21,8 +21,9 @@ export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 4;
 /** §4 */
 export const AIM_TIMEOUT_MS = 30_000;
-/** §6 — shots per turn including the first. */
-export const MAX_CHAIN = 3;
+/** §6 — host option: extra shots after knocking a stone off (0 = off). */
+export const BONUS_SHOT_CHOICES = [0, 1, 2, 3, 5] as const;
+export const DEFAULT_BONUS_SHOTS = 2;
 /** §7 */
 export const ROUND_SHOT_LIMIT = 60;
 
@@ -32,9 +33,17 @@ export interface GameOptions {
   stones: StoneCount;
   rounds: 1 | 3;
   king: boolean;
+  /** §6 — bonus shots per turn on top of the first (0 disables the chain). */
+  bonusShots: number;
 }
 
-export const DEFAULT_OPTIONS: GameOptions = { stones: "normal", rounds: 1, king: false };
+export const DEFAULT_OPTIONS: GameOptions = { stones: "normal", rounds: 1, king: false, bonusShots: DEFAULT_BONUS_SHOTS };
+
+/** §6 — shots per turn including the first. */
+export function maxChain(options: Pick<GameOptions, "bonusShots">): number {
+  const n = Math.floor(Number(options.bonusShots));
+  return 1 + (Number.isFinite(n) ? Math.max(0, Math.min(10, n)) : DEFAULT_BONUS_SHOTS);
+}
 
 export interface Stone {
   id: number;
@@ -88,7 +97,7 @@ export interface AlkkagiState {
   phase: Phase;
   /** Monotonic action counter — animation key and stale-timeout guard. */
   turn: number;
-  /** Shots taken in the current turn (1..MAX_CHAIN once someone has flicked). */
+  /** Shots taken in the current turn (1..maxChain once someone has flicked). */
   chain: number;
   roundShots: number;
   /** Elimination order this round (earliest out first). */
@@ -144,7 +153,7 @@ function placeOnSide(side: number, u: number, depth: number): { x: number; y: nu
   }
 }
 
-export function setupStones(playerCount: number, options: GameOptions): Stone[] {
+export function setupStones(playerCount: number, options: Partial<GameOptions> & Pick<GameOptions, "stones" | "king">): Stone[] {
   const count = stoneCountFor(playerCount, options.stones);
   const depth = playerCount <= 2 ? 6 : 7;
   const span = playerCount <= 2 ? 8 : 4.5;
@@ -163,7 +172,7 @@ export function setupStones(playerCount: number, options: GameOptions): Stone[] 
   return stones;
 }
 
-export function startGame(playerCount: number, seed: number, options: GameOptions = DEFAULT_OPTIONS): AlkkagiState {
+export function startGame(playerCount: number, seed: number, options: Partial<GameOptions> = DEFAULT_OPTIONS): AlkkagiState {
   const n = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, Math.floor(playerCount)));
   const opts: GameOptions = { ...DEFAULT_OPTIONS, ...options };
   const first = Math.floor(seededRng(seed ^ 0x51ed)() * n);
@@ -332,7 +341,7 @@ function doFlick(state: AlkkagiState, seat: Seat, stoneId: number, vxM: number, 
   const outOrder = [...state.outOrder, ...eliminated];
   const roundShots = state.roundShots + 1;
   const alive = aliveSeats({ stones: out.stones, playerCount: state.playerCount });
-  const bonus = knocked > 0 && !shooterFell && nowAlive.has(seat) && alive.length > 1 && state.chain + 1 < MAX_CHAIN;
+  const bonus = knocked > 0 && !shooterFell && nowAlive.has(seat) && alive.length > 1 && state.chain + 1 < maxChain(state.options);
 
   const shot: ShotRecord = {
     turn: state.turn,

@@ -64,6 +64,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.83.0",
+    releaseDate: "2026-10-21",
+    title: "⚫ 알까기 — 떨어뜨리면 한 번 더, 횟수를 방장이 정해요",
+    changes: [
+      { game: "alkkagi", type: "FEAT", desc: "🔥 방 만들 때 '떨어뜨리면 한 번 더' 보너스 횟수 선택 — 끔·1·2·3·5회(기본 2회), 게임 중 상단에 표시" },
+    ],
+  },
+  {
     version: "v1.82.0",
     releaseDate: "2026-10-21",
     title: "🥒 5 오이 3D 플레이어가 진짜 사람처럼",

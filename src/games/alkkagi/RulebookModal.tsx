@@ -1,7 +1,7 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { AIM_TIMEOUT_MS, MAX_CHAIN, ROUND_SHOT_LIMIT } from "./engine";
+import { AIM_TIMEOUT_MS, DEFAULT_BONUS_SHOTS, ROUND_SHOT_LIMIT } from "./engine";
 
 const H3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
 const LIST = "list-disc space-y-1.5 pl-4 text-white/70 light:text-slate-600";
@@ -40,7 +40,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         <section>
           <h3 className={H3}>연속 공격 · 탈락</h3>
           <ul className={LIST}>
-            <li>상대 알을 떨어뜨리고 <b>튕긴 내 알이 판에 남으면 한 번 더</b> — 한 차례 최대 {MAX_CHAIN}번.</li>
+            <li>상대 알을 떨어뜨리고 <b>튕긴 내 알이 판에 남으면 한 번 더</b> — 보너스 횟수는 방장이 방을 만들 때 정해요(끔·1·2·3·5회, 기본 {DEFAULT_BONUS_SHOTS}회).</li>
             <li>내 알이 스스로 떨어지면 그 알도 잃어요.</li>
             <li>여러 명이 한꺼번에 탈락하면 알이 더 오래 판에 남았던 사람이 위예요(같은 순간이면 튕긴 사람이 아래).</li>
             <li>한 판에 {ROUND_SHOT_LIMIT}번 튕겨도 안 끝나면 남은 알 수(왕알은 2개) → 이번 판에 떨어뜨린 수로 순위를 정해요.</li>

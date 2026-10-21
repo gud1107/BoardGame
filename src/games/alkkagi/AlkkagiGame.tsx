@@ -16,6 +16,8 @@ import {
   applyAction,
   computeRankings,
   currentActor,
+  BONUS_SHOT_CHOICES,
+  DEFAULT_BONUS_SHOTS,
   DEFAULT_OPTIONS,
   MAX_PLAYERS,
   MIN_PLAYERS,
@@ -131,6 +133,7 @@ export default function AlkkagiGame({ onComplete }: PlayableGameProps) {
   const [rounds, setRounds] = useState<1 | 3>(1);
   const [stoneOpt, setStoneOpt] = useState<StoneCount>("normal");
   const [kingMode, setKingMode] = useState(false);
+  const [bonusShots, setBonusShots] = useState(DEFAULT_BONUS_SHOTS);
   const optionsRef = useRef<GameOptions>(DEFAULT_OPTIONS);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -227,7 +230,7 @@ export default function AlkkagiGame({ onComplete }: PlayableGameProps) {
       return;
     }
     playerCountRef.current = targetPlayerCount;
-    optionsRef.current = { rounds, stones: stoneOpt, king: kingMode };
+    optionsRef.current = { rounds, stones: stoneOpt, king: kingMode, bonusShots };
     getAlkkagiSound().unlock();
     setMyName(name);
     setMyPlayerId(identity.name.trim() ? identity.playerId : undefined);
@@ -953,6 +956,25 @@ export default function AlkkagiGame({ onComplete }: PlayableGameProps) {
               <b className="block text-sm">👑 왕알 모드 {kingMode ? "켜짐" : "꺼짐"}</b>
               가운데 알이 크고 무거운 왕알 — 왕알이 떨어지면 바로 탈락
             </button>
+            <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
+              🔥 떨어뜨리면 한 번 더
+              <div className="grid grid-cols-5 gap-1.5">
+                {BONUS_SHOT_CHOICES.map((b) => (
+                  <button
+                    key={b}
+                    type="button"
+                    onClick={() => setBonusShots(b)}
+                    aria-pressed={bonusShots === b}
+                    className={`rounded-xl border px-1 py-2 text-sm font-bold ${bonusShots === b ? "border-amber-400 bg-amber-500/15 text-amber-100 light:text-amber-800" : "border-white/15 text-white/60 light:border-slate-300 light:text-slate-600"}`}
+                  >
+                    {b === 0 ? "끔" : `${b}회`}
+                  </button>
+                ))}
+              </div>
+              <span className="text-xs text-white/50 light:text-slate-500">
+                {bonusShots === 0 ? "상대 알을 떨어뜨려도 차례가 넘어가요" : `상대 알을 떨어뜨리면 보너스로 최대 ${bonusShots}번 더 튕겨요 (한 차례 최대 ${bonusShots + 1}번)`}
+              </span>
+            </div>
           </>
         )}
         {formError && <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300 light:bg-rose-50 light:text-rose-700">{formError}</p>}
