@@ -7,6 +7,7 @@ import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/game
 import { CoinStack, FlatCard, FlyIn, ImpactRing, StandingCard } from "@/games/shared/three/tablePieces";
 import { bubbleTexture, paintedTexture, FONTS, type BubbleStyle } from "@/games/shared/three/tableKit";
 import type { PersonMood } from "@/games/shared/three/SeatedPerson";
+import { PORTRAIT } from "../CardArt";
 import { CHARACTER_EMOJI, CHARACTER_NAMES, type Character } from "../engine";
 
 /**
@@ -69,7 +70,63 @@ const CHAR_COLORS: Record<Character, [string, string, string]> = {
   ambassador: ["#6b4616", "#160f04", "#fcd34d"],
 };
 
+const portraitRequested = new Set<Character>();
+
+/**
+ * Repaints a cached card texture with the same oil portrait as the 2D hand
+ * (`CardArt.tsx` PORTRAIT) once the image loads; until then, or if it fails,
+ * the emoji face below stays on the card.
+ */
+function paintPortrait(t: THREE.CanvasTexture, c: Character) {
+  const src = PORTRAIT[c];
+  if (!src || portraitRequested.has(c)) return;
+  portraitRequested.add(c);
+  const img = new Image();
+  img.onload = () => {
+    const canvas = t.image as HTMLCanvasElement;
+    const ctx = canvas.getContext("2d")!;
+    const W = canvas.width;
+    const H = canvas.height;
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(4, 4, W - 8, H - 8, 20);
+    ctx.clip();
+    // object-fit: cover, focused on the face (same 18% as the 2D card)
+    const scale = Math.max(W / img.width, H / img.height);
+    const dw = img.width * scale;
+    const dh = img.height * scale;
+    ctx.drawImage(img, (W - dw) / 2, (H - dh) * 0.18, dw, dh);
+    const shade = ctx.createLinearGradient(0, H * 0.6, 0, H);
+    shade.addColorStop(0, "rgba(0,0,0,0)");
+    shade.addColorStop(1, "rgba(0,0,0,0.85)");
+    ctx.fillStyle = shade;
+    ctx.fillRect(0, H * 0.6, W, H * 0.4);
+    ctx.restore();
+    ctx.strokeStyle = CHAR_COLORS[c][2];
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.roundRect(9, 9, W - 18, H - 18, 16);
+    ctx.stroke();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#fef3c7";
+    ctx.font = `800 44px ${FONTS.text}`;
+    ctx.shadowColor = "#000";
+    ctx.shadowBlur = 6;
+    ctx.fillText(CHARACTER_NAMES[c], W / 2, H - 50);
+    ctx.shadowBlur = 0;
+    t.needsUpdate = true;
+  };
+  img.src = src;
+}
+
 function characterTexture(c: Character): THREE.CanvasTexture {
+  const t = emojiCharacterTexture(c);
+  paintPortrait(t, c);
+  return t;
+}
+
+function emojiCharacterTexture(c: Character): THREE.CanvasTexture {
   return paintedTexture(`coup:${c}`, 256, 360, (ctx, W, H) => {
     const [a, b, edge] = CHAR_COLORS[c];
     ctx.beginPath();

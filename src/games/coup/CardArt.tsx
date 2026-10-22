@@ -14,7 +14,13 @@ import { usePortrait } from "../shared/portrait/usePortrait";
 import { CHARACTER_EMOJI, CHARACTER_NAMES, type Card, type Character } from "./engine";
 
 /** Fill only when all 5 portraits exist — a half-painted deck reads as two different games. */
-const PORTRAIT: Partial<Record<Character, string>> = {};
+export const PORTRAIT: Partial<Record<Character, string>> = {
+  duke: "/images/coup/duke.webp",
+  assassin: "/images/coup/assassin.webp",
+  contessa: "/images/coup/contessa.webp",
+  captain: "/images/coup/captain.webp",
+  ambassador: "/images/coup/ambassador.webp",
+};
 
 const CHARACTER_BG: Record<Character, string> = {
   duke: "linear-gradient(160deg,#4a1048 0%,#260826 55%,#100310 100%)",
