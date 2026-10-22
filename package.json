@@ -12,7 +12,8 @@
     "test:bench": "vitest run --config vitest.bench.config.mts",
     "gen:last-updated": "node scripts/gen-game-last-updated.mjs",
     "gen:admin-changelog": "node scripts/gen-admin-changelog.mjs",
-    "check:ui-width": "node scripts/ui-width-check/run.mjs"
+    "check:ui-width": "node scripts/ui-width-check/run.mjs",
+    "posters:stale": "node scripts/poster-videos/stale.mjs"
   },
   "dependencies": {
     "@react-three/fiber": "^9.8.1",

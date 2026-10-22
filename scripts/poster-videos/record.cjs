@@ -108,7 +108,12 @@ const VW = 960, VH = 1200;
         const a = r.width * Math.min(r.height, 1400);
         if (r.width > 160 && r.height > 120 && a > area) { area = a; best = el; }
       });
-      const w = Math.min(VW, Math.max(600, best ? Math.min(best.getBoundingClientRect().width + 32, 820) : 820));
+      // A 3D board's WebGL canvas is the showpiece even when a taller 2D panel
+      // around it is bigger: center a 480-wide crop (1:1 with the card, so no
+      // magnified text) on the scene.
+      const scene = [...main.querySelectorAll('canvas')].find((c) => { const r = c.getBoundingClientRect(); return r.width > 400 && r.height > 250 && c.getContext && !c.getContext('2d'); });
+      if (scene) best = scene;
+      const w = scene ? 480 : Math.min(VW, Math.max(600, best ? Math.min(best.getBoundingClientRect().width + 32, 820) : 820));
       const h = Math.round(w * 1.25);
       let cx = VW / 2, cyDoc = h / 2;
       if (best) { const r = best.getBoundingClientRect(); cx = r.left + r.width / 2; cyDoc = r.top + scrollY + r.height / 2; }
@@ -167,7 +172,7 @@ const VW = 960, VH = 1200;
       while (Date.now() < end) {
         await page.waitForTimeout(2000);
         // also role-card acks (마피아·아발론), "ROUND n 시작" (운명전쟁39), album paging (그림 전화기)
-        await clickFirst(/^(\S+\s*)?다음 라운드( 시작)?$|^(\S+\s*)?다음 판$|^확인했어요$|^ROUND \d+ 시작$|^다음 장/);
+        await clickFirst(/^(\S+\s*)?다음 라운드( 시작)?$|^(\S+\s*)?다음 판$|^확인했어요$|^ROUND \d+ 시작$|^다음 장|결과 확정하고 계속하기|^다시하기$/);
       }
     } else {
       // Monkey for the host's own seat: no self-autoplay exists, so on our
