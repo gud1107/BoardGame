@@ -4,23 +4,29 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import SeatedPerson, { blinking } from "@/games/shared/three/SeatedPerson";
-import { resolveLook, type CharacterPreset } from "@/lib/character/avatar";
+import { resolveLook, type AvatarProfile } from "@/lib/character/avatar";
 
 /**
- * Portrait thumbnails for the preset list, rendered with the real table rig
- * (so they can never drift from what the games show) on ONE hidden canvas —
- * a WebGL context per card would hit the browser's context limit. Results
- * are cached for the tab, so reopening the picker is instant.
+ * Portrait thumbnails (the preset list, and the player's own character for the
+ * profile picture), rendered with the real table rig (so they can never drift
+ * from what the games show) on ONE hidden canvas — a WebGL context per card
+ * would hit the browser's context limit. Results are cached for the tab under
+ * each item's `key`, so reopening the picker is instant.
  */
-const cache = new Map<string, string>();
-
-export function cachedThumb(id: string): string | undefined {
-  return cache.get(id);
+export interface ThumbItem {
+  key: string;
+  look: AvatarProfile;
 }
 
-function Shooter({ presets, onShot }: { presets: readonly CharacterPreset[]; onShot: (id: string, url: string) => void }) {
+const cache = new Map<string, string>();
+
+export function cachedThumb(key: string): string | undefined {
+  return cache.get(key);
+}
+
+function Shooter({ items, onShot }: { items: readonly ThumbItem[]; onShot: (key: string, url: string) => void }) {
   const { gl } = useThree();
-  const todo = useMemo(() => presets.filter((p) => !cache.has(p.id)), [presets]);
+  const todo = useMemo(() => items.filter((p) => !cache.has(p.key)), [items]);
   const [i, setI] = useState(0);
   const frames = useRef(0);
   const p = todo[i];
@@ -33,31 +39,47 @@ function Shooter({ presets, onShot }: { presets: readonly CharacterPreset[]; onS
     // let the pose/face springs settle, and never freeze a portrait mid-blink
     if (++frames.current < 8 || blinking(clock.elapsedTime, 3)) return;
     const url = gl.domElement.toDataURL("image/png");
-    cache.set(p.id, url);
-    onShot(p.id, url);
+    cache.set(p.key, url);
+    onShot(p.key, url);
     frames.current = 0;
     setI((k) => k + 1);
   });
   if (!p || !look) return null;
-  return <SeatedPerson key={p.id} seed={3} look={look} color="#f43f5e" position={pos} facing={0} mood="rest" lookAt={eye} maxYaw={0.2} lowDetail={false} chair="none" />;
+  return <SeatedPerson key={p.key} seed={3} look={look} color="#f43f5e" position={pos} facing={0} mood="rest" lookAt={eye} maxYaw={0.2} lowDetail={false} chair="none" />;
 }
 
-export default function CharacterThumbs3D({ presets, onShot }: { presets: readonly CharacterPreset[]; onShot: (id: string, url: string) => void }) {
-  const done = presets.every((p) => cache.has(p.id));
+/** "bust" = head and shoulders (the preset cards); "face" = a tight head shot that still reads in a 28px profile circle. */
+const FRAMING = {
+  bust: { fov: 20, y: 1.55 },
+  face: { fov: 10.5, y: 1.5 },
+} as const;
+
+export default function CharacterThumbs3D({
+  items,
+  onShot,
+  framing = "bust",
+}: {
+  items: readonly ThumbItem[];
+  onShot: (key: string, url: string) => void;
+  framing?: keyof typeof FRAMING;
+}) {
+  const f = FRAMING[framing];
+  const done = items.every((p) => cache.has(p.key));
   useEffect(() => {
-    presets.forEach((p) => {
-      const url = cache.get(p.id);
-      if (url) onShot(p.id, url);
+    items.forEach((p) => {
+      const url = cache.get(p.key);
+      if (url) onShot(p.key, url);
     });
-  }, [presets, onShot]);
+  }, [items, onShot]);
   if (done) return null;
   return (
     <div aria-hidden style={{ position: "fixed", left: -9999, top: 0, width: 160, height: 160, pointerEvents: "none" }}>
-      <Canvas dpr={1} gl={{ preserveDrawingBuffer: true, alpha: true }} camera={{ fov: 20, position: [0, 1.62, 3] }} onCreated={({ camera }) => camera.lookAt(0, 1.55, 0)}>
+      {/* a fresh shooter whenever the queue changes, so a new item (e.g. a re-styled own character) gets shot too */}
+      <Canvas dpr={1} gl={{ preserveDrawingBuffer: true, alpha: true }} camera={{ fov: f.fov, position: [0, 1.62, 3] }} onCreated={({ camera }) => camera.lookAt(0, f.y, 0)}>
         <ambientLight intensity={0.8} />
         <hemisphereLight args={["#fff4e6", "#2a2a3a", 0.5]} />
         <directionalLight position={[1.5, 3, 4]} intensity={1.5} />
-        <Shooter presets={presets} onShot={onShot} />
+        <Shooter key={items.map((p) => p.key).join("|")} items={items} onShot={onShot} />
       </Canvas>
     </div>
   );

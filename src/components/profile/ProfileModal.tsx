@@ -5,7 +5,9 @@ import Overlay from "@/components/Overlay";
 import Avatar from "@/components/common/Avatar";
 import { DEFAULT_AVATAR } from "@/constants/avatar";
 import { PUBLIC_NAME_RULE, useProfileStore } from "@/store/profileStore";
+import { useMyCharacter } from "@/lib/character/myCharacter";
 import CharacterPicker from "./CharacterPicker";
+import { useProfilePhoto } from "./ProfilePhoto";
 
 /**
  * Profile editor: the public ranking nickname + avatar — logged-in accounts only (see `profileStore.ts`;
@@ -20,13 +22,41 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
   const uploadAvatar = useProfileStore((s) => s.uploadAvatar);
   const resetAvatar = useProfileStore((s) => s.resetAvatar);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const photo = useProfilePhoto();
+  const hasCharacter = useMyCharacter((s) => !!s.character);
+  const photoMode = useMyCharacter((s) => s.photoMode);
+  const setPhotoMode = useMyCharacter((s) => s.setPhotoMode);
 
   return (
     <Overlay title="🙂 프로필" onClose={onClose}>
       <div className="flex flex-col items-center gap-4">
         <PublicNameEditor />
         <div className="w-full border-t border-white/10 light:border-slate-200" />
-        <Avatar src={avatarUrl} size={112} className="border-2" />
+        <Avatar src={photo} size={112} className="border-2" />
+        {hasCharacter && avatarUrl && (
+          <div className="flex gap-1.5" role="group" aria-label="프로필 사진">
+            {(
+              [
+                ["character", "🧑‍🎤 내 3D 캐릭터"],
+                ["upload", "🖼 업로드한 사진"],
+              ] as const
+            ).map(([m, label]) => (
+              <button
+                key={m}
+                type="button"
+                aria-pressed={photoMode === m}
+                onClick={() => setPhotoMode(m)}
+                className={`min-h-9 rounded-full border px-3 py-1.5 text-xs transition ${
+                  photoMode === m
+                    ? "border-rose-400 bg-rose-500/20 text-white light:text-slate-900"
+                    : "border-white/15 text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {error && <p className="text-xs text-rose-300">{error}</p>}
 
@@ -39,7 +69,10 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
             onChange={(e) => {
               const file = e.target.files?.[0];
               e.target.value = ""; // allow re-selecting the same file later
-              if (file) void uploadAvatar(file);
+              if (file) {
+                setPhotoMode("upload");
+                void uploadAvatar(file);
+              }
             }}
           />
           <button
@@ -59,8 +92,8 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <p className="text-center text-[11px] leading-relaxed text-white/40 light:text-slate-400">
-          PNG · JPG · WEBP · GIF, 최대 2MB. 기본 이미지는 `{DEFAULT_AVATAR}`이며, 게임 방의 다른 참가자에게는 보이지 않고
-          공개 랭킹에만 함께 표시돼요.
+          아래에서 3D 캐릭터를 고르면 그 캐릭터 얼굴이 프로필 사진이 돼요. 직접 올린 사진(PNG · JPG · WEBP · GIF, 최대
+          2MB, 기본 `{DEFAULT_AVATAR}`)은 게임 방의 다른 참가자에게는 보이지 않고 공개 랭킹에만 함께 표시돼요.
         </p>
 
         <div className="w-full border-t border-white/10 light:border-slate-200" />

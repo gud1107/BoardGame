@@ -37,8 +37,8 @@ export type PersonMood =
 
 // The look data (types, palettes, seat defaults, profile validation) lives in the
 // three-free @/lib/character/avatar module so profile UIs and storage can use it without three.js.
-import type { HatKind, PersonLook } from "@/lib/character/avatar";
-export { defaultLook, resolveLook, type HairStyle, type HatKind, type PersonGender, type PersonLook } from "@/lib/character/avatar";
+import type { BodyBuild, EyeShape, FaceShape, HatKind, PersonLook } from "@/lib/character/avatar";
+export { defaultLook, resolveLook, type BodyBuild, type EyeShape, type FaceShape, type HairStyle, type HatKind, type PersonGender, type PersonLook } from "@/lib/character/avatar";
 
 // ---------------------------------------------------------------------------
 // Poses: [spineX, spineY, spineZ, headX, headY, headZ, lSx, lSy, lSz, lE, rSx, rSy, rSz, rE]
@@ -312,6 +312,73 @@ function onHead(x: number, y: number, lift = 0.012, roll = 0): { position: [numb
   return { position: [x + nx * lift, y + ny * lift, z + nz * lift], rotation: [Math.atan2(-ny, Math.hypot(nx, nz)), Math.atan2(nx, nz), roll, "YXZ"] };
 }
 
+/**
+ * The head sphere with its lower half tapered per 얼굴형 (only ever narrowed,
+ * so the hair shells sized for the plain sphere still cover it). Cached per
+ * (shape, detail) — every seat with the same face shares one geometry.
+ */
+const faceGeos = new Map<string, THREE.SphereGeometry>();
+function faceGeometry(shape: FaceShape, seg: number): THREE.SphereGeometry {
+  const key = `${shape}:${seg}`;
+  const hit = faceGeos.get(key);
+  if (hit) return hit;
+  const g = new THREE.SphereGeometry(0.2, seg + 6, seg);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const y = p.getY(i);
+    if (y >= 0) continue;
+    const t = -y / 0.2; // 0 at the cheekbones … 1 at the chin
+    let x = 1;
+    let dy = 0;
+    let dz = 0;
+    if (shape === "oval") x = 1 - 0.2 * t ** 1.6;
+    else if (shape === "vline") {
+      x = 1 - 0.36 * t ** 1.25;
+      dy = -0.014 * t ** 4; // a slightly longer, pointed chin
+      dz = p.getZ(i) > 0 ? 0.012 * t ** 3 : 0;
+    } else if (shape === "round") x = 1 - 0.07 * t ** 2;
+    else {
+      // square: full cheeks down to a wide jaw, then a flat chin
+      x = 1 - 0.06 * t ** 2 - 0.6 * Math.max(0, t - 0.82);
+      dy = t > 0.9 ? (t - 0.9) * 0.05 : 0;
+    }
+    p.setX(i, p.getX(i) * x);
+    p.setY(i, y + dy);
+    p.setZ(i, p.getZ(i) + dz);
+  }
+  g.computeVertexNormals();
+  faceGeos.set(key, g);
+  return g;
+}
+
+/**
+ * 체격: torso width (w) / depth (d) / height (h), limb thickness (t) and the
+ * head's size relative to the body (k — petite reads younger with a bigger head).
+ * Women sit a touch narrower in the shoulders than men of the same build.
+ */
+const BUILD: Record<BodyBuild, { w: number; d: number; h: number; t: number; k: number }> = {
+  petite: { w: 0.88, d: 0.92, h: 0.9, t: 0.88, k: 1.06 },
+  slim: { w: 0.93, d: 0.92, h: 1.02, t: 0.9, k: 1 },
+  standard: { w: 1, d: 1, h: 1, t: 1, k: 1 },
+  broad: { w: 1.16, d: 1.1, h: 1.05, t: 1.15, k: 0.97 },
+};
+
+/**
+ * Brow line per 눈매: `tilt` lifts (+) or drops (−) the outer end, `y` nudges the
+ * height — fox arches up, puppy droops, sharp sits low and straight.
+ */
+const BROW: Record<EyeShape, { tilt: number; y: number }> = {
+  round: { tilt: 0.06, y: 0.008 },
+  fox: { tilt: 0.24, y: 0 },
+  puppy: { tilt: -0.05, y: 0.006 },
+  sharp: { tilt: 0.1, y: -0.006 },
+};
+
+/** Skin darkened toward a warm brown — nose shading that stays the same hue as the face. */
+function shadeSkin(hex: string, k: number): string {
+  return "#" + new THREE.Color(hex).lerp(new THREE.Color("#8a4a3a"), k).getHexString();
+}
+
 function Strand({ x, y, len, r = 0.016, roll = 0, mat }: { x: number; y: number; len: number; r?: number; roll?: number; mat: ReactNode }) {
   const t = onHead(x, y, 0.006, roll);
   return (
@@ -485,8 +552,8 @@ export default function SeatedPerson(props: SeatedPersonProps) {
   const rS = useRef<THREE.Group>(null);
   const rE = useRef<THREE.Group>(null);
   const eyes = useRef<THREE.Group>(null);
-  const browL = useRef<THREE.Mesh>(null);
-  const browR = useRef<THREE.Mesh>(null);
+  const browL = useRef<THREE.Group>(null);
+  const browR = useRef<THREE.Group>(null);
   const mouth = useRef<THREE.Group>(null);
   const sweat = useRef<THREE.Mesh>(null);
   const coatMat = useRef<THREE.MeshStandardMaterial>(null);
@@ -495,7 +562,13 @@ export default function SeatedPerson(props: SeatedPersonProps) {
   // dyed (light) idol hair keeps darker brows
   const browColor = useMemo(() => "#" + new THREE.Color(look.hair).lerp(new THREE.Color("#2a1c16"), 0.45).getHexString(), [look.hair]);
   const fem = look.gender === "f";
-  const eyeTex = useMemo(() => kpopEyeTexture(look.gender, look.gender === "f" ? "#6a3f24" : "#4a2e1c"), [look.gender]);
+  const eyeTex = useMemo(() => kpopEyeTexture(look.gender, look.gender === "f" ? "#6a3f24" : "#4a2e1c", look.eyes), [look.gender, look.eyes]);
+  const headGeo = faceGeometry(look.face ?? "oval", seg);
+  const b = BUILD[look.build ?? "standard"];
+  const bw = b.w * (fem ? 0.92 : 1.02);
+  const brow = BROW[look.eyes ?? "round"];
+  const noseShade = useMemo(() => shadeSkin(look.skin, 0.45), [look.skin]);
+  const lipLine = useMemo(() => "#" + new THREE.Color(look.lip).lerp(new THREE.Color("#3a1212"), 0.45).getHexString(), [look.lip]);
   const lW = useRef<THREE.Group>(null);
   const rW = useRef<THREE.Group>(null);
   const lHand = useRef<THREE.Group>(null);
@@ -564,8 +637,8 @@ export default function SeatedPerson(props: SeatedPersonProps) {
     if (eyes.current) {
       eyes.current.scale.y = Math.max(0.06, c.eye * (blinking(now, seed) && c.eye > 0.3 ? 0.12 : 1));
     }
-    browL.current?.rotation.set(0, 0, 0.12 + c.brow * 0.38);
-    browR.current?.rotation.set(0, 0, -0.12 - c.brow * 0.38);
+    browL.current?.rotation.set(0, 0, 0.12 - brow.tilt + c.brow * 0.38);
+    browR.current?.rotation.set(0, 0, -0.12 + brow.tilt - c.brow * 0.38);
     if (mouth.current) {
       // talking flaps between "o" and "flat"
       const m = mood === "talk" ? (Math.sin(now * 13 + seed) > 0 ? "o" : "flat") : face.mouth;
@@ -584,13 +657,13 @@ export default function SeatedPerson(props: SeatedPersonProps) {
   const skin = <meshStandardMaterial color={look.skin} roughness={0.55} emissive={look.skin} emissiveIntensity={0.14} />;
   const sleeve = <meshStandardMaterial color={look.coat} roughness={0.75} />;
   const arm = (side: 1 | -1, sRef: React.RefObject<THREE.Group | null>, eRef: React.RefObject<THREE.Group | null>) => (
-    <group ref={sRef} position={[0.34 * side, 0.67, 0.04]}>
-      <mesh position={[0, -0.18, 0]} castShadow>
+    <group ref={sRef} position={[0.34 * bw * side, 0.67 * b.h, 0.04]}>
+      <mesh position={[0, -0.18, 0]} scale={[b.t, 1, b.t]} castShadow>
         <capsuleGeometry args={[0.075, 0.24, 4, lowDetail ? 6 : 10]} />
         {sleeve}
       </mesh>
       <group ref={eRef} position={[0, -0.36, 0]}>
-        <mesh position={[0, -0.14, 0]} castShadow>
+        <mesh position={[0, -0.14, 0]} scale={[b.t, 1, b.t]} castShadow>
           <capsuleGeometry args={[0.065, 0.2, 4, lowDetail ? 6 : 10]} />
           {sleeve}
         </mesh>
@@ -649,6 +722,7 @@ export default function SeatedPerson(props: SeatedPersonProps) {
       )}
       <group ref={root}>
         <group ref={spine} position={[0, 0.55, -0.06]}>
+          <group scale={[bw, b.h, b.d]}>
           <mesh geometry={coatGeo} scale={[1, 1, 0.78]} castShadow>
             <meshStandardMaterial ref={coatMat} color={look.coat} roughness={0.78} />
           </mesh>
@@ -666,21 +740,20 @@ export default function SeatedPerson(props: SeatedPersonProps) {
               <meshStandardMaterial color={look.coat} roughness={0.7} side={THREE.DoubleSide} />
             </mesh>
           ))}
+          </group>
           {arm(-1, lS, lE)}
           {arm(1, rS, rE)}
-          <mesh position={[0, 0.77, 0.04]}>
+          <mesh position={[0, 0.77 * b.h, 0.04]} scale={[b.t * (fem ? 0.9 : 1.05), 1, b.t * (fem ? 0.9 : 1.05)]}>
             <cylinderGeometry args={[0.075, 0.085, 0.12, 12]} />
             {skin}
           </mesh>
-          <group ref={head} position={[0, 0.97, 0.06]}>
-            <mesh castShadow scale={[0.92, 1.06, 0.95]}>
-              <sphereGeometry args={[0.2, seg + 6, seg]} />
+          <group ref={head} position={[0, 0.77 * b.h + 0.2, 0.06]} scale={b.k}>
+            <mesh castShadow geometry={headGeo} scale={[0.92, 1.06, 0.95]}>
               {skin}
             </mesh>
             {/* soft cel outline: an inverted hull a hair larger than the head */}
             {!lowDetail && (
-              <mesh scale={[0.92 * 1.035, 1.06 * 1.03, 0.95 * 1.035]}>
-                <sphereGeometry args={[0.2, seg + 6, seg]} />
+              <mesh geometry={headGeo} scale={[0.92 * 1.035, 1.06 * 1.03, 0.95 * 1.035]}>
                 <meshBasicMaterial color="#3a2420" side={THREE.BackSide} />
               </mesh>
             )}
@@ -694,8 +767,8 @@ export default function SeatedPerson(props: SeatedPersonProps) {
             <group ref={eyes} position={[0, 0.02, 0.165]}>
               {[-1, 1].map((s) => (
                 // painted anime eye (kpopEyes.ts) on a card that follows the head's curve; the left one is mirrored
-                <mesh key={s} position={[0.066 * s, 0, 0.02]} rotation-y={0.38 * s} scale={[s, 1, 1]} renderOrder={2}>
-                  <planeGeometry args={[0.09, 0.07]} />
+                <mesh key={s} position={[0.067 * s, 0, 0.021]} rotation-y={0.38 * s} scale={[s, 1, 1]} renderOrder={2}>
+                  <planeGeometry args={[0.1, 0.078]} />
                   <meshStandardMaterial map={eyeTex} transparent roughness={0.25} depthWrite={false} polygonOffset polygonOffsetFactor={-2} side={THREE.DoubleSide} />
                 </mesh>
               ))}
@@ -728,19 +801,54 @@ export default function SeatedPerson(props: SeatedPersonProps) {
                   <meshStandardMaterial color="#1f2937" metalness={0.6} roughness={0.3} />
                 </mesh>
               ))}
-            {/* soft, slim brows (women) / straight, fuller brows (men) */}
-            <mesh ref={browL} position={[-0.066, 0.075, 0.172]}>
-              <boxGeometry args={fem ? [0.056, 0.009, 0.01] : [0.066, 0.016, 0.013]} />
-              <meshStandardMaterial color={browColor} roughness={0.9} />
-            </mesh>
-            <mesh ref={browR} position={[0.066, 0.075, 0.172]}>
-              <boxGeometry args={fem ? [0.056, 0.009, 0.01] : [0.066, 0.016, 0.013]} />
-              <meshStandardMaterial color={browColor} roughness={0.9} />
-            </mesh>
-            <mesh position={[0, -0.025, 0.19]} scale={[0.8, 1.1, 1]}>
-              <sphereGeometry args={[0.026, 10, 8]} />
+            {/* brows: soft and slim (women) / straight and full (men), set by 눈매 (BROW) */}
+            {[-1, 1].map((s) => (
+              <group key={`w${s}`} ref={s < 0 ? browL : browR} position={[0.066 * s, 0.078 + brow.y, 0.174]}>
+                <mesh rotation-z={Math.PI / 2} scale={[1, 1, 0.6]}>
+                  <capsuleGeometry args={[fem ? 0.0065 : 0.0095, fem ? 0.046 : 0.054, 2, 6]} />
+                  <meshStandardMaterial color={browColor} roughness={0.9} />
+                </mesh>
+              </group>
+            ))}
+            {/* nose: soft tip, a light bridge glint and a shadow under the tip so it reads from across the table */}
+            <mesh position={[0, -0.028, 0.19]} scale={[0.8, 1, 1]}>
+              <sphereGeometry args={[fem ? 0.022 : 0.026, 10, 8]} />
               {skin}
             </mesh>
+            <mesh position={[0.004, 0.0, 0.198]} scale={[0.5, 2.2, 0.4]}>
+              <sphereGeometry args={[0.009, 8, 6]} />
+              <meshBasicMaterial color="#fff6ee" transparent opacity={0.55} depthWrite={false} />
+            </mesh>
+            <mesh position={[0, -0.047, 0.199]} rotation-x={-0.5} scale={[fem ? 1 : 1.25, 0.32, 0.3]}>
+              <sphereGeometry args={[0.018, 10, 6]} />
+              <meshStandardMaterial color={noseShade} roughness={0.8} />
+            </mesh>
+            {!fem && (
+              <mesh position={[-0.018, -0.012, 0.192]} rotation={[0, -0.5, 0.08]} scale={[0.3, 2.4, 0.3]}>
+                <sphereGeometry args={[0.009, 8, 6]} />
+                <meshBasicMaterial color={noseShade} transparent opacity={0.45} depthWrite={false} />
+              </mesh>
+            )}
+            {look.mark === "mole" && (
+              <mesh position={[0.088, -0.03, 0.172]}>
+                <sphereGeometry args={[0.0055, 8, 6]} />
+                <meshStandardMaterial color="#3a2018" roughness={0.6} />
+              </mesh>
+            )}
+            {look.mark === "freckles" &&
+              [
+                [-0.034, -0.016],
+                [-0.05, -0.026],
+                [-0.066, -0.018],
+                [0.034, -0.016],
+                [0.05, -0.026],
+                [0.066, -0.018],
+              ].map(([x, y], i) => (
+                <mesh key={`f${i}`} position={[x, y, HEAD_R[2] * Math.sqrt(1 - (x / HEAD_R[0]) ** 2 - (y / HEAD_R[1]) ** 2) + 0.003]}>
+                  <sphereGeometry args={[0.0045, 6, 4]} />
+                  <meshBasicMaterial color={noseShade} transparent opacity={0.75} depthWrite={false} />
+                </mesh>
+              ))}
             {look.beard && (
               <mesh position={[0, -0.1, 0.1]} scale={[1, 0.8, 0.75]}>
                 <sphereGeometry args={[0.15, seg, 10, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.35]} />
@@ -748,10 +856,27 @@ export default function SeatedPerson(props: SeatedPersonProps) {
               </mesh>
             )}
             <group ref={mouth} position={[0, -0.088, 0.174]}>
-              <mesh name="flat">
-                <boxGeometry args={fem ? [0.05, 0.014, 0.012] : [0.056, 0.009, 0.01]} />
-                <meshStandardMaterial color={look.lip} roughness={0.35} />
-              </mesh>
+              {/* closed lips: darker upper lip and parting line, a fuller lower lip with a gloss dot (women) */}
+              <group name="flat">
+                <mesh position={[0, 0.005, 0]} scale={[1.2, 0.3, 0.35]}>
+                  <sphereGeometry args={[fem ? 0.028 : 0.03, 12, 8]} />
+                  <meshStandardMaterial color={lipLine} roughness={0.4} />
+                </mesh>
+                <mesh position={[0, -0.005, 0.001]} scale={[1.1, fem ? 0.42 : 0.3, 0.4]}>
+                  <sphereGeometry args={[fem ? 0.026 : 0.027, 12, 8]} />
+                  <meshStandardMaterial color={look.lip} roughness={0.3} />
+                </mesh>
+                <mesh position={[0, 0.002, 0.01]}>
+                  <boxGeometry args={[fem ? 0.044 : 0.05, 0.0035, 0.002]} />
+                  <meshBasicMaterial color={lipLine} />
+                </mesh>
+                {fem && (
+                  <mesh position={[0.007, -0.008, 0.011]}>
+                    <sphereGeometry args={[0.004, 6, 4]} />
+                    <meshBasicMaterial color="#ffffff" transparent opacity={0.7} depthWrite={false} />
+                  </mesh>
+                )}
+              </group>
               <mesh name="smile" rotation={[0, 0, Math.PI * 1.15]} position={[0, 0.02, 0]}>
                 <torusGeometry args={[0.035, fem ? 0.009 : 0.007, 6, 12, Math.PI * 0.7]} />
                 <meshStandardMaterial color={look.lip} roughness={0.35} />

@@ -10,6 +10,7 @@ import SoundToggleButton from "@/components/audio/SoundToggleButton";
 import PatchNoteButton from "@/components/patchNotes/PatchNoteButton";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import Avatar from "@/components/common/Avatar";
+import { OwnPortraitKeeper, useProfilePhoto } from "@/components/profile/ProfilePhoto";
 import ProfileModal from "@/components/profile/ProfileModal";
 import { useIsSiteAdmin } from "@/lib/admin/useIsSiteAdmin";
 
@@ -24,7 +25,7 @@ export default function SiteHeader() {
   const initSubscription = useSubscriptionStore((s) => s.init);
   const isSiteAdmin = useIsSiteAdmin(userId);
 
-  const profileAvatarUrl = useProfileStore((s) => s.avatarUrl);
+  const profileAvatarUrl = useProfilePhoto();
   const initProfile = useProfileStore((s) => s.init);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
 
@@ -103,6 +104,7 @@ export default function SiteHeader() {
               <Avatar src={profileAvatarUrl} size={28} />
             </button>
           )}
+          <OwnPortraitKeeper />
           {configured && (
             <Link
               href={userId ? "/account" : "/login"}

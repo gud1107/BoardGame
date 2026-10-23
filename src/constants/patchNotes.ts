@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.90.0",
+    releaseDate: "2026-10-23",
+    title: "🧑‍🎤 3D 캐릭터마다 얼굴형·체격이 달라요 — 프로필 사진도 내 캐릭터로",
+    changes: [
+      { game: "common", type: "IMPROVE", desc: "💪 캐릭터마다 체격(아담한·슬림·보통·어깨 넓은)과 얼굴형(계란형·V라인·동글동글·각진 턱선)이 달라요" },
+      { game: "common", type: "IMPROVE", desc: "👁️ 눈매 4종(사슴눈·여우눈·강아지눈·무쌍)과 짝이 맞는 눈썹, 콧대·코끝 음영, 윗입술·아랫입술이 나뉜 입술, 눈밑 점·주근깨 — '직접 꾸미기'에서도 골라요" },
+      { game: "common", type: "FEAT", desc: "🖼️ 고른 3D 캐릭터의 얼굴이 프로필 사진(상단 바·프로필·내 구독)과 '내 3D 캐릭터' 버튼에 떠요 — 업로드한 사진과 둘 중 골라 쓸 수 있어요" },
+    ],
+  },
+  {
     version: "v1.89.0",
     releaseDate: "2026-10-23",
     title: "🦹 시티 체이스 3D — 내가 도둑이 되어 도시를 털고 숨어요",

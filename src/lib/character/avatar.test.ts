@@ -54,3 +54,24 @@ describe("character presets", () => {
     expect(a).not.toHaveProperty("presetId");
   });
 });
+
+describe("character individuality", () => {
+  it("sanitize keeps known build/face/eyes/mark and drops unknown ones", () => {
+    expect(sanitizeAvatar({ build: "broad", face: "vline", eyes: "fox", mark: "mole" })).toEqual({ build: "broad", face: "vline", eyes: "fox", mark: "mole" });
+    expect(sanitizeAvatar({ build: "huge", face: 3, eyes: "<b>", mark: "tattoo" })).toEqual({});
+  });
+
+  it("presets don't share a face: no two presets of one gender have the same build + face + eyes", async () => {
+    const { CHARACTER_PRESETS } = await import("./avatar");
+    const sig = CHARACTER_PRESETS.map((c) => `${c.look.gender}:${c.look.build}:${c.look.face}:${c.look.eyes}`);
+    expect(new Set(sig).size).toBe(sig.length);
+    for (const k of ["build", "face", "eyes"] as const) expect(new Set(CHARACTER_PRESETS.map((c) => c.look[k])).size).toBe(4);
+  });
+
+  it("every seat default has a valid build/face/eyes/mark", () => {
+    for (let seat = 0; seat < 10; seat++) {
+      const l = defaultLook(seat);
+      expect(sanitizeAvatar({ build: l.build, face: l.face, eyes: l.eyes, mark: l.mark })).toEqual({ build: l.build, face: l.face, eyes: l.eyes, mark: l.mark });
+    }
+  });
+});

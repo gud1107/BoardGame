@@ -17,8 +17,31 @@ const PREVIEW_SEAT = 0;
 
 /** Everything the profile can hold, read off a resolved look — so the first tap freezes the whole look, not one field. */
 function toProfile(l: PersonLook): AvatarProfile {
-  return { gender: l.gender, skin: l.skin, hair: l.hair, hairStyle: l.hairStyle, coat: l.coat, shirt: l.shirt, glasses: l.glasses, lip: l.lip };
+  return {
+    gender: l.gender,
+    skin: l.skin,
+    hair: l.hair,
+    hairStyle: l.hairStyle,
+    coat: l.coat,
+    shirt: l.shirt,
+    glasses: l.glasses,
+    lip: l.lip,
+    build: l.build,
+    face: l.face,
+    eyes: l.eyes,
+    mark: l.mark,
+  };
 }
+
+const PRESET_THUMBS = CHARACTER_PRESETS.map((c) => ({ key: c.id, look: c.look }));
+
+/** The 3D-look rows of "직접 꾸미기" that are plain chip choices. */
+const SHAPE_ROWS = [
+  ["build", "체격"],
+  ["face", "얼굴형"],
+  ["eyes", "눈매"],
+  ["mark", "포인트"],
+] as const;
 
 /**
  * 3D character picker (profile → 캐릭터 선택): pick one of the listed
@@ -98,7 +121,7 @@ export default function CharacterPicker() {
           })}
         </div>
       </Row>
-      <CharacterThumbs3D presets={CHARACTER_PRESETS} onShot={onShot} />
+      <CharacterThumbs3D items={PRESET_THUMBS} onShot={onShot} />
 
       <details className="group rounded-xl border border-white/10 p-2 light:border-slate-200">
         <summary className="cursor-pointer select-none text-xs font-semibold text-white/70 light:text-slate-600">✏️ 직접 꾸미기</summary>
@@ -119,6 +142,15 @@ export default function CharacterPicker() {
           </Chip>
         ))}
       </Row>
+      {SHAPE_ROWS.map(([k, label]) => (
+        <Row key={k} label={label}>
+          {AVATAR_OPTIONS[k].map((o) => (
+            <Chip key={o.id} selected={look[k] === o.id} onClick={() => update({ [k]: o.id })}>
+              {o.label}
+            </Chip>
+          ))}
+        </Row>
+      ))}
       <Row label="머리색">
         {hairs.map((o) => (
           <Swatch key={o.id} color={o.id} label={o.label} selected={look.hair === o.id} onClick={() => update({ hair: o.id })} />

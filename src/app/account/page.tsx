@@ -8,6 +8,7 @@ import { useProfileStore } from "@/store/profileStore";
 import { TIER_LABELS } from "@/lib/entitlements/types";
 import SupabaseRequiredNotice from "@/components/SupabaseRequiredNotice";
 import Avatar from "@/components/common/Avatar";
+import { useProfilePhoto } from "@/components/profile/ProfilePhoto";
 import ProfileModal from "@/components/profile/ProfileModal";
 
 export default function AccountPage() {
@@ -24,7 +25,7 @@ export default function AccountPage() {
   const toggleCancelAtPeriodEnd = useSubscriptionStore((s) => s.toggleCancelAtPeriodEnd);
   const signOut = useSubscriptionStore((s) => s.signOut);
 
-  const profileAvatarUrl = useProfileStore((s) => s.avatarUrl);
+  const profileAvatarUrl = useProfilePhoto();
   const initProfile = useProfileStore((s) => s.init);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
 
