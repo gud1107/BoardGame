@@ -102,16 +102,16 @@ describe("engine", () => {
     expect(heroActor(w).x).toBeGreaterThan(120);
   });
 
-  it("light chain → finisher knocks a grunt down and counts a combo", () => {
+  it("mashing the light chain knocks a grunt down and counts a combo", () => {
     const { w, e } = arena();
-    const seq: Partial<Input>[] = [{ light: true }, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, { light: true }, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, { heavy: true }];
-    for (const k of seq) {
-      step(w, press(k));
+    let seen = false;
+    for (let i = 0; i < 90; i++) {
+      step(w, press({ light: i % 3 === 0 }));
       w.events.length = 0;
+      if (e.state === "air" || e.state === "down") seen = true;
     }
-    run(w, 30);
-    expect(w.combo).toBeGreaterThanOrEqual(3);
-    expect(["air", "down"]).toContain(e.state);
+    expect(w.maxCombo).toBeGreaterThanOrEqual(3);
+    expect(seen).toBe(true);
   });
 
   it("launcher puts a grunt in the air, and jump-cancel chases it", () => {
@@ -190,6 +190,123 @@ describe("engine", () => {
     expect(w.phase).toBe("clear");
     expect(w.bossKills).toBe(1);
     expect(w.summary?.cleared).toBe(true);
+  });
+});
+
+/** Arena with a chosen hero (same layout as `arena`). */
+function heroArena(hero: (typeof HERO_ORDER)[number]) {
+  const w = createWorld({ stage: 1, hero, diff: "normal", seed: 7 });
+  run(w, 151);
+  const h = heroActor(w);
+  w.waveIdx = 99;
+  w.lockX = w.camX;
+  const mk = (id: number, dx: number) => {
+    const e = { ...h, id, kind: "enemy" as const, team: 1 as const, enemyId: "grunt" as const, name: "졸개", x: h.x + dx, hp: 5000, maxHp: 5000, face: -1 as const, heroId: undefined, entered: true, ai: { cd: 9999, think: 0, side: 1 as const, wz: h.z, patCd: {}, zOff: 0 }, state: "idle" as const, breakMax: 0, mark: 0, markT: 0 };
+    w.actors.push(e);
+    return w.actors[w.actors.length - 1];
+  };
+  return { w, h, mk };
+}
+
+describe("hero traits are distinct", () => {
+  it("every hero has its own trait, headgear and skill names", () => {
+    const traits = new Set(HERO_ORDER.map((id) => HEROES[id].trait));
+    const gear = new Set(HERO_ORDER.map((id) => HEROES[id].gear));
+    const skills = new Set(HERO_ORDER.flatMap((id) => HEROES[id].skills.map((s) => s.name)));
+    expect(traits.size).toBe(5);
+    expect(gear.size).toBe(5);
+    expect(skills.size).toBe(15);
+    for (const id of HERO_ORDER) expect(HEROES[id].name).not.toMatch(/프리즘|레드|블루|옐로|그린|핑크/);
+  });
+
+  it("블레이즈: heat builds to overheat and 폭염 해방 spends it", () => {
+    const { w, mk } = heroArena("red");
+    w.heat = 98;
+    const e = mk(900, 40);
+    step(w, press({ light: true }));
+    run(w, 20);
+    expect(w.overheat).toBeGreaterThan(0);
+    const hp = e.hp;
+    w.en = 100;
+    step(w, press({ skill: 3 }));
+    run(w, 40);
+    expect(w.heat).toBe(0);
+    expect(w.overheat).toBe(0);
+    expect(e.hp).toBeLessThan(hp - 150);
+  });
+
+  it("볼트: the 5th charge chains lightning to nearby foes", () => {
+    const { w, mk } = heroArena("blue");
+    mk(900, 36);
+    const far = mk(901, 120);
+    w.charge = 4;
+    step(w, press({ light: true }));
+    run(w, 12);
+    expect(far.hp).toBeLessThan(far.maxHp);
+    expect(w.charge).toBe(0);
+  });
+
+  it("볼트: 뇌전 카운터 blinks behind an attacker and shocks it", () => {
+    const { w, h, mk } = heroArena("blue");
+    const e = mk(900, 36);
+    w.en = 100;
+    step(w, press({ skill: 3 }));
+    e.next = ENEMIES.grunt.moves[0];
+    e.state = "tell";
+    e.stun = 1;
+    run(w, 20);
+    expect(w.counters).toBe(1);
+    expect(h.hp).toBe(h.maxHp);
+    expect(e.hp).toBeLessThan(e.maxHp);
+  });
+
+  it("아이언: an empty magazine turns the light attack into a reload", () => {
+    const { w, mk } = heroArena("yellow");
+    mk(900, 60);
+    w.ammo = 0;
+    step(w, press({ light: true }));
+    run(w, 2);
+    expect(heroActor(w).move?.id).toBe("reload");
+    run(w, 60);
+    expect(w.ammo).toBe(10);
+  });
+
+  it("아이언: the shield drone soaks whole hits", () => {
+    const { w, h, mk } = heroArena("yellow");
+    const e = mk(900, 36);
+    w.shieldHits = 1;
+    e.next = ENEMIES.grunt.moves[0];
+    e.state = "tell";
+    e.stun = 1;
+    run(w, 20);
+    expect(w.shieldHits).toBe(0);
+    expect(h.hp).toBe(h.maxHp);
+  });
+
+  it("테라 takes 15% less damage than an equal-HP hero would", () => {
+    const { w, h, mk } = heroArena("green");
+    const e = mk(900, 36);
+    e.next = ENEMIES.grunt.moves[0];
+    e.state = "tell";
+    e.stun = 1;
+    run(w, 20);
+    expect(h.maxHp - h.hp).toBe(Math.round(42 * 0.85));
+  });
+
+  it("세이렌: marks stack to 3 and 공명 폭발 cashes them in", () => {
+    const { w, mk } = heroArena("pink");
+    const e = mk(900, 40);
+    for (let i = 0; i < 60; i++) {
+      step(w, press({ light: i % 4 === 0 && i < 30 }));
+      w.events.length = 0;
+    }
+    expect(e.mark).toBe(3);
+    const hp = e.hp;
+    w.en = 100;
+    step(w, press({ skill: 3 }));
+    run(w, 10);
+    expect(e.mark).toBe(0);
+    expect(hp - e.hp).toBeGreaterThanOrEqual(120);
   });
 });
 

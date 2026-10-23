@@ -24,6 +24,7 @@ import {
   GRAVITY,
   HERO_ORDER,
   HEROES,
+  IRON_MAG,
   JUGGLE_MAX,
   JUMP_VY,
   MECHA,
@@ -31,6 +32,7 @@ import {
   PERFECT_TICKS,
   PICKUPS,
   PRISM_MAX,
+  RELOAD_MOVE,
   STAGES,
   STYLE_MAX,
   TEAM_ULT,
@@ -79,7 +81,7 @@ export interface Input {
 }
 export const NO_INPUT: Input = { mx: 0, mz: 0, light: false, heavy: false, jump: false, dodge: false, skill: 0, ult: false, assist: false };
 
-export type ActorKind = "hero" | "enemy" | "boss" | "clone" | "assist" | "mecha" | "giant" | "crate";
+export type ActorKind = "hero" | "enemy" | "boss" | "clone" | "assist" | "mecha" | "giant" | "crate" | "turret";
 export type AState = "idle" | "walk" | "run" | "jump" | "attack" | "tell" | "hit" | "air" | "down" | "getup" | "dodge" | "dead" | "grabbed" | "held" | "stunned" | "pose" | "gone";
 export type Reaction = "high" | "low" | "stagger" | "bind" | "spin" | "guard";
 
@@ -149,6 +151,9 @@ export interface Actor {
   /** Untouchable while falling after the juggle cap. */
   untouchable: boolean;
   koByHero: boolean;
+  /** 세이렌's water marks (0..3) and their remaining ticks. */
+  mark: number;
+  markT: number;
   ai: { cd: number; think: number; side: 1 | -1; wz: number; patCd: Record<string, number>; zOff: number };
   drop?: PickupKind;
 }
@@ -213,6 +218,11 @@ export type GameEvent =
   | { type: "ult"; name: string; color: string }
   | { type: "assist"; hero: HeroId }
   | { type: "perfect" }
+  | { type: "counter" }
+  | { type: "overheat" }
+  | { type: "chain" }
+  | { type: "detonate"; marks: number }
+  | { type: "reload" }
   | { type: "break"; name: string }
   | { type: "parry" }
   | { type: "phase"; phase: number; name: string }
@@ -298,6 +308,18 @@ export interface World {
   ventT: number;
   finishReady: boolean;
   goT: number;
+  /** Hero traits: 블레이즈 heat/overheat, 볼트 charge, 아이언 ammo + shield drone, 세이렌 regen. */
+  heat: number;
+  overheat: number;
+  charge: number;
+  ammo: number;
+  shieldHits: number;
+  regenT: number;
+  counters: number;
+  /** Targets already visited by the current 연쇄 번개 스텝. */
+  blinkIds: number[];
+  /** Guards chain-lightning from re-triggering itself. */
+  chaining: boolean;
   summary: StageSummary | null;
 }
 
@@ -372,6 +394,8 @@ function baseActor(w: World, kind: ActorKind, team: 0 | 1, x: number, z: number,
     charge: 0,
     untouchable: false,
     koByHero: false,
+    mark: 0,
+    markT: 0,
     ai: { cd: 40, think: 0, side: 1, wz: z, patCd: {}, zOff: 0 },
   };
 }
@@ -434,6 +458,15 @@ export function createWorld(opts: { stage: number; hero: HeroId; diff: Difficult
     ventT: 0,
     finishReady: false,
     goT: 0,
+    heat: 0,
+    overheat: 0,
+    charge: 0,
+    ammo: IRON_MAG,
+    shieldHits: 0,
+    regenT: 0,
+    counters: 0,
+    blinkIds: [],
+    chaining: false,
     summary: null,
   };
   const h = baseActor(w, "hero", 0, 120, Z_MAX * 0.55, hero.hp, hero.name);
@@ -579,7 +612,55 @@ function startSpecial(w: World, a: Actor, m: MoveDef) {
     case "teleport":
       a.hidden = 20;
       break;
+    case "flameField":
+    case "heatBurst":
+      break;
+    case "chainBlink":
+      w.blinkIds = [];
+      break;
+    case "counter":
+      a.parry = m.total;
+      fx(w, "ring", a.x, a.z, 30, { color: "#7dd3fc", life: 20, size: 1.2 });
+      break;
+    case "turret": {
+      for (const old of w.actors) if (old.kind === "turret") old.state = "gone";
+      const t = baseActor(w, "turret", 0, a.x + a.face * 34, a.z, 1, "자동 포탑");
+      t.face = a.face;
+      t.life = 480;
+      t.invuln = 999;
+      t.entered = true;
+      w.actors.push(t);
+      fx(w, "dust", t.x, t.z, 0, { life: 14 });
+      break;
+    }
+    case "shieldDrone":
+      w.shieldHits = 3;
+      fx(w, "ring", a.x, a.z, 40, { color: "#94a3b8", life: 26, size: 1.6 });
+      break;
+    case "rockLine":
+      for (let i = 0; i < 5; i++)
+        addProj(w, a, { kind: "pillar", x: a.x + a.face * (54 + i * 46), z: a.z, y: 0, vx: 0, vy: 0, warn: 8 + i * 5, life: 8 + i * 5 + 16, hit: { r: 22, dmg: 40, kind: "launch", lift: 9, stop: 4, brk: 18, z: 26 }, color: "#a8a29e" });
+      break;
+    case "detonate": {
+      let total = 0;
+      w.chaining = true;
+      for (const b of w.actors) {
+        if (b.team !== 1 || b.mark <= 0 || b.state === "dead" || b.state === "gone" || b.hp <= 0) continue;
+        if (b.x < w.camX - 30 || b.x > w.camX + VIEW_W + 30) continue;
+        const n = b.mark;
+        total += n;
+        b.mark = 0;
+        fx(w, "boom", b.x, b.z, 40 * b.scale, { color: "#5eead4", life: 22, size: 1 + n * 0.4 });
+        const hit: HitDef = { at: 0, len: 1, x: [0, 0], z: 999, y: [-99, 999], dmg: 40 * n + 10, kind: n >= 3 ? "knockdown" : "stagger", stun: 40, kb: 3, lift: 5, stop: 4, brk: 26 * n, screen: true };
+        applyHit(w, a, b, hit, b.x >= a.x ? 1 : -1, false);
+      }
+      w.chaining = false;
+      w.events.push({ type: "detonate", marks: total });
+      if (!total) fx(w, "text", a.x, a.z, 90, { text: "표식이 없다!", color: "#99f6e4", life: 40 });
+      break;
+    }
     case "heal": {
+      if (m.id === "s2") w.regenT = 300;
       const amount = Math.round(h.maxHp * (m.id === "ult" ? 0.3 : m.id === "as" ? 0.12 : 0.18));
       h.hp = Math.min(h.maxHp, h.hp + amount);
       fx(w, "heal", h.x, h.z, 40, { color: "#f9a8d4", life: 40, text: `+${amount}` });
@@ -638,6 +719,42 @@ function startSpecial(w: World, a: Actor, m: MoveDef) {
 /** Per-tick behaviour for moves with specials (beyond hit/proj tables). */
 function tickSpecial(w: World, a: Actor, m: MoveDef) {
   const h = heroActor(w);
+  if (m.special === "flameField" && a.moveT % 4 === 0 && a.moveT <= 16)
+    addProj(w, a, { kind: "flame", x: a.x, z: a.z, y: 0, vx: 0, life: 150, pierce: true, hit: { r: 18, dmg: 14, kind: "flinch", stun: 14, kb: 0.3, stop: 0, brk: 4, z: 18 } });
+  if (m.special === "heatBurst" && a.moveT === 14) {
+    const over = w.overheat > 0;
+    const dmg = Math.round(50 + w.heat * 1.5 + (over ? 70 : 0));
+    w.heat = 0;
+    w.overheat = 0;
+    w.shake = Math.max(w.shake, over ? 16 : 9);
+    fx(w, "bigBoom", a.x, a.z, 30, { color: "#f97316", life: 30, size: over ? 2.6 : 1.6 });
+    w.events.push({ type: "explode", big: over });
+    const burst: HitDef = { at: 0, len: 1, x: [-120, 120], z: 50, y: [-20, 160], dmg, kind: "launch", lift: 10, kb: 4, stop: over ? 12 : 7, brk: Math.round(dmg * 0.5) };
+    w.chaining = true;
+    for (const b of w.actors.filter((o) => o.team === 1 && o.state !== "dead" && o.state !== "gone")) tryHit(w, a, b, burst, 50, b.x >= a.x ? 1 : -1, true);
+    w.chaining = false;
+  }
+  if (m.special === "chainBlink" && a.moveT % 10 === 0 && a.moveT <= 20) {
+    let best: Actor | null = null;
+    let bd = 340;
+    for (const b of foes(w, a)) {
+      if (w.blinkIds.includes(b.id)) continue;
+      const d = Math.abs(b.x - a.x) + Math.abs(b.z - a.z) * 1.5;
+      if (d < bd) {
+        bd = d;
+        best = b;
+      }
+    }
+    if (best) {
+      w.blinkIds.push(best.id);
+      fx(w, "flashLine", a.x, a.z, 30, { color: "#7dd3fc", life: 12, size: 1 });
+      const side = best.face === 1 ? -1 : 1;
+      a.x = best.x + side * 36 * best.scale;
+      a.z = best.z;
+      a.face = best.x > a.x ? 1 : -1;
+      fx(w, "speed", a.x, a.z, 30, { color: "#38bdf8", life: 12 });
+    }
+  }
   if (m.special === "teleport" && a.moveT === 20) {
     a.x = Math.max(w.camX + 40, Math.min(w.camX + VIEW_W - 40, h.x - h.face * 70));
     a.z = h.z;
@@ -764,6 +881,11 @@ function tickMove(w: World, a: Actor) {
   a.moveT++;
   const done = m.untilLand ? a.y <= 0 && a.moveT > 3 : a.moveT >= m.total;
   if (done) {
+    if (m.id === "reload") {
+      w.ammo = IRON_MAG;
+      w.events.push({ type: "reload" });
+      fx(w, "text", a.x, a.z, 80, { text: "장전 완료", color: "#e2e8f0", life: 30 });
+    }
     if (m.untilLand) {
       fx(w, "dust", a.x, a.z, 0, { life: 16, size: 1.6 });
       fx(w, "ring", a.x, a.z, 0, { color: "#fde68a", life: 14, size: 1.4 });
@@ -800,7 +922,7 @@ function inRange(a: Actor, b: Actor, h: HitDef, w: World): boolean {
 /** Returns true when the hit connected (even if blocked). */
 function tryHit(w: World, a: Actor, b: Actor, h: HitDef, idx: number, dir: number, melee: boolean): boolean {
   if (b.hp <= 0 && b.kind !== "crate") return false;
-  if (b.state === "held" || b.hidden > 0 || b.kind === "assist") return false;
+  if (b.state === "held" || b.hidden > 0 || b.kind === "assist" || b.kind === "turret") return false;
   if (b.state === "down" && !(h.otg && !b.otgUsed)) return false;
   if (b.untouchable) return false;
   const key = idx * 100000 + b.id;
@@ -858,6 +980,33 @@ function applyHit(w: World, a: Actor, b: Actor, h: HitDef, dir: number, melee: b
     fx(w, "guard", b.x - dir * 20 * b.scale, b.z, 50, { color: "#fda4af", life: 12, size: 1.5 });
     w.events.push({ type: "hit", heavy: false, onHero: false, blocked: true });
   }
+  // 볼트 뇌전 카운터: the hero blinks behind whoever struck and shocks them.
+  if (heroVictim && b.parry > 0 && !h.screen && a.team === 1) {
+    b.parry = 0;
+    if (b.move) endMove(b);
+    const side = a.face === 1 ? -1 : 1;
+    b.x = a.x + side * 34 * a.scale;
+    b.z = a.z;
+    b.face = a.x > b.x ? 1 : -1;
+    b.invuln = Math.max(b.invuln, 30);
+    w.counters++;
+    w.slow = Math.max(w.slow, 30);
+    w.style = Math.min(STYLE_MAX, w.style + 70);
+    w.charge = 5;
+    fx(w, "flashLine", b.x, b.z, 40, { color: "#7dd3fc", life: 22, size: 2 });
+    fx(w, "text", b.x, b.z, 100, { text: "뇌전 카운터!", color: "#7dd3fc", life: 50 });
+    w.events.push({ type: "counter" });
+    const zap: HitDef = { at: 0, len: 1, x: [-999, 999], z: 999, y: [-99, 999], dmg: 90, kind: "stagger", stun: 50, kb: 3, stop: 10, brk: 70 };
+    applyHit(w, b, a, zap, b.face, false);
+    return;
+  }
+  // 아이언 실드 드론 soaks whole hits.
+  if (heroVictim && b.kind === "hero" && w.shieldHits > 0 && !h.screen) {
+    w.shieldHits--;
+    fx(w, "guard", b.x - dir * 12, b.z, 40, { color: "#94a3b8", life: 14, size: 1.6 });
+    w.events.push({ type: "hit", heavy: false, onHero: true, blocked: true });
+    return;
+  }
   // Parry: melee into a parry stance gets countered.
   if (b.parry > 0 && melee && !h.screen && heroSide) {
     b.parry = 0;
@@ -870,12 +1019,15 @@ function applyHit(w: World, a: Actor, b: Actor, h: HitDef, dir: number, melee: b
     applyHit(w, b, a, counter, b.face, false);
     return;
   }
+  const byHero = a.kind === "hero" && b.kind !== "crate";
+  if (byHero && w.hero.trait === "heat" && w.overheat > 0) mul *= 1.35;
   let dmg = h.dmg * mul;
   if (heroSide && b.juggle > 6) dmg *= Math.max(0.4, 1 - 0.05 * (b.juggle - 6));
   if (b.broken > 0 || b.state === "stunned") dmg *= 1.5;
   if (heroVictim) {
     dmg *= diffOf(w).dmg;
     if (b.ironWall > 0) dmg *= 0.3;
+    if (b.kind === "hero" && w.hero.trait === "stoneSkin") dmg *= 0.85;
   }
   dmg = Math.max(1, Math.round(dmg));
   // Giants can only be felled by the finisher.
@@ -904,6 +1056,7 @@ function applyHit(w: World, a: Actor, b: Actor, h: HitDef, dir: number, melee: b
     w.styleTop = Math.max(w.styleTop, w.style);
     w.en = Math.min(EN_MAX, w.en + 1.2);
     w.prism = Math.min(PRISM_MAX, w.prism + dmg * 0.045);
+    if (byHero) heroTrait(w, a, b, dir);
     if (w.mode === "stage" && ++w.assistHits >= ASSIST_HITS) {
       w.assistHits = 0;
       if (w.assistStock < ASSIST_MAX) w.assistStock++;
@@ -956,6 +1109,52 @@ function applyHit(w: World, a: Actor, b: Actor, h: HitDef, dir: number, melee: b
 }
 
 /** `direct` = not routed through applyHit (which handles its own KO). */
+/** Per-hero rule that fires on every hero hit (see HeroDef.trait). */
+function heroTrait(w: World, a: Actor, b: Actor, dir: number) {
+  // Trait payoffs (chain lightning, heat burst, mark detonation) never feed their own trait.
+  if (w.chaining) return;
+  switch (w.hero.trait) {
+    case "heat":
+      if (w.overheat > 0) {
+        fx(w, "boom", b.x, b.z, b.y + 30 * b.scale, { color: "#fb923c", life: 12, size: 0.6 });
+        break;
+      }
+      w.heat = Math.min(100, w.heat + 5);
+      if (w.heat >= 100) {
+        w.overheat = 480;
+        fx(w, "ring", a.x, a.z, 30, { color: "#f97316", life: 30, size: 2.4 });
+        fx(w, "text", a.x, a.z, 100, { text: "OVERHEAT!", color: "#fb923c", life: 60, size: 1.4 });
+        w.events.push({ type: "overheat" });
+      }
+      break;
+    case "charge":
+      if (++w.charge >= 5) {
+        w.charge = 0;
+        w.chaining = true;
+        const near = foes(w, a)
+          .filter((o) => o !== b && Math.abs(o.x - b.x) < 180 && Math.abs(o.z - b.z) < 70)
+          .slice(0, 3);
+        for (const o of near) {
+          fx(w, "flashLine", o.x, o.z, 40, { color: "#bae6fd", life: 10, size: 0.8 });
+          const zap: HitDef = { at: 0, len: 1, x: [0, 0], z: 999, y: [-99, 999], dmg: 32, kind: "flinch", stun: 26, kb: 0.6, stop: 2, brk: 14, screen: true };
+          applyHit(w, a, o, zap, o.x >= b.x ? 1 : -1, false);
+        }
+        fx(w, "heavySpark", b.x, b.z, b.y + 34, { color: "#38bdf8", life: 14, size: 1.4, dir });
+        w.events.push({ type: "chain" });
+        w.chaining = false;
+      }
+      break;
+    case "mark":
+      if (b.hp > 0) {
+        b.mark = Math.min(3, b.mark + 1);
+        b.markT = 420;
+      }
+      break;
+    default:
+      break;
+  }
+}
+
 function damage(w: World, a: Actor, b: Actor, dmg: number, direct: boolean) {
   b.hp = Math.max(0, b.hp - dmg);
   if (direct) fx(w, "num", b.x, b.z, b.y + 60 * b.scale, { text: String(dmg), color: "#fde047", life: 36, size: 1.4 });
@@ -1120,7 +1319,7 @@ function enterGiant(w: World) {
   w.cds = [0, 0, 0];
   w.en = Math.max(w.en, 50);
   w.events.push({ type: "giant", boss: boss.id });
-  say(w, `거대 ${boss.name} 출현!`, "#f97316", "프리즘 킹로보 — 합체 출격!", 140);
+  say(w, `거대 ${boss.name} 출현!`, "#f97316", `${MECHA.name} — 합체 출격!`, 140);
 }
 
 function bossAI(w: World, b: Actor) {
@@ -1325,7 +1524,7 @@ function heroControl(w: World, h: Actor, inp: Input) {
     if (b.light && ci >= 0 && ci + 1 < chain.length) {
       b.light = 0;
       faceInput(h, inp);
-      startMove(w, h, chain[ci + 1]);
+      startMove(w, h, giant ? chain[ci + 1] : ammoGate(w, chain[ci + 1]));
       return;
     }
     if (b.light && ai >= 0 && ai + 1 < hd.air.length && h.y > 0) {
@@ -1403,7 +1602,7 @@ function heroControl(w: World, h: Actor, inp: Input) {
   if (b.light) {
     b.light = 0;
     faceInput(h, inp);
-    startMove(w, h, giant ? MECHA.chain[0] : w.running ? hd.dashAtk : hd.chain[0]);
+    startMove(w, h, giant ? MECHA.chain[0] : w.running ? hd.dashAtk : ammoGate(w, hd.chain[0]));
     w.running = false;
     return;
   }
@@ -1419,6 +1618,17 @@ function heroControl(w: World, h: Actor, inp: Input) {
   }
 }
 
+/** 아이언's light-chain shots spend rounds; an empty magazine turns the press into a reload. */
+function ammoGate(w: World, m: MoveDef): MoveDef {
+  if (w.hero.trait !== "ammo" || !w.hero.chain.includes(m)) return m;
+  if (w.ammo <= 0) {
+    fx(w, "text", heroActor(w).x, heroActor(w).z, 80, { text: "재장전!", color: "#fbbf24", life: 30 });
+    return RELOAD_MOVE;
+  }
+  w.ammo--;
+  return m;
+}
+
 function faceInput(h: Actor, inp: Input) {
   if (inp.mx) h.face = inp.mx;
 }
@@ -1432,6 +1642,7 @@ function startDodge(w: World, h: Actor, inp: Input) {
   h.vx = dir * sp;
   h.vz = h.kind === "mecha" ? 0 : inp.mz * 3.2;
   w.running = false;
+  if (w.hero.trait === "ammo" && h.kind === "hero") w.ammo = Math.min(IRON_MAG, w.ammo + 3);
 }
 
 function cutIn(w: World, h: Actor, m: MoveDef, who: CutIn["heroId"], color: string) {
@@ -1588,7 +1799,7 @@ function explodeDrone(w: World, d: Actor) {
   w.shake = Math.max(w.shake, 10);
   w.events.push({ type: "explode", big: false });
   for (const b of w.actors) {
-    if (b === d || b.state === "dead" || b.state === "gone" || b.kind === "crate" || b.kind === "assist") continue;
+    if (b === d || b.state === "dead" || b.state === "gone" || b.kind === "crate" || b.kind === "assist" || b.kind === "turret") continue;
     if (Math.abs(b.x - d.x) > 64 || Math.abs(b.z - d.z) > 34) continue;
     if (b.invuln > 0) {
       if (b.kind === "hero" && b.state === "dodge") perfectDodge(w, b);
@@ -1701,6 +1912,22 @@ function tickActor(w: World, a: Actor) {
       break;
   }
   if (a.state === "attack") tickMove(w, a);
+  if (a.markT > 0 && --a.markT === 0) a.mark = 0;
+  if (a.kind === "turret") {
+    if (--a.life <= 0) {
+      a.state = "gone";
+      fx(w, "smoke", a.x, a.z, 10, { color: "#94a3b8", life: 20 });
+      return;
+    }
+    if (a.t % 20 === 0) {
+      const t = nearestFoe(w, a, 520);
+      if (t) {
+        a.face = t.x >= a.x ? 1 : -1;
+        addProj(w, a, { kind: "shot", x: a.x + a.face * 14, z: a.z, y: 22, vx: 11 * a.face, vz: Math.sign(t.z - a.z) * Math.min(1.5, Math.abs(t.z - a.z) / 20), life: 46, hit: { r: 12, dmg: 14, kind: "flinch", stun: 14, kb: 0.8, stop: 1, brk: 6, z: 18 } });
+      }
+    }
+    return;
+  }
   if (a.kind === "clone" && a.life > 0 && --a.life === 0) a.state = "gone";
   if (a.kind === "assist" && a.state !== "attack") {
     a.vy = 8;
@@ -1722,11 +1949,35 @@ function tickProjs(w: World) {
         p.y = o.y + 40 * o.scale;
       }
       if (p.t % 6 === 0) p.hitIds = [];
+    } else if (p.kind === "flame") {
+      if (p.t % 15 === 0) p.hitIds = [];
     } else if (p.kind === "pillar") {
       if (p.t === p.warn) w.events.push({ type: "explode", big: false });
     } else {
       if (p.kind === "rock" && p.t < p.warn) continue;
-      if (p.home > 0) {
+      if (p.home > 0 && p.kind === "missile") {
+        let tgt: Actor | null = null;
+        let bd = 1e9;
+        for (const b of w.actors) {
+          if (b.team === p.team || b.kind === "crate" || b.state === "dead" || b.state === "gone" || b.hp <= 0) continue;
+          const d = Math.abs(b.x - p.x) + Math.abs(b.z - p.z);
+          if (d < bd) {
+            bd = d;
+            tgt = b;
+          }
+        }
+        if (tgt && p.t > 10) {
+          p.vx += Math.sign(tgt.x - p.x) * p.home;
+          p.vz += Math.sign(tgt.z - p.z) * p.home * 0.5;
+          p.vy += Math.sign(tgt.y + 30 * tgt.scale - p.y) * p.home * 0.6;
+        }
+        const sp = Math.hypot(p.vx, p.vy, p.vz);
+        if (sp > 7) {
+          p.vx *= 7 / sp;
+          p.vy *= 7 / sp;
+          p.vz *= 7 / sp;
+        }
+      } else if (p.home > 0) {
         const tgt = p.team === 1 ? heroActor(w) : null;
         if (tgt) {
           p.vx += Math.sign(tgt.x - p.x) * p.home;
@@ -1743,7 +1994,7 @@ function tickProjs(w: World) {
       p.x += p.vx;
       p.y += p.vy;
       p.z = Math.max(4, Math.min(Z_MAX - 4, p.z + p.vz));
-      if ((p.kind === "bomb" || p.kind === "grenade" || p.kind === "rock") && p.y <= 0) {
+      if ((p.kind === "bomb" || p.kind === "grenade" || p.kind === "rock" || p.kind === "missile") && p.y <= 0) {
         blast(w, p);
         p.life = 0;
         continue;
@@ -1758,7 +2009,7 @@ function tickProjs(w: World) {
       // Thrown explosives only detonate on impact with the ground or a body.
     }
     for (const b of w.actors) {
-      if (b.team === p.team || b.state === "dead" || b.state === "gone" || b.kind === "assist") continue;
+      if (b.team === p.team || b.state === "dead" || b.state === "gone" || b.kind === "assist" || b.kind === "turret") continue;
       if (p.hitIds.includes(b.id)) continue;
       if (!projOverlaps(p, b)) continue;
       if (p.blast) {
@@ -1801,6 +2052,7 @@ function projOverlaps(p: Proj, b: Actor): boolean {
     return b.x + BODY_R * b.scale >= from && b.x - BODY_R * b.scale <= to && Math.abs(bodyMid - p.y) < p.hit.r + 40 * b.scale;
   }
   if (p.kind === "wave") return Math.abs(b.x - p.x) < r && b.y < 20;
+  if (p.kind === "flame") return Math.abs(b.x - p.x) < r && b.y < 30;
   if (p.kind === "pillar") return Math.abs(b.x - p.x) < r;
   return Math.abs(b.x - p.x) < r && Math.abs(bodyMid - p.y) < p.hit.r + 34 * b.scale;
 }
@@ -1811,7 +2063,7 @@ function blast(w: World, p: Proj) {
   w.events.push({ type: "explode", big: false });
   const owner = w.actors.find((a) => a.id === p.owner);
   for (const b of w.actors) {
-    if (b.team === p.team || b.state === "dead" || b.state === "gone" || b.kind === "assist" || b.state === "held") continue;
+    if (b.team === p.team || b.state === "dead" || b.state === "gone" || b.kind === "assist" || b.kind === "turret" || b.state === "held") continue;
     if (Math.abs(b.x - p.x) > p.blast + BODY_R * b.scale || Math.abs(b.z - p.z) > p.hit.z + 6) continue;
     if (b.state === "down" || b.hidden > 0) continue;
     if (b.invuln > 0 || b.untouchable) {
@@ -1882,7 +2134,7 @@ function tickHeroLife(w: World, h: Actor) {
     h.state = "dead";
     h.t = 0;
     w.combo = 0;
-    say(w, h.kind === "mecha" ? "킹로보 기능 정지…" : "변신 해제…!", "#f87171", undefined, 80);
+    say(w, h.kind === "mecha" ? `${MECHA.name} 기능 정지…` : "변신 해제…!", "#f87171", undefined, 80);
   }
   if (h.t < 90) return;
   if (w.lives <= 0) {
@@ -1902,7 +2154,7 @@ function tickHeroLife(w: World, h: Actor) {
   h.invuln = 180;
   w.en = Math.max(w.en, 60);
   w.prism = Math.min(PRISM_MAX, w.prism + 30);
-  say(w, h.kind === "mecha" ? "킹로보 재기동!" : "재변신 — 프리즘 체인지!", w.hero.color, `남은 변신 ${w.lives}`, 90);
+  say(w, h.kind === "mecha" ? `${MECHA.name} 재기동!` : `재변신 — ${w.hero.henshin}`, w.hero.color, `남은 변신 ${w.lives}`, 90);
   w.events.push({ type: "henshin" });
   // Shockwave clears space.
   for (const e of w.actors)
@@ -2046,6 +2298,12 @@ export function step(w: World, inp: Input) {
   // Timers.
   for (let i = 0; i < 3; i++) if (w.cds[i] > 0) w.cds[i]--;
   w.en = Math.min(EN_MAX, w.en + 1 / 30);
+  if (w.overheat > 0 && --w.overheat === 0) w.heat = 0;
+  else if (w.overheat <= 0 && w.heat > 0 && w.comboT === 0) w.heat = Math.max(0, w.heat - 0.08);
+  if (w.regenT > 0) {
+    w.regenT--;
+    if (h.hp > 0 && h.kind === "hero" && w.regenT % 6 === 0) h.hp = Math.min(h.maxHp, h.hp + Math.ceil(h.maxHp * 0.003));
+  }
   if (w.comboT > 0 && --w.comboT === 0) {
     if (w.combo >= 5) endCombo(w);
     w.combo = 0;
@@ -2136,7 +2394,7 @@ function tickVents(w: World, h: Actor) {
   if (w.ventT === 60) w.events.push({ type: "explode", big: false });
   for (const vx of ventXs(w)) {
     for (const b of w.actors) {
-      if (b.state === "dead" || b.state === "gone" || b.kind === "crate" || b.kind === "assist" || b.kind === "boss") continue;
+      if (b.state === "dead" || b.state === "gone" || b.kind === "crate" || b.kind === "assist" || b.kind === "turret" || b.kind === "boss") continue;
       if (Math.abs(b.x - vx) > 22 || b.y > 30 || b.invuln > 0 || b.state === "down") continue;
       if (w.ventT % 20 !== 0) continue;
       const hit: HitDef = { at: 0, len: 1, x: [0, 0], z: 0, y: [0, 0], dmg: b.team === 0 ? 40 : 60, kind: "launch", lift: 6, kb: 1, stop: 3 };

@@ -11,6 +11,7 @@ import {
   DODGE_TICKS,
   ENEMIES,
   HEROES,
+  IRON_MAG,
   HERO_ORDER,
   MECHA,
   PRISM_MAX,
@@ -309,184 +310,491 @@ function torso(ctx: CanvasRenderingContext2D, s: Skel, p: Pose, color: string, w
   ctx.stroke();
 }
 
-function helmet(ctx: CanvasRenderingContext2D, s: Skel, p: Pose, color: string, visor: HeroDef["visor"]) {
+/** Set by drawWorld each frame so suits can glow with hero-trait state. */
+let traitGlow = { overheat: false, charge: 0 };
+
+/** Each hero's headgear is a different silhouette, not one helmet in five colours. */
+function heroHead(ctx: CanvasRenderingContext2D, s: Skel, p: Pose, h: HeroDef) {
   const [hx, hy] = s.head;
   ctx.save();
   ctx.translate(hx, hy);
   ctx.rotate(p.lean + p.head);
-  // Helmet shell.
-  ctx.beginPath();
-  ctx.ellipse(0, 0, 8.6, 10, 0, 0, Math.PI * 2);
-  ctx.fillStyle = color;
-  ctx.fill();
   ctx.lineWidth = 1.5;
   ctx.strokeStyle = "#0b0b12";
-  ctx.stroke();
-  // Shine.
-  ctx.beginPath();
-  ctx.ellipse(-2.5, -4.5, 3, 2, -0.5, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(255,255,255,0.45)";
-  ctx.fill();
-  // Visor (front = +x).
-  ctx.fillStyle = "#0b0b12";
-  ctx.beginPath();
-  switch (visor) {
-    case "v":
-      ctx.moveTo(0.5, -3.5);
-      ctx.lineTo(8.6, -1);
-      ctx.lineTo(8.6, 3);
-      ctx.lineTo(3.5, 0.5);
-      ctx.lineTo(1, 4.2);
+  switch (h.gear) {
+    case "crest": {
+      // 블레이즈: swept-back flame crest, amber T-slit, dark jaw guard.
+      ctx.fillStyle = h.trim;
+      ctx.beginPath();
+      ctx.moveTo(2, -8);
+      ctx.quadraticCurveTo(-8, -20, -18, -14);
+      ctx.quadraticCurveTo(-10, -12, -9, -8);
+      ctx.quadraticCurveTo(-16, -8, -20, -2);
+      ctx.quadraticCurveTo(-10, -4, -6, -2);
       ctx.closePath();
-      break;
-    case "diamond":
-      ctx.moveTo(1.5, 0);
-      ctx.lineTo(5.5, -4.5);
-      ctx.lineTo(9, 0);
-      ctx.lineTo(5.5, 4.5);
-      ctx.closePath();
-      break;
-    case "bar":
-      ctx.rect(1, -3, 8, 5);
-      break;
-    case "arch":
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 8.8, 10, 0, 0, Math.PI * 2);
+      ctx.fillStyle = h.color;
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#1c1917";
+      ctx.beginPath();
       ctx.moveTo(1, 3);
-      ctx.quadraticCurveTo(5, -7, 9, 3);
-      ctx.lineTo(9, 4);
-      ctx.lineTo(1, 4);
+      ctx.lineTo(9, 2);
+      ctx.lineTo(8, 9);
+      ctx.lineTo(2, 9);
       ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = traitGlow.overheat ? "#fef08a" : "#fbbf24";
+      ctx.fillRect(1.5, -2.2, 7.5, 2.4);
+      ctx.fillRect(4.6, -2.2, 1.6, 6);
       break;
-    case "heart":
-      ctx.moveTo(5, 4.5);
-      ctx.bezierCurveTo(-1, 0, 2, -6, 5, -2);
-      ctx.bezierCurveTo(8, -6, 11, 0, 5, 4.5);
+    }
+    case "hood": {
+      // 볼트: pointed hood over a dark face recess with a cyan eye line.
+      ctx.fillStyle = h.color;
+      ctx.beginPath();
+      ctx.moveTo(9, 6);
+      ctx.quadraticCurveTo(10, -12, -2, -12);
+      ctx.quadraticCurveTo(-12, -11, -15, 2);
+      ctx.lineTo(-9, 9);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#0b1220";
+      ctx.beginPath();
+      ctx.ellipse(4, 1, 5, 6.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#67e8f9";
+      ctx.fillRect(2, -1, 7, 1.8);
+      ctx.strokeStyle = h.trim;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(-4, -9);
+      ctx.lineTo(-7, -3);
+      ctx.lineTo(-4, -3);
+      ctx.lineTo(-8, 4);
+      ctx.stroke();
       break;
+    }
+    case "goggles": {
+      // 아이언: boxy gunmetal helmet, twin round goggles, rebreather.
+      ctx.fillStyle = "#475569";
+      ctx.beginPath();
+      ctx.roundRect(-9, -10, 18, 19, 4);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = h.color;
+      ctx.fillRect(-9, -10, 18, 4);
+      for (const gx of [2.5, 7.5]) {
+        ctx.beginPath();
+        ctx.arc(gx, -1, 3, 0, Math.PI * 2);
+        ctx.fillStyle = "#fbbf24";
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(3, 4, 7, 5);
+      ctx.fillStyle = "#94a3b8";
+      ctx.fillRect(4, 5.5, 5, 1);
+      ctx.fillRect(4, 7.5, 5, 1);
+      break;
+    }
+    case "stone": {
+      // 테라: craggy stone mask with moss and glowing green slits.
+      ctx.fillStyle = "#78716c";
+      ctx.beginPath();
+      ctx.moveTo(-9, -6);
+      ctx.lineTo(-4, -12);
+      ctx.lineTo(5, -11);
+      ctx.lineTo(10, -4);
+      ctx.lineTo(9, 7);
+      ctx.lineTo(2, 11);
+      ctx.lineTo(-7, 9);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = h.color;
+      ctx.beginPath();
+      ctx.moveTo(-9, -6);
+      ctx.lineTo(-4, -12);
+      ctx.lineTo(3, -11);
+      ctx.lineTo(-2, -6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "rgba(28,25,23,0.6)";
+      ctx.beginPath();
+      ctx.moveTo(-6, 2);
+      ctx.lineTo(-2, 5);
+      ctx.lineTo(-4, 9);
+      ctx.stroke();
+      ctx.fillStyle = "#a3e635";
+      ctx.fillRect(2, -3, 6, 2);
+      ctx.fillRect(2, 1, 4, 1.5);
+      break;
+    }
+    case "hair": {
+      // 세이렌: flowing ponytail, face with a domino mask and a wave tiara.
+      const sway = Math.sin((s.head[0] + s.head[1]) * 0.05) * 3;
+      ctx.fillStyle = "#4c1d95";
+      ctx.beginPath();
+      ctx.moveTo(-6, -8);
+      ctx.quadraticCurveTo(-22, -6 + sway, -24, 12 + sway);
+      ctx.quadraticCurveTo(-16, 4, -6, 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(1, 0, 7.6, 9, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#f2d0b5";
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#4c1d95";
+      ctx.beginPath();
+      ctx.moveTo(-7, 3);
+      ctx.quadraticCurveTo(-8, -10, 2, -10);
+      ctx.quadraticCurveTo(9, -10, 9, -3);
+      ctx.quadraticCurveTo(2, -7, -3, -2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = h.color;
+      ctx.beginPath();
+      ctx.moveTo(1, -2);
+      ctx.quadraticCurveTo(5, -4, 9.5, -2);
+      ctx.lineTo(9, 1.5);
+      ctx.quadraticCurveTo(5, 0, 1, 1.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(6, -1.2, 1.6, 1.4);
+      ctx.strokeStyle = h.trim;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(-4, -9);
+      ctx.quadraticCurveTo(0, -13, 2, -10);
+      ctx.quadraticCurveTo(4, -14, 7, -9);
+      ctx.stroke();
+      ctx.fillStyle = "#be185d";
+      ctx.fillRect(6, 5, 3, 1.2);
+      break;
+    }
   }
-  ctx.fill();
-  // Mouth plate.
-  ctx.fillStyle = "#e5e7eb";
-  ctx.fillRect(3.5, 5, 4.5, 3);
   ctx.restore();
 }
 
 function heroSkin(h: HeroDef): Skin {
   return {
     suit: h.color,
-    suitDark: shade(h.color, 0.62),
-    glove: "#f8fafc",
-    boot: "#f8fafc",
-    bulk: h.id === "green" ? 1.06 : 1,
-    head: (ctx, s, p) => helmet(ctx, s, p, h.color, h.visor),
+    suitDark: shade(h.color, 0.6),
+    glove: h.glove,
+    boot: h.boot,
+    bulk: h.bulk,
+    head: (ctx, s, p) => heroHead(ctx, s, p, h),
+    back: (ctx, s, p) => {
+      if (h.gear === "crest") {
+        // Long battle scarf streaming behind.
+        const wave = Math.sin((s.neck[0] + s.neck[1]) * 0.08 + p.lean * 3) * 4;
+        ctx.fillStyle = h.trim;
+        ctx.beginPath();
+        ctx.moveTo(s.neck[0] - 2, s.neck[1] + 1);
+        ctx.quadraticCurveTo(s.neck[0] - 18, s.neck[1] + 4 + wave, s.neck[0] - 30, s.neck[1] + 12 - wave);
+        ctx.lineTo(s.neck[0] - 26, s.neck[1] + 17 - wave);
+        ctx.quadraticCurveTo(s.neck[0] - 14, s.neck[1] + 9, s.neck[0] + 1, s.neck[1] + 5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = "#0b0b12";
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      } else if (h.gear === "goggles") {
+        // Equipment backpack with antenna.
+        ctx.save();
+        ctx.translate((s.neck[0] + s.hip[0]) / 2, (s.neck[1] + s.hip[1]) / 2);
+        ctx.rotate(p.lean);
+        ctx.fillStyle = "#334155";
+        ctx.strokeStyle = "#0b0b12";
+        ctx.lineWidth = 1.5;
+        ctx.fillRect(-17, -11, 10, 18);
+        ctx.strokeRect(-17, -11, 10, 18);
+        ctx.fillStyle = h.color;
+        ctx.fillRect(-17, -4, 10, 3);
+        ctx.beginPath();
+        ctx.moveTo(-14, -11);
+        ctx.lineTo(-16, -22);
+        ctx.stroke();
+        dot(ctx, [-16, -23], 1.6, "#ef4444");
+        ctx.restore();
+      } else if (h.gear === "hair") {
+        // Two coat tails.
+        const sw = Math.sin((s.hip[0] + s.hip[1]) * 0.07) * 3;
+        ctx.fillStyle = h.color;
+        ctx.strokeStyle = "#0b0b12";
+        ctx.lineWidth = 1.2;
+        for (const [off, col] of [[0, h.color], [5, h.trim]] as [number, string][]) {
+          ctx.fillStyle = col;
+          ctx.beginPath();
+          ctx.moveTo(s.hip[0] - 2, s.hip[1] - 4);
+          ctx.quadraticCurveTo(s.hip[0] - 12 - off, s.hip[1] + 8, s.hip[0] - 16 - off + sw, s.hip[1] + 22);
+          ctx.lineTo(s.hip[0] - 8 - off + sw, s.hip[1] + 20);
+          ctx.quadraticCurveTo(s.hip[0] - 4, s.hip[1] + 8, s.hip[0] + 3, s.hip[1] - 2);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
+      }
+    },
     chest: (ctx, s, p) => {
-      // White shoulder stripes + prism emblem + belt.
       const mid: Pt = [(s.neck[0] + s.hip[0]) / 2, (s.neck[1] + s.hip[1]) / 2];
       ctx.save();
       ctx.translate(mid[0], mid[1]);
       ctx.rotate(p.lean);
-      ctx.fillStyle = "#f8fafc";
-      ctx.beginPath();
-      ctx.moveTo(-1, -6);
-      ctx.lineTo(5, -6);
-      ctx.lineTo(2, 0);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,0.85)";
-      ctx.fillRect(-7, -11, 14, 2.2);
-      ctx.fillStyle = "#f8fafc";
-      ctx.fillRect(-6.5, 8, 13, 3.4);
-      const g = ctx.createLinearGradient(-3, 7, 3, 12);
-      g.addColorStop(0, "#f472b6");
-      g.addColorStop(0.5, "#facc15");
-      g.addColorStop(1, "#38bdf8");
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(1.5, 9.7, 3.1, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.strokeStyle = "#0b0b12";
+      ctx.lineWidth = 1;
+      switch (h.trait) {
+        case "heat":
+          // Dark breastplate with a flame emblem.
+          ctx.fillStyle = "#1c1917";
+          ctx.fillRect(-8, -10, 16, 8);
+          ctx.fillStyle = traitGlow.overheat ? "#fde047" : h.trim;
+          ctx.beginPath();
+          ctx.moveTo(0, -11);
+          ctx.quadraticCurveTo(5, -6, 2, -3);
+          ctx.quadraticCurveTo(0, -6, -1, -3);
+          ctx.quadraticCurveTo(-5, -6, 0, -11);
+          ctx.fill();
+          ctx.fillStyle = "#1c1917";
+          ctx.fillRect(-7, 8, 14, 3);
+          break;
+        case "charge": {
+          // Light jacket front + bolt.
+          ctx.fillStyle = h.trim;
+          ctx.fillRect(-1.5, -11, 3, 20);
+          const on = traitGlow.charge;
+          ctx.fillStyle = on >= 4 ? "#fef9c3" : "#67e8f9";
+          ctx.beginPath();
+          ctx.moveTo(2, -9);
+          ctx.lineTo(-3, -1);
+          ctx.lineTo(1, -1);
+          ctx.lineTo(-2, 7);
+          ctx.lineTo(5, -3);
+          ctx.lineTo(1, -3);
+          ctx.closePath();
+          ctx.fill();
+          break;
+        }
+        case "ammo":
+          // Bandolier + hazard plate.
+          ctx.fillStyle = "#1e293b";
+          ctx.save();
+          ctx.rotate(-0.6);
+          ctx.fillRect(-12, -2, 24, 4);
+          ctx.fillStyle = "#fbbf24";
+          for (let i = -10; i < 12; i += 4) ctx.fillRect(i, -1.5, 2, 3);
+          ctx.restore();
+          ctx.fillStyle = "#64748b";
+          ctx.fillRect(-7, 6, 14, 5);
+          break;
+        case "stoneSkin":
+          // Rock plates over the chest.
+          ctx.fillStyle = "#a8a29e";
+          ctx.beginPath();
+          ctx.moveTo(-9, -11);
+          ctx.lineTo(2, -12);
+          ctx.lineTo(4, -4);
+          ctx.lineTo(-8, -2);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(4, -9);
+          ctx.lineTo(9, -6);
+          ctx.lineTo(8, 2);
+          ctx.lineTo(3, 0);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = "#57534e";
+          ctx.fillRect(-8, 8, 16, 4);
+          break;
+        case "mark":
+          // Wrap-dress sash with a wave.
+          ctx.fillStyle = h.trim;
+          ctx.beginPath();
+          ctx.moveTo(-8, -11);
+          ctx.lineTo(-3, -11);
+          ctx.lineTo(8, 9);
+          ctx.lineTo(3, 9);
+          ctx.closePath();
+          ctx.fill();
+          ctx.strokeStyle = "#ecfeff";
+          ctx.lineWidth = 1.3;
+          ctx.beginPath();
+          ctx.moveTo(-6, 4);
+          ctx.quadraticCurveTo(-3, 1, 0, 4);
+          ctx.quadraticCurveTo(3, 7, 6, 4);
+          ctx.stroke();
+          break;
+      }
       ctx.restore();
+      if (h.gear === "stone") {
+        // Boulder pauldron on the near shoulder.
+        ctx.fillStyle = "#78716c";
+        ctx.strokeStyle = "#0b0b12";
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(s.sh[0] - 8, s.sh[1] + 2);
+        ctx.lineTo(s.sh[0] - 5, s.sh[1] - 8);
+        ctx.lineTo(s.sh[0] + 6, s.sh[1] - 9);
+        ctx.lineTo(s.sh[0] + 10, s.sh[1] - 1);
+        ctx.lineTo(s.sh[0] + 4, s.sh[1] + 5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
     },
     weapon: (ctx, s, p, a) => heroWeapon(ctx, s, p, a, h),
   };
 }
 
-function heroWeapon(ctx: CanvasRenderingContext2D, s: Skel, p: Pose, a: Actor | null, h: HeroDef) {
+function heroWeapon(ctx: CanvasRenderingContext2D, s: Skel, _p: Pose, a: Actor | null, h: HeroDef) {
   const ang = s.foreN;
   const anim = a?.move?.anim ?? a?.next?.anim;
   const hand = s.handN;
-  switch (h.id) {
-    case "red": {
-      const tip = add(hand, ang, 34);
-      limb(ctx, [hand, tip], 3.2, "#e2e8f0");
-      ctx.strokeStyle = "rgba(255,120,120,0.7)";
-      ctx.lineWidth = 1;
+  const attacking = a?.state === "attack";
+  switch (h.trait) {
+    case "heat": {
+      // Broad greatsword with a molten edge.
+      const tip = add(hand, ang, 44);
+      const nx = Math.cos(ang);
+      const ny = -Math.sin(ang);
+      const base = add(hand, ang, 5);
       ctx.beginPath();
-      ctx.moveTo(...add(hand, ang, 4));
-      ctx.lineTo(...tip);
+      ctx.moveTo(base[0] + nx * 4, base[1] + ny * 4);
+      ctx.lineTo(tip[0] + nx * 2.5, tip[1] + ny * 2.5);
+      ctx.lineTo(...add(tip, ang, 5));
+      ctx.lineTo(tip[0] - nx * 2.5, tip[1] - ny * 2.5);
+      ctx.lineTo(base[0] - nx * 4, base[1] - ny * 4);
+      ctx.closePath();
+      ctx.fillStyle = "#3f3f46";
+      ctx.fill();
+      ctx.strokeStyle = "#0b0b12";
+      ctx.lineWidth = 1.4;
       ctx.stroke();
-      limb(ctx, [add(hand, ang + 1.57, 4), add(hand, ang - 1.57, 4)], 2.2, "#facc15");
-      break;
-    }
-    case "blue":
-      dot(ctx, hand, 4.4, "#60a5fa");
-      dot(ctx, s.handF, 3.8, "#3b82f6");
-      if (a?.state === "attack") {
-        ctx.fillStyle = "rgba(147,197,253,0.35)";
+      ctx.strokeStyle = traitGlow.overheat ? "#fde047" : h.trim;
+      ctx.lineWidth = traitGlow.overheat ? 2.4 : 1.4;
+      ctx.beginPath();
+      ctx.moveTo(base[0] + nx * 3.6, base[1] + ny * 3.6);
+      ctx.lineTo(tip[0] + nx * 2.2, tip[1] + ny * 2.2);
+      ctx.stroke();
+      limb(ctx, [add(hand, ang + 1.57, 6), add(hand, ang - 1.57, 6)], 2.6, "#7f1d1d");
+      if (traitGlow.overheat || (attacking && anim !== "dash")) {
+        ctx.fillStyle = "rgba(251,146,60,0.35)";
         ctx.beginPath();
-        ctx.arc(hand[0], hand[1], 8, 0, Math.PI * 2);
+        ctx.arc(tip[0], tip[1], traitGlow.overheat ? 9 : 6, 0, Math.PI * 2);
         ctx.fill();
       }
       break;
-    case "yellow": {
-      const muzzle = add(hand, ang, 16);
-      limb(ctx, [add(hand, ang, -2), muzzle], 5, "#334155");
-      limb(ctx, [add(hand, ang, 2), add(hand, ang, 12)], 2, "#facc15", "#334155");
-      if (anim === "shoot" && a && a.moveT < 8 && a.state === "attack") dot(ctx, add(muzzle, ang, 3), 4, "#fef08a", "#facc15");
-      break;
     }
-    case "green": {
-      const top = add(hand, ang, 24);
-      limb(ctx, [add(hand, ang, -5), top], 2.8, "#a16207");
-      ctx.save();
-      ctx.translate(top[0], top[1]);
-      ctx.rotate(-ang);
-      ctx.fillStyle = "#94a3b8";
-      ctx.strokeStyle = "#0b0b12";
-      ctx.lineWidth = 1.5;
-      ctx.fillRect(-10, -6, 20, 12);
-      ctx.strokeRect(-10, -6, 20, 12);
-      ctx.fillStyle = "#16a34a";
-      ctx.fillRect(-10, -2, 20, 4);
-      ctx.restore();
-      break;
-    }
-    case "pink":
-      if (anim === "whip" && a?.state === "attack") {
-        const m = a.move;
-        const reach = m ? Math.max(...m.hits.map((x) => x.x[1]), 80) : 80;
-        const k = Math.min(1, a.moveT / 9);
-        ctx.strokeStyle = "#f9a8d4";
-        ctx.lineWidth = 2.6;
+    case "charge": {
+      // Plasma gauntlets crackling with charge.
+      for (const hp of [hand, s.handF]) {
+        dot(ctx, hp, 5, "#0c4a6e");
+        dot(ctx, hp, 3, traitGlow.charge >= 4 ? "#fef9c3" : "#7dd3fc", "#0c4a6e");
+      }
+      if (attacking || traitGlow.charge >= 4) {
+        ctx.strokeStyle = "#e0f2fe";
+        ctx.lineWidth = 1.2;
         ctx.beginPath();
-        ctx.moveTo(hand[0], hand[1]);
-        const n = 14;
-        for (let i = 1; i <= n; i++) {
-          const f = i / n;
-          ctx.lineTo(hand[0] + f * reach * k, hand[1] + Math.sin(f * 9 + a.moveT * 0.8) * 5 * (1 - f * 0.4) - f * 6);
-        }
-        ctx.stroke();
-      } else {
-        ctx.strokeStyle = "#f9a8d4";
-        ctx.lineWidth = 2.2;
-        ctx.beginPath();
-        ctx.arc(hand[0] + 2, hand[1], 11, -1.2, 1.2);
-        ctx.stroke();
-        ctx.strokeStyle = "rgba(255,255,255,0.8)";
-        ctx.lineWidth = 0.8;
-        ctx.beginPath();
-        ctx.moveTo(hand[0] + 6.5, hand[1] - 10);
-        ctx.lineTo(hand[0] + 6.5, hand[1] + 10);
+        ctx.moveTo(hand[0] - 4, hand[1] - 6);
+        ctx.lineTo(hand[0] + 2, hand[1] - 2);
+        ctx.lineTo(hand[0] - 1, hand[1] + 1);
+        ctx.lineTo(hand[0] + 6, hand[1] + 6);
         ctx.stroke();
       }
       break;
+    }
+    case "ammo": {
+      // Gatling arm cannon: three barrels on a drum.
+      ctx.save();
+      ctx.translate(hand[0], hand[1]);
+      ctx.rotate(-ang + Math.PI / 2);
+      ctx.fillStyle = "#334155";
+      ctx.strokeStyle = "#0b0b12";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.roundRect(-6, -7, 12, 14, 3);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#94a3b8";
+      for (const by of [-4, 0, 4]) ctx.fillRect(5, by - 1.2, 16, 2.4);
+      ctx.fillStyle = h.color;
+      ctx.fillRect(-6, -2, 12, 4);
+      if (anim === "shoot" && attacking && a && a.moveT % 4 < 2) dot(ctx, [23, 0], 3.5, "#fef08a", "#f59e0b");
+      ctx.restore();
+      break;
+    }
+    case "stoneSkin": {
+      // Boulder fists + stone maul.
+      dot(ctx, s.handF, 6, "#78716c");
+      const top = add(hand, ang, 24);
+      limb(ctx, [add(hand, ang, -4), top], 3.2, "#57534e");
+      ctx.save();
+      ctx.translate(top[0], top[1]);
+      ctx.rotate(-ang);
+      ctx.fillStyle = "#a8a29e";
+      ctx.strokeStyle = "#0b0b12";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-12, -5);
+      ctx.lineTo(-8, -8);
+      ctx.lineTo(9, -7);
+      ctx.lineTo(12, 1);
+      ctx.lineTo(8, 7);
+      ctx.lineTo(-10, 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = h.color;
+      ctx.fillRect(-4, -7, 5, 3);
+      ctx.restore();
+      dot(ctx, hand, 6, "#78716c");
+      break;
+    }
+    case "mark": {
+      // Twin folding fans; a water trail while slashing.
+      for (const [hp, an] of [[s.handF, s.foreF], [hand, ang]] as [Pt, number][]) {
+        ctx.save();
+        ctx.translate(hp[0], hp[1]);
+        ctx.rotate(-an);
+        ctx.fillStyle = h.trim;
+        ctx.strokeStyle = "#0b0b12";
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, 13, 0.6, 2.55);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.strokeStyle = h.color;
+        for (let k = 0.8; k < 2.5; k += 0.35) {
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(Math.cos(k) * 12, Math.sin(k) * 12);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      if (attacking && (anim === "whip" || anim === "spin" || anim === "slashB") && a) {
+        const k = Math.min(1, a.moveT / 8);
+        ctx.strokeStyle = "rgba(94,234,212,0.75)";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(s.sh[0], s.sh[1], 30, -1.4, -1.4 + 2.6 * k);
+        ctx.stroke();
+      }
+      break;
+    }
   }
 }
 
@@ -895,6 +1203,10 @@ function drawActor(ctx: CanvasRenderingContext2D, w: World, a: Actor, camX: numb
     drawCrate(ctx, sx, gy, ds);
     return;
   }
+  if (a.kind === "turret") {
+    drawTurret(ctx, sx, gy, a);
+    return;
+  }
   if (a.hidden > 0) {
     ctx.globalAlpha = 0.15;
   }
@@ -963,6 +1275,22 @@ function drawActor(ctx: CanvasRenderingContext2D, w: World, a: Actor, camX: numb
       ctx.stroke();
     }
   }
+  // 세이렌's water marks.
+  if (a.mark > 0 && a.state !== "dead") {
+    for (let i = 0; i < a.mark; i++) {
+      const mx = sx + (i - (a.mark - 1) / 2) * 9;
+      const my = sy - 92 * ds - 4;
+      ctx.fillStyle = "#5eead4";
+      ctx.strokeStyle = "#0b0b12";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(mx, my - 6);
+      ctx.quadraticCurveTo(mx + 4.5, my, mx, my + 3);
+      ctx.quadraticCurveTo(mx - 4.5, my, mx, my - 6);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
   // Dizzy stars.
   if (a.state === "stunned") {
     for (let i = 0; i < 3; i++) {
@@ -1021,6 +1349,32 @@ function drawActor(ctx: CanvasRenderingContext2D, w: World, a: Actor, camX: numb
       ctx.fillRect(sx - bw / 2, sy - 86 * ds + 3, (bw * a.breakG) / a.breakMax, 2);
     }
   }
+}
+
+function drawTurret(ctx: CanvasRenderingContext2D, sx: number, gy: number, a: Actor) {
+  ctx.strokeStyle = "#1e293b";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(sx, gy - 14);
+  ctx.lineTo(sx - 10, gy);
+  ctx.moveTo(sx, gy - 14);
+  ctx.lineTo(sx + 10, gy);
+  ctx.moveTo(sx, gy - 14);
+  ctx.lineTo(sx, gy);
+  ctx.stroke();
+  ctx.fillStyle = "#475569";
+  ctx.strokeStyle = "#0b0b12";
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.roundRect(sx - 9, gy - 26, 18, 13, 3);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#94a3b8";
+  ctx.fillRect(a.face > 0 ? sx + 8 : sx - 22, gy - 22, 14, 3);
+  ctx.fillStyle = a.life < 90 && Math.floor(a.t / 6) % 2 === 0 ? "#ef4444" : "#fbbf24";
+  ctx.beginPath();
+  ctx.arc(sx - a.face * 3, gy - 21, 2.2, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function drawCrate(ctx: CanvasRenderingContext2D, sx: number, gy: number, s: number) {
@@ -1129,8 +1483,88 @@ function drawProj(ctx: CanvasRenderingContext2D, w: World, p: Proj, camX: number
       ctx.fill();
       break;
     }
+    case "flame": {
+      const fade = Math.min(1, (p.life) / 30);
+      ctx.globalAlpha = fade;
+      for (let i = 0; i < 3; i++) {
+        const fl = 10 + Math.sin(p.t * 0.5 + i * 2) * 4;
+        ctx.fillStyle = i === 1 ? "#fde047" : "#f97316";
+        ctx.beginPath();
+        ctx.moveTo(sx - 12 + i * 8, gy);
+        ctx.quadraticCurveTo(sx - 10 + i * 8, gy - fl, sx - 6 + i * 8, gy - fl - 6);
+        ctx.quadraticCurveTo(sx - 2 + i * 8, gy - fl, sx - 4 + i * 8, gy);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case "missile": {
+      const ang = Math.atan2(-p.vy, p.vx);
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(ang);
+      ctx.fillStyle = "#e2e8f0";
+      ctx.strokeStyle = "#0b0b12";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(-7, -2.5, 14, 5, 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#ef4444";
+      ctx.fillRect(4, -2.5, 3, 5);
+      ctx.fillStyle = "#fb923c";
+      ctx.beginPath();
+      ctx.moveTo(-7, -2);
+      ctx.lineTo(-14 - Math.sin(p.t) * 3, 0);
+      ctx.lineTo(-7, 2);
+      ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = "rgba(203,213,225,0.35)";
+      ctx.beginPath();
+      ctx.arc(sx - p.vx * 3, sy + p.vy * 3, 4, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "tide": {
+      const d = p.vx >= 0 ? 1 : -1;
+      ctx.fillStyle = "rgba(45,212,191,0.65)";
+      ctx.strokeStyle = "#ecfeff";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(sx - d * 14, sy + 16);
+      ctx.quadraticCurveTo(sx + d * 16, sy + 10, sx + d * 8, sy - 18);
+      ctx.quadraticCurveTo(sx + d * 2, sy - 4, sx - d * 14, sy + 16);
+      ctx.fill();
+      ctx.stroke();
+      break;
+    }
     case "pillar": {
       const col = p.color ?? "#facc15";
+      if (p.team === 0) {
+        // 테라's rock spikes burst out of the ground.
+        if (p.t < p.warn) {
+          ctx.fillStyle = "rgba(87,83,78,0.5)";
+          ctx.beginPath();
+          ctx.ellipse(sx, gy, 14, 4, 0, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          const k = Math.min(1, (p.t - p.warn) / 4);
+          ctx.fillStyle = col;
+          ctx.strokeStyle = "#0b0b12";
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(sx - 16, gy);
+          ctx.lineTo(sx - 6, gy - 46 * k);
+          ctx.lineTo(sx, gy - 30 * k);
+          ctx.lineTo(sx + 7, gy - 54 * k);
+          ctx.lineTo(sx + 16, gy);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
+        break;
+      }
       if (p.t < p.warn) {
         const k = p.t / p.warn;
         ctx.strokeStyle = col;
@@ -1667,6 +2101,8 @@ function drawHud(ctx: CanvasRenderingContext2D, w: World, memo: RenderMemo, opts
       ctx.closePath();
       ctx.fill();
     }
+  // Hero trait gauge.
+  if (w.mode === "stage") drawTraitGauge(ctx, w);
   // Score, time, style.
   outlinedText(ctx, w.score.toLocaleString(), VIEW_W - 10, 22, "900 16px system-ui, sans-serif", "#fff", "right");
   const sec = Math.floor(w.time / 60);
@@ -1747,6 +2183,44 @@ function drawHud(ctx: CanvasRenderingContext2D, w: World, memo: RenderMemo, opts
   }
 }
 const COMBO_PULSE = 90;
+
+function drawTraitGauge(ctx: CanvasRenderingContext2D, w: World) {
+  const x = 8;
+  const y = 62;
+  ctx.fillStyle = "rgba(0,0,0,0.5)";
+  ctx.fillRect(x - 2, y - 2, 150, 14);
+  switch (w.hero.trait) {
+    case "heat": {
+      const over = w.overheat > 0;
+      outlinedText(ctx, over ? "OVERHEAT" : "열기", x + 2, y + 9, "900 9px system-ui, sans-serif", over ? "#fde047" : "#fb923c", "left", 2);
+      bar(ctx, x + 50, y + 2, 92, 6, over ? w.overheat / 480 : w.heat / 100, over ? "#fde047" : "#f97316");
+      break;
+    }
+    case "charge":
+      outlinedText(ctx, "전하", x + 2, y + 9, "900 9px system-ui, sans-serif", "#7dd3fc", "left", 2);
+      for (let i = 0; i < 5; i++) {
+        ctx.fillStyle = i < w.charge ? (w.charge >= 4 ? "#fef9c3" : "#38bdf8") : "rgba(255,255,255,0.15)";
+        ctx.fillRect(x + 50 + i * 18, y + 2, 15, 6);
+      }
+      break;
+    case "ammo":
+      outlinedText(ctx, w.ammo > 0 ? `탄 ${w.ammo}` : "재장전!", x + 2, y + 9, "900 9px system-ui, sans-serif", w.ammo > 0 ? "#e2e8f0" : "#fbbf24", "left", 2);
+      for (let i = 0; i < IRON_MAG; i++) {
+        ctx.fillStyle = i < w.ammo ? "#fbbf24" : "rgba(255,255,255,0.15)";
+        ctx.fillRect(x + 50 + i * 9, y + 1, 6, 8);
+      }
+      for (let i = 0; i < w.shieldHits; i++) dot(ctx, [x + 152 + i * 9, y + 5], 3.4, "#94a3b8");
+      break;
+    case "stoneSkin":
+      outlinedText(ctx, w.actors.some((a) => a.kind === "hero" && a.ironWall > 0) ? "돌 피부 · 철벽 -70%" : "돌 피부 -15%", x + 2, y + 9, "900 9px system-ui, sans-serif", "#a3e635", "left", 2);
+      break;
+    case "mark": {
+      const marks = w.actors.reduce((n, a) => n + (a.team === 1 && a.state !== "dead" ? a.mark : 0), 0);
+      outlinedText(ctx, `표식 ${marks}${w.regenT > 0 ? " · 치유 중" : ""}`, x + 2, y + 9, "900 9px system-ui, sans-serif", "#5eead4", "left", 2);
+      break;
+    }
+  }
+}
 
 function drawBanner(ctx: CanvasRenderingContext2D, w: World) {
   const b = w.banner;
@@ -1838,7 +2312,7 @@ function drawIntro(ctx: CanvasRenderingContext2D, w: World, opts: RenderOpts) {
       ctx.fillStyle = `rgba(255,255,255,${1 - (t - 80) / 20})`;
       ctx.fillRect(0, 0, VIEW_W, VIEW_H);
     }
-    if (t >= 90) outlinedText(ctx, "프리즘 킹로보 — 합체 완료!", VIEW_W / 2, 70, "italic 900 22px system-ui, sans-serif", "#fde047", "center", 4);
+    if (t >= 90) outlinedText(ctx, `${MECHA.name} — 합체 완료!`, VIEW_W / 2, 70, "italic 900 22px system-ui, sans-serif", "#fde047", "center", 4);
     ctx.restore();
     return;
   }
@@ -1848,7 +2322,7 @@ function drawIntro(ctx: CanvasRenderingContext2D, w: World, opts: RenderOpts) {
   if (t < 60) {
     ctx.fillStyle = "rgba(0,0,0,0.45)";
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    outlinedText(ctx, "프리즘 체인지!", VIEW_W / 2, 90, "italic 900 26px system-ui, sans-serif", w.hero.color, "center", 5);
+    outlinedText(ctx, w.hero.henshin, VIEW_W / 2, 90, "italic 900 26px system-ui, sans-serif", w.hero.color, "center", 5);
     // Civilian silhouette with a glowing brace.
     const sx = h.x - w.camX;
     const sy = groundY(h.z);
@@ -1858,7 +2332,7 @@ function drawIntro(ctx: CanvasRenderingContext2D, w: World, opts: RenderOpts) {
     ctx.fill();
   } else if (t < 100) {
     const k = (t - 60) / 40;
-    const cols = ["#ef4444", "#facc15", "#22c55e", "#3b82f6", "#ec4899"];
+    const cols = [w.hero.color, w.hero.trim, w.hero.dark, w.hero.trim, w.hero.color];
     if (!opts.calm) {
       cols.forEach((c, i) => {
         ctx.fillStyle = c;
@@ -1875,7 +2349,7 @@ function drawIntro(ctx: CanvasRenderingContext2D, w: World, opts: RenderOpts) {
     const sx = h.x - w.camX;
     const sy = groundY(h.z);
     if (!opts.calm)
-      ["#ef4444", "#3b82f6", "#facc15", "#22c55e", "#ec4899"].forEach((c, i) => {
+      HERO_ORDER.map((id) => HEROES[id].trim).forEach((c, i) => {
         ctx.globalAlpha = 0.7 * (1 - k);
         ctx.fillStyle = c;
         ctx.beginPath();
@@ -1884,7 +2358,7 @@ function drawIntro(ctx: CanvasRenderingContext2D, w: World, opts: RenderOpts) {
       });
     ctx.globalAlpha = 1;
     outlinedText(ctx, `${w.hero.name}!`, VIEW_W / 2, 90, "italic 900 26px system-ui, sans-serif", w.hero.color, "center", 5);
-    outlinedText(ctx, "섬광전대 — 프리즘파이브!", VIEW_W / 2, 112, "900 13px system-ui, sans-serif", "#fff", "center", 4);
+    outlinedText(ctx, `${w.hero.role} · ${w.hero.person}`, VIEW_W / 2, 112, "900 13px system-ui, sans-serif", "#fff", "center", 4);
   }
   ctx.restore();
 }
@@ -1892,6 +2366,7 @@ function drawIntro(ctx: CanvasRenderingContext2D, w: World, opts: RenderOpts) {
 // ---------------------------------------------------------------- main
 
 export function drawWorld(ctx: CanvasRenderingContext2D, w: World, memo: RenderMemo, opts: RenderOpts) {
+  traitGlow = { overheat: w.overheat > 0, charge: w.charge };
   ctx.save();
   const shake = opts.noShake ? 0 : w.shake;
   const sx = shake ? (hash(w.tick) - 0.5) * shake : 0;

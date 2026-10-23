@@ -64,6 +64,17 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.95.0",
+    releaseDate: "2026-10-23",
+    title: "🔥⚡🛠️🪨🌊 프리즘파이브 — 다섯 히어로가 완전히 다른 캐릭터로",
+    changes: [
+      { game: "prism-five", type: "FEAT", desc: "🎭 같은 슈트 5색 대신 블레이즈·볼트·아이언·테라·세이렌 — 투구·후드·고글·돌가면·포니테일로 실루엣부터 달라요" },
+      { game: "prism-five", type: "FEAT", desc: "🔥 고유 규칙 — 열기 오버히트 · 전하 연쇄 번개 · 탄창 재장전 · 돌 피부 · 물방울 표식, 화면 왼쪽 위에 게이지로 표시" },
+      { game: "prism-five", type: "FEAT", desc: "🌀 스킬 15개 전부 새로 — 불길 돌진, 등 뒤 순간이동, 뇌전 카운터, 자동 포탑·유도 미사일·실드 드론, 바위 기둥, 공명 폭발" },
+      { game: "prism-five", type: "IMPROVE", desc: "🤖 합체 로봇은 그랜드 오리온, 5인 합동기는 오버드라이브 노바로 새 이름" },
+    ],
+  },
+  {
     version: "v1.94.1",
     releaseDate: "2026-10-23",
     title: "👮 시티 체이스 — 경찰관이 건물에 안 가려져요",

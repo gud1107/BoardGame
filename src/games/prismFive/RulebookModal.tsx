@@ -43,8 +43,8 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <ul className={`list-disc space-y-1 pl-4 ${P}`}>
             <li><b>HP</b>(초록): 0이 되면 변신 해제 → 남은 <b>변신 스톡</b>이 있으면 체력 가득 재변신(주변 적을 날려 보냄), 없으면 게임 오버.</li>
             <li><b>EN</b>(파랑): 스킬 비용. 초당 2씩, 타격마다 +1.2, 섬광 회피 +15, 에너지 크리스탈 +40.</li>
-            <li><b>프리즘 게이지</b>(무지개): 준 피해·받은 피해·섬광 회피로 충전. 가득 차면 <b>필살기</b>(컷인 연출 + 화면 전체 공격, 사용 중 무적).</li>
-            <li><b>팀 스톡</b>(◆ 최대 3): 타격 40회마다 1개. 1개로 동료 1명 <b>어시스트</b> 호출, 3개가 모두 차 있으면 <b>5인 합체포 「{TEAM_ULT.name}」</b>.</li>
+            <li><b>필살 게이지</b>(무지개): 준 피해·받은 피해·섬광 회피로 충전. 가득 차면 <b>필살기</b>(컷인 연출 + 화면 전체 공격, 사용 중 무적).</li>
+            <li><b>팀 스톡</b>(◆ 최대 3): 타격 40회마다 1개. 1개로 동료 1명 <b>어시스트</b> 호출, 3개가 모두 차 있으면 <b>5인 합동기 「{TEAM_ULT.name}」</b>.</li>
           </ul>
         </section>
 
@@ -91,7 +91,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <h3 className={H3}>회피 · 섬광 회피 · 브레이크</h3>
           <ul className={`list-disc space-y-1 pl-4 ${P}`}>
             <li><b>회피</b>: 구르기(약 0.37초). 앞 0.25초는 무적. 방향 없이 누르면 뒤로.</li>
-            <li><b>섬광 회피</b>: 공격이 닿기 직전(회피 시작 0.13초 안)에 피하면 <b>슬로 모션</b> + 프리즘 +15 + EN +15 + 스타일 대폭 상승.</li>
+            <li><b>섬광 회피</b>: 공격이 닿기 직전(회피 시작 0.13초 안)에 피하면 <b>슬로 모션</b> + 필살 게이지 +15 + EN +15 + 스타일 대폭 상승.</li>
             <li><b>브레이크</b>: 보스·근위대장은 강한 공격에도 밀리지 않는 <b>슈퍼아머</b>. 대신 노란 브레이크 게이지가 쌓여 가득 차면 <b>BREAK!</b> — 약 3.7초 기절, 받는 피해 1.5배, 띄우기·콤보가 들어갑니다.</li>
             <li>적의 공격 전에는 머리 위에 <b className="text-red-400">!</b> 예고가 뜹니다(저격병은 붉은 조준선, 돌진은 붉은 길).</li>
             <li>공격 토큰: 한 번에 덤비는 졸개 수는 난이도별 최대 1/2/3명. 나머지는 주위를 맴돕니다.</li>
@@ -106,10 +106,13 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
               return (
                 <div key={id} className="rounded-lg border border-white/10 p-2 light:border-slate-200" style={{ borderLeft: `4px solid ${h.color}` }}>
                   <div className="font-black" style={{ color: h.color }}>
-                    {h.name} <span className="text-xs font-semibold text-white/50 light:text-slate-500">{h.role} · {h.weapon}</span>
+                    {h.name} <span className="text-xs font-semibold text-white/50 light:text-slate-500">({h.person}) {h.role} · {h.weapon}</span>
                   </div>
                   <div className="text-xs text-white/50 light:text-slate-500">HP {h.hp} · 속도 {h.speed} · 공격 ×{h.atk}{h.heavyArmor ? " · 강공격 슈퍼아머" : ""}</div>
                   <p className={`mt-1 text-xs ${P}`}>{h.blurb}</p>
+                  <p className="mt-1 text-xs">
+                    <b style={{ color: h.trim }}>고유 능력 · {h.traitName}</b> — {h.traitDesc}
+                  </p>
                   <ul className="mt-1 space-y-0.5 text-xs">
                     <li>약공격 {h.chain.length}연격: {h.chain.map((m) => m.name).join(" → ")}</li>
                     <li>띄우기 {h.heavy.name} · 피니셔 {h.finisher.name} · 다이브 {h.airHeavy.name}</li>

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { PlayableGameProps } from "../types";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import { recordSoloRun } from "@/lib/stats/soloResult";
-import { BOSSES, DIFFICULTIES, HERO_ORDER, HEROES, STAGES, type AnimKind, type Difficulty, type HeroId } from "./data";
+import { BOSSES, DIFFICULTIES, HERO_ORDER, HEROES, MECHA, STAGES, type AnimKind, type Difficulty, type HeroId } from "./data";
 import type { StageSummary } from "./engine";
 import PrismFiveCanvas from "./PrismFiveCanvas";
 import RulebookModal from "./RulebookModal";
@@ -140,7 +140,7 @@ export default function PrismFiveGame({ participants, onComplete }: PlayableGame
               <div className="text-xs font-bold tracking-[0.3em] text-yellow-200">FLASH SQUADRON</div>
               <h2 className="text-3xl font-black italic drop-shadow">섬광전대 프리즘파이브</h2>
               <p className="mt-1 max-w-xl text-sm text-white/85">
-                5인의 전대 히어로로 변신해 암흑제국의 졸개 무리를 콤보로 쓸어버리고, 괴인 보스를 브레이크한 뒤 거대 로봇 <b>프리즘 킹로보</b>로 필살 일도양단!
+                화염 검사·번개 격투가·중화기 공병·대지의 거인·물결 무희 — 싸우는 방식이 전혀 다른 다섯 히어로 중 하나로 변신해 암흑제국 졸개를 쓸어버리고, 괴인 보스를 브레이크한 뒤 합체 로봇 <b>{MECHA.name}</b>로 필살 일도양단!
               </p>
               <div className="mt-3 flex -space-x-3">
                 {HERO_ORDER.map((id) => (
@@ -192,9 +192,12 @@ export default function PrismFiveGame({ participants, onComplete }: PlayableGame
             </div>
             <div className="mt-3 rounded-lg p-3 text-sm" style={{ background: `${hero.color}18`, borderLeft: `4px solid ${hero.color}` }}>
               <div className="font-black" style={{ color: hero.color }}>
-                {hero.name} <span className="text-xs font-semibold text-white/50 light:text-slate-500">· {hero.weapon}</span>
+                {hero.name} <span className="text-xs font-semibold text-white/50 light:text-slate-500">({hero.person}) · {hero.role} · {hero.weapon}</span>
               </div>
               <p className="text-xs text-white/70 light:text-slate-600">{hero.blurb}</p>
+              <p className="mt-1 text-xs">
+                <b style={{ color: hero.trim }}>고유 능력 · {hero.traitName}</b> <span className="text-white/70 light:text-slate-600">{hero.traitDesc}</span>
+              </p>
               <div className="mt-1 flex flex-wrap gap-1 text-[11px]">
                 <span className="rounded bg-black/20 px-1.5 py-0.5">HP {hero.hp}</span>
                 {hero.skills.map((s, i) => (

@@ -18,7 +18,7 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
  */
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
   "2026-10-23": {
-    "prism-five": "🦸 신규 전대물 액션 — 5인 히어로·콤보·필살기, 괴인 보스 브레이크, 🤖 거대 로봇전",
+    "prism-five": "🦸 신규 변신 히어로 액션 — 고유 규칙이 다른 5명, 콤보·필살기, 괴인 보스 브레이크, 🤖 거대 로봇전",
     "city-chase": "🦹 도둑을 직접 조종해 털고 숨기, 🚓👮🚁 경찰 3종·수갑 검거, 👀 읽기 쉬운 3D·탑뷰, 🔦 화려한 수색",
   },
   "2026-10-22": {

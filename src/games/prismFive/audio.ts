@@ -198,6 +198,25 @@ export class PrismAudio {
         this.tone(880, t, 0.1, "triangle", 0.2, 6000, M);
         this.tone(1320, t + 0.08, 0.16, "triangle", 0.2, 6000, M);
         break;
+      case "counter":
+        this.tone(1800, t, 0.25, "sawtooth", 0.18, 9000, M, 300);
+        this.noise(t, 0.2, 5000, 0.4, "highpass", M);
+        break;
+      case "overheat":
+        this.noise(t, 0.8, 300, 0.5, "lowpass", M, 2400);
+        this.tone(110, t, 0.6, "sawtooth", 0.2, 1200, M, 330);
+        break;
+      case "chain":
+        for (let i = 0; i < 3; i++) this.noise(t + i * 0.04, 0.08, 6000, 0.3, "highpass", M);
+        break;
+      case "detonate":
+        if (e.marks) [72, 76, 79].forEach((n, i) => this.tone(midi(n), t + i * 0.05, 0.4, "sine", 0.2, 9000, M));
+        this.noise(t, 0.4, 900, 0.4, "lowpass", M, 200);
+        break;
+      case "reload":
+        this.noise(t, 0.05, 2500, 0.3, "bandpass", M);
+        this.noise(t + 0.12, 0.05, 1800, 0.35, "bandpass", M);
+        break;
       case "perfect":
         [84, 88, 91, 96].forEach((n, i) => this.tone(midi(n), t + i * 0.04, 0.5, "sine", 0.18, 9000, M));
         break;
