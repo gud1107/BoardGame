@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.91.0",
+    releaseDate: "2026-10-23",
+    title: "🪵 스플렌더 대결·가운데땅의 대결 보드에 살짝 입체감(2.5D)",
+    changes: [
+      { game: "splendor-duel", type: "IMPROVE", desc: "💎 보석판이 테이블 위 나무 판처럼 살짝 기울고 두께가 생겼어요 — 보석은 홈에 앉아 그림자를 드리우고, 고르면 쏙 들려요" },
+      { game: "lotr-duel", type: "IMPROVE", desc: "🗺️ 가운데땅 지도가 살짝 뒤로 눕고, 지역 명패는 그 위에 그림자와 함께 똑바로 서 있어요 — 글씨는 2D 그대로 또렷하게" },
+    ],
+  },
+  {
     version: "v1.90.0",
     releaseDate: "2026-10-23",
     title: "🧑‍🎤 3D 캐릭터마다 얼굴형·체격이 달라요 — 프로필 사진도 내 캐릭터로",

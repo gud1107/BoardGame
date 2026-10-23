@@ -15,6 +15,11 @@ import type { LotrDuelState, RegionId, RegionState } from "./types";
  * Geography is approximate (the rulebook has no map picture) — north-west
  * Lindon/Arnor to south-east Mordor. Regions in `targets` pulse and are
  * clickable; the FX props (rise / preview / drops / combat flash) layer on top.
+ *
+ * Drawn 2.5D: the terrain + roads lie on a plane tilted back a little, while
+ * the plaques stand upright on it (placed at their projected spots, with a
+ * ground shadow) so every label stays as readable as flat 2D. Full 3D read
+ * worse (2026-10-23).
  */
 
 const REGION_THEME: Record<RegionId, { icon: string; landmark: string; en: string; gradient: string; border: string; glow: string }> = {
@@ -26,6 +31,23 @@ const REGION_THEME: Record<RegionId, { icon: string; landmark: string; en: strin
   GONDOR: { icon: "👑", landmark: "미나스 티리스", en: "Gondor", gradient: "from-slate-700/90 via-neutral-900/90 to-neutral-950/90", border: "border-slate-300/60", glow: "shadow-[0_0_16px_rgba(203,213,225,.35)]" },
   MORDOR: { icon: "🌋", landmark: "바라드두르 & 운명의 산", en: "Mordor", gradient: "from-rose-950/95 via-red-950/85 to-neutral-950/95", border: "border-rose-600/70", glow: "shadow-[0_0_22px_rgba(225,29,72,.45)]" },
 };
+
+/** Tilt of the map plane, its perspective distance (× box height), and its size (× box) — larger so the tilted far edge still fills the box and the regions keep their flat spacing. */
+const TILT_DEG = 14;
+const PERSPECTIVE = 3;
+const PLANE_W = 1.08;
+const PLANE_H = 1.12;
+/** Map box height / width (the box is 10:9). */
+const BOX_H = 0.9;
+
+/** Where a 0–100 map point on the tilted plane lands in the box, in %. Mirrors the CSS `perspective() rotateX()` about the bottom edge. */
+function project(x: number, y: number): { left: number; top: number } {
+  const t = (TILT_DEG * Math.PI) / 180;
+  const X = (x / 100 - 0.5) * PLANE_W; // × box width, from the bottom-center origin
+  const Y = (y / 100 - 1) * PLANE_H; // × box height, negative = up
+  const s = PERSPECTIVE / (PERSPECTIVE - Y * Math.sin(t));
+  return { left: 50 + X * s * 100, top: 100 + Y * Math.cos(t) * s * 100 };
+}
 
 const RUNES = "ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈ";
 
@@ -163,8 +185,20 @@ export default function MiddleEarthMap({
           <span className="rounded-md border border-red-500/50 bg-red-950/60 px-1.5 text-rose-200">👁️ {controlledCount(state, "SAURON")}/7</span>
         </span>
       </div>
-      <div className="relative">
-        <svg viewBox="0 0 100 100" className="block aspect-[10/9] w-full" preserveAspectRatio="none" aria-hidden>
+      <div className="relative aspect-[10/9]" style={{ containerType: "inline-size", background: "#0c0906" }}>
+        {/* the tilted ground: terrain, roads and fog */}
+        <div
+          className="absolute bottom-0"
+          style={{
+            width: `${PLANE_W * 100}%`,
+            height: `${PLANE_H * 100}%`,
+            left: `${(1 - PLANE_W) * 50}%`,
+            transform: `perspective(${PERSPECTIVE * BOX_H * 100}cqw) rotateX(${TILT_DEG}deg)`,
+            transformOrigin: "50% 100%",
+            boxShadow: "0 -1px 0 rgba(201,151,63,.45), 0 -10px 24px rgba(201,151,63,.12)",
+          }}
+        >
+        <svg viewBox="0 0 100 100" className="block h-full w-full" preserveAspectRatio="none" aria-hidden>
           <Terrain />
           {/* rune roads = adjacency (unit moves follow these) */}
           {edges.map(([a, b], i) => {
@@ -198,8 +232,10 @@ export default function MiddleEarthMap({
           <div className="absolute top-[55%] left-[5%] h-[16%] w-[40%] rounded-full bg-slate-200/[0.05] blur-xl" />
           <div className="absolute top-[35%] right-[2%] h-[14%] w-[35%] rounded-full bg-slate-300/[0.05] blur-xl" />
         </div>
+        </div>
         {REGIONS.map((r) => {
           const info = REGION_INFO[r];
+          const at = project(info.x, info.y);
           const theme = REGION_THEME[r];
           const reg = state.boardRegions[r];
           const isTarget = targets.has(r);
@@ -214,11 +250,13 @@ export default function MiddleEarthMap({
               disabled={!isTarget}
               onClick={() => onRegion(r)}
               title={`${info.name} (${theme.en}) — ${theme.landmark}`}
-              style={{ left: `${info.x}%`, top: `${info.y}%` }}
+              style={{ left: `${at.left}%`, top: `${at.top}%` }}
               className={`absolute flex w-[27%] max-w-[136px] -translate-x-1/2 -translate-y-1/2 flex-col items-center rounded-xl border-2 bg-gradient-to-b px-1 pt-0.5 pb-1 text-center backdrop-blur-[2px] transition ${theme.gradient} ${
                 isFrom ? "border-amber-300 ring-2 ring-amber-300" : isTarget ? "lotrd-target cursor-pointer border-emerald-300" : `${theme.border} ${theme.glow}`
               }`}
             >
+              {/* ground shadow — the plaque stands on the tilted map */}
+              <span className="pointer-events-none absolute top-full left-1/2 -mt-0.5 h-2.5 w-[88%] -translate-x-1/2 rounded-[50%] bg-black/65 blur-[3px]" />
               {flashing && <span key={flash.no} className="lotrd-clash pointer-events-none absolute inset-0 rounded-xl" />}
               {preview?.regions.includes(r) && <span className={`pointer-events-none absolute -inset-1 rounded-2xl ${preview.tone === "violet" ? "lotrp-violet" : "lotrp-red"}`} />}
               {drops?.items
