@@ -20,11 +20,6 @@ import {
 import PlayerDock from "./PlayerDock";
 import SpiralGridBoard from "./SpiralGridBoard";
 import DuelSoundHud from "./DuelSoundHud";
-import dynamic from "next/dynamic";
-import { Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
-
-// three.js only loads when the 3D gem board is shown (🖼️ 2D otherwise / without WebGL).
-const DuelGrid3D = dynamic(() => import("./three/DuelGrid3D"), { ssr: false, loading: () => <Loading3D /> });
 import { playDuelEventSound, playDuelVictorySound } from "./splendorDuelAudio";
 import { getSplendorDuelSound, matchTension } from "./splendorDuelSound";
 import {
@@ -300,8 +295,6 @@ export default function SplendorDuelBoard({
   const pendingHead =
     myTurn && state.phase === "resolving" ? state.pending[0] : undefined;
 
-  const board3d = useBoardView("splendor-duel-view");
-  const [lowDetail] = useState(preferLowDetail);
   const [selected, setSelected] = useState<number[]>([]);
   const [scrollMode, setScrollMode] = useState(false);
   const [sheet, setSheet] = useState<{
@@ -562,30 +555,6 @@ export default function SplendorDuelBoard({
         </span>
       </div>
       <div ref={boardRef} className="mx-auto w-full max-w-[20dvh] md:max-w-none">
-{board3d.view === "3d" ? (
-          <div className="aspect-square w-full overflow-hidden rounded-2xl border border-amber-400/25">
-        <DuelGrid3D
-          grid={state.grid}
-          selected={selected}
-          selectable={
-            pendingHead?.kind === "takeToken"
-              ? (takeTargets ?? new Set())
-              : reservePick
-                ? goldCells
-                : canMain
-                  ? null
-                  : new Set()
-          }
-          highlight={reservePick ? goldCells : takeTargets}
-          onCellClick={
-            canMain || pendingHead?.kind === "takeToken"
-              ? onCellClick
-              : undefined
-          }
-          lowDetail={lowDetail}
-        />
-          </div>
-        ) : (
         <SpiralGridBoard
           grid={state.grid}
           selected={selected}
@@ -605,7 +574,6 @@ export default function SplendorDuelBoard({
               : undefined
           }
         />
-        )}
       </div>
       {canMain && (
         <div className="flex w-full flex-wrap items-center justify-center gap-1.5">
@@ -772,7 +740,6 @@ export default function SplendorDuelBoard({
                 {describeEvent(lastEvent, names)}
               </p>
             )}
-            <ViewToggle board={board3d} />
             <DuelSoundHud tension={tension} />
             <button
               onClick={onOpenRulebook}

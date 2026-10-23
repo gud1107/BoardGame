@@ -196,12 +196,10 @@
     "auto": true
   },
   "lotr-duel": {
-    "from": 122.5,
-    "to": 130.5,
-    "crop": [240, 300, 480, 600],
-    "moment": "격돌",
-    "stillAt": 126.5,
-    "auto": true
+    "from": 33,
+    "to": 41,
+    "crop": [140, 180, 680, 850],
+    "moment": "격돌"
   },
   "love-letter": {
     "from": 34,
@@ -312,12 +310,10 @@
     "auto": true
   },
   "splendor-duel": {
-    "from": 171.8,
-    "to": 179.8,
-    "crop": [70, 133, 820, 1025],
-    "moment": "왕관 카드",
-    "stillAt": 175.8,
-    "auto": true
+    "from": 49,
+    "to": 57,
+    "crop": [180, 240, 600, 750],
+    "moment": "왕관 카드"
   },
   "spot-difference": {
     "from": 14,

@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.88.0",
+    releaseDate: "2026-10-23",
+    title: "🖼️ 스플렌더 대결·가운데땅의 대결은 다시 2D 보드로",
+    changes: [
+      { game: "splendor-duel", type: "IMPROVE", desc: "💎 보석판을 3D에서 원래의 2D 나선 보드로 되돌렸어요 — 한눈에 읽기 쉬운 쪽이 더 낫다는 의견 반영" },
+      { game: "lotr-duel", type: "IMPROVE", desc: "🗺️ 가운데땅 지도를 3D에서 원래의 2D 지도로 되돌렸어요 — 지역·유닛 수를 바로 읽을 수 있어요" },
+    ],
+  },
+  {
     version: "v1.87.0",
     releaseDate: "2026-10-22",
     title: "💃 3D 캐릭터가 손까지 자연스럽게 — 캐릭터 목록에서 골라요",
