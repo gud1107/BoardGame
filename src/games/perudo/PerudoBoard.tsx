@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import { preferLowDetail, useBoardView } from "@/games/shared/three/viewPref";
@@ -165,6 +165,27 @@ export default function PerudoBoard({
   // own presence-track resolves a real pick.
   const myColorway = colorways[viewerSeat] ?? playerColorwayForSeat(viewerSeat);
 
+  // 3D 테이블의 "내 컵 들춰보기" (2026-10-23) — 3D에선 내 주사위도 컵 속에
+  // 덮여 있다가 내가 컵을 누르거나 HUD 버튼을 눌러야 보인다. 이 브라우저만의
+  // 로컬 상태(남에게 방송하지 않음), 새 라운드마다 다시 덮인다.
+  const [peek, setPeek] = useState(false);
+  const [peekRound, setPeekRound] = useState(state.roundNumber);
+  if (peekRound !== state.roundNumber) {
+    setPeekRound(state.roundNumber);
+    setPeek(false);
+  }
+  const is3D = boardView === "3d";
+  // 2D의 `DiceRollTray`가 맡던 굴림 사운드를 3D에선 컵 흔들기(1.1s)에 맞춰 낸다.
+  const rollPlaying = is3D && state.phase === "playing";
+  useEffect(() => {
+    if (!rollPlaying) return;
+    const engine = getSoundEngine();
+    engine.unlock();
+    engine.playDiceRattle(600);
+    const t = window.setTimeout(() => engine.playCupThud(), 900);
+    return () => window.clearTimeout(t);
+  }, [rollPlaying, state.roundNumber]);
+
   // Overscroll-bounce containment (요구사항 1) — scoped to this component's
   // mount, restored on unmount, same pattern as `WormCanvas.tsx`'s own
   // gesture lock (see that file's doc comment). Applied regardless of
@@ -323,6 +344,12 @@ export default function PerudoBoard({
 
   function stepQuantity(delta: number) {
     setPendingQuantity((q) => Math.max(pendingFloor, q + delta));
+  }
+
+  /** A tile of the 3D table's ring track was tapped — jump the draft's quantity there, keeping the face (only legal tiles are tappable). */
+  function pickQuantity(q: number) {
+    if (!validateRaise(state.currentBid, { quantity: q, face: pendingFace })) return;
+    setPendingQuantity(q);
   }
 
   /**
@@ -499,11 +526,13 @@ export default function PerudoBoard({
       {boardView === "3d" ? "🖼️ 2D로" : "🧊 3D로"}
     </button>
   ) : null;
-  function renderTable3D() {
+  function renderTable3D(hud?: { top: ReactNode; bottom: ReactNode }) {
     if (boardView !== "3d") return null;
     const res = state.phase === "reveal" ? state.lastResolution : null;
+    const drafting = isMyTurn && iAmAlive;
     return (
-      <div className="relative z-10 h-[330px] w-full overflow-hidden rounded-2xl border border-black/50 sm:h-[430px]">
+      <div className="relative z-10 flex w-full flex-col overflow-hidden rounded-2xl border border-black/50 bg-black/40">
+        <div className={`relative w-full ${hud ? "h-[min(52svh,460px)] min-h-[300px] sm:h-[460px]" : "h-[330px] sm:h-[430px]"}`}>
         <PerudoTable3D
           playerCount={state.playerCount}
           viewerSeat={viewerSeat}
@@ -540,12 +569,160 @@ export default function PerudoBoard({
           roundNumber={state.roundNumber}
           overview={!!res}
           lowDetail={lowDetail}
+          totalDice={res ? Object.values(res.revealedDice).reduce((n, d) => n + d.length, 0) : totalDiceInPlay(state)}
+          peek={peek}
+          onTogglePeek={iAmAlive && !res ? () => setPeek((v) => !v) : null}
+          draft={drafting ? { quantity: pendingQuantity, face: pendingFace } : null}
+          onPickQuantity={drafting ? pickQuantity : null}
+          quantityEnabled={(q) => validateRaise(state.currentBid, { quantity: q, face: pendingFace })}
         />
-        <span className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-amber-100/80">
-          {res ? "모든 컵이 열렸어요 🎲" : "남의 컵 속은 안 보여요 🤫 · 드래그로 둘러보기"}
-        </span>
+        {hud ? (
+          hud.top
+        ) : (
+          <span className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-amber-100/80">
+            {res ? "모든 컵이 열렸어요 🎲" : "남의 컵 속은 안 보여요 🤫 · 드래그로 둘러보기"}
+          </span>
+        )}
+        </div>
+        {hud?.bottom}
       </div>
     );
+  }
+
+  /**
+   * 3D 테이블 위에 겹치는 조작 HUD (2026-10-23, 사용자 요청: "3D 캐릭터 쪽에
+   * 판을 만들고 하나의 공간을 보면서") — 3D에선 아래의 사각 배팅판·내 주사위
+   * 트레이 대신 이것 하나로 플레이한다. 위: 차례 표시 · 아래: 내 컵 들춰보기 +
+   * (내 차례면) 눈/개수 고르기·확정 + 페루도!/맞아!. 개수는 테이블의 원형
+   * 트랙 칸을 직접 눌러도 된다. 모든 판정 경로는 2D와 같은 `validateRaise`.
+   */
+  function renderHud3D(): { top: ReactNode; bottom: ReactNode } {
+    const drafting = isMyTurn && iAmAlive;
+    return {
+      top: (
+        <div className="pointer-events-none absolute inset-x-2 top-2 flex items-start justify-between gap-2">
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-bold whitespace-nowrap shadow-lg ${
+              isMyTurn ? "animate-pulse bg-amber-400 text-neutral-900" : "bg-black/60 text-amber-100/85"
+            }`}
+          >
+            {isMyTurn ? "🫵 내 차례!" : `⏳ ${names[state.activeSeat]}님 차례`}
+          </span>
+          {state.currentBid && (
+            <span
+              key={betStampToken}
+              className="rounded-xl border border-amber-300/60 bg-black/65 px-2.5 py-1 text-right text-[11px] leading-tight text-amber-100 shadow-lg"
+              style={{ animation: "perudo-bet-stamp-drop 0.4s cubic-bezier(0.34,1.56,0.64,1) both" }}
+            >
+              <span className="block text-[10px] text-amber-100/60">{names[state.currentBid.seat]}님의 선언</span>
+              <span className="text-sm font-black text-amber-300">
+                {faceLabel(state.currentBid.face)} × {state.currentBid.quantity}개↑
+              </span>
+            </span>
+          )}
+          <span className="absolute bottom-0 left-1/2 hidden -translate-x-1/2 rounded-full bg-black/50 px-2.5 py-0.5 text-[10px] whitespace-nowrap text-amber-100/60 sm:block">
+            남의 컵 속은 안 보여요 🤫 · 드래그로 둘러보기
+          </span>
+        </div>
+      ),
+      bottom: (
+        <div
+          ref={bidActionZoneRef}
+          className="flex w-full flex-col items-center gap-1.5 border-t border-amber-200/20 bg-gradient-to-b from-[#2a1608] to-[#140a04] p-2 sm:px-4"
+        >
+          {iAmAlive ? (
+            <div className="flex w-full items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPeek((v) => !v)}
+                className={`flex min-h-[36px] shrink-0 items-center gap-1 rounded-full border px-3 text-xs font-bold transition ${
+                  peek ? "border-white/25 bg-white/10 text-white/80 hover:bg-white/20" : "border-amber-300 bg-amber-500 text-neutral-900 hover:bg-amber-400"
+                }`}
+              >
+                {peek ? "🙈 컵 덮기" : "👀 내 주사위 보기"}
+              </button>
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                {peek ? (
+                  me.dice.map((d, i) => (
+                    <DieFace
+                      key={i}
+                      value={d}
+                      size="md"
+                      colorway={myColorway}
+                      ring={state.currentBid && d === state.currentBid.face ? "match" : state.currentBid && state.currentBid.face !== 1 && d === 1 ? "wild" : undefined}
+                    />
+                  ))
+                ) : (
+                  <span className="text-[11px] text-white/50">컵 속 {me.diceCount}개 — 나만 볼 수 있어요 🤫</span>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-rose-300/80">탈락했습니다 — 관전 중</p>
+          )}
+
+          {drafting && (
+            <div className="flex w-full flex-wrap items-center justify-center gap-1.5 border-t border-white/10 pt-1.5">
+              <FacePicker selected={pendingFace} onSelect={pickFace} />
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => stepQuantity(-1)}
+                  disabled={pendingQuantity <= pendingFloor}
+                  title="개수 줄이기"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-violet-300/40 bg-violet-950/60 text-sm font-bold text-violet-100 transition hover:bg-violet-900 disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  −
+                </button>
+                <span className="min-w-[3ch] text-center text-base font-black text-violet-200">{pendingQuantity}개</span>
+                <button
+                  type="button"
+                  onClick={() => stepQuantity(1)}
+                  title="개수 늘리기"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-violet-300/40 bg-violet-950/60 text-sm font-bold text-violet-100 transition hover:bg-violet-900"
+                >
+                  +
+                </button>
+              </div>
+              <PerudoFxButton
+                type="button"
+                variant="gold"
+                disabled={!canConfirmBet}
+                onClick={() => onAction({ type: "raise", seat: viewerSeat, quantity: pendingQuantity, face: pendingFace })}
+                className="flex min-h-[36px] items-center justify-center rounded-full bg-violet-600 px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-white shadow-[0_0_0_2px_rgba(168,85,247,0.35)] transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 disabled:shadow-none"
+              >
+                ✅ {faceLabel(pendingFace)} × {pendingQuantity}개 선언
+              </PerudoFxButton>
+              <p className="w-full text-center text-[10px] text-white/45">
+                {isIdenticalToCurrentBid ? "⚠️ 눈금이나 수량을 올려야 확정할 수 있어요" : "테이블의 숫자 칸을 눌러도 개수를 고를 수 있어요"}
+              </p>
+            </div>
+          )}
+
+          {iAmAlive && (
+            <div className="flex w-full gap-1.5">
+              <PerudoFxButton
+                variant="crimson"
+                disabled={!isMyTurn || !state.currentBid}
+                onClick={() => onAction({ type: "dudo", seat: viewerSeat })}
+                className="flex min-h-[36px] flex-1 items-center justify-center rounded-lg bg-rose-700 px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+              >
+                🚨 페루도!
+              </PerudoFxButton>
+              <PerudoFxButton
+                variant="emerald"
+                disabled={!state.currentBid}
+                onClick={() => onAction({ type: "calza", seat: viewerSeat })}
+                title="차례와 상관없이 외칠 수 있어요"
+                className="flex min-h-[36px] flex-1 items-center justify-center rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+              >
+                🎯 맞아!
+              </PerudoFxButton>
+            </div>
+          )}
+        </div>
+      ),
+    };
   }
 
   if (state.phase === "gameOver") {
@@ -715,6 +892,7 @@ export default function PerudoBoard({
       <div className="relative z-10 flex flex-wrap items-center justify-between gap-1.5 text-xs text-rose-100/60 light:text-slate-500">
         <span className="flex items-center gap-1.5">
           {state.playerCount}인 · {state.roundNumber}라운드
+          {is3D && colorwayPicker}
         </span>
         <div className="flex items-center gap-1.5">
           {viewToggle}
@@ -727,16 +905,19 @@ export default function PerudoBoard({
           "당신의 차례입니다!" 배너보다 위, 라운드 판단에 필요한 숫자를 먼저
           보고 베팅을 결정하도록. 원래 이 자리엔 아무것도 없었음(바로 턴
           배너로 이어졌음). */}
-      {renderTable3D()}
+      {renderTable3D(renderHud3D())}
 
-      <MyDiceStatsPanel state={state} myDice={me.dice} />
+      {/* 3D에선 컵을 들춰봤을 때만 — 덮여 있는 동안 내 눈 분포를 여기서 흘리면 들춰보기가 무의미하다. */}
+      {(!is3D || peek) && <MyDiceStatsPanel state={state} myDice={me.dice} />}
 
       {/* 턴 배너 — 하단 상태 텍스트는 이제 조용한 안내문 고정(한 번 튀는
           애니메이션은 위 <MyTurnOverlay>의 중앙 팝업이 전담, 2026-09-05
           세션). */}
+      {!is3D && (
       <p className={`relative z-10 text-center text-sm font-bold break-keep ${isMyTurn ? "text-amber-200 light:text-amber-700" : "text-xs font-medium text-white/50 light:text-slate-500"}`}>
         {isMyTurn ? "🫵 당신 차례입니다!" : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
       </p>
+      )}
 
       {/* 잃은 주사위 무덤 — 2026-09-20 세션: 보드의 hollow center 안(넘침 배지
           바로 아래)에서 여기(턴 배너 바로 아래, 보드 바로 위)로 이동. 이 이동
@@ -769,6 +950,7 @@ export default function PerudoBoard({
           a horizontal scroll/pan on narrow phones rather than lost content;
           `RectBidTrack`'s own `mx-auto` still centers it whenever it's
           narrower than the scroll area, i.e. on every viewport past mobile. */}
+      {!is3D && (
       <div className="relative z-10 w-full overflow-x-auto">
         <RectBidTrack
           currentCell={currentCell}
@@ -964,6 +1146,7 @@ export default function PerudoBoard({
         </div>
         </RectBidTrack>
       </div>
+      )}
 
       {/* My dice + 색상 변경 — 2026-09-20 세션: 통계 현황판이 있던 이 자리로
           보드 중앙(2026-08-20 사각형 트랙 세션 이후 자리)에서 옮겨옴. 항상
@@ -971,6 +1154,7 @@ export default function PerudoBoard({
           `DiceRollTray`가 매 라운드 짧은 흔들기→정지 애니메이션을 재생한다
           (WebGL 물리 트레이를 대체한 이유는 `dice/PerudoDie.tsx` 파일 헤더
           참고). */}
+      {!is3D && (
       <div className="relative z-10 flex w-full flex-col items-center gap-1.5 rounded-2xl border-2 border-amber-900/40 bg-gradient-to-b from-black/25 to-black/35 p-3 shadow-[inset_0_2px_10px_rgba(0,0,0,0.35),0_4px_14px_-6px_rgba(0,0,0,0.6)] light:border-amber-300 light:from-amber-50 light:to-white">
         <div className="flex w-full items-center justify-between px-1">
           <p className="text-[11px] font-semibold text-amber-100/70 light:text-amber-700">🎲 내 주사위 ({me.diceCount}개)</p>
@@ -1000,6 +1184,7 @@ export default function PerudoBoard({
           />
         )}
       </div>
+      )}
 
       {/* Scoreboard — a responsive grid (not a single flex column) so it
           stays readable up to the full 8-player table instead of forcing a

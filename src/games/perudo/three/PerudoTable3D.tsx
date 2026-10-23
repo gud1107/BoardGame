@@ -4,17 +4,20 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
-import TableScene, { type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
-import { GlowDisc, PopIn } from "@/games/shared/three/tablePieces";
-import { bubbleTexture, easeInOut, paintedTexture, type BubbleStyle } from "@/games/shared/three/tableKit";
+import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
+import { Clickable, GlowDisc, HitBox, PopIn } from "@/games/shared/three/tablePieces";
+import { bubbleTexture, easeInOut, paintedTexture, polar, type BubbleStyle } from "@/games/shared/three/tableKit";
 import type { PersonMood } from "@/games/shared/three/SeatedPerson";
 
 /**
  * 페루도 3D — 해 질 녘 안데스 석조 마당. 각자 앞에 가죽 컵이 엎어져 있고(속
- * 주사위는 안 보임), 내 컵만 살짝 들려 내 주사위가 보인다. 선언은 말풍선과
- * 테이블 가운데의 큰 주사위 팻말로, "페루도!"/"맞아!"가 나오면 모든 컵이
- * 들리며 주사위가 드러나고 선언한 눈(+페루도 와일드)이 빛난다. 라운드가
- * 바뀌면 컵을 흔들어 굴리는 동작.
+ * 주사위는 안 보임), 내 컵도 기본은 덮여 있다 — 내 컵을 누르거나 HUD의
+ * "👀 내 주사위 보기"로 들어 올려야(`peek`, 이 브라우저에서만) 보인다. 차례인
+ * 사람의 컵은 제 쪽으로 살짝 들썩이며 몰래 확인하는 시늉만 한다(값은 없음).
+ * 테이블 위엔 1…전체 주사위 수의 원형 배팅 트랙이 깔려 현재 선언(금색 주사위
+ * 말)과 내 초안(보라 유령 주사위)이 그 칸에 서고, 내 차례엔 칸을 눌러 개수를
+ * 고른다. "페루도!"/"맞아!"가 나오면 모든 컵이 들리며 주사위가 드러나고 선언한
+ * 눈(+페루도 와일드)이 빛난다. 라운드가 바뀌면 컵을 흔들어 굴리는 동작.
  *
  * 보드가 볼 수 있는 주사위만 넘긴다(진행 중엔 내 것만, 공개 단계에선
  * `lastResolution.revealedDice`). 숨은 주사위 값은 이 장면에 오지 않는다.
@@ -60,6 +63,16 @@ export interface PerudoTable3DProps {
   roundNumber: number;
   overview: boolean;
   lowDetail: boolean;
+  /** 전체 주사위 수 — 원형 트랙의 칸 수. */
+  totalDice: number;
+  /** 내 컵을 들어 올려 내 주사위를 보는 중(로컬 전용). */
+  peek: boolean;
+  onTogglePeek?: (() => void) | null;
+  /** 내 차례에 짜고 있는 선언(현재 선언과 다를 때만 보라 유령 말로 표시). */
+  draft: { quantity: number; face: number } | null;
+  /** 트랙 칸 클릭(내 차례에 고를 수 있는 칸만) — 없으면 클릭 불가. */
+  onPickQuantity?: ((q: number) => void) | null;
+  quantityEnabled?: (q: number) => boolean;
 }
 
 const SEAT_COLORS = ["#f97316", "#38bdf8", "#4ade80", "#c084fc", "#f43f5e", "#22d3ee", "#facc15", "#a3e635"];
@@ -195,10 +208,11 @@ const cupProfile = [
  * and set down beside them, mouth up. Shakes for a moment when `shakeKey`
  * changes (a new round's roll).
  */
-function Cup({ open, accent, shakeKey, lowDetail }: { open: boolean; accent: string; shakeKey: string; lowDetail: boolean }) {
+function Cup({ open, accent, shakeKey, lowDetail, sneak = false }: { open: boolean; accent: string; shakeKey: string; lowDetail: boolean; sneak?: boolean }) {
   const geo = useMemo(() => new THREE.LatheGeometry(cupProfile, lowDetail ? 16 : 28), [lowDetail]);
   const ref = useRef<THREE.Group>(null);
   const t = useRef(open ? 1 : 0);
+  const sn = useRef(0);
   const shake = useRef<{ key: string; at: number }>({ key: shakeKey, at: -10 });
   useFrame(({ clock }, dt) => {
     const g = ref.current;
@@ -208,9 +222,12 @@ function Cup({ open, accent, shakeKey, lowDetail }: { open: boolean; accent: str
     const e = easeInOut(t.current);
     const since = clock.elapsedTime - shake.current.at;
     const s = since < 1.1 ? Math.sin(since * 38) * (1 - since / 1.1) : 0;
+    // sneak: the owner tips the near edge up now and then to check underneath (shows nothing)
+    const wantSneak = sneak && !open ? Math.max(0, Math.sin(clock.elapsedTime * 1.3)) ** 3 : 0;
+    sn.current += (wantSneak - sn.current) * (1 - Math.exp(-dt * 6));
     // closed: upside down centred on the dice; open: tipped up and parked to the side
-    g.position.set(0.3 * e + s * 0.03, 0.31 * (1 - e) + Math.sin(Math.PI * e) * 0.35 + Math.abs(s) * 0.05, -0.02 * e);
-    g.rotation.set(0, 0, Math.PI * (1 - e) + s * 0.12);
+    g.position.set(0.3 * e + s * 0.03, 0.31 * (1 - e) + Math.sin(Math.PI * e) * 0.35 + Math.abs(s) * 0.05 + sn.current * 0.07, -0.02 * e);
+    g.rotation.set(-sn.current * 0.45, 0, Math.PI * (1 - e) + s * 0.12);
   });
   return (
     <group ref={ref}>
@@ -403,7 +420,6 @@ function trapezoid(): THREE.Shape {
 // Centre: the current bid as a big die + count
 // ---------------------------------------------------------------------------
 
-const BETTING_DIE: PerudoColor3D = { body: "#7c3aed", shadow: "#3b0a75", ink: "#f5f3ff" };
 const SIGN_STYLE: BubbleStyle = { bg: "rgba(41,20,8,0.92)", fg: "#fde68a", border: "#e3a73b", size: 44 };
 
 function BidCenter({ bid, reveal, names }: { bid: PerudoTable3DProps["bid"]; reveal: PerudoReveal3D | null; names: Record<number, string> }) {
@@ -428,7 +444,7 @@ function BidCenter({ bid, reveal, names }: { bid: PerudoTable3DProps["bid"]; rev
       {face !== null && (
         <group ref={spin} position={[0, 0.42, 0]} scale={2.1}>
           <group position={[0, -0.065, 0]}>
-            <Die value={face} color={BETTING_DIE} glow={!!reveal} dim={false} />
+            <Die value={face} color={BID_DIE} glow={!!reveal} dim={false} />
           </group>
         </group>
       )}
@@ -440,12 +456,121 @@ function BidCenter({ bid, reveal, names }: { bid: PerudoTable3DProps["bid"]; rev
   );
 }
 
+
+// ---------------------------------------------------------------------------
+// The bid track: tiles 1…total in a ring on the felt
+// ---------------------------------------------------------------------------
+
+const BID_DIE: PerudoColor3D = { body: "#fbbf24", shadow: "#b45309", ink: "#451a03" };
+const DRAFT_DIE: PerudoColor3D = { body: "#a78bfa", shadow: "#5b21b6", ink: "#ffffff" };
+
+type TileTone = "plain" | "passed" | "bid" | "draft" | "open";
+const TILE_COLOR: Record<TileTone, string> = { plain: "#3b2417", passed: "#b45309", bid: "#fbbf24", draft: "#8b5cf6", open: "#f1e3c2" };
+
+function tileNumber(q: number, dark: boolean): THREE.CanvasTexture {
+  return paintedTexture(`perudo:tile:${q}:${dark}`, 128, 128, (ctx, W) => {
+    ctx.font = `900 ${q >= 10 ? 62 : 78}px system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.7)";
+    ctx.strokeText(String(q), W / 2, W / 2 + 4);
+    ctx.fillStyle = dark ? "#2a1206" : "#fff7e6";
+    ctx.fillText(String(q), W / 2, W / 2 + 4);
+  });
+}
+
+const tileGeo = new RoundedBoxGeometry(1, 0.03, 1, 2, 0.008);
+
+function BidTile({ q, tone, size, onPick }: { q: number; tone: TileTone; size: number; onPick: (() => void) | null }) {
+  const dark = tone === "bid" || tone === "open";
+  return (
+    <Clickable onClick={onPick} lift={0.03}>
+      <mesh geometry={tileGeo} scale={[size, 1, size]} position={[0, 0.015, 0]} receiveShadow>
+        <meshStandardMaterial
+          color={TILE_COLOR[tone]}
+          roughness={0.5}
+          metalness={tone === "bid" ? 0.35 : 0.05}
+          emissive={tone === "draft" ? "#6d28d9" : tone === "bid" ? "#92400e" : "#000000"}
+          emissiveIntensity={tone === "draft" || tone === "bid" ? 0.35 : 0}
+        />
+      </mesh>
+      <mesh position={[0, 0.032, 0]} rotation-x={-Math.PI / 2}>
+        <planeGeometry args={[size * 0.92, size * 0.92]} />
+        <meshBasicMaterial map={tileNumber(q, dark)} transparent depthWrite={false} opacity={tone === "plain" ? 0.7 : 1} />
+      </mesh>
+      {onPick && <HitBox size={[size * 1.05, 0.12, size * 1.05]} />}
+    </Clickable>
+  );
+}
+
+/** A die standing on a tile as the bid's game piece; `ghost` bobs and spins (my unconfirmed draft). */
+function BidPiece({ face, color, ghost }: { face: number; color: PerudoColor3D; ghost: boolean }) {
+  const ref = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => {
+    const g = ref.current;
+    if (!g) return;
+    const t = clock.elapsedTime;
+    g.position.y = ghost ? 0.1 + Math.sin(t * 3) * 0.03 : 0.03;
+    g.rotation.y = ghost ? t * 1.2 : Math.sin(t * 0.8) * 0.15;
+  });
+  return (
+    <group>
+      <GlowDisc color={ghost ? "#a78bfa" : "#fbbf24"} r={0.16} opacity={0.55} />
+      <group ref={ref} scale={1.35}>
+        <Die value={face} color={color} glow={!ghost} dim={false} />
+      </group>
+    </group>
+  );
+}
+
+function BidRing(props: { total: number; bid: PerudoTable3DProps["bid"]; draft: PerudoTable3DProps["draft"]; onPick: PerudoTable3DProps["onPickQuantity"]; enabled?: (q: number) => boolean }) {
+  const geo = useTableGeo();
+  const total = Math.max(1, props.total);
+  // the ring sits inside the cups; the small duel table gets smaller tiles so it clears both cups
+  const r = Math.min(2.0, Math.max(0.4, geo.tableR - 0.9));
+  const size = Math.min(geo.tableR < 1.3 ? 0.16 : 0.22, ((2 * Math.PI * r) / total) * 0.84);
+  // q = 1 sits just left of me and the ring climbs clockwise (as seen from my seat) back round to my right;
+  // a bid past the dice in play parks on the last tile (the centre sign still says the real number)
+  const at = (q: number) => polar(-((Math.min(q, total) - 0.5) / total) * Math.PI * 2, r);
+  const bidQ = props.bid?.quantity ?? 0;
+  const draft = props.draft && (!props.bid || props.draft.quantity !== props.bid.quantity || props.draft.face !== props.bid.face) ? props.draft : null;
+  return (
+    <group>
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0.004, 0]}>
+        <ringGeometry args={[r - size * 0.7, r + size * 0.7, 64]} />
+        <meshStandardMaterial color="#1c120b" roughness={0.9} transparent opacity={0.55} />
+      </mesh>
+      {Array.from({ length: total }, (_, i) => {
+        const q = i + 1;
+        const can = !!props.onPick && (props.enabled?.(q) ?? true);
+        const tone: TileTone = draft && Math.min(draft.quantity, total) === q ? "draft" : q === Math.min(bidQ, total) ? "bid" : can ? "open" : q < bidQ ? "passed" : "plain";
+        return (
+          <group key={q} position={at(q)}>
+            <BidTile q={q} tone={tone} size={size} onPick={can ? () => props.onPick!(q) : null} />
+          </group>
+        );
+      })}
+      {props.bid && (
+        <group position={at(props.bid.quantity)}>
+          <BidPiece face={props.bid.face} color={BID_DIE} ghost={false} />
+        </group>
+      )}
+      {draft && (
+        <group position={at(draft.quantity)}>
+          <BidPiece face={draft.face} color={DRAFT_DIE} ghost />
+        </group>
+      )}
+    </group>
+  );
+}
+
 // ---------------------------------------------------------------------------
 
 const THEME: TableTheme = {
   background: "#3a2340",
   fog: [12, 34],
-  ambient: ["#ffd7b0", 0.35],
+  ambient: ["#ffd7b0", 0.5],
   hemi: ["#ffb98a", "#2a1a24", 0.5],
   fills: [
     ["#ff9a5a", 0.75, -10, 5, -14],
@@ -496,7 +621,7 @@ export default function PerudoTable3D(props: PerudoTable3DProps & { names: Recor
       bubble = { text: `${FACE_NAME[bid.face]} ${bid.quantity}개!`, style: BID_STYLE, key: `b${bid.quantity}-${bid.face}`, width: 0.72 };
     }
     const isViewer = s.seat === viewerSeat;
-    const open = !!reveal || isViewer;
+    const open = !!reveal || (isViewer && props.peek);
     return {
       seat: s.seat,
       name: s.name,
@@ -507,11 +632,24 @@ export default function PerudoTable3D(props: PerudoTable3DProps & { names: Recor
       out: s.out,
       active: !reveal && activeSeat === s.seat,
       bubble,
-      tag: isViewer ? { text: s.out ? "💀 탈락" : `🎲 내 주사위 ${s.diceCount}개`, color: s.color.body } : null,
+      // no tag of my own — it would float over the ring track; the HUD under the canvas carries it
+      tag: null,
       front: s.out ? null : (
-        <group>
-          {open && s.dice && <DiceCluster dice={s.dice} color={s.color} face={faceForGlow} wild={wild} roundKey={`${roundKey}-${open}`} />}
-          <Cup open={open} accent={s.color.body} shakeKey={roundKey} lowDetail={props.lowDetail} />
+        // my own cup and dice sit a bit bigger so they read from the camera behind them
+        <group scale={isViewer ? 1.2 : 1}>
+          {open && s.dice && (
+            <DiceCluster
+              dice={s.dice}
+              color={s.color}
+              face={reveal ? faceForGlow : (bid?.face ?? null)}
+              wild={reveal ? wild : !!bid && bid.face !== 1}
+              roundKey={`${roundKey}-${open}`}
+            />
+          )}
+          <Clickable onClick={isViewer && !reveal ? props.onTogglePeek : null} lift={0.04}>
+            <Cup open={open} accent={s.color.body} shakeKey={roundKey} lowDetail={props.lowDetail} sneak={!isViewer && !reveal && activeSeat === s.seat} />
+            {isViewer && !reveal && props.onTogglePeek && <HitBox size={[0.5, 0.4, 0.5]} />}
+          </Clickable>
         </group>
       ),
     };
@@ -524,7 +662,18 @@ export default function PerudoTable3D(props: PerudoTable3DProps & { names: Recor
       seats={seats}
       theme={THEME}
       environment={<IncaCourtyard lowDetail={props.lowDetail} />}
-      center={<BidCenter bid={bid} reveal={reveal} names={names} />}
+      center={
+        <group>
+          <BidCenter bid={bid} reveal={reveal} names={names} />
+          <BidRing
+            total={props.totalDice}
+            bid={reveal ? { seat: reveal.bidSeat, quantity: reveal.quantity, face: reveal.face } : bid}
+            draft={reveal ? null : props.draft}
+            onPick={reveal ? null : props.onPickQuantity}
+            enabled={props.quantityEnabled}
+          />
+        </group>
+      }
       overview={props.overview}
       lowDetail={props.lowDetail}
     />
