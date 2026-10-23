@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -268,6 +269,73 @@ function flyGold(from: DOMRect, to: DOMRect, delayMs: number) {
   anim.oncancel = () => coin.remove();
 }
 
+/**
+ * Plucks one gem off the 2.5D board: a fixed-position copy of the cell's gem
+ * art lifts out of its socket (the socket's shadow shrinks away beneath it),
+ * hangs for a beat, then arcs into the taker's dock. Same throwaway
+ * Web-Animations approach as flyGold; skipped under reduced motion.
+ */
+function pluckGem(gemHtml: string, from: DOMRect, to: DOMRect, delayMs: number) {
+  if (typeof window === "undefined" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (from.width === 0 || to.width === 0) return;
+  const size = Math.max(22, Math.min(56, from.width * 0.82));
+  const cx = from.left + from.width / 2;
+  const cy = from.top + from.height / 2;
+  const shadow = document.createElement("div");
+  Object.assign(shadow.style, {
+    position: "fixed",
+    left: `${cx - size * 0.32}px`,
+    top: `${cy + size * 0.3}px`,
+    width: `${size * 0.64}px`,
+    height: `${size * 0.2}px`,
+    borderRadius: "50%",
+    background: "rgba(0,0,0,.7)",
+    filter: "blur(2px)",
+    zIndex: "59",
+    pointerEvents: "none",
+  });
+  const gem = document.createElement("div");
+  gem.innerHTML = gemHtml;
+  gem.setAttribute("aria-hidden", "true");
+  Object.assign(gem.style, {
+    position: "fixed",
+    left: `${cx - size / 2}px`,
+    top: `${cy - size / 2}px`,
+    width: `${size}px`,
+    height: `${size}px`,
+    zIndex: "60",
+    pointerEvents: "none",
+  });
+  const svg = gem.firstElementChild as HTMLElement | null;
+  if (svg) Object.assign(svg.style, { width: "100%", height: "100%" });
+  document.body.append(shadow, gem);
+  const dx = to.left + to.width / 2 - cx;
+  const dy = to.top + to.height / 2 - cy;
+  const lift = -size * 0.75;
+  const timing = { duration: 1050, delay: delayMs, easing: "cubic-bezier(.4,0,.3,1)", fill: "both" as const };
+  const g = gem.animate(
+    [
+      { transform: "translate(0,0) scale(1)", filter: "drop-shadow(0 2px 2px rgba(0,0,0,.6))" },
+      { transform: `translate(0,${lift}px) scale(1.3)`, filter: "drop-shadow(0 16px 8px rgba(0,0,0,.45)) drop-shadow(0 0 10px rgba(255,255,255,.55))", offset: 0.28 },
+      { transform: `translate(0,${lift * 1.1}px) scale(1.3) rotate(-8deg)`, offset: 0.42 },
+      { transform: `translate(${dx * 0.55}px, ${dy * 0.55 + lift * 1.6}px) scale(1) rotate(8deg)`, offset: 0.7 },
+      { transform: `translate(${dx}px, ${dy}px) scale(.45)`, opacity: 0.15 },
+    ],
+    timing,
+  );
+  const sh = shadow.animate(
+    [
+      { transform: "scale(1)", opacity: 1 },
+      { transform: "scale(.55)", opacity: 0.35, offset: 0.28 },
+      { transform: "scale(.4)", opacity: 0, offset: 0.5 },
+      { transform: "scale(.4)", opacity: 0 },
+    ],
+    timing,
+  );
+  g.onfinish = g.oncancel = () => gem.remove();
+  sh.onfinish = sh.oncancel = () => shadow.remove();
+}
+
 export default function SplendorDuelBoard({
   state,
   viewerSeat,
@@ -312,6 +380,38 @@ export default function SplendorDuelBoard({
   const marketRef = useRef<HTMLElement>(null);
   const p1DockRef = useRef<HTMLDivElement>(null);
   const p2DockRef = useRef<HTMLDivElement>(null);
+
+  // Gems leaving the board (line take, scroll, matching-token ability) are
+  // plucked up and flown to the taker's dock. Found by diffing the grid — the
+  // engine's lastEvent can be overwritten by a follow-up event in the same
+  // action. Each gem's art is snapshotted while it's still on the board.
+  // Layout effect so the copy appears in the same frame the cell empties.
+  const prevGridRef = useRef(state.grid);
+  const gemArtRef = useRef(new Map<number, string>());
+  useLayoutEffect(() => {
+    const prev = prevGridRef.current;
+    const now = state.grid;
+    prevGridRef.current = now;
+    const art = gemArtRef.current;
+    const nextArt = new Map<number, string>();
+    boardRef.current?.querySelectorAll("[data-cell]").forEach((el) => {
+      const svg = el.querySelector("svg");
+      if (svg) nextArt.set(Number(el.getAttribute("data-cell")), svg.outerHTML);
+    });
+    gemArtRef.current = nextArt;
+    if (prev === now || now.some((t, i) => t && !prev[i])) return; // refill / new game
+    // Gold is already flown by the reserve effect below.
+    const taken = prev.flatMap((t, i) => (t && t !== "gold" && !now[i] ? [i] : []));
+    if (taken.length === 0 || taken.length > 3) return;
+    const seat = state.lastEvent?.seat ?? state.activeSeat;
+    const to = (seat === "p1" ? p1DockRef : p2DockRef).current?.getBoundingClientRect();
+    if (!to) return;
+    taken.forEach((cell, k) => {
+      const html = art.get(cell);
+      const from = boardRef.current?.querySelector(`[data-cell="${cell}"]`)?.getBoundingClientRect();
+      if (html && from) pluckGem(html, from, to, k * 130);
+    });
+  }, [state.grid, state.lastEvent, state.activeSeat]);
 
   // Reset local UI selection whenever the turn/phase moves on — "compare
   // during render" pattern (no setState-in-effect), same as the rest of this

@@ -64,6 +64,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.94.0",
+    releaseDate: "2026-10-23",
+    title: "💎 스플렌더 대결 — 보석을 판에서 집어 올려 가져가요",
+    changes: [
+      { game: "splendor-duel", type: "IMPROVE", desc: "✋ 보석을 가져가면 입체 판의 홈에서 쏙 들려 올라 잠깐 반짝인 뒤, 가져간 사람의 자리로 날아가요 (두루마리·능력으로 가져갈 때도)" },
+    ],
+  },
+  {
     version: "v1.93.1",
     releaseDate: "2026-10-23",
     title: "🔦 시티 체이스 — 경찰 수색이 더 화려하게",
