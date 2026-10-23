@@ -190,6 +190,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "qplay",
+    name: "큐플레이",
+    nameEn: "Q-Play Quiz Party",
+    description:
+      "2~8명이 각자 기기로 모여 8가지 퀴즈 게임을 이어서 겨루는 실시간 퀴즈 파티! 틀리면 탈락하는 ⭕❌ OX 서바이벌, 📜 속담 이어 말하기, 🀄 사자성어, 🤪 넌센스, 🧠 상식, 직접 입력하는 🔤 초성 퀴즈, 각자 계단을 오르는 🧗 올라올라, 먼저 맞히고 쏘는 🚀 미사일까지. 빨리 맞힐수록 점수가 커요. AI 봇 Lv.1~10 지원.",
+    players: { min: 2, max: 8 },
+    playTime: { minMinutes: 6, maxMinutes: 15 },
+    category: "party",
+    thumbnail: { emoji: "🎙️", gradient: ["#f472b6", "#1e1b4b"] },
+    tags: ["퀴즈", "OX퀴즈", "OX", "속담", "사자성어", "넌센스", "상식", "초성퀴즈", "초성", "올라올라", "미사일", "큐플레이", "순발력", "AI봇"],
+    genres: ["party", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "word-tower",
     name: "단어 마천루",
     nameEn: "Word Skyscraper",

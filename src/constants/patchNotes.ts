@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.92.0",
+    releaseDate: "2026-10-23",
+    title: "🎙️ 신규 게임 큐플레이 — 8가지 퀴즈 게임을 이어서 겨루는 퀴즈 파티",
+    changes: [
+      { game: "qplay", type: "FEAT", desc: "신규 게임 🎙️ 큐플레이 — 2~8명이 각자 기기로 모여 미니 퀴즈 게임 3/5/8개를 이어서 겨루는 실시간 퀴즈 파티, AI 봇 Lv.1~10" },
+      { game: "qplay", type: "FEAT", desc: "⭕❌ OX 서바이벌·📜 속담 이어 말하기·🀄 사자성어·🤪 넌센스·🧠 상식·🔤 초성 퀴즈 — 먼저 맞힐수록 점수가 커요" },
+      { game: "qplay", type: "FEAT", desc: "🧗 올라올라(각자 계산 문제로 10층까지) · 🚀 미사일(먼저 맞히면 한 명을 골라 발사, 하트 0이면 탈락)" },
+    ],
+  },
+  {
     version: "v1.91.0",
     releaseDate: "2026-10-23",
     title: "🪵 스플렌더 대결·가운데땅의 대결 보드에 살짝 입체감(2.5D)",

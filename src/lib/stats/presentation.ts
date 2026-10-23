@@ -130,6 +130,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "완벽한 빼기", key: "perfectPulls", unit: "번" },
     { label: "무너뜨리지 않음", key: "cleanGames", flag: true },
   ],
+  qplay: [
+    { label: "미니 게임 1등", key: "miniWins", unit: "번" },
+    { label: "점수", key: "score", unit: "점" },
+    { label: "정답", key: "correct", unit: "개" },
+    { label: "미사일 격추", key: "missileKills", unit: "명" },
+  ],
   "word-tower": [
     { label: "라운드 1등", key: "roundWins", unit: "번" },
     { label: "최고 층수", key: "maxHeight", unit: "층" },
@@ -292,6 +298,11 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "wbt-pulls", label: "빼기 성공", num: "pulls", format: "count", unit: "번" },
     { id: "wbt-builder", label: "마지막 건축가", num: "lastBuilder", format: "count", unit: "번" },
     { id: "wbt-perfect", label: "완벽한 빼기", num: "perfectPulls", format: "count", unit: "번" },
+  ],
+  qplay: [
+    { id: "qp-score", label: "한 판 최고 점수", num: "maxScore", format: "count", unit: "점" },
+    { id: "qp-acc", label: "정답률", num: "correct", den: "answered", minDen: 30, format: "percent" },
+    { id: "qp-wins", label: "미니 게임 1등", num: "miniWins", format: "count", unit: "번" },
   ],
   "word-tower": [
     { id: "wt-height", label: "한 라운드 최고 층수", num: "maxHeight", format: "count", unit: "층" },

@@ -109,6 +109,15 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "빈칸 층에서 버틴 빼기", value: (d) => n(d.riskyPulls) },
     { label: "최고 층수 / 최고 손놀림", value: (d) => `${n(d.maxLevels)}층 / ${n(d.bestQuality)}%` },
   ],
+  qplay: [
+    { label: "미니 게임 1등", value: (d) => n(d.miniWins) },
+    { label: "한 판 최고 점수", value: (d) => `${n(d.maxScore)}점` },
+    { label: "정답 / 푼 문제", value: (d) => `${n(d.correct)} / ${n(d.answered)}` },
+    { label: "OX 끝까지 생존", value: (d) => n(d.oxSurvived) },
+    { label: "미사일 명중 / 격추", value: (d) => `${n(d.missileHits)} / ${n(d.missileKills)}` },
+    { label: "올라올라 완주 / 1등", value: (d) => `${n(d.climbFinishes)} / ${n(d.climbFirst)}` },
+    { label: "초성 퀴즈 1등 정답", value: (d) => n(d.chosungFirst) },
+  ],
   "word-tower": [
     { label: "라운드 1등", value: (d) => n(d.roundWins) },
     { label: "최고 연승", value: (d) => n(d.bestStreak) },

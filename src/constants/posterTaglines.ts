@@ -19,6 +19,7 @@ export const POSTER_TAGLINES: Partial<Record<GameId, string>> = {
   curling: "던지고! 쓸고! 소리 질러!",
   alkkagi: "튕겨라, 떨어뜨려라, 딱!",
   "wobble-tower": "한 칸만 더… 와르르!",
+  qplay: "8가지 퀴즈, 먼저 맞히는 자가 쏜다",
   "word-tower": "단어를 쏟아내 하늘까지 쌓아라",
   "liar-game": "우리 중에 거짓말쟁이가 있다",
   telepathy: "말없이, 신호없이, 마음으로만",
