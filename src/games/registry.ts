@@ -902,6 +902,21 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
   },
   {
+    id: "prism-five",
+    name: "섬광전대 프리즘파이브",
+    nameEn: "Prism Five: Flash Squadron",
+    description:
+      "80년대 특촬 전대물(후레쉬맨 스타일)을 오마주한 1인용 횡스크롤 액션. 레드·블루·옐로·그린·핑크 5인 중 한 명으로 변신해 약공격 체인·띄우기·점프 추격 공중 콤보·스킬 캔슬로 암흑제국 졸개 7종을 쓸어버리고, 슈퍼아머 괴인 보스 5명의 브레이크 게이지를 깨 쓰러뜨린 뒤 거대화한 괴인과 합체 로봇 프리즘 킹로보로 필살 섬광 일도양단! 경직·휘청·다운·벽꽝·지면 바운드 피격 모션, 섬광 회피 슬로 모션, 팀 어시스트와 5인 합체포, 스타일 랭크 D~SSS까지.",
+    players: { min: 1, max: 1 },
+    playTime: { minMinutes: 3, maxMinutes: 25 },
+    category: "party",
+    thumbnail: { emoji: "🦸", gradient: ["#e11d2e", "#312e81"], image: "/games/prism-five.svg" },
+    tags: ["실시간액션", "1인용", "벨트스크롤", "격투", "보스전"],
+    genres: ["party"],
+    playable: true,
+    supportsAutoRanking: true,
+  },
+  {
     id: "lost-cities",
     name: "로스트 시티",
     nameEn: "Lost Cities",

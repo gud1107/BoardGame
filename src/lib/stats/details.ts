@@ -38,6 +38,7 @@ const waves3 = (...v: (number | undefined)[]) => (v.some((x) => x) ? v.map((x) =
 export const SOLO_HEADLINE: Record<string, (d: StatDetails) => string> = {
   "hungry-shark": (d) => `최고 ${n(d.maxScore)}점 · 🔥 최고 연속 올클리어 ${n(d.maxMissionStreak)}회`,
   "crab-survival": (d) => `최고 ${n(d.maxScore)}점 · 👑 1등 ${n(d.firsts)}회${d.minRank !== undefined ? ` · 최고 ${n(d.minRank)}위` : ""}`,
+  "prism-five": (d) => `최고 ${n(d.maxScore)}점 · STAGE ${n(d.maxStage)} · 최대 ${n(d.maxCombo)}콤보`,
 };
 
 /** What /stats shows per game — only games listed here have a detail panel. */
@@ -208,6 +209,15 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "한 장에 받은 최다 반응", value: (d) => n(d.maxReactionsOnePage) },
     { label: "받은 투표 (점수 모드)", value: (d) => n(d.votesReceived) },
     { label: "시간 초과로 자동 제출", value: (d) => n(d.autoFilled) },
+  ],
+  "prism-five": [
+    { label: "최고 점수 (한 스테이지)", value: (d) => n(d.maxScore) },
+    { label: "클리어", value: (d) => ratio(d.clears, d.runs) },
+    { label: "최고 스테이지 · FINAL 클리어", value: (d) => `STAGE ${n(d.maxStage)} · ${n(d.finalClears)}회` },
+    { label: "최대 콤보", value: (d) => `${n(d.maxCombo)} HITS` },
+    { label: "처치 (보스)", value: (d) => `${n(d.kills)} (${n(d.bossKills)})` },
+    { label: "S 등급 / 노데스 클리어", value: (d) => `${n(d.sGrades)} / ${n(d.noDeathClears)}` },
+    { label: "섬광 회피", value: (d) => `${n(d.perfectDodges)}회` },
   ],
   "crab-survival": [
     { label: "최고 점수 (한 판)", value: (d) => n(d.maxScore) },

@@ -301,6 +301,14 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["all-clear", "🦈", "미션 올클리어", "한 잠수에서 미션 모두 달성", 1, k("missionAllClears")],
     ["streak-5", "🔥", "연속 올클리어", "5연속 미션 올클리어", 5, k("maxMissionStreak")],
   ],
+  "prism-five": [
+    ["clear-1", "🦸", "첫 출동", "스테이지 하나 클리어", 1, k("clears")],
+    ["final", "👑", "암흑제국 격멸", "FINAL 스테이지 클리어", 1, k("finalClears")],
+    ["combo-50", "💥", "50 HITS", "한 번에 50콤보", 50, k("maxCombo")],
+    ["s-grade", "⭐", "S랭크 히어로", "S 등급으로 클리어", 1, k("sGrades")],
+    ["no-death", "🛡️", "무결점 변신", "변신 해제 없이 클리어", 1, k("noDeathClears")],
+    ["perfect-30", "✨", "섬광의 달인", "섬광 회피 누적 30회", 30, k("perfectDodges")],
+  ],
   "crab-survival": [
     ["first", "👑", "게들의 왕", "1등으로 살아남기", 1, k("firsts")],
     ["kills-10", "🦀", "집게 폭풍", "한 판에 10마리 처치", 10, k("maxKills")],

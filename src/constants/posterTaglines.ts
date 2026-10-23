@@ -51,6 +51,7 @@ export const POSTER_TAGLINES: Partial<Record<GameId, string>> = {
   worm: "먹고, 커지고, 들이받아라",
   "hungry-shark": "배고프다. 바다 전체가 먹이다",
   "crab-survival": "작은 게가 해변의 왕이 되기까지",
+  "prism-five": "변신! 다섯 빛이 하나 될 때, 악은 무너진다",
   "lost-cities": "잃어버린 도시로, 모험엔 대가가 있다",
   "rat-a-tat-cat": "기억해라, 그리고 속여라",
   "mine-of-oblivion": "지뢰를 묻은 자리, 기억나나?",

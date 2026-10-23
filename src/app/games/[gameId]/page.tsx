@@ -329,8 +329,9 @@ export default function GamePlayPage() {
   // 원정 트랙·랜드마크 3열 + 좌측 게임 기록 패널(w-60)까지 붙어 96rem.
   // 2026-09-26 배고픈 상어: 실시간 캔버스 액션이라 화면이 넓을수록 시야가 넓어져 6xl.
   // 2026-09-27 그림 전화기: 그림판(4:3)이 2xl 폭에선 너무 작아 3xl.
+  // 2026-10-23 섬광전대 프리즘파이브: 16:9 횡스크롤 캔버스라 상어와 같은 6xl.
   const pageMaxWidth =
-    game.id === "hungry-shark"
+    game.id === "hungry-shark" || game.id === "prism-five"
       ? "max-w-6xl"
       : game.id === "doodle-phone" || game.id === "liar-game" || game.id === "word-tower" || game.id === "qplay" || game.id === "wobble-tower" || game.id === "alkkagi" || game.id === "curling"
       ? "max-w-3xl"

@@ -39,6 +39,7 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   worm: dynamic(() => import("./worm/WormGame"), { ssr: false }),
   "hungry-shark": dynamic(() => import("./hungryShark/HungrySharkGame"), { ssr: false }),
   "crab-survival": dynamic(() => import("./crabSurvival/CrabSurvivalGame"), { ssr: false }),
+  "prism-five": dynamic(() => import("./prismFive/PrismFiveGame"), { ssr: false }),
   "lost-cities": dynamic(() => import("./lostCities/LostCitiesGame"), { ssr: false }),
   "show-me-the-coin": dynamic(() => import("./showMeTheCoin/ShowMeTheCoinGame"), { ssr: false }),
   "love-wins-all": dynamic(() => import("./loveWinsAll/LoveWinsAllGame"), { ssr: false }),

@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e11d2e"/>
+      <stop offset="0.5" stop-color="#312e81"/>
+      <stop offset="1" stop-color="#ec4899"/>
+    </linearGradient>
+    <radialGradient id="boom" cx="0.5" cy="0.47" r="0.5">
+      <stop offset="0" stop-color="#fff7c2"/>
+      <stop offset="0.4" stop-color="#fb923c" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#fb923c" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="300" height="400" fill="url(#bg)"/>
+  <polygon points="150,190 550,190 547,238" fill="rgba(255,255,255,0.10)"/><polygon points="150,190 515,353 493,396" fill="rgba(255,255,255,0.10)"/><polygon points="150,190 417,488 379,518" fill="rgba(255,255,255,0.10)"/><polygon points="150,190 272,571 226,583" fill="rgba(255,255,255,0.10)"/><polygon points="150,190 106,588 59,580" fill="rgba(255,255,255,0.10)"/><polygon points="150,190 -52,535 -92,509" fill="rgba(255,255,255,0.10)"/><polygon points="150,190 -175,423 -201,382" fill="rgba(255,255,255,0.10)"/><polygon points="150,190 -242,270 -249,223" fill="rgba(255,255,255,0.10)"/><polygon points="150,190 -240,103 -227,57" fill="rgba(255,255,255,0.10)"/><polygon points="150,190 -171,-48 -140,-85" fill="rgba(255,255,255,0.10)"/><polygon points="150,190 -46,-159 -3,-180" fill="rgba(255,255,255,0.10)"/><polygon points="150,190 113,-208 161,-210" fill="rgba(255,255,255,0.10)"/><polygon points="150,190 279,-189 323,-171" fill="rgba(255,255,255,0.10)"/><polygon points="150,190 422,-103 455,-69" fill="rgba(255,255,255,0.10)"/><polygon points="150,190 518,33 534,78" fill="rgba(255,255,255,0.10)"/>
+  <circle cx="150" cy="190" r="150" fill="url(#boom)"/>
+  <g stroke="#0b0b12" stroke-width="2.2">
+  <path d="M15.5,295.0 L13.299999999999997,317.0 L50.7,317.0 L48.5,295.0Z" fill="#16a34a"/>
+  <ellipse cx="32" cy="262" rx="16.5" ry="18.700000000000003" fill="#16a34a"/>
+  <g fill="#0b0b12" stroke="none"><path d="M21.0,268.6 Q32,248.8 43.0,268.6Z"/></g>
+  <rect x="26.5" y="275.2" width="11.0" height="4.4" fill="#e5e7eb" stroke="none"/>
+  <ellipse cx="26.5" cy="253.2" rx="4.4" ry="2.75" fill="rgba(255,255,255,0.5)" stroke="none"/>
+</g><g stroke="#0b0b12" stroke-width="2.2">
+  <path d="M251.5,295.0 L249.3,317.0 L286.7,317.0 L284.5,295.0Z" fill="#ec4899"/>
+  <ellipse cx="268" cy="262" rx="16.5" ry="18.700000000000003" fill="#ec4899"/>
+  <g fill="#0b0b12" stroke="none"><path d="M268,271.9 C254.8,262 261.4,252.1 268,259.8 C274.6,252.1 281.2,262 268,271.9Z"/></g>
+  <rect x="262.5" y="275.2" width="11.0" height="4.4" fill="#e5e7eb" stroke="none"/>
+  <ellipse cx="262.5" cy="253.2" rx="4.4" ry="2.75" fill="rgba(255,255,255,0.5)" stroke="none"/>
+</g><g stroke="#0b0b12" stroke-width="2.9">
+  <path d="M48.25,258.5 L45.35,287.5 L94.65,287.5 L91.75,258.5Z" fill="#1d4ed8"/>
+  <ellipse cx="70" cy="215" rx="21.75" ry="24.65" fill="#1d4ed8"/>
+  <g fill="#0b0b12" stroke="none"><path d="M70,206.3 L83.05,217.9 L70,228.05 L56.95,217.9Z"/></g>
+  <rect x="62.75" y="232.4" width="14.5" height="5.8" fill="#e5e7eb" stroke="none"/>
+  <ellipse cx="62.75" cy="203.4" rx="5.8" ry="3.625" fill="rgba(255,255,255,0.5)" stroke="none"/>
+</g><g stroke="#0b0b12" stroke-width="2.9">
+  <path d="M208.25,258.5 L205.35,287.5 L254.65,287.5 L251.75,258.5Z" fill="#eab308"/>
+  <ellipse cx="230" cy="215" rx="21.75" ry="24.65" fill="#eab308"/>
+  <g fill="#0b0b12" stroke="none"><rect x="215.5" y="212.1" width="29.0" height="10.15"/></g>
+  <rect x="222.75" y="232.4" width="14.5" height="5.8" fill="#e5e7eb" stroke="none"/>
+  <ellipse cx="222.75" cy="203.4" rx="5.8" ry="3.625" fill="rgba(255,255,255,0.5)" stroke="none"/>
+</g><g stroke="#0b0b12" stroke-width="4.0">
+  <path d="M120.0,230.0 L116.0,270.0 L184.0,270.0 L180.0,230.0Z" fill="#e11d2e"/>
+  <ellipse cx="150" cy="170" rx="30.0" ry="34.0" fill="#e11d2e"/>
+  <g fill="#0b0b12" stroke="none"><path d="M132.0,166.0 L150,182.0 L168.0,166.0 L168.0,176.0 L150,192.0 L132.0,176.0Z"/></g>
+  <rect x="140.0" y="194.0" width="20.0" height="8.0" fill="#e5e7eb" stroke="none"/>
+  <ellipse cx="140.0" cy="154.0" rx="8.0" ry="5.0" fill="rgba(255,255,255,0.5)" stroke="none"/>
+</g>
+  <rect x="0" y="318" width="300" height="82" fill="rgba(11,11,18,0.55)"/>
+  <text x="150" y="352" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="900" font-style="italic" font-size="30" fill="#fff" stroke="#0b0b12" stroke-width="1.5">섬광전대</text>
+  <text x="150" y="384" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="900" font-style="italic" font-size="26" fill="#fde047" stroke="#0b0b12" stroke-width="1.2">프리즘파이브</text>
+  <text x="150" y="40" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="800" font-size="13" letter-spacing="5" fill="#fde68a">FLASH SQUADRON</text>
+</svg>

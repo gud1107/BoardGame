@@ -17,6 +17,9 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
  * Keep it short (≤ 80 chars), headline features only.
  */
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
+  "2026-10-23": {
+    "prism-five": "🦸 신규 전대물 액션 — 5인 히어로·콤보·필살기, 괴인 보스 브레이크, 🤖 거대 로봇전",
+  },
   "2026-10-22": {
     common: "🧑‍🎤 3D 캐릭터가 K-pop 아이돌로, 📋 캐릭터 목록에서 내 캐릭터 선택, 🤲 손까지 자연스러운 동작",
   },

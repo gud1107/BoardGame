@@ -64,6 +64,17 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.93.0",
+    releaseDate: "2026-10-23",
+    title: "🦸 신규 게임 섬광전대 프리즘파이브 — 변신! 콤보로 졸개를 쓸고 거대 로봇으로 괴인을 벤다",
+    changes: [
+      { game: "prism-five", type: "FEAT", desc: "🦸 전대물 횡스크롤 액션 — 레드·블루·옐로·그린·핑크 5인 중 선택, 스테이지 5개 · 졸개 7종 · 괴인 보스 5명" },
+      { game: "prism-five", type: "FEAT", desc: "💥 약공격 체인 → 띄우기 → 점프 추격 공중 콤보, 스킬 캔슬, 필살기 컷인, 팀 어시스트·5인 합체포" },
+      { game: "prism-five", type: "FEAT", desc: "🤕 경직·휘청·다운·벽꽝·지면 바운드 피격 모션, 보스 브레이크 게이지, 저스트 회피 시 섬광 회피 슬로 모션" },
+      { game: "prism-five", type: "FEAT", desc: "🤖 보스를 쓰러뜨리면 거대화 → 프리즘 킹로보 합체, 체력 25% 아래에서 필살 섬광 일도양단으로 마무리" },
+    ],
+  },
+  {
     version: "v1.92.0",
     releaseDate: "2026-10-23",
     title: "🎙️ 신규 게임 큐플레이 — 8가지 퀴즈 게임을 이어서 겨루는 퀴즈 파티",
