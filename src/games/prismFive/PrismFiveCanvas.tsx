@@ -5,6 +5,7 @@ import { ASSIST_MAX, HEROES, MECHA, PRISM_MAX, VIEW_W, type Difficulty, type Her
 import { createWorld, NO_INPUT, step, type Input, type StageSummary, type World } from "./engine";
 import { drawWorld, newMemo, VIEW_H, type RenderMemo } from "./render";
 import { PrismAudio } from "./audio";
+import KeyHelpTable from "./KeyHelpTable";
 
 /**
  * requestAnimationFrame host for one stage: owns the mutable `World`, turns
@@ -47,6 +48,8 @@ const KEYMAP: Record<string, keyof Omit<Input, "mx" | "mz" | "skill"> | "s1" | "
   KeyV: "ult",
   KeyG: "assist",
   KeyB: "assist",
+  KeyH: "poke",
+  KeyN: "poke",
 };
 
 export default function PrismFiveCanvas({
@@ -83,15 +86,18 @@ export default function PrismFiveCanvas({
   const pausedRef = useRef(false);
   const optsRef = useRef({ noShake, calm: reduceFlash, touch: false });
   const onEndRef = useRef(onEnd);
+  const muteRef = useRef(onToggleMute);
   const [paused, setPaused] = useState(false);
   const [touch, setTouch] = useState(false);
   const [pad, setPad] = useState<Pad | null>(null);
   const [joyView, setJoyView] = useState<{ ox: number; oy: number; x: number; y: number } | null>(null);
   const [full, setFull] = useState(false);
+  const [help, setHelp] = useState(false);
 
   useEffect(() => {
     onEndRef.current = onEnd;
-  }, [onEnd]);
+    muteRef.current = onToggleMute;
+  }, [onEnd, onToggleMute]);
   useEffect(() => {
     optsRef.current = { ...optsRef.current, noShake, calm: reduceFlash };
   }, [noShake, reduceFlash]);
@@ -158,6 +164,7 @@ export default function PrismFiveCanvas({
         dodge: p.has("dodge"),
         ult: p.has("ult"),
         assist: p.has("assist"),
+        poke: p.has("poke"),
         skill: p.has("s1") ? 1 : p.has("s2") ? 2 : p.has("s3") ? 3 : 0,
       };
       p.clear();
@@ -216,7 +223,20 @@ export default function PrismFiveCanvas({
 
     const down = (e: KeyboardEvent) => {
       if (e.code === "Escape" || e.code === "KeyP") {
+        setHelp(false);
         setPause(!pausedRef.current);
+        return;
+      }
+      if (e.code === "F1" || e.code === "Slash") {
+        e.preventDefault();
+        setHelp((v) => {
+          setPause(!v);
+          return !v;
+        });
+        return;
+      }
+      if (e.code === "KeyM" && !e.repeat) {
+        muteRef.current();
         return;
       }
       audio.unlock();
@@ -282,6 +302,17 @@ export default function PrismFiveCanvas({
         <button type="button" onClick={toggleFull} className="rounded-md bg-black/50 px-2 py-0.5 text-xs text-white/80 hover:bg-black/70" aria-label="전체 화면">
           ⛶
         </button>
+        <button
+          type="button"
+          onClick={() => {
+            setHelp(true);
+            setPause(true);
+          }}
+          className="rounded-md bg-black/50 px-2 py-0.5 text-xs text-white/80 hover:bg-black/70"
+          aria-label="단축키 보기"
+        >
+          ⌨️
+        </button>
       </div>
 
       {touch && (
@@ -329,7 +360,7 @@ export default function PrismFiveCanvas({
             {!joyView && <div className="pointer-events-none absolute bottom-3 left-3 text-[10px] text-white/40">여기를 끌어 이동 · 같은 방향 두 번 = 달리기</div>}
           </div>
           {/* Right: action buttons */}
-          <div className="absolute right-1 bottom-1 grid grid-cols-4 gap-1">
+          <div className="absolute right-1 bottom-1 grid grid-cols-5 gap-1">
             {pad &&
               (pad.giant ? [0] : [0, 1, 2]).map((i) => {
                 const ready = pad.cds[i] <= 0 && pad.en >= pad.enCost[i];
@@ -355,8 +386,12 @@ export default function PrismFiveCanvas({
                 {pad.assist >= ASSIST_MAX ? "합체!" : `팀×${pad.assist}`}
               </button>
             )}
-            {pad && pad.giant && <span />}
-            {pad && pad.giant && <span />}
+            {pad && !pad.giant && (
+              <button type="button" onPointerDown={() => press("poke")} className="h-11 w-11 rounded-full border border-emerald-300/60 bg-emerald-500/25 text-[10px] font-black text-white">
+                견제
+              </button>
+            )}
+            {pad && pad.giant && [0, 1, 2, 3].map((i) => <span key={i} />)}
             <button type="button" onPointerDown={() => press("dodge")} className="h-12 w-12 rounded-full border border-white/30 bg-white/10 text-[11px] font-black text-white">
               회피
             </button>
@@ -382,7 +417,28 @@ export default function PrismFiveCanvas({
         </>
       )}
 
-      {paused && (
+      {help && (
+        <div className="absolute inset-0 z-10 flex flex-col rounded-xl bg-slate-950/95 p-3 text-white">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-sm font-black">⌨️ 단축키 · 조작</div>
+            <button
+              type="button"
+              onClick={() => {
+                setHelp(false);
+                setPause(false);
+              }}
+              className="rounded-md bg-white/90 px-3 py-1 text-xs font-bold text-slate-900"
+            >
+              ▶ 닫고 계속 (? / Esc)
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <KeyHelpTable compact={touch} />
+          </div>
+        </div>
+      )}
+
+      {paused && !help && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl bg-black/70">
           <div className="text-lg font-black text-white">일시정지</div>
           <button type="button" onClick={() => setPause(false)} className="w-40 rounded-lg bg-white/90 px-3 py-2 text-sm font-bold text-slate-900">

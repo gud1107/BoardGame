@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOSSES, DIFFICULTIES, ENEMIES, HERO_ORDER, HEROES, MECHA, STAGES, stageGrade, styleRank, type MoveDef } from "./data";
+import { BOSSES, DIFFICULTIES, ENEMIES, HERO_ORDER, HEROES, KEY_HELP, MECHA, STAGES, stageGrade, styleRank, type MoveDef } from "./data";
 import { botInput, createWorld, heroActor, NO_INPUT, step, type Input, type World } from "./engine";
 import { applySummary, freshSave } from "./save";
 
@@ -40,7 +40,7 @@ describe("data invariants", () => {
   const all: MoveDef[] = [];
   for (const id of HERO_ORDER) {
     const h = HEROES[id];
-    all.push(...h.chain, h.heavy, h.finisher, ...h.air, h.airHeavy, h.dashAtk, h.slide, ...h.skills, h.ult, h.assist);
+    all.push(...h.chain, h.heavy, h.heavy2, h.poke, h.finisher, ...h.air, h.airHeavy, h.dashAtk, h.slide, ...h.skills, h.ult, h.assist);
   }
   for (const e of Object.values(ENEMIES)) all.push(...e.moves);
   for (const b of Object.values(BOSSES)) all.push(...b.patterns.map((p) => p.move), ...b.giantMoves);
@@ -207,6 +207,37 @@ function heroArena(hero: (typeof HERO_ORDER)[number]) {
   };
   return { w, h, mk };
 }
+
+describe("basic attacks, pokes, cooldowns", () => {
+  it("every hero has a 5+ hit chain, a heavy follow-up and a free poke", () => {
+    for (const id of HERO_ORDER) {
+      const h = HEROES[id];
+      expect(h.chain.length, h.name).toBeGreaterThanOrEqual(5);
+      expect(h.poke.en ?? 0).toBe(0);
+      expect(h.poke.cd ?? 0).toBe(0);
+      expect(h.heavy2.hits.length + (h.heavy2.proj?.length ?? 0)).toBeGreaterThan(0);
+      for (const s of h.skills) expect(s.cd!, s.name).toBeLessThanOrEqual(300);
+    }
+  });
+
+  it("H fires the poke, and K after a landed launcher fires the follow-up", () => {
+    const { w, h } = arena();
+    step(w, press({ heavy: true }));
+    run(w, 20);
+    step(w, press({ heavy: true }));
+    run(w, 4);
+    expect(h.move?.id).toBe("h2");
+    run(w, 60);
+    step(w, press({ poke: true }));
+    run(w, 2);
+    expect(h.move?.id).toBe("p");
+  });
+
+  it("every control in the key list is wired (poke H/N included)", () => {
+    expect(KEY_HELP.some((k) => k.pc.includes("H"))).toBe(true);
+    expect(KEY_HELP.some((k) => k.pc.includes("F1"))).toBe(true);
+  });
+});
 
 describe("hero traits are distinct", () => {
   it("every hero has its own trait, headgear and skill names", () => {

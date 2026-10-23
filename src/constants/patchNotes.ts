@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.96.0",
+    releaseDate: "2026-10-23",
+    title: "⌨️ 프리즘파이브 — 기본 공격 추가, 스킬 쿨타임 절반, 모든 단축키 한눈에",
+    changes: [
+      { game: "prism-five", type: "FEAT", desc: "👊 약공격 체인 5~6연격, 띄운 뒤 K 추가타, H 견제기(검기·전격 잽·권총·암석파·물방울) — 비용·쿨타임 없음" },
+      { game: "prism-five", type: "IMPROVE", desc: "⏱️ 스킬 쿨타임 절반 이하로 단축 (가장 긴 스킬도 5초)" },
+      { game: "prism-five", type: "FEAT", desc: "⌨️ 룰북·메뉴·게임 중 ? / F1(모바일 ⌨️)에서 모든 단축키 표 보기, M으로 소리 끄기" },
+    ],
+  },
+  {
     version: "v1.95.0",
     releaseDate: "2026-10-23",
     title: "🔥⚡🛠️🪨🌊 프리즘파이브 — 다섯 히어로가 완전히 다른 캐릭터로",

@@ -1,6 +1,7 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
+import KeyHelpTable from "./KeyHelpTable";
 import { BOSSES, DIFFICULTIES, ENEMIES, HERO_ORDER, HEROES, MECHA, STAGES, STYLE_RANKS, TEAM_ULT, type MoveDef } from "./data";
 
 const H3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
@@ -25,17 +26,11 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         </section>
 
         <section>
-          <h3 className={H3}>조작법</h3>
-          <ul className={`list-disc space-y-1.5 pl-4 ${P}`}>
-            <li>
-              <b>PC</b>: 이동 <b>WASD / 방향키</b>(위·아래 = 안쪽·바깥쪽 라인) · 같은 방향 두 번 = <b>달리기</b> · <b>J</b>(Z) 약공격 · <b>K</b>(X) 강공격 ·{" "}
-              <b>Space</b>(C) 점프 · <b>L / Shift</b> 회피 · <b>U·I·O</b>(1·2·3) 스킬 · <b>F</b>(V) 필살기 · <b>G</b>(B) 팀 어시스트 · Esc/P 일시정지
-            </li>
-            <li>
-              <b>모바일</b>: 왼쪽 절반 아무 곳이나 끌면 조이스틱. 오른쪽 버튼 — 공격/강공/점프/회피, 위 줄 스킬 3개와 팀 버튼. 필살 게이지가 차면 무지갯빛 <b>필살기!</b> 버튼이 뜹니다.
-              ⛶ 버튼으로 전체 화면.
-            </li>
-          </ul>
+          <h3 className={H3}>조작법 · 모든 단축키</h3>
+          <p className={`mb-2 ${P}`}>
+            게임 중 <b>?</b> 또는 <b>F1</b>(모바일은 ⌨️ 버튼)을 누르면 언제든 이 표를 다시 볼 수 있습니다. 모바일은 왼쪽 절반을 끌면 조이스틱이 생깁니다.
+          </p>
+          <KeyHelpTable />
         </section>
 
         <section>
@@ -115,7 +110,10 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
                   </p>
                   <ul className="mt-1 space-y-0.5 text-xs">
                     <li>약공격 {h.chain.length}연격: {h.chain.map((m) => m.name).join(" → ")}</li>
-                    <li>띄우기 {h.heavy.name} · 피니셔 {h.finisher.name} · 다이브 {h.airHeavy.name}</li>
+                    <li>강공격 띄우기 {h.heavy.name} → 추가타 {h.heavy2.name} · 피니셔 {h.finisher.name} · 다이브 {h.airHeavy.name}</li>
+                    <li>
+                      <b>H</b> 견제기 {h.poke.name} (EN·쿨타임 없음) · 달리기 공격 {h.dashAtk.name} · 슬라이딩 {h.slide.name}
+                    </li>
                     {h.skills.map((s, i) => (
                       <li key={s.id}>
                         <b>{"UIO"[i]}</b> {s.name} — EN {s.en} · 쿨 {sec(s.cd)} · 피해 약 {totalDmg(s)}

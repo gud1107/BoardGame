@@ -1469,7 +1469,7 @@ function drawProj(ctx: CanvasRenderingContext2D, w: World, p: Proj, camX: number
     }
     case "orb":
     case "bubble": {
-      const col = p.kind === "bubble" ? "rgba(253,164,175,0.55)" : p.home ? "#a855f7" : "#c4b5fd";
+      const col = p.kind === "bubble" ? (p.team === 0 ? "rgba(94,234,212,0.7)" : "rgba(253,164,175,0.55)") : p.home ? "#a855f7" : "#c4b5fd";
       ctx.fillStyle = col;
       ctx.shadowColor = col;
       ctx.shadowBlur = opts.calm ? 0 : 12;
@@ -1524,6 +1524,23 @@ function drawProj(ctx: CanvasRenderingContext2D, w: World, p: Proj, camX: number
       ctx.beginPath();
       ctx.arc(sx - p.vx * 3, sy + p.vy * 3, 4, 0, Math.PI * 2);
       ctx.fill();
+      break;
+    }
+    case "slashwave": {
+      const d = p.vx >= 0 ? 1 : -1;
+      const col = p.color ?? "#fde047";
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 4;
+      ctx.globalAlpha = Math.min(1, p.life / 10);
+      ctx.beginPath();
+      ctx.arc(sx - d * 10, sy, 18, -1.1, 1.1, d < 0);
+      ctx.stroke();
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(sx - d * 12, sy, 16, -0.9, 0.9, d < 0);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
       break;
     }
     case "tide": {

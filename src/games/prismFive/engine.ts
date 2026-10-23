@@ -78,8 +78,10 @@ export interface Input {
   skill: 0 | 1 | 2 | 3;
   ult: boolean;
   assist: boolean;
+  /** 견제기 (H). */
+  poke: boolean;
 }
-export const NO_INPUT: Input = { mx: 0, mz: 0, light: false, heavy: false, jump: false, dodge: false, skill: 0, ult: false, assist: false };
+export const NO_INPUT: Input = { mx: 0, mz: 0, light: false, heavy: false, jump: false, dodge: false, skill: 0, ult: false, assist: false, poke: false };
 
 export type ActorKind = "hero" | "enemy" | "boss" | "clone" | "assist" | "mecha" | "giant" | "crate" | "turret";
 export type AState = "idle" | "walk" | "run" | "jump" | "attack" | "tell" | "hit" | "air" | "down" | "getup" | "dodge" | "dead" | "grabbed" | "held" | "stunned" | "pose" | "gone";
@@ -293,7 +295,7 @@ export interface World {
   assistHits: number;
   assistIdx: number;
   cds: [number, number, number];
-  buf: { light: number; heavy: number; jump: number; dodge: number; skill: number; skillN: 0 | 1 | 2 | 3; ult: number; assist: number };
+  buf: { light: number; heavy: number; jump: number; dodge: number; skill: number; skillN: 0 | 1 | 2 | 3; ult: number; assist: number; poke: number };
   lastMx: number;
   tapDir: number;
   tapT: number;
@@ -445,7 +447,7 @@ export function createWorld(opts: { stage: number; hero: HeroId; diff: Difficult
     assistHits: 0,
     assistIdx: 0,
     cds: [0, 0, 0],
-    buf: { light: 0, heavy: 0, jump: 0, dodge: 0, skill: 0, skillN: 0, ult: 0, assist: 0 },
+    buf: { light: 0, heavy: 0, jump: 0, dodge: 0, skill: 0, skillN: 0, ult: 0, assist: 0, poke: 0 },
     lastMx: 0,
     tapDir: 0,
     tapT: -99,
@@ -542,6 +544,7 @@ function bufferInput(w: World, inp: Input) {
   b.dodge = inp.dodge ? B : Math.max(0, b.dodge - 1);
   b.ult = inp.ult ? B : Math.max(0, b.ult - 1);
   b.assist = inp.assist ? B : Math.max(0, b.assist - 1);
+  b.poke = inp.poke ? B : Math.max(0, b.poke - 1);
   if (inp.skill) {
     b.skill = B;
     b.skillN = inp.skill;
@@ -626,7 +629,7 @@ function startSpecial(w: World, a: Actor, m: MoveDef) {
       for (const old of w.actors) if (old.kind === "turret") old.state = "gone";
       const t = baseActor(w, "turret", 0, a.x + a.face * 34, a.z, 1, "자동 포탑");
       t.face = a.face;
-      t.life = 480;
+      t.life = 300;
       t.invuln = 999;
       t.entered = true;
       w.actors.push(t);
@@ -853,6 +856,7 @@ function spawnMoveProj(w: World, a: Actor, s: ProjSpawn) {
       home: s.home ?? 0,
       len: s.kind === "beam" ? (a.kind === "giant" ? 560 : 420) : 0,
       dir: a.face,
+      color: s.color,
     });
   }
   w.events.push({ type: "shoot", kind: s.kind });
@@ -1532,6 +1536,17 @@ function heroControl(w: World, h: Actor, inp: Input) {
       startMove(w, h, hd.air[ai + 1]);
       return;
     }
+    if (b.heavy && m === hd.heavy && h.landed && !giant) {
+      b.heavy = 0;
+      startMove(w, h, hd.heavy2);
+      return;
+    }
+    if (b.poke && ci >= 0 && !giant) {
+      b.poke = 0;
+      faceInput(h, inp);
+      startMove(w, h, hd.poke);
+      return;
+    }
     if (b.heavy && ci >= 0 && !giant) {
       b.heavy = 0;
       faceInput(h, inp);
@@ -1589,6 +1604,13 @@ function heroControl(w: World, h: Actor, inp: Input) {
     h.t = 0;
     h.airHits = 0;
     h.airIdx = 0;
+    w.running = false;
+    return;
+  }
+  if (b.poke && !giant) {
+    b.poke = 0;
+    faceInput(h, inp);
+    startMove(w, h, hd.poke);
     w.running = false;
     return;
   }

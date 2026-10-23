@@ -66,7 +66,7 @@ export type AnimKind =
   | "shoot" | "shootUp" | "throw" | "slam" | "dive" | "rise" | "dash"
   | "whip" | "heal" | "guard" | "roar" | "charge" | "cast" | "pose" | "grab";
 
-export type ProjKind = "shot" | "arrow" | "bomb" | "grenade" | "orb" | "rock" | "pillar" | "wave" | "beam" | "fist" | "bubble" | "laser" | "heart" | "darkBlast" | "flame" | "missile" | "tide";
+export type ProjKind = "shot" | "arrow" | "bomb" | "grenade" | "orb" | "rock" | "pillar" | "wave" | "beam" | "fist" | "bubble" | "laser" | "heart" | "darkBlast" | "flame" | "missile" | "tide" | "slashwave";
 
 export interface ProjSpawn {
   at: number;
@@ -85,6 +85,8 @@ export interface ProjSpawn {
   blast?: number;
   /** Homing strength toward the nearest enemy (units/tick²). */
   home?: number;
+  /** Tint for generic projectiles (검기·암석파). */
+  color?: string;
 }
 
 export type Special =
@@ -175,6 +177,10 @@ export interface HeroDef {
   atk: number;
   chain: MoveDef[];
   heavy: MoveDef;
+  /** 강공격 추가타: K again while the launcher is still cancellable. */
+  heavy2: MoveDef;
+  /** 견제기 (H): free, no cooldown — every hero's quick poke. */
+  poke: MoveDef;
   finisher: MoveDef;
   air: MoveDef[];
   airHeavy: MoveDef;
@@ -241,9 +247,13 @@ export const HEROES: Record<HeroId, HeroDef> = {
     chain: [
       { id: "l1", name: "대검 가로베기", anim: "slashH", total: 22, cancel: 11, hits: [H(7, [8, 70], 30, "flinch", { z: 26 })] },
       { id: "l2", name: "되베기", anim: "slashB", total: 22, cancel: 11, hits: [H(7, [8, 70], 32, "flinch", { z: 26 })] },
-      { id: "l3", name: "내려찍기", anim: "slashDown", total: 34, hits: [H(12, [8, 74], 52, "knockdown", { z: 28, kb: 4, lift: 6, brk: 28 })] },
+      { id: "l3", name: "어깨 박치기", anim: "dash", total: 22, cancel: 11, lunge: [[3, 8, 3]], hits: [H(6, [4, 48], 30, "flinch", { kb: 2.2, stun: 22 })] },
+      { id: "l4", name: "연속 찌르기", anim: "thrust", total: 28, cancel: 15, lunge: [[4, 10, 2]], hits: [H(7, [8, 80], 22, "flinch", { stun: 20 }), H(13, [8, 80], 24, "flinch", { stun: 22 })] },
+      { id: "l5", name: "내려찍기", anim: "slashDown", total: 34, hits: [H(12, [8, 74], 52, "knockdown", { z: 28, kb: 4, lift: 6, brk: 28 })] },
     ],
     heavy: { id: "h", name: "화염 올려베기", anim: "slashUp", total: 36, cancel: 16, hits: [H(10, [6, 66], 54, "launch", { lift: 9.8, brk: 26, len: 5, z: 26 })] },
+    heavy2: { id: "h2", name: "화염 내려베기", anim: "slashDown", total: 36, hits: [H(10, [6, 70], 50, "spike", { lift: -8, y: [-10, 150], z: 26, brk: 26, stop: 8 })] },
+    poke: { id: "p", name: "검기 날리기", anim: "slashH", total: 26, hits: [], proj: [{ at: 8, kind: "slashwave", dx: 34, dy: 36, vx: 9, life: 30, color: "#fb923c", hit: { r: 16, dmg: 24, kind: "flinch", stun: 20, kb: 1.4, stop: 3, brk: 10, z: 22 } }] },
     finisher: { id: "f", name: "용염 회전참", anim: "spin", total: 44, hits: [H(10, [-60, 72], 40, "stagger", { z: 34 }), H(20, [-60, 76], 66, "knockdown", { z: 34, kb: 8.5, lift: 4, brk: 34, stop: 9 })] },
     air: airChain("slashH", [28, 36]),
     airHeavy: dive("유성 낙인", 50, 3),
@@ -251,15 +261,15 @@ export const HEROES: Record<HeroId, HeroDef> = {
     slide: { id: "sl", name: "불꽃 쓸기", anim: "slashUp", total: 32, lunge: [[0, 12, 5]], hits: [H(5, [4, 60], 32, "launch", { len: 10, lift: 7.5, y: [-10, 30] })] },
     skills: [
       {
-        id: "s1", name: "작열 돌진", anim: "dash", total: 34, en: 25, cd: 260, invuln: [0, 14], special: "flameField", shout: "작열 돌진!",
+        id: "s1", name: "작열 돌진", anim: "dash", total: 34, en: 25, cd: 130, invuln: [0, 14], special: "flameField", shout: "작열 돌진!",
         lunge: [[0, 16, 10]],
         hits: [H(2, [-10, 50], 36, "flinch", { z: 30, len: 14 }), H(17, [-20, 70], 48, "knockdown", { z: 32, kb: 7, lift: 4, stop: 8 })],
       },
       {
-        id: "s2", name: "업화 승천", anim: "rise", total: 44, en: 30, cd: 300, invuln: [0, 14], shout: "업화 승천!", hop: [3, 9.6],
+        id: "s2", name: "업화 승천", anim: "rise", total: 44, en: 30, cd: 150, invuln: [0, 14], shout: "업화 승천!", hop: [3, 9.6],
         hits: [H(3, [0, 60], 42, "launch", { lift: 11, len: 4, y: [-10, 110] }), H(9, [0, 60], 42, "launch", { lift: 11.5, len: 4, y: [-10, 130] }), H(15, [0, 60], 50, "launch", { lift: 12, len: 4, y: [-10, 150], brk: 40 })],
       },
-      { id: "s3", name: "폭염 해방", anim: "slam", total: 46, en: 20, cd: 360, armor: true, special: "heatBurst", shout: "폭염 해방!", hits: [] },
+      { id: "s3", name: "폭염 해방", anim: "slam", total: 46, en: 20, cd: 180, armor: true, special: "heatBurst", shout: "폭염 해방!", hits: [] },
     ],
     ult: {
       id: "ult", name: "인페르노 엔드", anim: "slashDown", total: 90, invuln: [0, 90], shout: "용염 해방 — 인페르노 엔드!",
@@ -294,9 +304,12 @@ export const HEROES: Record<HeroId, HeroDef> = {
       { id: "l2", name: "원투", anim: "straight", total: 13, cancel: 6, hits: [H(4, [6, 48], 16, "flinch", { stun: 16 })] },
       { id: "l3", name: "엘보", anim: "hook", total: 16, cancel: 8, hits: [H(5, [6, 44], 20, "flinch")] },
       { id: "l4", name: "니킥", anim: "kick", total: 18, cancel: 9, hits: [H(6, [6, 50], 22, "flinch", { kb: 1.6 })] },
-      { id: "l5", name: "뇌격 돌려차기", anim: "spinKick", total: 28, hits: [H(8, [6, 62], 40, "knockdown", { kb: 7.5, lift: 4 })] },
+      { id: "l5", name: "더블 로우킥", anim: "kick", total: 22, cancel: 12, hits: [H(5, [6, 54], 14, "flinch", { stun: 18, y: [-10, 40] }), H(11, [6, 54], 16, "flinch", { stun: 20, y: [-10, 40] })] },
+      { id: "l6", name: "뇌격 돌려차기", anim: "spinKick", total: 28, hits: [H(8, [6, 62], 40, "knockdown", { kb: 7.5, lift: 4 })] },
     ],
     heavy: { id: "h", name: "라이징 어퍼", anim: "uppercut", total: 28, cancel: 12, hits: [H(7, [6, 50], 38, "launch", { lift: 10, brk: 22, len: 4 })] },
+    heavy2: { id: "h2", name: "제트 어퍼 2단", anim: "uppercut", total: 30, hop: [4, 5], hits: [H(6, [0, 50], 22, "launch", { lift: 11, y: [-10, 150] }), H(12, [0, 50], 26, "launch", { lift: 12, y: [-10, 170], brk: 16 })] },
+    poke: { id: "p", name: "전격 잽", anim: "jab", total: 20, lunge: [[2, 7, 6]], hits: [H(5, [6, 70], 18, "flinch", { stun: 28, kb: 0.5, len: 4 })] },
     finisher: { id: "f", name: "방전 정권", anim: "straight", total: 36, lunge: [[6, 12, 4]], hits: [H(11, [6, 60], 66, "knockdown", { kb: 11, lift: 2.5, brk: 40, stop: 10 })] },
     air: airChain("kick", [16, 16, 18, 26], 50),
     airHeavy: dive("낙뢰각", 42, 5.4),
@@ -304,14 +317,14 @@ export const HEROES: Record<HeroId, HeroDef> = {
     slide: { id: "sl", name: "슬라이딩", anim: "dash", total: 26, lunge: [[0, 14, 7]], hits: [H(3, [4, 52], 24, "launch", { len: 11, lift: 7.5, y: [-10, 30] })] },
     skills: [
       {
-        id: "s1", name: "연쇄 번개 스텝", anim: "hook", total: 40, en: 25, cd: 240, invuln: [0, 30], special: "chainBlink", shout: "연쇄 번개 스텝!",
+        id: "s1", name: "연쇄 번개 스텝", anim: "hook", total: 40, en: 25, cd: 120, invuln: [0, 30], special: "chainBlink", shout: "연쇄 번개 스텝!",
         hits: [3, 13, 23].map((t) => H(t, [-10, 56], 34, "stagger", { z: 30, stun: 30, brk: 20, stop: 4 })),
       },
       {
-        id: "s2", name: "방전 어퍼", anim: "uppercut", total: 40, en: 25, cd: 270, invuln: [0, 12], hop: [6, 8], shout: "방전 어퍼!",
+        id: "s2", name: "방전 어퍼", anim: "uppercut", total: 40, en: 25, cd: 135, invuln: [0, 12], hop: [6, 8], shout: "방전 어퍼!",
         hits: [H(5, [0, 52], 64, "launch", { lift: 12.5, brk: 40, y: [-10, 120], len: 6, stop: 8 }), H(16, [-60, 80], 24, "bind", { stun: 50, z: 40, y: [-10, 200], kb: 0, brk: 10 })],
       },
-      { id: "s3", name: "뇌전 카운터", anim: "guard", total: 48, en: 15, cd: 200, special: "counter", shout: "뇌전 카운터!", hits: [] },
+      { id: "s3", name: "뇌전 카운터", anim: "guard", total: 48, en: 15, cd: 100, special: "counter", shout: "뇌전 카운터!", hits: [] },
     ],
     ult: {
       id: "ult", name: "천둥 천 갈래", anim: "straight", total: 96, invuln: [0, 96], shout: "만뢰 낙하 — 천둥 천 갈래!",
@@ -345,18 +358,21 @@ export const HEROES: Record<HeroId, HeroDef> = {
       { id: "l1", name: "개틀링", anim: "shoot", total: 12, cancel: 6, hits: [], proj: [3, 7].map((at) => ({ at, kind: "shot" as const, dx: 30, dy: 38, vx: 12, life: 40, hit: bullet(12) })) },
       { id: "l2", name: "개틀링", anim: "shoot", total: 12, cancel: 6, hits: [], proj: [3, 7].map((at) => ({ at, kind: "shot" as const, dx: 30, dy: 38, vx: 12, life: 40, hit: bullet(12) })) },
       { id: "l3", name: "산탄", anim: "shoot", total: 22, cancel: 12, hits: [], proj: [{ at: 6, kind: "shot", dx: 30, dy: 38, vx: 11, life: 22, fanZ: [-22, 22], hit: bullet(24, { kb: 3, stun: 22, brk: 12 }) }] },
+      { id: "l3b", name: "3점사", anim: "shoot", total: 18, cancel: 10, hits: [], proj: [3, 6, 9].map((at) => ({ at, kind: "shot" as const, dx: 30, dy: 38, vx: 13, life: 40, hit: bullet(12) })) },
       { id: "l4", name: "철갑탄", anim: "shoot", total: 30, hits: [], proj: [{ at: 10, kind: "shot", dx: 32, dy: 38, vx: 13, life: 40, pierce: true, hit: bullet(46, { r: 18, kind: "knockdown", kb: 6, lift: 3, stop: 6, brk: 24, z: 22 }) }] },
     ],
     heavy: { id: "h", name: "암캐논 어퍼", anim: "uppercut", total: 32, cancel: 14, armor: true, hits: [H(9, [6, 52], 40, "launch", { lift: 9.8, brk: 22 })] },
+    heavy2: { id: "h2", name: "대공 산탄", anim: "shootUp", total: 30, hits: [], proj: [{ at: 8, kind: "shot", dx: 20, dy: 60, vx: 6, vy: 6, life: 26, fanZ: [-16, 16], hit: bullet(22, { kind: "launch", lift: 7, stun: 24, brk: 12, r: 16, z: 24 }) }] },
+    poke: { id: "p", name: "권총 퀵샷", anim: "shoot", total: 16, hits: [], proj: [{ at: 4, kind: "shot", dx: 26, dy: 36, vx: 14, life: 40, hit: bullet(16, { stun: 18 }) }] },
     finisher: { id: "f", name: "근접 포격", anim: "shoot", total: 34, hits: [H(10, [6, 70], 70, "knockdown", { kb: 9, lift: 4, brk: 36, stop: 9, z: 26 })] },
     air: [0, 1, 2].map((i) => ({ id: `air${i}`, name: "공중 사격", anim: "shoot" as const, total: 14, cancel: 8, hits: [], proj: [{ at: 4, kind: "shot" as const, dx: 26, dy: 30, vx: 10, vy: -2.2, life: 36, hit: bullet(20, { stun: 22, kb: 0.5, lift: 3.4, r: 14, z: 20 }) }] })),
     airHeavy: { id: "dive", name: "공중 폭격", anim: "throw", total: 26, hits: [], proj: [{ at: 6, kind: "grenade", dx: 10, dy: 20, vx: 2.5, vy: -1, life: 80, blast: 60, hit: { r: 14, dmg: 60, kind: "launch", lift: 8, stop: 6, brk: 30, z: 30 } }] },
     dashAtk: { id: "da", name: "숄더 램", anim: "dash", total: 32, armor: true, lunge: [[0, 14, 6.5]], hits: [H(2, [4, 54], 44, "knockdown", { len: 12, kb: 8, lift: 3 })] },
     slide: { id: "sl", name: "로우 킥", anim: "kick", total: 26, lunge: [[0, 12, 6]], hits: [H(3, [4, 50], 26, "launch", { len: 10, lift: 7.5, y: [-10, 30] })] },
     skills: [
-      { id: "s1", name: "자동 포탑", anim: "throw", total: 30, en: 30, cd: 600, special: "turret", shout: "포탑 설치!", hits: [] },
-      { id: "s2", name: "유도 미사일", anim: "shootUp", total: 36, en: 25, cd: 300, shout: "미사일 발사!", hits: [], proj: [{ at: 8, kind: "missile", dx: 0, dy: 70, vx: 1.5, vy: 6, life: 150, home: 0.35, fanZ: [-20, 20, -40], blast: 40, hit: { r: 14, dmg: 46, kind: "launch", lift: 7, stop: 4, brk: 20, z: 26 } }] },
-      { id: "s3", name: "실드 드론", anim: "guard", total: 26, en: 20, cd: 540, special: "shieldDrone", shout: "실드 드론!", hits: [] },
+      { id: "s1", name: "자동 포탑", anim: "throw", total: 30, en: 30, cd: 240, special: "turret", shout: "포탑 설치!", hits: [] },
+      { id: "s2", name: "유도 미사일", anim: "shootUp", total: 36, en: 25, cd: 150, shout: "미사일 발사!", hits: [], proj: [{ at: 8, kind: "missile", dx: 0, dy: 70, vx: 1.5, vy: 6, life: 150, home: 0.35, fanZ: [-20, 20, -40], blast: 40, hit: { r: 14, dmg: 46, kind: "launch", lift: 7, stop: 4, brk: 20, z: 26 } }] },
+      { id: "s3", name: "실드 드론", anim: "guard", total: 26, en: 20, cd: 270, special: "shieldDrone", shout: "실드 드론!", hits: [] },
     ],
     ult: {
       id: "ult", name: "풀 버스트", anim: "shoot", total: 100, invuln: [0, 100], shout: "전탄 발사 — 풀 버스트!",
@@ -390,21 +406,25 @@ export const HEROES: Record<HeroId, HeroDef> = {
     chain: [
       { id: "l1", name: "망치 휘두르기", anim: "slashH", total: 26, cancel: 14, hits: [H(10, [10, 66], 40, "flinch", { stun: 24 })] },
       { id: "l2", name: "건틀릿 훅", anim: "hook", total: 24, cancel: 13, hits: [H(9, [8, 54], 40, "flinch", { stun: 24 })] },
+      { id: "l2b", name: "바위 주먹", anim: "straight", total: 24, cancel: 13, hits: [H(9, [8, 56], 42, "flinch", { stun: 26, kb: 2 })] },
+      { id: "l2c", name: "박치기", anim: "charge", total: 24, cancel: 13, hits: [H(8, [4, 44], 36, "stagger", { stun: 28, brk: 20 })] },
       { id: "l3", name: "땅 찍기", anim: "slam", total: 36, hits: [H(14, [10, 70], 64, "knockdown", { kb: 3, lift: 6, brk: 36, z: 28 })] },
     ],
     heavy: { id: "h", name: "올려치기", anim: "slashUp", total: 38, cancel: 18, armor: true, hits: [H(12, [8, 64], 60, "launch", { lift: 10, brk: 34, len: 5 })] },
+    heavy2: { id: "h2", name: "대지 내려찍기", anim: "slam", total: 40, armor: true, hits: [H(14, [4, 70], 58, "spike", { lift: -9, y: [-10, 150], z: 30, brk: 34, stop: 9 })] },
+    poke: { id: "p", name: "암석파", anim: "slam", total: 30, hits: [], proj: [{ at: 12, kind: "slashwave", dx: 36, dy: 10, vx: 6, life: 34, color: "#a8a29e", hit: { r: 18, dmg: 28, kind: "launch", lift: 6, stop: 3, brk: 14, z: 26 } }] },
     finisher: { id: "f", name: "대회전", anim: "spin", total: 46, armor: true, hits: [H(12, [-60, 70], 46, "stagger", { z: 34 }), H(22, [-60, 74], 70, "knockdown", { z: 36, kb: 9, lift: 4, brk: 40, stop: 10 })] },
     air: airChain("slashDown", [32, 40], 60),
     airHeavy: { ...dive("대지 낙하", 60, 1.6), hits: [H(2, [-30, 50], 60, "spike", { len: 58, y: [-60, 30], z: 30, lift: -9, brk: 40 })] },
     dashAtk: { id: "da", name: "숄더 차지", anim: "dash", total: 34, armor: true, lunge: [[0, 16, 6.5]], hits: [H(2, [4, 56], 46, "knockdown", { len: 14, kb: 8, lift: 3 })] },
     slide: { id: "sl", name: "망치 쓸기", anim: "slashUp", total: 34, lunge: [[0, 10, 4]], hits: [H(6, [4, 62], 38, "launch", { len: 8, lift: 8, y: [-10, 30] })] },
     skills: [
-      { id: "s1", name: "바위 기둥", anim: "slam", total: 40, en: 25, cd: 240, armor: true, special: "rockLine", shout: "바위 기둥!", hits: [H(14, [0, 50], 40, "launch", { lift: 8, z: 30 })] },
+      { id: "s1", name: "바위 기둥", anim: "slam", total: 40, en: 25, cd: 120, armor: true, special: "rockLine", shout: "바위 기둥!", hits: [H(14, [0, 50], 40, "launch", { lift: 8, z: 30 })] },
       {
-        id: "s2", name: "대지 메치기", anim: "grab", total: 80, en: 30, cd: 330, armor: true, special: "grabThrow", shout: "대지 메치기!",
+        id: "s2", name: "대지 메치기", anim: "grab", total: 80, en: 30, cd: 165, armor: true, special: "grabThrow", shout: "대지 메치기!",
         hits: [H(6, [4, 54], 20, "grab", { len: 6, stun: 70, stop: 4 })].concat([22, 32, 42, 52, 62].map((t) => H(t, [-84, 84], 30, "knockdown", { z: 44, kb: 7, lift: 4, len: 2 }))),
       },
-      { id: "s3", name: "철벽", anim: "guard", total: 34, en: 25, cd: 600, special: "ironWall", shout: "철벽!", hits: [H(10, [-60, 60], 30, "knockdown", { z: 40, kb: 7, lift: 3 })] },
+      { id: "s3", name: "철벽", anim: "guard", total: 34, en: 25, cd: 240, special: "ironWall", shout: "철벽!", hits: [H(10, [-60, 60], 30, "knockdown", { z: 40, kb: 7, lift: 3 })] },
     ],
     ult: {
       id: "ult", name: "대륙 붕괴", anim: "slam", total: 96, invuln: [0, 96], shout: "대지여 깨어나라 — 대륙 붕괴!",
@@ -437,19 +457,22 @@ export const HEROES: Record<HeroId, HeroDef> = {
     chain: [
       { id: "l1", name: "부채 베기", anim: "whip", total: 16, cancel: 8, hits: [H(5, [8, 64], 18, "flinch", { z: 22 })] },
       { id: "l2", name: "역부채", anim: "slashB", total: 16, cancel: 8, hits: [H(5, [8, 64], 18, "flinch", { z: 22 })] },
+      { id: "l2b", name: "회전 발차기", anim: "kick", total: 18, cancel: 9, hits: [H(6, [6, 56], 20, "flinch", { stun: 20 })] },
       { id: "l3", name: "물보라 회전", anim: "spin", total: 24, cancel: 12, hits: [H(8, [-56, 70], 24, "flinch", { z: 32 })] },
       { id: "l4", name: "물결 날리기", anim: "whip", total: 28, hits: [], proj: [{ at: 10, kind: "tide", dx: 30, dy: 30, vx: 8, life: 34, pierce: true, hit: { r: 18, dmg: 34, kind: "knockdown", kb: 6, lift: 3, stop: 5, brk: 16, z: 24 } }] },
     ],
     heavy: { id: "h", name: "물기둥 띄우기", anim: "whip", total: 32, cancel: 14, hits: [H(9, [10, 76], 34, "launch", { lift: 9.8, brk: 20, len: 4 })] },
+    heavy2: { id: "h2", name: "물보라 연타", anim: "spin", total: 34, hits: [6, 12, 18].map((t) => H(t, [-30, 70], 14, "launch", { lift: 7, y: [-10, 160], z: 30, len: 2, stop: 2 })) },
+    poke: { id: "p", name: "물방울 탄", anim: "cast", total: 22, hits: [], proj: [{ at: 7, kind: "bubble", dx: 30, dy: 38, vx: 7, life: 50, hit: { r: 14, dmg: 18, kind: "flinch", stun: 22, kb: 1, stop: 2, brk: 8, z: 20 } }] },
     finisher: { id: "f", name: "소용돌이 끌어당기기", anim: "whip", total: 40, hits: [H(10, [20, 120], 30, "stagger", { pull: true, kb: 5, stun: 40 }), H(24, [6, 60], 50, "knockdown", { kb: 7, lift: 4, brk: 30 })] },
     air: airChain("whip", [18, 18, 26], 62),
     airHeavy: dive("물방울 다이브", 40, 3.6),
     dashAtk: { id: "da", name: "부채 돌진", anim: "whip", total: 30, lunge: [[0, 12, 6.5]], hits: [H(4, [10, 80], 34, "knockdown", { len: 8, kb: 7, lift: 3 })] },
     slide: { id: "sl", name: "물미끄럼", anim: "dash", total: 28, lunge: [[0, 14, 6.5]], hits: [H(3, [4, 52], 24, "launch", { len: 11, lift: 7.5, y: [-10, 30] })] },
     skills: [
-      { id: "s1", name: "해일 부채", anim: "whip", total: 36, en: 20, cd: 200, shout: "해일 부채!", hits: [], proj: [{ at: 10, kind: "tide", dx: 30, dy: 30, vx: 7, life: 60, pierce: true, fanZ: [-30, 30], hit: { r: 22, dmg: 30, kind: "knockdown", kb: 9, lift: 3, stop: 4, brk: 14, z: 26 } }] },
-      { id: "s2", name: "치유의 노래", anim: "heal", total: 50, en: 40, cd: 720, invuln: [0, 60], special: "heal", shout: "치유의 노래!", hits: [H(12, [-70, 70], 20, "knockdown", { z: 44, kb: 7, lift: 3 })] },
-      { id: "s3", name: "공명 폭발", anim: "cast", total: 40, en: 25, cd: 300, special: "detonate", shout: "공명 폭발!", hits: [] },
+      { id: "s1", name: "해일 부채", anim: "whip", total: 36, en: 20, cd: 100, shout: "해일 부채!", hits: [], proj: [{ at: 10, kind: "tide", dx: 30, dy: 30, vx: 7, life: 60, pierce: true, fanZ: [-30, 30], hit: { r: 22, dmg: 30, kind: "knockdown", kb: 9, lift: 3, stop: 4, brk: 14, z: 26 } }] },
+      { id: "s2", name: "치유의 노래", anim: "heal", total: 50, en: 40, cd: 300, invuln: [0, 60], special: "heal", shout: "치유의 노래!", hits: [H(12, [-70, 70], 20, "knockdown", { z: 44, kb: 7, lift: 3 })] },
+      { id: "s3", name: "공명 폭발", anim: "cast", total: 40, en: 25, cd: 150, special: "detonate", shout: "공명 폭발!", hits: [] },
     ],
     ult: {
       id: "ult", name: "대해일", anim: "shootUp", total: 100, invuln: [0, 100], special: "heal", shout: "바다여 노래하라 — 대해일!",
@@ -495,7 +518,7 @@ export const MECHA: MechaDef = {
   ],
   heavy: { id: "mh", name: "성운검 올려베기", anim: "slashUp", total: 44, hits: [H(16, [20, 200], 170, "stagger", { z: 80, y: [-10, 340], kb: 3, stop: 10, brk: 80 })] },
   rocket: {
-    id: "mr", name: "드릴 너클", anim: "straight", total: 40, en: 25, cd: 240, shout: "드릴 너클!", hits: [],
+    id: "mr", name: "드릴 너클", anim: "straight", total: 40, en: 25, cd: 150, shout: "드릴 너클!", hits: [],
     proj: [{ at: 12, kind: "fist", dx: 90, dy: 140, vx: 9, life: 70, hit: { r: 60, dmg: 200, kind: "stagger", stun: 40, kb: 3, stop: 10, brk: 90, z: 80 } }],
   },
   finish: {
@@ -819,3 +842,33 @@ export const PICKUPS: Record<PickupKind, { name: string; emoji: string; hp?: num
 export function stageGrade(p: number): "S" | "A" | "B" | "C" {
   return p >= 90 ? "S" : p >= 72 ? "A" : p >= 50 ? "B" : "C";
 }
+
+// ---------------------------------------------------------------- controls (one list for the rulebook, menu and in-game help)
+
+export interface KeyHelp {
+  group: "이동" | "공격" | "스킬·필살" | "시스템";
+  action: string;
+  pc: string;
+  mobile: string;
+  note?: string;
+}
+
+export const KEY_HELP: KeyHelp[] = [
+  { group: "이동", action: "좌우 이동", pc: "A / D · ← / →", mobile: "왼쪽 조이스틱 좌우" },
+  { group: "이동", action: "안쪽·바깥쪽 라인 이동", pc: "W / S · ↑ / ↓", mobile: "왼쪽 조이스틱 위아래", note: "적 공격 라인을 피하는 기본 회피" },
+  { group: "이동", action: "달리기", pc: "같은 방향 두 번 빠르게", mobile: "조이스틱을 같은 방향으로 두 번", note: "달리며 J = 돌진기, K = 슬라이딩" },
+  { group: "이동", action: "점프", pc: "Space · C", mobile: "점프", note: "띄우기 적중 직후 누르면 점프 추격 / 떨어질 때 누르면 낙법" },
+  { group: "이동", action: "회피 (구르기)", pc: "L · Shift", mobile: "회피", note: "앞 0.25초 무적, 맞기 직전이면 섬광 회피 · 공격 적중 후 EN 10으로 회피 캔슬" },
+  { group: "공격", action: "약공격 (체인)", pc: "J · Z", mobile: "공격", note: "연타하면 히어로별 5~6연격" },
+  { group: "공격", action: "강공격 (띄우기)", pc: "K · X", mobile: "강공", note: "약공격 0~1타 뒤 = 띄우기, 2타 이상 뒤 = 피니셔" },
+  { group: "공격", action: "강공격 추가타", pc: "띄우기 적중 후 K", mobile: "띄우기 적중 후 강공", note: "공중의 적을 내리꽂거나 더 높이 띄움" },
+  { group: "공격", action: "견제기", pc: "H · N", mobile: "견제", note: "EN·쿨타임 없는 히어로별 빠른 기본기 (아이언 권총은 탄 소모 없음)" },
+  { group: "공격", action: "공중 공격 / 다이브", pc: "점프 중 J / 점프 중 K", mobile: "점프 중 공격 / 강공" },
+  { group: "스킬·필살", action: "스킬 1 · 2 · 3", pc: "U · I · O (또는 1 · 2 · 3)", mobile: "오른쪽 위 스킬 버튼", note: "EN 소모 + 쿨타임 · 일반기 적중 후 바로 캔슬 가능" },
+  { group: "스킬·필살", action: "필살기", pc: "F · V", mobile: "필살기! (게이지가 차면 나타남)", note: "필살 게이지 100 · 거대전에서는 체력 25% 이하에서 마무리 일격" },
+  { group: "스킬·필살", action: "팀 어시스트 / 5인 합동기", pc: "G · B", mobile: "팀×N / 합체!", note: "스톡 1개 = 동료 1명, 3개 = 오버드라이브 노바" },
+  { group: "시스템", action: "일시정지", pc: "Esc · P", mobile: "⏸" },
+  { group: "시스템", action: "단축키 보기", pc: "? · F1", mobile: "⌨️" },
+  { group: "시스템", action: "소리 켜기/끄기", pc: "M", mobile: "🔊" },
+  { group: "시스템", action: "전체 화면", pc: "⛶ 버튼", mobile: "⛶" },
+];

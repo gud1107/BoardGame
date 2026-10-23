@@ -8,6 +8,7 @@ import { BOSSES, DIFFICULTIES, HERO_ORDER, HEROES, MECHA, STAGES, type AnimKind,
 import type { StageSummary } from "./engine";
 import PrismFiveCanvas from "./PrismFiveCanvas";
 import RulebookModal from "./RulebookModal";
+import KeyHelpTable from "./KeyHelpTable";
 import { drawPreview } from "./render";
 import { applySummary, bestKey, freshSave, loadSave, writeSave, type PrismSave } from "./save";
 
@@ -202,9 +203,10 @@ export default function PrismFiveGame({ participants, onComplete }: PlayableGame
                 <span className="rounded bg-black/20 px-1.5 py-0.5">HP {hero.hp}</span>
                 {hero.skills.map((s, i) => (
                   <span key={s.id} className="rounded bg-black/20 px-1.5 py-0.5">
-                    {"UIO"[i]} {s.name}
+                    {"UIO"[i]} {s.name} <span className="opacity-60">{((s.cd ?? 0) / 60).toFixed(1)}초</span>
                   </span>
                 ))}
+                <span className="rounded bg-emerald-400/20 px-1.5 py-0.5">H {hero.poke.name}</span>
                 <span className="rounded bg-yellow-400/20 px-1.5 py-0.5">F {hero.ult.name}</span>
               </div>
             </div>
@@ -283,11 +285,12 @@ export default function PrismFiveGame({ participants, onComplete }: PlayableGame
             </span>
           </div>
 
-          <div className="rounded-xl border border-white/10 p-3 text-xs text-white/60 light:border-slate-200 light:text-slate-500">
-            <b>PC</b> 이동 WASD/방향키 · 두 번 = 달리기 · J 약공 · K 강공 · Space 점프 · L/Shift 회피 · U I O 스킬 · F 필살 · G 팀 어시스트 · Esc 일시정지
-            <br />
-            <b>모바일</b> 왼쪽을 끌어 이동 · 오른쪽 버튼으로 공격/강공/점프/회피/스킬
-          </div>
+          <details className="rounded-xl border border-white/10 p-3 text-xs light:border-slate-200" open>
+            <summary className="cursor-pointer text-sm font-bold">⌨️ 모든 단축키 · 조작 (게임 중 ? / F1)</summary>
+            <div className="mt-2">
+              <KeyHelpTable />
+            </div>
+          </details>
 
           <button type="button" onClick={finish} className="self-start text-xs text-white/40 underline light:text-slate-400">
             기록 저장하고 나가기
