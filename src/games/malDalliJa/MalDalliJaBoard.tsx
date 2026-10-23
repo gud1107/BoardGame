@@ -382,17 +382,22 @@ export default function MalDalliJaBoard({
           disabled={!move && !isSelectableHorse}
           onClick={() => handleCellClick(row, col)}
           className={`relative aspect-square border border-white/[0.06] transition ${
-            (row + col) % 2 === 0 ? "bg-white/[0.02]" : "bg-black/20 light:bg-slate-100"
+            isOasisRing
+              ? (row + col) % 2 === 0
+                ? "bg-emerald-500/45"
+                : "bg-emerald-600/45"
+              : (row + col) % 2 === 0
+                ? "bg-white/[0.02]"
+                : "bg-black/20 light:bg-slate-100"
           } ${move || isSelectableHorse ? "cursor-pointer" : "cursor-default"}`}
         >
-          {/* 말달리자판.png 기준 오아시스 다이아몬드 존 — 중앙 파란 원 + 초록 원 12개 */}
+          {/* 오아시스 다이아몬드 존 — 중앙 파란 원 + 둘레 12칸은 칸 전체를 에메랄드로 */}
           {isOasisCenter && (
             <span
               className="absolute inset-[15%] rounded-full border-2 border-sky-200/80 bg-sky-400/60"
               style={{ animation: "maldallija-oasis-pulse 2.2s ease-in-out infinite" }}
             />
           )}
-          {isOasisRing && <span className="absolute inset-[28%] rounded-full bg-emerald-400/50 ring-1 ring-emerald-300/60" />}
           {!isOasisCenter && !isOasisRing && (
             <span className="absolute inset-[40%] rounded-full bg-amber-200/20" />
           )}
@@ -568,7 +573,7 @@ export default function MalDalliJaBoard({
       <p className="break-keep text-center text-xs text-white/40 light:text-slate-500">
         {isMyTurn
           ? selectedHorseIndex === null
-            ? "내 차례입니다 — 이동 가능한 말을 선택하세요 (🔵 = 오아시스, 도착하면 즉시 승리 · 🟢 오아시스 구역으로는 나이트 이동 착지 불가)"
+            ? "내 차례입니다 — 이동 가능한 말을 선택하세요 (🔵 = 오아시스, 도착하면 즉시 승리 · 초록 오아시스 구역으로는 나이트 이동 착지 불가)"
             : "하이라이트된 칸으로 이동하세요 (파랑=슬라이드, 자홍=나이트 · 다시 탭하면 선택 해제)"
           : `${names[opponentSeat]}의 차례를 기다리는 중…`}
       </p>

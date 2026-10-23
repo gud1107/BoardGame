@@ -9,7 +9,8 @@ import { clamp01, easeInOut } from "@/games/shared/three/tableKit";
 
 /**
  * 말달리자 입체 보드 — 데스게임 경기장 한가운데 놓인 11×11 돌판 위에 나이트
- * 체스말 모양 말 20개. 가운데 오아시스는 물웅덩이, 둘레 12칸은 풀밭.
+ * 체스말 모양 말 20개. 가운데 오아시스는 물웅덩이, 둘레 12칸은 에메랄드 칸
+ * (장식물 없이 칸 색만 — 야자수·풀은 말을 가리고 장애물로 오해돼 뺐다).
  *
  * 규칙·선택 상태는 전부 보드(`MalDalliJaBoard`)가 갖고, 이 장면은 그대로
  * 그리기만 한다: 칸/말을 누르면 `onCellClick(row, col)`(2D와 같은 함수),
@@ -229,7 +230,7 @@ function Horse({
 // Board
 // ---------------------------------------------------------------------------
 
-function Tiles({ onCellClick, lowDetail }: { onCellClick: (e: ThreeEvent<MouseEvent>, row: number, col: number) => void; lowDetail: boolean }) {
+function Tiles({ onCellClick }: { onCellClick: (e: ThreeEvent<MouseEvent>, row: number, col: number) => void }) {
   const home = useMemo(() => {
     const m = new Map<string, Seat>();
     (["p1", "p2"] as const).forEach((seat) => HOME_ZONES[seat].flat().forEach((p) => m.set(`${p.row},${p.col}`, seat)));
@@ -242,25 +243,18 @@ function Tiles({ onCellClick, lowDetail }: { onCellClick: (e: ThreeEvent<MouseEv
       const ring = !center && isOasisZoneCell({ row, col });
       const h = home.get(`${row},${col}`);
       const dark = (row + col) % 2 === 1;
-      const color = ring ? (dark ? "#2f6b3a" : "#3d8a49") : h === "p1" ? (dark ? "#5b1f2b" : "#73303d") : h === "p2" ? (dark ? "#1d4c5a" : "#2a6273") : dark ? "#4a3b2c" : "#8a7356";
+      const color = ring ? (dark ? "#059669" : "#10b981") : h === "p1" ? (dark ? "#5b1f2b" : "#73303d") : h === "p2" ? (dark ? "#1d4c5a" : "#2a6273") : dark ? "#4a3b2c" : "#8a7356";
       tiles.push(
         <mesh key={`${row}-${col}`} position={[cellX(col), TILE_TOP / 2, cellZ(row)]} receiveShadow onClick={(e) => onCellClick(e, row, col)}>
           <boxGeometry args={[0.96, TILE_TOP, 0.96]} />
-          <meshStandardMaterial color={center ? "#1e3a5f" : color} roughness={0.85} />
+          <meshStandardMaterial
+            color={center ? "#1e3a5f" : color}
+            emissive={ring ? "#34d399" : "#000000"}
+            emissiveIntensity={ring ? 0.28 : 0}
+            roughness={0.85}
+          />
         </mesh>,
       );
-      if (ring && !lowDetail && (row + col) % 2 === 0) {
-        tiles.push(
-          <group key={`g${row}-${col}`} position={[cellX(col), TILE_TOP, cellZ(row)]}>
-            {[0, 1, 2].map((i) => (
-              <mesh key={i} position={[Math.cos(i * 2.1) * 0.3, 0.05, Math.sin(i * 2.1) * 0.3]}>
-                <coneGeometry args={[0.04, 0.12, 4]} />
-                <meshStandardMaterial color="#65a30d" roughness={1} />
-              </mesh>
-            ))}
-          </group>,
-        );
-      }
     }
   }
   return <group>{tiles}</group>;
@@ -288,26 +282,6 @@ function Oasis() {
         <ringGeometry args={[0.3, 0.34, 32]} />
         <meshBasicMaterial color="#e0f2fe" transparent opacity={0.5} depthWrite={false} />
       </mesh>
-      {/* palm trees on the four diagonal neighbours */}
-      {[
-        [-1, -1],
-        [1, -1],
-        [-1, 1],
-        [1, 1],
-      ].map(([dx, dz], i) => (
-        <group key={i} position={[dx * 0.95, 0, dz * 0.95]} scale={0.55}>
-          <mesh position={[0, 0.7, 0]} rotation-z={dx * 0.12}>
-            <cylinderGeometry args={[0.06, 0.09, 1.4, 6]} />
-            <meshStandardMaterial color="#7c5a33" roughness={0.9} />
-          </mesh>
-          {[0, 1, 2, 3, 4].map((k) => (
-            <mesh key={k} position={[Math.cos(k * 1.26) * 0.3 + dx * 0.08, 1.38, Math.sin(k * 1.26) * 0.3]} rotation={[Math.sin(k * 1.26) * 0.7, 0, -Math.cos(k * 1.26) * 0.7]}>
-              <coneGeometry args={[0.12, 0.7, 4]} />
-              <meshStandardMaterial color="#15803d" roughness={0.8} />
-            </mesh>
-          ))}
-        </group>
-      ))}
     </group>
   );
 }
@@ -467,7 +441,7 @@ function SceneContents(props: MalDalliJaBoard3DProps) {
       />
       <pointLight position={[0, 6, 0]} color="#7dd3fc" intensity={8} distance={10} />
       <Arena lowDetail={lowDetail} />
-      <Tiles onCellClick={click} lowDetail={lowDetail} />
+      <Tiles onCellClick={click} />
       <Oasis />
       {props.lastMove && <LastMoveMarker to={props.lastMove.to} seat={props.lastMove.seat} />}
       {props.legal.map((m) => (
