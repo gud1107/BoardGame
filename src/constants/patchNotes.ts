@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.97.0",
+    releaseDate: "2026-10-23",
+    title: "💎 스플렌더 대결 — 판은 반듯하게, 보석만 3D로",
+    changes: [
+      { game: "splendor-duel", type: "IMPROVE", desc: "📐 보석판 기울기를 없앴어요 — 판은 반듯하게 놓이고 나무 테두리·홈은 그대로" },
+      { game: "splendor-duel", type: "IMPROVE", desc: "✨ 보석만 진짜 3D로 — 깎인 면이 빛을 받아 반짝이며 살짝 흔들려요. 모양(삼각·육각·직사각…)은 2D와 같아 색 구분도 그대로" },
+    ],
+  },
+  {
     version: "v1.96.0",
     releaseDate: "2026-10-23",
     title: "⌨️ 프리즘파이브 — 기본 공격 추가, 스킬 쿨타임 절반, 모든 단축키 한눈에",

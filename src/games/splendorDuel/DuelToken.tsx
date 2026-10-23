@@ -59,8 +59,8 @@ function regular(n: number, rx: number, ry: number, rot = 0): Pt[] {
   });
 }
 
-/** Outline polygon per gem, in a 100×100 viewBox. */
-const SHAPES: Record<GemColor, Pt[]> = {
+/** Outline polygon per gem, in a 100×100 viewBox (also cut into the 3D gems of GemLayer3D). */
+export const SHAPES: Record<GemColor, Pt[]> = {
   // Round brilliant — 16 sides reads as a circle with visible facets.
   white: regular(16, 44, 44, -Math.PI / 2),
   // Oval cabochon-ish faceted sapphire.

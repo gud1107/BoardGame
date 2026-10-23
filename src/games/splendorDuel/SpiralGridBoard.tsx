@@ -1,7 +1,14 @@
 "use client";
 
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { DuelToken } from "./DuelToken";
 import { GRID_SIZE, SPIRAL_ORDER, type BoardToken } from "./engine";
+import { preferLowDetail, webglAvailable } from "@/games/shared/three/viewPref";
+import type { GemSpot } from "./three/GemLayer3D";
+
+// three.js loads only for the gem layer; the 2D gems show until it's ready (and stay without WebGL).
+const GemLayer3D = dynamic(() => import("./three/GemLayer3D"), { ssr: false });
 
 /**
  * The 5×5 gem board. Purely presentational — the parent decides what a tap
@@ -10,8 +17,11 @@ import { GRID_SIZE, SPIRAL_ORDER, type BoardToken } from "./engine";
  * The faint numbers are the spiral refill order (rulebook §1-3), shown so
  * players can see where the next refill will land.
  *
- * Drawn 2.5D (a gently tilted plate with a wooden edge, recessed sockets and
- * gems that sit up and lift when picked) — full 3D read worse (2026-10-23).
+ * The plate lies flat (no tilt) with a wooden edge and recessed sockets;
+ * only the gems are 3D — a transparent three.js layer over the sockets,
+ * looking straight down. The 2D gems stay in the DOM underneath (hidden once
+ * the 3D layer is up) as the fallback and as the art the pluck flight copies.
+ * A tilted / fully-3D board read worse (2026-10-23).
  */
 export default function SpiralGridBoard({
   grid,
@@ -29,13 +39,37 @@ export default function SpiralGridBoard({
   onCellClick?: (cell: number) => void;
 }) {
   const orderOf = new Map(SPIRAL_ORDER.map((cell, i) => [cell, i + 1]));
+  const [gl] = useState(webglAvailable);
+  const [lowDetail] = useState(preferLowDetail);
+  const [ready3d, setReady3d] = useState(false);
+  const onReady = useCallback(() => setReady3d(true), []);
+  // Socket centers in % of the plate, measured from the real cells so the 3D gems sit exactly in them.
+  const plateRef = useRef<HTMLDivElement>(null);
+  const [spots, setSpots] = useState<GemSpot[]>([]);
+  useLayoutEffect(() => {
+    const plate = plateRef.current;
+    if (!gl || !plate) return;
+    const measure = () => {
+      const b = plate.getBoundingClientRect();
+      if (b.width === 0) return;
+      setSpots(
+        [...plate.querySelectorAll("[data-cell]")].map((el) => {
+          const r = el.getBoundingClientRect();
+          return { x: ((r.left + r.width / 2 - b.left) / b.width) * 100, y: ((r.top + r.height / 2 - b.top) / b.height) * 100, size: (r.width / b.width) * 100 };
+        }),
+      );
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(plate);
+    return () => ro.disconnect();
+  }, [gl]);
+  const dim = new Set(grid.flatMap((t, i) => (selectable && t && !selectable.has(i) ? [i] : [])));
   return (
-    // 2.5D: the plate leans back a little (md+ only — the mobile board is
-    // already tiny) and shows a wooden edge; gems stay flat-on and readable.
-    <div className="pb-3" style={{ containerType: "inline-size" }}>
-      <style>{TILT_CSS}</style>
+    <div className="pb-3">
       <div
-        className="sdgrid-plate relative grid aspect-square w-full gap-[3%] rounded-2xl border border-amber-400/30 p-[3.5%] light:border-amber-600/35"
+        ref={plateRef}
+        className="relative grid aspect-square w-full gap-[3%] rounded-2xl border border-amber-400/30 p-[3.5%] light:border-amber-600/35"
         style={{
           gridTemplateColumns: `repeat(${GRID_SIZE}, minmax(0, 1fr))`,
           background: "radial-gradient(circle at 50% 35%, #2a2118 0%, #12100c 65%, #070505 100%)",
@@ -74,7 +108,7 @@ export default function SpiralGridBoard({
                     }`}
                   />
                   <span
-                    className={`relative flex h-[82%] w-[82%] transition duration-150 ${
+                    className={`relative flex h-[82%] w-[82%] transition duration-150 ${ready3d ? "opacity-0" : ""} ${
                       isSel ? "-translate-y-[16%] scale-110" : canTap ? "-translate-y-[5%] group-hover:-translate-y-[10%]" : "-translate-y-[5%]"
                     }`}
                   >
@@ -85,13 +119,8 @@ export default function SpiralGridBoard({
             </button>
           );
         })}
+        {gl && spots.length === grid.length && <GemLayer3D grid={grid} spots={spots} selected={selected} dim={dim} lowDetail={lowDetail} onReady={onReady} />}
       </div>
     </div>
   );
 }
-
-const TILT_CSS = `
-@media (min-width: 768px) {
-  .sdgrid-plate { transform: perspective(260cqw) rotateX(13deg); transform-origin: 50% 100%; }
-}
-`;
