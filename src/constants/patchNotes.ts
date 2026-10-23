@@ -64,6 +64,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.94.1",
+    releaseDate: "2026-10-23",
+    title: "👮 시티 체이스 — 경찰관이 건물에 안 가려져요",
+    changes: [
+      { game: "city-chase", type: "IMPROVE", desc: "👮 경찰관이 교차로 안쪽에 서서 앞 건물에 가려지지 않고, 더 커진 몸에 빛나는 형광 조끼 + 머리 위 표식이 붙어 어디 있는지 바로 보여요" },
+    ],
+  },
+  {
     version: "v1.94.0",
     releaseDate: "2026-10-23",
     title: "💎 스플렌더 대결 — 보석을 판에서 집어 올려 가져가요",

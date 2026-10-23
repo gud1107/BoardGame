@@ -76,9 +76,10 @@ const canPos = (cell: Cell): V3 => {
 };
 function unitPos(p: Point, h: number): V3 {
   const [i, j] = pointIJ(p);
-  // car / officer share the ground — nudge them apart so a stack stays readable
-  const off = h === 0 ? -0.16 : h === 1 ? 0.16 : 0;
-  return [px(j) + off, h === 2 ? HELI_ALT : 0, pz(i) + off];
+  // car / officer share the ground — nudge them apart so a stack stays readable, and both to the
+  // far (north) side of the crossing: on the camera side the shop in front hides them up to the chest
+  if (h === 2) return [px(j), HELI_ALT, pz(i)];
+  return h === 0 ? [px(j) - 0.2, 0, pz(i) - 0.16] : [px(j) + 0.2, 0, pz(i) - 0.22];
 }
 
 // ---------------------------------------------------------------------------
@@ -452,7 +453,8 @@ function Building({
 type FigureAnim = { walk: number; phase: number; crouch: number; cuffed: number; look: number };
 
 /** A small stylised person (≈0.62 tall). The parent drives `anim` every frame. */
-function Figure({ kind, anim, sack = 0 }: { kind: "thief" | "officer"; anim: React.MutableRefObject<FigureAnim>; sack?: number }) {
+/** `vest` = a glowing hi-vis vest in that colour (the officer unit — navy alone vanishes in the night city). */
+function Figure({ kind, anim, sack = 0, vest }: { kind: "thief" | "officer"; anim: React.MutableRefObject<FigureAnim>; sack?: number; vest?: string }) {
   const body = useRef<THREE.Group>(null);
   const legL = useRef<THREE.Group>(null);
   const legR = useRef<THREE.Group>(null);
@@ -500,8 +502,22 @@ function Figure({ kind, anim, sack = 0 }: { kind: "thief" | "officer"; anim: Rea
           <boxGeometry args={[0.21, 0.25, 0.13]} />
           <meshStandardMaterial color={top} map={thief ? stripeTexture() : null} roughness={0.7} />
         </mesh>
+        {vest && (
+          <>
+            <mesh position={[0, 0.37, 0]}>
+              <boxGeometry args={[0.23, 0.21, 0.15]} />
+              <meshStandardMaterial color={vest} emissive={vest} emissiveIntensity={0.9} roughness={0.5} />
+            </mesh>
+            {[0.33, 0.42].map((y) => (
+              <mesh key={y} position={[0, y, 0]}>
+                <boxGeometry args={[0.235, 0.022, 0.155]} />
+                <meshBasicMaterial color="#f8fafc" />
+              </mesh>
+            ))}
+          </>
+        )}
         {!thief && (
-          <mesh position={[0.05, 0.43, 0.067]}>
+          <mesh position={[0.05, 0.45, vest ? 0.077 : 0.067]}>
             <circleGeometry args={[0.022, 8]} />
             <meshBasicMaterial color="#fbbf24" />
           </mesh>
@@ -881,6 +897,7 @@ function PoliceUnit({ at, index, active }: { at: Point; index: number; active: b
   const ringMat = useRef<THREE.MeshBasicMaterial>(null);
   const lights = useRef<THREE.Group>(null);
   const rotor = useRef<THREE.Group>(null);
+  const beacon = useRef<THREE.Mesh>(null);
   const cur = useRef<THREE.Vector3 | null>(null);
   const heading = useRef(0);
   const anim = useRef<FigureAnim>({ walk: 0, phase: 0, crouch: 0, cuffed: 0, look: 0 });
@@ -905,6 +922,10 @@ function PoliceUnit({ at, index, active }: { at: Point; index: number; active: b
     anim.current.look = speed > 0.1 ? 0 : Math.sin(clock.elapsedTime * 1.3) * 0.6;
     if (lights.current) lights.current.scale.x = Math.sin(clock.elapsedTime * 12) > 0 ? 1 : -1;
     if (rotor.current) rotor.current.rotation.y += dt * 28;
+    if (beacon.current) {
+      beacon.current.position.y = (index === 1 ? 1.6 : 1.1) + Math.sin(clock.elapsedTime * 4) * 0.06;
+      beacon.current.rotation.y = clock.elapsedTime * 2;
+    }
     if (ring.current) ring.current.scale.setScalar(active ? 1.15 + Math.sin(clock.elapsedTime * 5) * 0.15 : 1);
     if (ringMat.current) ringMat.current.opacity = active ? 0.95 : 0.6;
   });
@@ -926,12 +947,19 @@ function PoliceUnit({ at, index, active }: { at: Point; index: number; active: b
       <group ref={ref}>
         {index === 0 && <PoliceCarModel lights={lights} />}
         {index === 1 && (
-          <group scale={PERSON}>
-            <Figure kind="officer" anim={anim} />
+          <group scale={PERSON * 1.2}>
+            <Figure kind="officer" anim={anim} vest={style.hex} />
           </group>
         )}
+        {index !== 2 && (
+          // a bobbing marker that stays on top of the buildings, so a ground unit is never lost behind one
+          <mesh ref={beacon} position={[0, 1.75, 0]} rotation-x={Math.PI} renderOrder={21}>
+            <coneGeometry args={[0.12, 0.22, 4]} />
+            <meshBasicMaterial color={style.hex} depthTest={false} depthWrite={false} transparent />
+          </mesh>
+        )}
         {index === 2 && <HeliModel color={style.hex} rotor={rotor} />}
-        <Tag text={`${style.icon}${index + 1}`} color={style.hex} position={[0, index === 2 ? 0.75 : 1.2, 0]} height={active ? 0.4 : 0.32} front={active} />
+        <Tag text={`${style.icon}${index + 1}`} color={style.hex} position={[0, index === 2 ? 0.75 : index === 1 ? 2.05 : 1.55, 0]} height={active ? 0.4 : 0.32} front={active || index !== 2} />
       </group>
     </>
   );
