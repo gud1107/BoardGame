@@ -57,6 +57,20 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
     return () => window.clearTimeout(t);
   }, [blocked]);
 
+  // The round's last search hands the turn to the thief at once — hold the police's 🙈 cover
+  // until the 3D search show (2.6s) has played, or it blurs the result away.
+  const [searchHold, setSearchHold] = useState<number | null>(null);
+  const [seenSeq, setSeenSeq] = useState(state.seq);
+  if (seenSeq !== state.seq) {
+    setSeenSeq(state.seq);
+    setSearchHold(state.lastEvent?.kind === "search" ? state.seq : null);
+  }
+  useEffect(() => {
+    if (searchHold === null) return;
+    const t = window.setTimeout(() => setSearchHold(null), 2600);
+    return () => window.clearTimeout(t);
+  }, [searchHold]);
+
   // SFX once per applied action.
   const soundSeqRef = useRef(state.seq);
   useEffect(() => {
@@ -231,7 +245,7 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
               <span className="rounded-xl border border-red-400/60 bg-red-950/90 px-3 py-1.5 text-center text-xs font-bold text-red-100 shadow-lg light:bg-red-50 light:text-red-800">{blocked.text}</span>
             </div>
           )}
-          {!isThief && !over && state.phase === "thief" && (
+          {!isThief && !over && state.phase === "thief" && searchHold === null && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-3xl bg-black/55 backdrop-blur-[2px]">
               <div className="text-center">
                 <div className="text-4xl">🙈</div>

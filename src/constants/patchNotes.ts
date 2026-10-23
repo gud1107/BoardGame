@@ -64,6 +64,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.93.1",
+    releaseDate: "2026-10-23",
+    title: "🔦 시티 체이스 — 경찰 수색이 더 화려하게",
+    changes: [
+      { game: "city-chase", type: "IMPROVE", desc: "🔦 수색하면 탐조등 → 건물 스캔 → 충격파·파편 → 결과 도장 순서로 터지고 카메라가 다가가 흔들려요 — 🚓 빨강·파랑, 🚁 넓은 서치라이트" },
+    ],
+  },
+  {
     version: "v1.93.0",
     releaseDate: "2026-10-23",
     title: "🦸 신규 게임 섬광전대 프리즘파이브 — 변신! 콤보로 졸개를 쓸고 거대 로봇으로 괴인을 벤다",

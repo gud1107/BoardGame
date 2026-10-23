@@ -335,18 +335,18 @@ function Building({
   const heatColor = useMemo(() => new THREE.Color("#f43f5e"), []);
   const plotBase = useMemo(() => new THREE.Color("#334155"), []);
   const plotTint = useMemo(() => new THREE.Color(tone === "thief" ? "#fb7185" : zone ?? "#334155"), [tone, zone]);
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, dt) => {
     const t = clock.elapsedTime;
     if (alarm && (!alarmAt.current || alarmAt.current.key !== alarm.key)) alarmAt.current = { key: alarm.key, at: t };
     const alarmT = alarmAt.current ? t - alarmAt.current.at : 99;
     const alarming = alarmT < 1.6;
     const pulse = tone ? 0.5 + Math.sin(t * 5) * 0.5 : 0;
     if (mat.current) {
-      mat.current.opacity = ghost ? 0.16 : 1;
+      mat.current.opacity += ((ghost ? 0.16 : 1) - mat.current.opacity) * Math.min(1, dt * 5);
       mat.current.emissiveIntensity = alarming ? (Math.sin(alarmT * 18) > 0 ? 1.4 : 0.2) : 0.65 + pulse * 0.35;
     }
     if (roof.current) {
-      roof.current.opacity = ghost ? 0.2 : 1;
+      roof.current.opacity += ((ghost ? 0.2 : 1) - roof.current.opacity) * Math.min(1, dt * 5);
       roof.current.color.copy(baseRoof).lerp(heatColor, Math.min(0.85, heat > 0.004 ? 0.15 + heat * 2.2 : 0));
     }
     if (plot.current) {
@@ -743,8 +743,9 @@ function ThiefActor({ at, move, loot, label }: { at: Cell; move: Move | null; lo
   );
 }
 
-/** 🔗 Caught: the thief is walked out of the door and handcuffed by an officer under flashing lights. */
+/** 🔗 Caught: right after the search stamp ("도둑 발견!") the thief is pulled out and handcuffed under flashing lights. */
 function CaughtScene({ cell }: { cell: Cell }) {
+  const root = useRef<THREE.Group>(null);
   const thief = useRef<THREE.Group>(null);
   const cop = useRef<THREE.Group>(null);
   const light = useRef<THREE.PointLight>(null);
@@ -755,7 +756,9 @@ function CaughtScene({ cell }: { cell: Cell }) {
   const [click, setClick] = useState(false);
   useFrame(({ clock }, dt) => {
     if (t0.current === null) t0.current = clock.elapsedTime;
-    const t = clock.elapsedTime - t0.current;
+    const t = clock.elapsedTime - t0.current - (FX.hit + 0.2);
+    if (root.current) root.current.visible = t > 0;
+    if (t < 0) return;
     const out = easeOut(t / 0.6);
     if (thief.current) thief.current.position.set(dx, 0, dz + out * 0.1);
     const run = clamp01((t - 0.2) / 0.8);
@@ -771,7 +774,7 @@ function CaughtScene({ cell }: { cell: Cell }) {
     if (light.current) light.current.color.set(Math.sin(t * 10) > 0 ? "#ef4444" : "#3b82f6");
   });
   return (
-    <group>
+    <group ref={root} visible={false}>
       <group ref={thief} rotation-y={0.25}>
         <group scale={PERSON}>
           <Figure kind="thief" anim={thiefAnim} sack={2} />
@@ -934,24 +937,168 @@ function PoliceUnit({ at, index, active }: { at: Point; index: number; active: b
   );
 }
 
-/** Search: a beam from the searching unit to the building. */
-function SearchBeam({ from, cell, color }: { from: V3; cell: Cell; color: string }) {
+/** Search timeline (s): beam shoots out → scan sweeps the shop → hit (burst + stamp) → fade. */
+const FX = { beam: 0.4, scanFrom: 0.25, scanTo: 1.0, hit: 1.0, end: 2.6 };
+const FX_PARTICLES = 32;
+/** Deterministic 0..1 noise (no Math.random in render). */
+const hash = (n: number) => Math.abs((Math.sin(n * 127.1 + 311.7) * 43758.5453) % 1);
+
+/**
+ * The police search show, per unit: 🚁 wide sky searchlight, 🚓 siren red/blue
+ * floodlight, 👮 narrow flashlight. Beam → x-ray scan plane sweeping the shop
+ * top to bottom → twin ground shockwaves → result burst (token colours for a
+ * trail, grey dust for an empty shop, red/blue for a catch) + a popping stamp.
+ */
+function SearchFx({ from, heli, cell, result, tokens }: { from: V3; heli: number; cell: Cell; result: SearchRecord["result"]; tokens: TokenColor[] }) {
   const [r, c] = cellRC(cell);
-  const to = useMemo(() => new THREE.Vector3(cx(c), buildingHeight(cell) * 0.5, cz(r)), [c, r, cell]);
-  const src = useMemo(() => new THREE.Vector3(from[0], from[1] + 0.35, from[2]), [from]);
-  const mat = useRef<THREE.MeshBasicMaterial>(null);
-  const { mid, len, quat } = useMemo(() => {
+  const h = buildingHeight(cell);
+  const color = HELI_STYLES[heli].hex;
+  const t0 = useRef<number | null>(null);
+  const beam = useRef<THREE.Mesh>(null);
+  const beamMat = useRef<THREE.MeshBasicMaterial>(null);
+  const core = useRef<THREE.Mesh>(null);
+  const scan = useRef<THREE.Mesh>(null);
+  const scanMat = useRef<THREE.MeshBasicMaterial>(null);
+  const rings = useRef<(THREE.Mesh | null)[]>([]);
+  const light = useRef<THREE.PointLight>(null);
+  const stamp = useRef<THREE.Group>(null);
+  const parts = useRef<(THREE.Mesh | null)[]>([]);
+  const src = useMemo(() => new THREE.Vector3(from[0], from[1] + (heli === 2 ? -0.1 : 0.35), from[2]), [from, heli]);
+  const to = useMemo(() => new THREE.Vector3(cx(c), h * 0.55, cz(r)), [c, r, h]);
+  const { len, quat } = useMemo(() => {
     const d = to.clone().sub(src);
-    return { mid: src.clone().add(to).multiplyScalar(0.5), len: d.length(), quat: new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()) };
+    return { len: d.length(), quat: new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()) };
   }, [src, to]);
+  const radius = heli === 2 ? 0.85 : heli === 0 ? 0.55 : 0.32;
+  const partColors = useMemo(() => {
+    const pal =
+      result === "trail"
+        ? (tokens.length ? tokens.map((t) => TOKEN_HEX[t]) : ["#fbbf24"]).concat("#fde68a")
+        : result === "caught"
+          ? ["#ef4444", "#3b82f6", "#ffffff"]
+          : ["#94a3b8", "#cbd5e1", "#64748b"];
+    return Array.from({ length: FX_PARTICLES }, (_, k) => pal[k % pal.length]);
+  }, [result, tokens]);
+  const vel = useMemo(
+    () =>
+      Array.from({ length: FX_PARTICLES }, (_, k) => {
+        const a = hash(k) * Math.PI * 2;
+        const sp = (result === "empty" ? 0.6 : 1.3) + hash(k + 50) * 1.2;
+        return new THREE.Vector3(Math.cos(a) * sp, (result === "empty" ? 0.8 : 2.2) + hash(k + 99) * 1.6, Math.sin(a) * sp);
+      }),
+    [result],
+  );
+  const stampText = result === "trail" ? `🔍 흔적 발견! ${tokens.map((t) => TOKEN_ICON[t]).join("")}` : result === "caught" ? "🚨 도둑 발견!" : "✕ 빈 건물";
+  const stampColor = result === "trail" ? "#fbbf24" : result === "caught" ? "#ef4444" : "#94a3b8";
+  const stampBg = result === "trail" ? "rgba(120,53,15,0.95)" : result === "caught" ? "rgba(127,29,29,0.95)" : "rgba(30,41,59,0.92)";
   useFrame(({ clock }) => {
-    if (mat.current) mat.current.opacity = 0.32 + Math.sin(clock.elapsedTime * 16) * 0.08;
+    const now = clock.elapsedTime;
+    if (t0.current === null) t0.current = now;
+    const t = now - t0.current;
+    const fade = 1 - clamp01((t - (FX.end - 0.5)) / 0.5);
+    // beam grows from the unit to the shop, then flickers
+    const grow = Math.max(0.001, easeOut(t / FX.beam));
+    for (const m of [beam.current, core.current]) {
+      if (!m) continue;
+      m.scale.set(1, grow, 1);
+      m.position.set(0, (len * grow) / 2, 0);
+    }
+    if (beamMat.current) {
+      beamMat.current.opacity = (0.38 + Math.sin(t * 28) * 0.1) * fade;
+      if (heli === 0) beamMat.current.color.set(Math.sin(t * 14) > 0 ? "#ef4444" : "#3b82f6");
+    }
+    // x-ray scan plane: roof → ground
+    const sk = clamp01((t - FX.scanFrom) / (FX.scanTo - FX.scanFrom));
+    if (scan.current) {
+      scan.current.visible = t > FX.scanFrom && sk < 1;
+      scan.current.position.y = (h + 0.25) * (1 - easeInOut(sk));
+    }
+    if (scanMat.current) scanMat.current.opacity = 0.75 * Math.sin(sk * Math.PI);
+    // twin shockwaves on the ground
+    rings.current.forEach((m, k) => {
+      if (!m) return;
+      const rk = clamp01((t - FX.hit - k * 0.18) / 0.9);
+      m.visible = rk > 0 && rk < 1;
+      m.scale.setScalar(0.6 + easeOut(rk) * (result === "empty" ? 2.2 : 3.4));
+      (m.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - rk);
+    });
+    // light on the shop: unit colour (siren red/blue for the car or a catch) + a flash on the hit
+    if (light.current) {
+      const flash = t > FX.hit ? Math.max(0, 1 - (t - FX.hit) * 2.5) * 10 : 0;
+      light.current.intensity = (2.5 + Math.sin(t * 20) + flash) * fade;
+      if (heli === 0 || result === "caught") light.current.color.set(Math.sin(t * 14) > 0 ? "#ef4444" : "#3b82f6");
+    }
+    // result burst
+    const pt = t - FX.hit;
+    parts.current.forEach((m, k) => {
+      if (!m) return;
+      m.visible = pt > 0 && pt < 1.4;
+      if (!m.visible) return;
+      const v = vel[k];
+      m.position.set(v.x * pt, h * 0.7 + v.y * pt - 3.2 * pt * pt, v.z * pt);
+      m.rotation.set(pt * 9 + k, pt * 7, 0);
+      m.scale.setScalar(Math.max(0.001, 1 - pt / 1.4));
+    });
+    // stamp pops with a little overshoot
+    if (stamp.current) {
+      const st = clamp01(pt / 0.35);
+      const back = st < 1 ? 1 + Math.sin(st * Math.PI) * 0.35 : 1;
+      stamp.current.visible = pt > 0;
+      stamp.current.scale.setScalar(Math.max(0.001, easeOut(st) * back * fade));
+      stamp.current.position.y = h + 0.95 + clamp01(pt / 1.5) * 0.25;
+    }
   });
   return (
-    <mesh position={mid} quaternion={quat} renderOrder={6}>
-      <cylinderGeometry args={[0.55, 0.06, len, 16, 1, true]} />
-      <meshBasicMaterial ref={mat} color={color} transparent opacity={0.35} side={THREE.DoubleSide} depthWrite={false} blending={THREE.AdditiveBlending} />
-    </mesh>
+    <group>
+      <group position={src} quaternion={quat}>
+        <mesh ref={beam} renderOrder={6}>
+          <cylinderGeometry args={[radius, 0.05, len, 20, 1, true]} />
+          <meshBasicMaterial ref={beamMat} color={color} transparent opacity={0.4} side={THREE.DoubleSide} depthWrite={false} blending={THREE.AdditiveBlending} />
+        </mesh>
+        <mesh ref={core} renderOrder={6}>
+          <cylinderGeometry args={[radius * 0.25, 0.02, len, 10, 1, true]} />
+          <meshBasicMaterial color="#ffffff" transparent opacity={0.55} side={THREE.DoubleSide} depthWrite={false} blending={THREE.AdditiveBlending} />
+        </mesh>
+      </group>
+      <group position={[cx(c), 0, cz(r)]}>
+        <mesh ref={scan} visible={false} renderOrder={8}>
+          <boxGeometry args={[FOOT + 0.18, 0.035, FOOT + 0.18]} />
+          <meshBasicMaterial ref={scanMat} color={color} transparent opacity={0.7} depthWrite={false} blending={THREE.AdditiveBlending} />
+        </mesh>
+        {[0, 1].map((k) => (
+          <mesh
+            key={k}
+            ref={(m) => {
+              rings.current[k] = m;
+            }}
+            rotation-x={-Math.PI / 2}
+            position={[0, 0.03, 0]}
+            visible={false}
+            renderOrder={7}
+          >
+            <ringGeometry args={[0.5, 0.6, 40]} />
+            <meshBasicMaterial color={k === 0 ? color : stampColor} transparent depthWrite={false} blending={THREE.AdditiveBlending} />
+          </mesh>
+        ))}
+        {partColors.map((col, k) => (
+          <mesh
+            key={k}
+            ref={(m) => {
+              parts.current[k] = m;
+            }}
+            visible={false}
+            renderOrder={9}
+          >
+            {result === "trail" && k % 3 === 0 ? <octahedronGeometry args={[0.07]} /> : <boxGeometry args={[0.07, 0.07, 0.07]} />}
+            <meshBasicMaterial color={col} transparent depthWrite={false} />
+          </mesh>
+        ))}
+        <pointLight ref={light} position={[0, h + 0.6, 0.4]} color={color} intensity={0} distance={3.5} />
+        <group ref={stamp} visible={false}>
+          <Tag text={stampText} color={stampColor} bg={stampBg} position={[0, 0, 0]} height={0.42} front />
+        </group>
+      </group>
+    </group>
   );
 }
 
@@ -1016,8 +1163,11 @@ function Route({ path, winner, endReason }: { path: Cell[]; winner: CityMapProps
 
 export type CameraMode = "city" | "top";
 
-/** City = orbit (drag to swing / tilt), top = near-vertical 2.5D map with the drag disabled. */
-function CameraRig({ mode }: { mode: CameraMode }) {
+type Focus = { x: number; z: number; key: number; shake: number };
+
+/** City = orbit (drag to swing / tilt), top = near-vertical 2.5D map with the drag disabled. A search `focus` pushes in and shakes. */
+function CameraRig({ mode, focus }: { mode: CameraMode; focus: Focus | null }) {
+  const focusAt = useRef<{ key: number; at: number } | null>(null);
   const gl = useThree((s) => s.gl);
   const yaw = useRef(0);
   const yawTarget = useRef(0);
@@ -1062,9 +1212,25 @@ function CameraRig({ mode }: { mode: CameraMode }) {
     pitch.current += (pitchTarget.current - pitch.current) * 0.12;
     const fov = 42;
     const need = (GRID * STEP + 2.4) / 2 / Math.tan(((fov / 2) * Math.PI) / 180);
-    const dist = (need / Math.min(1, aspect)) * (modeRef.current === "top" ? 1.0 : 0.98);
-    cam.position.set(Math.sin(yaw.current) * Math.cos(pitch.current) * dist, Math.sin(pitch.current) * dist, Math.cos(yaw.current) * Math.cos(pitch.current) * dist);
-    cam.lookAt(0, 0, modeRef.current === "top" ? 0.15 : 0.5);
+    let dist = (need / Math.min(1, aspect)) * (modeRef.current === "top" ? 1.0 : 0.98);
+    let lx = 0;
+    let lz = 0;
+    let shake = 0;
+    const now = frame.clock.elapsedTime;
+    if (focus) {
+      if (!focusAt.current || focusAt.current.key !== focus.key) focusAt.current = { key: focus.key, at: now };
+      const ft = now - focusAt.current.at;
+      const w = ft < 0.5 ? easeInOut(ft / 0.5) : 1 - easeInOut((ft - (FX.end - 0.6)) / 0.6);
+      dist *= 1 - 0.14 * w;
+      lx = focus.x * 0.3 * w;
+      lz = focus.z * 0.3 * w;
+      const hitT = ft - FX.hit;
+      if (hitT > 0) shake = focus.shake * Math.max(0, 1 - hitT * 2.5);
+    }
+    const sx = Math.sin(now * 61) * shake;
+    const sy = Math.sin(now * 53 + 1) * shake;
+    cam.position.set(lx + sx + Math.sin(yaw.current) * Math.cos(pitch.current) * dist, sy + Math.sin(pitch.current) * dist, lz + Math.cos(yaw.current) * Math.cos(pitch.current) * dist);
+    cam.lookAt(lx + sx * 0.5, 0, lz + (modeRef.current === "top" ? 0.15 : 0.5));
     if (cam.fov !== fov) {
       cam.fov = fov;
       cam.updateProjectionMatrix();
@@ -1152,11 +1318,14 @@ function SceneContents(props: SceneProps) {
       {state.helis.map((p, h) => (
         <PoliceUnit key={h} at={p} index={h} active={(state.phase === "police" || state.phase === "deploy") && state.heliTurn === h} />
       ))}
-      {reveal && state.helis[reveal.heli] !== undefined && <SearchBeam key={reveal.key} from={unitPos(state.helis[reveal.heli], reveal.heli)} cell={reveal.cell} color={HELI_STYLES[reveal.heli].hex} />}
+      {reveal && state.helis[reveal.heli] !== undefined && <SearchFx key={reveal.key} from={unitPos(state.helis[reveal.heli], reveal.heli)} heli={reveal.heli} cell={reveal.cell} result={reveal.result} tokens={reveal.tokens} />}
       {showSecret && thiefAt !== null && caughtCell === null && <ThiefActor at={thiefAt} move={move} loot={state.path.length} label={over ? "🦹 도둑" : "🦹 나 (숨는 중)"} />}
       {caughtCell !== null && <CaughtScene cell={caughtCell} />}
       {revealRoute && state.path.length > 0 && <Route path={state.path} winner={state.winner} endReason={state.endReason} />}
-      <CameraRig mode={camMode} />
+      <CameraRig
+        mode={camMode}
+        focus={reveal ? { x: cx(cellRC(reveal.cell)[1]), z: cz(cellRC(reveal.cell)[0]), key: reveal.key, shake: reveal.result === "empty" ? 0.03 : reveal.result === "trail" ? 0.08 : 0.16 } : null}
+      />
     </>
   );
 }
@@ -1194,7 +1363,7 @@ export default function CityMap3D(props: CityMapProps & { lowDetail: boolean; al
   }
   useEffect(() => {
     if (!reveal || reveal.result === "caught") return;
-    const t = window.setTimeout(() => setReveal((r) => (r && r.key === reveal.key ? null : r)), 1900);
+    const t = window.setTimeout(() => setReveal((r) => (r && r.key === reveal.key ? null : r)), FX.end * 1000);
     return () => window.clearTimeout(t);
   }, [reveal]);
   const high = !props.lowDetail;
@@ -1218,7 +1387,7 @@ export default function CityMap3D(props: CityMapProps & { lowDetail: boolean; al
       </button>
       {reveal && reveal.result === "caught" && (
         <div className="pointer-events-none absolute inset-x-0 top-12 z-50 flex justify-center">
-          <div className="rounded-2xl bg-red-600/90 px-5 py-3 text-center text-lg font-black text-white shadow-2xl" style={{ animation: "cc3d-pop .5s ease-out 1s both, cc3d-fade .5s ease-in 3.4s forwards" }}>
+          <div className="rounded-2xl bg-red-600/90 px-5 py-3 text-center text-lg font-black text-white shadow-2xl" style={{ animation: "cc3d-pop .5s ease-out 2.4s both, cc3d-fade .5s ease-in 4.8s forwards" }}>
             🔗 수갑 철컥! {cellLabel(reveal.cell)}에서 검거
           </div>
         </div>
