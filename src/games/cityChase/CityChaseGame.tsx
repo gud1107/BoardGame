@@ -722,7 +722,7 @@ export default function CityChaseGame({ onComplete }: PlayableGameProps) {
         gameId="city-chase"
         icon="🚓"
         title="시티 체이스 온라인 대전"
-        description={<p className="text-sm text-white/50 light:text-slate-500">도둑 1명 vs 경찰 1~3명 (2~4인). 각자 기기로 접속해 도둑은 몰래 달아나고, 경찰은 헬기 3대로 추적해요.</p>}
+        description={<p className="text-sm text-white/50 light:text-slate-500">도둑 1명 vs 경찰 1~3명 (2~4인). 각자 기기로 접속해 도둑은 몰래 달아나고, 경찰은 경찰차·경찰관·헬기로 추적해요.</p>}
         actions={
           <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
             <button
@@ -826,7 +826,7 @@ export default function CityChaseGame({ onComplete }: PlayableGameProps) {
                 </button>
               ))}
             </div>
-            <p className="text-[11px] text-white/40 light:text-slate-400">나머지 인원은 모두 경찰 팀이 되어 헬기 3대를 나눠 조종해요. 다시하기 때마다 도둑 역할이 다음 사람에게 넘어가요.</p>
+            <p className="text-[11px] text-white/40 light:text-slate-400">나머지 인원은 모두 경찰 팀이 되어 🚓 경찰차·👮 경찰관·🚁 헬기를 나눠 조종해요. 다시하기 때마다 도둑 역할이 다음 사람에게 넘어가요.</p>
           </div>
         )}
         {formError && <p className="rounded-lg bg-rose-500/10 light:bg-rose-50 px-3 py-2 text-xs text-rose-300 light:text-rose-700">{formError}</p>}

@@ -24,11 +24,21 @@ export function cellLabel(cell: Cell): string {
   return `${String.fromCharCode(65 + c)}${r + 1}`;
 }
 
+/**
+ * The rulebook's 3 helicopters, dressed as a mixed police squad (2026-10-23, user
+ * request): car / officer / helicopter. Purely cosmetic — the engine still calls
+ * them helis and all three move and search by exactly the same rules.
+ */
 export const HELI_STYLES = [
-  { ring: "ring-sky-400", border: "border-sky-400", bg: "bg-sky-500", text: "text-sky-300", hex: "#38bdf8" },
-  { ring: "ring-amber-400", border: "border-amber-400", bg: "bg-amber-500", text: "text-amber-300", hex: "#fbbf24" },
-  { ring: "ring-fuchsia-400", border: "border-fuchsia-400", bg: "bg-fuchsia-500", text: "text-fuchsia-300", hex: "#e879f9" },
+  { ring: "ring-sky-400", border: "border-sky-400", bg: "bg-sky-500", text: "text-sky-300", hex: "#38bdf8", icon: "🚓", name: "경찰차" },
+  { ring: "ring-amber-400", border: "border-amber-400", bg: "bg-amber-500", text: "text-amber-300", hex: "#fbbf24", icon: "👮", name: "경찰관" },
+  { ring: "ring-fuchsia-400", border: "border-fuchsia-400", bg: "bg-fuchsia-500", text: "text-fuchsia-300", hex: "#e879f9", icon: "🚁", name: "헬기" },
 ] as const;
+
+/** "🚓 경찰차" — how every status line and log names police unit `h`. */
+export function unitName(h: number): string {
+  return `${HELI_STYLES[h].icon} ${HELI_STYLES[h].name}`;
+}
 
 /** Flat token swatch (round track): fill + border + number colour. */
 export const TOKEN_CLASS: Record<TokenColor, string> = {
@@ -187,7 +197,7 @@ export default function CityMap({ state, showSecret, revealRoute = false, thiefT
               {/* Ground: what's hidden under the building */}
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 rounded-lg bg-black/60 ring-1 ring-white/10">
                 {(lifting ? reveal!.result === "caught" : hasCar) && (
-                  <span className="text-[min(5.5vw,26px)] leading-none drop-shadow-[0_0_8px_rgba(239,68,68,0.9)]">🚗</span>
+                  <span className="text-[min(5.5vw,26px)] leading-none drop-shadow-[0_0_8px_rgba(239,68,68,0.9)]">🦹</span>
                 )}
                 <div className="flex flex-wrap justify-center gap-1">
                   {lifting
@@ -277,7 +287,7 @@ export default function CityMap({ state, showSecret, revealRoute = false, thiefT
                   </span>
                 )}
                 {hasCar && !lifting && (
-                  <span className="pointer-events-none absolute bottom-0.5 right-1 text-sm sm:text-base">🚗</span>
+                  <span className="pointer-events-none absolute bottom-0.5 right-1 text-sm sm:text-base">🦹</span>
                 )}
               </button>
             </div>
@@ -378,7 +388,7 @@ export default function CityMap({ state, showSecret, revealRoute = false, thiefT
               onClick={() => onPointClick?.(p)}
               className={`absolute z-30 flex h-[7%] w-[7%] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-dashed ${HELI_STYLES[heliControls.heli].border} bg-black/50 text-[10px] font-bold text-white hover:bg-white/20`}
               style={{ top: `${i * STEP}%`, left: `${j * STEP}%` }}
-              aria-label={heliControls.placing ? "헬기 배치" : "헬기 이동"}
+              aria-label={heliControls.placing ? "경찰 배치" : "경찰 이동"}
             >
               {heliControls.placing ? "＋" : "↗"}
             </button>
@@ -405,7 +415,7 @@ export default function CityMap({ state, showSecret, revealRoute = false, thiefT
                 className="absolute inset-[-18%] rounded-full border-2 border-dotted border-white/40"
                 style={{ animation: "cc-rotor 0.6s linear infinite" }}
               />
-              <span className="text-[min(4vw,20px)] leading-none">🚁</span>
+              <span className="text-[min(4vw,20px)] leading-none">{HELI_STYLES[h].icon}</span>
               <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-black text-[9px] font-bold text-white ring-1 ring-white/60">
                 {h + 1}
               </span>

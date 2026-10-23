@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.89.0",
+    releaseDate: "2026-10-23",
+    title: "🦹 시티 체이스 3D — 내가 도둑이 되어 도시를 털고 숨어요",
+    changes: [
+      { game: "city-chase", type: "IMPROVE", desc: "👀 낮은 상가 건물·큰 이름표·땅에 칠한 감시 구역으로 한눈에 읽혀요 — 🗺️ 탑뷰(2.5D) 버튼으로 위에서 내려다보기도 돼요" },
+      { game: "city-chase", type: "FEAT", desc: "🏃 건물을 탭하면 도둑이 달려가 문으로 들어가 💰 털고, 골목 쓰레기통 뒤에 숨어요 — 이미 턴 곳엔 🚧 폴리스 라인, 누르면 🚨 경보" },
+      { game: "city-chase", type: "FEAT", desc: "🚓 경찰차·👮 경찰관·🚁 헬기로 수사(규칙은 그대로) — 탐조등으로 건물을 비추고, 잡히면 🔗 수갑 철컥!" },
+    ],
+  },
+  {
     version: "v1.88.0",
     releaseDate: "2026-10-23",
     title: "🖼️ 스플렌더 대결·가운데땅의 대결은 다시 2D 보드로",

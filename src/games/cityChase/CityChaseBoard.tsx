@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { preferLowDetail, useBoardView } from "@/games/shared/three/viewPref";
-import CityMap, { cellLabel, HELI_STYLES, TOKEN_CLASS, TokenChip } from "./CityMap";
+import CityMap, { cellLabel, HELI_STYLES, TOKEN_CLASS, TokenChip, unitName } from "./CityMap";
 import {
   currentActor,
   currentPoliceBelief,
@@ -49,6 +49,13 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
   const [showHeat, setShowHeat] = useState(false);
   const { view: boardView, setView: setBoardView, canToggle } = useBoardView("city-chase-view");
   const [lowDetail] = useState(preferLowDetail);
+  // Thief tapped a building they can't enter: a robbed one sounds its alarm, anything else just explains why.
+  const [blocked, setBlocked] = useState<{ cell: Cell; key: number; text: string } | null>(null);
+  useEffect(() => {
+    if (!blocked) return;
+    const t = window.setTimeout(() => setBlocked((b) => (b?.key === blocked.key ? null : b)), 1800);
+    return () => window.clearTimeout(t);
+  }, [blocked]);
 
   // SFX once per applied action.
   const soundSeqRef = useRef(state.seq);
@@ -84,6 +91,14 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
 
   function handleCell(cell: Cell) {
     if (thiefTargets?.has(cell)) onAction({ type: "THIEF_MOVE", seat: viewerSeat, cell });
+    else if (thiefTargets) {
+      const robbed = state.path.includes(cell);
+      setBlocked({
+        cell,
+        key: Date.now(),
+        text: robbed ? `🚨 ${cellLabel(cell)}은(는) 이미 턴 건물 — 다시 들어가면 경찰한테 들켜요!` : "🏃 바로 옆(상·하·좌·우) 건물로만 갈 수 있어요",
+      });
+    }
     else if (heliControls?.searchTargets.includes(cell)) onAction({ type: "HELI_SEARCH", seat: viewerSeat, heli: heliControls.heli, cell });
   }
   function handlePoint(p: Point) {
@@ -100,18 +115,18 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
       return { tone: "thief", text: `🏁 ${thiefName}이(가) 11라운드를 버텨내고 도주 성공!` };
     }
     if (state.phase === "thief") {
-      if (isThief) return { tone: "thief", text: state.round === 1 ? "차를 숨길 건물을 고르세요 (아무 건물이나)" : "아직 안 가본 상·하·좌·우 건물로 이동하세요 (되돌아가기 불가)" };
-      return { tone: "wait", text: "🙈 도둑이 몰래 이동 중… 경찰은 눈을 감으세요" };
+      if (isThief) return { tone: "thief", text: state.round === 1 ? "털고 숨을 건물을 고르세요 (아무 건물이나)" : "아직 안 턴 상·하·좌·우 건물을 탭하면 도둑이 달려가요 (🚧 턴 곳은 불가)" };
+      return { tone: "wait", text: "🙈 도둑이 어둠 속을 이동 중… 경찰은 눈을 감으세요" };
     }
-    const heliName = `🚁${state.heliTurn + 1}`;
+    const heliName = unitName(state.heliTurn);
     const pilot = names[heliController(state, state.heliTurn)] ?? "경찰";
     if (state.phase === "deploy") {
-      if (!isThief && isMyTurn) return { tone: "police", text: `${heliName} 배치 — 헬기를 띄울 교차로(＋)를 고르세요. 1라운드는 배치로 끝나요` };
-      if (isThief) return { tone: "wait", text: `🚁 경찰이 헬기를 배치하는 중… (${pilot})` };
+      if (!isThief && isMyTurn) return { tone: "police", text: `${heliName} 배치 — 세울 교차로(＋)를 고르세요. 1라운드는 배치로 끝나요` };
+      if (isThief) return { tone: "wait", text: `🚓 경찰이 ${heliName}을(를) 배치하는 중… (${pilot})` };
       return { tone: "wait", text: `${heliName} ${pilot} 배치 중…` };
     }
-    if (!isThief && isMyTurn) return { tone: "police", text: `${heliName} 조종 차례 — 교차로로 이동(↗)하거나 맞닿은 건물을 수색(🔍)하세요` };
-    return { tone: "wait", text: `${heliName} ${pilot} 조종 중…` };
+    if (!isThief && isMyTurn) return { tone: "police", text: `${heliName} 차례 — 교차로로 이동(↗)하거나 맞닿은 건물을 수색(🔍)하세요` };
+    return { tone: "wait", text: `${heliName} — ${pilot} 생각 중…` };
   })();
 
   const toneClass =
@@ -196,6 +211,7 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
               heat={heat}
               latestSearch={latestSearch}
               lowDetail={lowDetail}
+              alarm={blocked && state.path.includes(blocked.cell) ? blocked : null}
             />
           ) : (
           <CityMap
@@ -210,11 +226,16 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
             latestSearch={latestSearch}
           />
           )}
+          {blocked && (
+            <div className="pointer-events-none absolute inset-x-0 top-11 z-[55] flex justify-center px-3">
+              <span className="rounded-xl border border-red-400/60 bg-red-950/90 px-3 py-1.5 text-center text-xs font-bold text-red-100 shadow-lg light:bg-red-50 light:text-red-800">{blocked.text}</span>
+            </div>
+          )}
           {!isThief && !over && state.phase === "thief" && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-3xl bg-black/55 backdrop-blur-[2px]">
               <div className="text-center">
                 <div className="text-4xl">🙈</div>
-                <p className="mt-1 text-sm font-semibold text-white">{state.round === 1 ? "도둑이 숨을 건물을 고르는 중…" : "도둑이 차를 옮기는 중…"}</p>
+                <p className="mt-1 text-sm font-semibold text-white">{state.round === 1 ? "도둑이 털 건물을 고르는 중…" : "도둑이 다음 건물로 숨어드는 중…"}</p>
               </div>
             </div>
           )}
@@ -233,8 +254,9 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
                     active ? "border-white/40 bg-white/10 light:bg-slate-100" : "border-white/10 light:border-slate-200"
                   }`}
                 >
-                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${HELI_STYLES[h].bg} text-[10px] font-bold text-white`}>{h + 1}</span>
+                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${HELI_STYLES[h].bg} text-[11px]`} title={HELI_STYLES[h].name}>{HELI_STYLES[h].icon}</span>
                   <span className="truncate text-white/80 light:text-slate-700">
+                    <span className="hidden font-semibold sm:inline">{HELI_STYLES[h].name} · </span>
                     {seat === viewerSeat ? "나" : names[seat]}
                     {!connectedSeats.has(seat) && " ⚠️"}
                   </span>
@@ -269,7 +291,7 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
                     <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${HELI_STYLES[s.heli].bg}`} />
                     <span className="font-semibold">{cellLabel(s.cell)}</span>
                     {s.result === "caught" ? (
-                      <span className="font-bold text-red-400">🚗 검거!</span>
+                      <span className="font-bold text-red-400">🔗 검거!</span>
                     ) : s.result === "trail" ? (
                       <span className="flex items-center gap-0.5 text-amber-300 light:text-amber-600">
                         흔적
@@ -288,7 +310,7 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
 
           {isThief && !over && (
             <p className="rounded-lg bg-rose-500/10 px-2 py-1.5 text-[11px] text-rose-100/80 light:bg-rose-50 light:text-rose-800">
-              💡 파란 빛 건물은 지금 헬기가 바로 들어 올릴 수 있는 곳이에요. 숫자는 내가 지나간 라운드 — 그 건물로는 다시 못 가니 막다른 길을 조심하세요!
+              💡 땅이 경찰 색(파랑·노랑·분홍)으로 칠해진 건물은 그 경찰이 지금 바로 수색할 수 있는 곳이에요. 🚧 폴리스 라인 건물은 이미 턴 곳 — 다시 못 가니 막다른 길을 조심하세요!
             </p>
           )}
         </div>
