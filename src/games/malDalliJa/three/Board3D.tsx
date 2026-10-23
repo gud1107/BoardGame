@@ -40,6 +40,13 @@ const HALF = (BOARD_SIZE - 1) / 2;
 const TILE_TOP = 0.3;
 const cellX = (col: number) => col - HALF;
 const cellZ = (row: number) => row - HALF;
+const cellKeyOf = (row: number, col: number) => `${row},${col}`;
+
+/** The board cell an intersected mesh stands for (tiles and landing markers carry `userData.cell`). */
+function cellOf(obj: THREE.Object3D | null): string | null {
+  for (let o = obj; o; o = o.parent) if (typeof o.userData.cell === "string") return o.userData.cell;
+  return null;
+}
 
 const THEME: Record<Seat, { body: string; accent: string; rough: number; metal: number }> = {
   p1: { body: "#1c1917", accent: "#fb7185", rough: 0.25, metal: 0.35 },
@@ -245,7 +252,13 @@ function Tiles({ onCellClick }: { onCellClick: (e: ThreeEvent<MouseEvent>, row: 
       const dark = (row + col) % 2 === 1;
       const color = ring ? (dark ? "#059669" : "#10b981") : h === "p1" ? (dark ? "#5b1f2b" : "#73303d") : h === "p2" ? (dark ? "#1d4c5a" : "#2a6273") : dark ? "#4a3b2c" : "#8a7356";
       tiles.push(
-        <mesh key={`${row}-${col}`} position={[cellX(col), TILE_TOP / 2, cellZ(row)]} receiveShadow onClick={(e) => onCellClick(e, row, col)}>
+        <mesh
+          key={`${row}-${col}`}
+          position={[cellX(col), TILE_TOP / 2, cellZ(row)]}
+          receiveShadow
+          userData={{ cell: cellKeyOf(row, col) }}
+          onClick={(e) => onCellClick(e, row, col)}
+        >
           <boxGeometry args={[0.96, TILE_TOP, 0.96]} />
           <meshStandardMaterial
             color={center ? "#1e3a5f" : color}
@@ -293,7 +306,7 @@ function TargetMarker({ move, onClick }: { move: LegalMove; onClick: (e: ThreeEv
     if (ref.current) ref.current.scale.setScalar(1 + Math.sin(clock.elapsedTime * 5 + move.to.row) * 0.1);
   });
   return (
-    <group position={[cellX(move.to.col), TILE_TOP + 0.02, cellZ(move.to.row)]} onClick={onClick}>
+    <group position={[cellX(move.to.col), TILE_TOP + 0.02, cellZ(move.to.row)]} userData={{ cell: cellKeyOf(move.to.row, move.to.col) }} onClick={onClick}>
       <mesh ref={ref} rotation-x={-Math.PI / 2}>
         <ringGeometry args={[0.2, 0.34, 28]} />
         <meshBasicMaterial color={color} transparent opacity={0.9} depthWrite={false} />
@@ -418,6 +431,19 @@ function SceneContents(props: MalDalliJaBoard3DProps) {
   const click = (e: ThreeEvent<MouseEvent>, row: number, col: number) => {
     e.stopPropagation();
     if (e.delta > 8) return; // that was a camera drag, not a tap
+    // 말을 고른 뒤엔 광선이 지나간 착지 칸이 앞에 선 다른 말보다 우선 —
+    // 원근 때문에 앞줄 말의 히트박스가 뒤 칸 착지 표시를 덮어 엉뚱한 말이 골라지던 문제.
+    if (props.legal.length > 0) {
+      const targets = new Set(props.legal.map((m) => cellKeyOf(m.to.row, m.to.col)));
+      for (const hit of e.intersections) {
+        const cell = cellOf(hit.object);
+        if (cell && targets.has(cell)) {
+          const [r, c] = cell.split(",").map(Number);
+          props.onCellClick(r, c);
+          return;
+        }
+      }
+    }
     props.onCellClick(row, col);
   };
   const animByHorse = new Map(props.animations.map((a) => [`${a.seat}-${a.horseIndex}`, a]));
