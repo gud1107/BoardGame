@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import FirstPersonCamera from "./FirstPersonCamera";
@@ -13,6 +13,7 @@ import SpeechBubble from "./SpeechBubble";
 import { AdaptiveResolution, BlobShadow, PerfHud, PostFx, StudioEnvironment } from "./sceneFx";
 import { labelTexture, polar, seatAngle, type BubbleStyle } from "./tableKit";
 import { personaFor } from "./persona";
+import { speakEmotion } from "@/lib/audio/characterVoice";
 
 /**
  * The shared "real people around a table" scene for the card / social
@@ -337,6 +338,15 @@ function SeatView({ s, geo, theme, lowDetail, ringColor }: { s: TableSeat; geo: 
   const frontSpot = geo.spotOf(s.seat, isViewer ? 0.45 : 0.38);
   const chair = s.chair ?? theme.chair;
   const Person = theme.personStyle === "realistic" ? RealisticPerson : SeatedPerson;
+  // the game turning this person's mood emotional is their cue to say something, in their own
+  // voice and words (characterVoice.ts); never on first mount, never for my own seat
+  const prevMood = useRef(s.mood);
+  useEffect(() => {
+    if (prevMood.current === s.mood) return;
+    prevMood.current = s.mood;
+    if (isViewer || s.out) return;
+    speakEmotion({ seat: s.seat, mood: s.mood, persona: personaFor(s.seat), gender: look.gender });
+  }, [s.mood, s.seat, s.out, isViewer, look.gender]);
   // every bubble carries its speaker: a name tab in the seat colour (and a matching border)
   const bubbleStyle = useMemo(() => (s.bubble ? { ...s.bubble.style, who: isViewer ? "나" : s.name, whoColor: color } : null), [s.bubble, isViewer, s.name, color]);
 

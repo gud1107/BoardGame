@@ -77,6 +77,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       { game: "common", type: "IMPROVE", desc: "🃏 3D 인물이 손패를 두 손으로 쥐고, 빈손은 테이블 위에 올려요 — 허공에 뜬 손 없음 (8종)" },
       { game: "common", type: "FEAT", desc: "🎭 인물마다 성격 — 뚫어지게 보는·수줍은·두리번·집중·멍때림·산만, 시선과 버릇이 달라요 · 👀 눈도 조금 더 크게" },
       { game: "common", type: "IMPROVE", desc: "💬 말풍선에 말한 사람 이름표·좌석색 테두리, 말하는 순간 머리 뒤에 같은 색 후광 — 누가 말했는지 바로 보여요 (26종)" },
+      { game: "common", type: "FEAT", desc: "🗣️ 3D 인물이 환호·놀람·웃음·좌절할 때 한마디 — 성격마다 대사·목소리 높이·말투가 달라요 (효과음 음소거를 따라요)" },
     ],
   },
   {
