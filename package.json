@@ -13,6 +13,7 @@
     "gen:last-updated": "node scripts/gen-game-last-updated.mjs",
     "gen:admin-changelog": "node scripts/gen-admin-changelog.mjs",
     "check:ui-width": "node scripts/ui-width-check/run.mjs",
+    "check:3d-perf": "node scripts/3d-perf/run.mjs",
     "posters:stale": "node scripts/poster-videos/stale.mjs"
   },
   "dependencies": {

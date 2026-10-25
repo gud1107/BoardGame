@@ -11,6 +11,7 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { VignetteShader } from "three/examples/jsm/shaders/VignetteShader.js";
+import { FpsWindow, nextDpr } from "./frameBudget";
 
 /**
  * Shared "make it look rendered, not drawn" layer for the 3D table scenes.
@@ -79,30 +80,92 @@ export function BlobShadow({ radius, y = 0.012, opacity = 1, stretch = 1 }: { ra
 
 /**
  * Starts at the device's real pixel ratio (capped at 2) so text and edges stay crisp on
- * phones, then steps down by 0.25 (to 1) whenever a ~1.5s window averages under ~45fps.
+ * phones; after a 1 s warm-up it reads the frame rate over 1.2 s and, if it's under ~45 fps,
+ * jumps straight to the ratio that should fit (see nextDpr) — on a weak phone that's one
+ * change ~2-3 s in, typically while the opening role/setup popup still covers the table.
  * A fixed low cap (the old 1.25 on mobile) rendered a 3× phone at ~40% resolution.
  */
 export function AdaptiveResolution({ max = 2 }: { max?: number }) {
   const setDpr = useThree((s) => s.setDpr);
+  const get = useThree((s) => s.get);
   const force = useMemo(() => forcedFx(), []);
   const dpr = useRef(1);
-  const perf = useRef({ frames: 0, acc: 0 });
+  const fps = useRef(new FpsWindow(1, 1.2));
   useEffect(() => {
-    dpr.current = Math.max(1, Math.min(max, window.devicePixelRatio || 1));
-    setDpr(dpr.current);
-  }, [max, setDpr]);
+    // the Canvas' own dpr range already starts there — only read it: every setDpr reallocates
+    // the drawing buffer (a redundant one here cost ~0.8 s of frozen frames on a throttled phone)
+    const want = Math.max(1, Math.min(max, window.devicePixelRatio || 1));
+    dpr.current = get().viewport.dpr;
+    if (dpr.current > want) {
+      dpr.current = want;
+      setDpr(want);
+    }
+  }, [max, get, setDpr]);
   useFrame((_, delta) => {
     if (force || dpr.current <= 1) return;
-    const p = perf.current;
-    p.frames++;
-    if (p.frames > 60) p.acc += Math.min(delta, 0.25);
-    if (p.frames < 150) return;
-    if (p.acc / 90 > 1 / 45) {
-      dpr.current = Math.max(1, dpr.current - 0.25);
-      setDpr(dpr.current);
+    const now = performance.now() / 1000;
+    const reading = fps.current.tick(now, delta);
+    if (reading === null) return;
+    const next = nextDpr(dpr.current, reading);
+    if (next === dpr.current) return;
+    dpr.current = next;
+    setDpr(next);
+    fps.current.reset(now);
+  });
+  return null;
+}
+
+/** What the quality steppers last decided — read by PerfHud. */
+const fxState = { tier: "-" as string };
+
+/**
+ * `?perf=1` on any 3D table: a small overlay with fps, pixel ratio, the longest stall since
+ * load, draw calls, shader programs and the post-FX tier — for checking a real phone, where
+ * the headless/software-GPU numbers are only a rough stand-in. Plain DOM (no extra deps).
+ */
+export function PerfHud() {
+  const get = useThree((s) => s.get);
+  const on = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return new URLSearchParams(window.location.search).get("perf") === "1";
+    } catch {
+      return false;
     }
-    p.frames = 0;
-    p.acc = 0;
+  }, []);
+  const stats = useRef({ frames: 0, since: 0, worst: 0, born: 0, first: 0 });
+  const box = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!on) return;
+    const parent = get().gl.domElement.parentElement;
+    if (!parent) return;
+    const el = document.createElement("div");
+    el.style.cssText = "position:absolute;left:4px;top:4px;z-index:5;pointer-events:none;font:11px/1.35 ui-monospace,monospace;color:#d9f99d;background:rgba(0,0,0,.72);padding:4px 6px;border-radius:6px;white-space:pre";
+    parent.appendChild(el);
+    box.current = el;
+    stats.current.born = performance.now();
+    return () => {
+      el.remove();
+      box.current = null;
+    };
+  }, [on, get]);
+  useFrame(({ gl, viewport }, delta) => {
+    if (!on || !box.current) return;
+    const s = stats.current;
+    const now = performance.now();
+    if (!s.first) s.first = now - s.born;
+    s.frames++;
+    s.worst = Math.max(s.worst, delta * 1000);
+    if (!s.since) s.since = now;
+    if (now - s.since < 500) return;
+    const fps = (s.frames * 1000) / (now - s.since);
+    s.frames = 0;
+    s.since = now;
+    box.current.textContent = [
+      `fps ${fps.toFixed(0)}  dpr ${viewport.dpr.toFixed(2)}/${(window.devicePixelRatio || 1).toFixed(1)}`,
+      `stall ${Math.round(s.worst)}ms  1st ${Math.round(s.first)}ms`,
+      `calls ${gl.info.render.calls}  prog ${gl.info.programs?.length ?? "?"}  fx ${fxState.tier}`,
+    ].join("\n");
   });
   return null;
 }
@@ -134,7 +197,7 @@ export function PostFx({ bloom = 0.28, ao = true }: { bloom?: number; ao?: boole
   const force = useMemo(() => forcedFx(), []);
   // 0 = full chain, 1 = AO dropped, 2 = composer off (plain render)
   const tier = useRef(0);
-  const perf = useRef({ frames: 0, acc: 0 });
+  const fps = useRef(new FpsWindow(1, 1.2));
   const chain = useRef<Chain | null>(null);
 
   useEffect(() => {
@@ -182,8 +245,10 @@ export function PostFx({ bloom = 0.28, ao = true }: { bloom?: number; ao?: boole
     composer.setPixelRatio(viewport.dpr);
     composer.setSize(sz.width, sz.height);
     chain.current = { composer, gtao, target };
+    fxState.tier = gtao ? "full" : "no-AO";
     return () => {
       chain.current = null;
+      fxState.tier = "-";
       composer.dispose();
       gtao?.dispose();
       target.dispose();
@@ -198,19 +263,15 @@ export function PostFx({ bloom = 0.28, ao = true }: { bloom?: number; ao?: boole
   useFrame(({ gl, scene, camera }, delta) => {
     const c = chain.current;
     if (!force && tier.current < 2) {
-      // average over ~1.5s windows after a warm-up; step down when below ~40fps
-      const p = perf.current;
-      p.frames++;
-      if (p.frames > 60) p.acc += Math.min(delta, 0.25);
-      if (p.frames >= 150) {
-        const avg = p.acc / 90;
-        if (avg > 1 / 40) {
-          tier.current++;
-          if (tier.current === 1 && c?.gtao) c.gtao.enabled = false;
-          else if (tier.current === 1) tier.current = 2;
-        }
-        p.frames = 0;
-        p.acc = 0;
+      // wall-clock windows after a warm-up; below ~40fps drop AO, then the whole chain
+      const now = performance.now() / 1000;
+      const reading = fps.current.tick(now, delta);
+      if (reading !== null && reading < 40) {
+        // far below budget: AO alone won't rescue it, go straight to the plain render
+        tier.current = reading < 20 || !c?.gtao ? 2 : tier.current + 1;
+        if (tier.current === 1 && c?.gtao) c.gtao.enabled = false;
+        fxState.tier = tier.current >= 2 ? "plain" : "no-AO";
+        fps.current.reset(now);
       }
     }
     if (!c || tier.current >= 2) gl.render(scene, camera);

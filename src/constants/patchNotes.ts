@@ -73,6 +73,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       { game: "common", type: "IMPROVE", desc: "🔍 휴대폰에서도 3D가 선명하게 — 화면 해상도 그대로 그리고 계단 현상 제거, 버벅이면 자동으로 낮춰요" },
       { game: "common", type: "FIX", desc: "💇 사실적인 인물의 앞머리 사이로 두피가 비치던 문제 수정" },
       { game: "common", type: "FIX", desc: "🪧 3D 테이블 가운데 안내판이 맞은편 사람 얼굴을 가리지 않게 — 얼굴 아래로 알아서 내려가요 (23종)" },
+      { game: "common", type: "IMPROVE", desc: "⚡ 느린 휴대폰에서 3D 화질 조절이 수십 초 → 몇 초 만에 끝나 시작 직후 버벅임이 짧아졌어요" },
     ],
   },
   {

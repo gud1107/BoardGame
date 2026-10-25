@@ -10,7 +10,7 @@ import { useRoomCharacter } from "@/lib/character/roomCharacters";
 import RealisticPerson from "./RealisticPerson";
 import ScreenSprite from "./ScreenSprite";
 import SpeechBubble from "./SpeechBubble";
-import { AdaptiveResolution, BlobShadow, PostFx, StudioEnvironment } from "./sceneFx";
+import { AdaptiveResolution, BlobShadow, PerfHud, PostFx, StudioEnvironment } from "./sceneFx";
 import { labelTexture, polar, seatAngle, type BubbleStyle } from "./tableKit";
 
 /**
@@ -429,6 +429,7 @@ function SceneContents(props: TableSceneProps) {
       )}
       <FirstPersonCamera seatR={geo.seatR} tableY={TABLE_Y} overview={props.overview} seats={n} eyeLevel={theme.personStyle === "realistic"} />
       <AdaptiveResolution />
+      <PerfHud />
       {!lowDetail && <PostFx bloom={theme.fx?.bloom ?? 0.28} />}
     </GeoContext.Provider>
   );
