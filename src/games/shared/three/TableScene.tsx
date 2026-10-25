@@ -251,6 +251,49 @@ function FloorRing({ color }: { color: string }) {
   );
 }
 
+let haloTex: THREE.Texture | null = null;
+function haloTexture(): THREE.Texture {
+  if (haloTex) return haloTex;
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d")!;
+  const grad = g.createRadialGradient(64, 64, 30, 64, 64, 64);
+  grad.addColorStop(0, "rgba(255,255,255,0)");
+  grad.addColorStop(0.55, "rgba(255,255,255,0.9)");
+  grad.addColorStop(0.75, "rgba(255,255,255,0.5)");
+  grad.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  haloTex = new THREE.CanvasTexture(c);
+  return haloTex;
+}
+
+/**
+ * For ~3 s after a seat's bubble pops, a halo in the seat colour pulses behind the speaker's
+ * head, so a "이 트릭은 내 거!" across the table is tied to a face, not to a card in the middle.
+ * A sprite at head height (a floor ring hid behind the table for the far seats).
+ */
+function SpeakerPulse({ color, popKey, y, size = 0.75 }: { color: string; popKey: string; y: number; size?: number }) {
+  const ref = useRef<THREE.Sprite>(null);
+  const born = useRef({ key: "", at: 0 });
+  const map = useMemo(() => haloTexture(), []);
+  useFrame(({ clock }) => {
+    const s = ref.current;
+    if (!s) return;
+    if (born.current.key !== popKey) born.current = { key: popKey, at: clock.elapsedTime };
+    const t = clock.elapsedTime - born.current.at;
+    s.visible = t < 3;
+    const ph = (t * 1.4) % 1;
+    s.scale.setScalar(size * (0.8 + ph * 0.6));
+    (s.material as THREE.SpriteMaterial).opacity = (1 - ph) * 0.9 * Math.min(1, 3 - t);
+  });
+  return (
+    <sprite ref={ref} position={[0, y, -0.05]} visible={false}>
+      <spriteMaterial map={map} color={color} transparent depthWrite={false} opacity={0} />
+    </sprite>
+  );
+}
+
 /** Pointer handlers that ignore drags (the canvas drag looks around). */
 function useSelect(onSelect: (() => void) | null | undefined) {
   const [hover, setHover] = useState(false);
@@ -294,6 +337,8 @@ function SeatView({ s, geo, theme, lowDetail, ringColor }: { s: TableSeat; geo: 
   const frontSpot = geo.spotOf(s.seat, isViewer ? 0.45 : 0.38);
   const chair = s.chair ?? theme.chair;
   const Person = theme.personStyle === "realistic" ? RealisticPerson : SeatedPerson;
+  // every bubble carries its speaker: a name tab in the seat colour (and a matching border)
+  const bubbleStyle = useMemo(() => (s.bubble ? { ...s.bubble.style, who: isViewer ? "나" : s.name, whoColor: color } : null), [s.bubble, isViewer, s.name, color]);
 
   return (
     <group>
@@ -319,7 +364,8 @@ function SeatView({ s, geo, theme, lowDetail, ringColor }: { s: TableSeat; geo: 
           </group>
           {/* with the low lifelike camera, keep my own tag on the table so it doesn't cover faces opposite */}
           {s.tag && <ScreenSprite position={theme.personStyle === "realistic" ? [0, 0.1, 0.12] : [0, 0.45, -0.1]} scale={theme.personStyle === "realistic" ? [0.5, 0.125] : [0.66, 0.165]} map={labelTexture(s.tag.text, s.tag.color, { bg: s.tag.bg })} />}
-          {s.bubble && <SpeechBubble text={s.bubble.text} style={s.bubble.style} y={0.82} popKey={s.bubble.key} width={s.bubble.width ?? 0.9} />}
+          {s.bubble && bubbleStyle && <SpeechBubble text={s.bubble.text} style={bubbleStyle} y={0.82} popKey={s.bubble.key} width={Math.max(0.62, s.bubble.width ?? 0.9)} />}
+          {s.bubble && <SpeakerPulse color={color} popKey={s.bubble.key} y={0.3} size={0.5} />}
         </group>
       ) : (
         <group {...handlers}>
@@ -353,7 +399,8 @@ function SeatView({ s, geo, theme, lowDetail, ringColor }: { s: TableSeat; geo: 
             <ScreenSprite anchorY={labelBase} position={[0, nameY, 0]} scale={[0.86, 0.21]} map={labelTexture(s.away ? `📴 ${s.name}` : s.name, s.away ? "#71717a" : color)} />
             {s.sub && <ScreenSprite anchorY={labelBase} position={[0, nameY - 0.2, 0]} scale={[0.7, 0.175]} map={labelTexture(s.sub, color, { bg: "rgba(0,0,0,0.55)" })} />}
             {s.tag && <ScreenSprite anchorY={labelBase} position={[0, nameY + 0.22, 0]} scale={[0.7, 0.175]} map={labelTexture(s.tag.text, s.tag.color, { bg: s.tag.bg ?? "rgba(20,10,10,0.85)" })} />}
-            {s.bubble && <SpeechBubble anchorY={labelBase} text={s.bubble.text} style={s.bubble.style} y={bubbleY} popKey={s.bubble.key} width={s.bubble.width ?? 1.0} />}
+            {s.bubble && bubbleStyle && <SpeechBubble anchorY={labelBase} text={s.bubble.text} style={bubbleStyle} y={bubbleY} popKey={s.bubble.key} width={Math.max(0.62, s.bubble.width ?? 1.0)} />}
+            {s.bubble && <SpeakerPulse color={color} popKey={s.bubble.key} y={theme.personStyle === "realistic" ? 1.52 : 1.66} size={theme.personStyle === "realistic" ? 0.55 : 0.8} />}
           </Person>
           {/* generous invisible hit box so a tap on the chair area counts too */}
           {s.onSelect && (

@@ -111,6 +111,10 @@ export interface BubbleStyle {
   border: string;
   /** Font px on the 512-wide canvas; long text shrinks automatically. */
   size?: number;
+  /** Speaker name drawn as a tab on the bubble's top edge (TableScene fills it in for every seat bubble). */
+  who?: string;
+  /** Tab colour — the speaker's seat colour; also replaces the border so bubble and seat match. */
+  whoColor?: string;
 }
 
 const bubbleCache = new Map<string, { tex: THREE.CanvasTexture; aspect: number }>();
@@ -148,7 +152,7 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number): string
  * Cached by text + style (a description never changes once said).
  */
 export function bubbleTexture(text: string, style: BubbleStyle): { tex: THREE.CanvasTexture; aspect: number } {
-  const key = `${text}|${style.bg}|${style.fg}|${style.border}|${style.size ?? 0}`;
+  const key = `${text}|${style.bg}|${style.fg}|${style.border}|${style.size ?? 0}|${style.who ?? ""}|${style.whoColor ?? ""}`;
   const hit = bubbleCache.get(key);
   if (hit) return hit;
   const W = 512;
@@ -166,31 +170,50 @@ export function bubbleTexture(text: string, style: BubbleStyle): { tex: THREE.Ca
   const textW = Math.max(...lines.map((l) => probe.measureText(l).width));
   const boxW = Math.min(W - 8, Math.max(140, textW + pad * 2));
   const lineH = size * 1.22;
-  const boxH = lines.length * lineH + pad * 1.3;
+  const boxH = lines.length * lineH + pad * 1.3 + (style.who ? 20 : 0);
   const tail = 26;
-  const H = Math.ceil(boxH + tail + 8);
+  // a name tab sits on the top edge (half above it), so who's talking reads without hunting
+  const tabH = style.who ? 70 : 0;
+  const top = 4 + tabH / 2;
+  const H = Math.ceil(top + boxH + tail + 8);
   const c = document.createElement("canvas");
   c.width = W;
   c.height = H;
   const ctx = c.getContext("2d")!;
   const x0 = (W - boxW) / 2;
   ctx.fillStyle = style.bg;
-  ctx.strokeStyle = style.border;
-  ctx.lineWidth = 6;
+  ctx.strokeStyle = style.whoColor ?? style.border;
+  ctx.lineWidth = style.whoColor ? 9 : 6;
   ctx.beginPath();
-  ctx.roundRect(x0, 4, boxW, boxH, 30);
-  ctx.moveTo(W / 2 - 18, boxH + 2);
-  ctx.lineTo(W / 2, boxH + tail);
-  ctx.lineTo(W / 2 + 18, boxH + 2);
+  ctx.roundRect(x0, top, boxW, boxH, 30);
+  ctx.moveTo(W / 2 - 18, top + boxH - 2);
+  ctx.lineTo(W / 2, top + boxH + tail);
+  ctx.lineTo(W / 2 + 18, top + boxH - 2);
   ctx.fill();
   ctx.stroke();
   // hide the stroke seam between box and tail
-  ctx.fillRect(W / 2 - 15, boxH - 2, 30, 8);
+  ctx.fillRect(W / 2 - 14, top + boxH - 6, 28, 10);
   ctx.fillStyle = style.fg;
   ctx.font = `700 ${size}px ${TEXT_FONT}, ${EMOJI_FONT}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  lines.forEach((l, i) => ctx.fillText(l, W / 2, 4 + pad * 0.65 + lineH * (i + 0.5)));
+  lines.forEach((l, i) => ctx.fillText(l, W / 2, top + pad * 0.65 + lineH * (i + 0.5) + (tabH ? 14 : 0)));
+  if (style.who) {
+    const name = [...style.who].length > 8 ? `${[...style.who].slice(0, 7).join("")}…` : style.who;
+    ctx.font = `800 48px ${TEXT_FONT}, ${EMOJI_FONT}`;
+    const tw = Math.min(boxW - 40, ctx.measureText(name).width + 40);
+    const tx = Math.max(6, x0 + 22);
+    const tc = style.whoColor ?? style.border;
+    ctx.fillStyle = tc;
+    ctx.beginPath();
+    ctx.roundRect(tx, 4, tw, tabH - 4, 32);
+    ctx.fill();
+    // dark or light lettering, whichever reads on the seat colour
+    const rgb = new THREE.Color(tc);
+    ctx.fillStyle = rgb.r * 0.299 + rgb.g * 0.587 + rgb.b * 0.114 > 0.55 ? "#1c1917" : "#ffffff";
+    ctx.textAlign = "left";
+    ctx.fillText(name, tx + 20, 4 + (tabH - 4) / 2 + 2);
+  }
   const out = { tex: makeTexture(c), aspect: H / W };
   bubbleCache.set(key, out);
   return out;

@@ -481,12 +481,12 @@ function SceneContents(props: CoyoteTable3DProps) {
               >
                 <ScreenSprite position={[0, 2.18, 0]} scale={[0.82, 0.2]} map={labelTexture(s.name, color)} />
                 <ScreenSprite position={[0, 1.99, 0]} scale={[0.62, 0.155]} map={labelTexture(s.out ? "💀 탈락" : `${"❤️".repeat(Math.max(0, s.hearts))}${"🤍".repeat(Math.max(0, props.maxHearts - s.hearts))}`, s.out ? "#7f1d1d" : "#f43f5e", { bg: "rgba(0,0,0,0.55)" })} />
-                {bubble && <SpeechBubble text={bubble.text} style={bubble.style} y={2.55} popKey={bubble.key} />}
+                {bubble && <SpeechBubble text={bubble.text} style={{ ...bubble.style, who: s.name, whoColor: color }} y={2.55} popKey={bubble.key} />}
               </SeatedPerson>
             )}
             {isViewer && bubble && (
               <group position={polar(0, tableR - 0.1, 0).toArray()}>
-                <SpeechBubble text={bubble.text} style={bubble.style} y={TABLE_Y + 0.75} popKey={bubble.key} />
+                <SpeechBubble text={bubble.text} style={{ ...bubble.style, who: "나", whoColor: color }} y={TABLE_Y + 0.75} popKey={bubble.key} />
               </group>
             )}
             {props.activeSeat === s.seat && !revealed && <ActiveRing position={polar(angle, tableR - 0.22)} />}

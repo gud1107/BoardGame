@@ -245,13 +245,13 @@ function SceneContents(props: LiarTable3DProps) {
         const isViewer = s.seat === viewerSeat;
         const color = SEAT_COLORS[s.seat % SEAT_COLORS.length];
         const lookAt = s.lookSeat === null ? new THREE.Vector3(0, TABLE_Y, 0) : headOf(s.lookSeat);
-        const bubble = s.bubble ? <SpeechBubble text={s.bubble.text} style={BUBBLES[s.bubble.kind]} y={2.62} popKey={s.bubble.key} width={s.bubble.kind === "status" ? 0.6 : 1.05} /> : null;
+        const bubble = s.bubble ? <SpeechBubble text={s.bubble.text} style={{ ...BUBBLES[s.bubble.kind], who: s.name, whoColor: color }} y={2.62} popKey={s.bubble.key} width={s.bubble.kind === "status" ? 0.62 : 1.05} /> : null;
         return (
           <group key={s.seat}>
             <SeatCard position={cardSpot(s.seat)} angle={angle} color={color} />
             {isViewer ? (
               <group position={polar(0, tableR - 0.15, 0).toArray()}>
-                {s.bubble && <SpeechBubble text={s.bubble.text} style={BUBBLES[s.bubble.kind]} y={TABLE_Y + 0.72} popKey={s.bubble.key} width={0.9} />}
+                {s.bubble && <SpeechBubble text={s.bubble.text} style={{ ...BUBBLES[s.bubble.kind], who: "나", whoColor: color }} y={TABLE_Y + 0.72} popKey={s.bubble.key} width={0.9} />}
                 {s.tag && (
                   <ScreenSprite position={[0, TABLE_Y + 0.35, 0]} scale={[0.7, 0.175]} map={labelTexture(s.tag, "#f43f5e")} />
                 )}
