@@ -72,6 +72,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       { game: "common", type: "IMPROVE", desc: "🌑 사람·의자·테이블 아래 부드러운 접지 그림자, PC에서는 틈새 음영·빛 번짐·가장자리 비네트까지 (느린 기기는 자동으로 꺼져요)" },
       { game: "common", type: "IMPROVE", desc: "🔍 휴대폰에서도 3D가 선명하게 — 화면 해상도 그대로 그리고 계단 현상 제거, 버벅이면 자동으로 낮춰요" },
       { game: "common", type: "FIX", desc: "💇 사실적인 인물의 앞머리 사이로 두피가 비치던 문제 수정" },
+      { game: "common", type: "FIX", desc: "🪧 3D 테이블 가운데 안내판이 맞은편 사람 얼굴을 가리지 않게 — 얼굴 아래로 알아서 내려가요 (23종)" },
     ],
   },
   {

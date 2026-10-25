@@ -4,8 +4,8 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
-import { FlatCard, FlyIn, ImpactRing, StandingCard, FloatIcon } from "@/games/shared/three/tablePieces";
-import { bubbleTexture, paintedTexture, FONTS, type BubbleStyle } from "@/games/shared/three/tableKit";
+import { FlatCard, FlyIn, ImpactRing, StandingCard, FloatIcon, TableSign } from "@/games/shared/three/tablePieces";
+import { paintedTexture, FONTS, type BubbleStyle } from "@/games/shared/three/tableKit";
 import type { HatKind, PersonMood } from "@/games/shared/three/SeatedPerson";
 import { CARD_RANK_INFO } from "../CardArt";
 import { JOKER_RANK, type Card } from "../engine";
@@ -372,16 +372,7 @@ function PlayFan({ cards }: { cards: Card[] }) {
 const SIGN_STYLE: BubbleStyle = { bg: "rgba(30,14,48,0.92)", fg: "#fde68a", border: "#d4a52c", size: 42 };
 
 function CenterSign({ text }: { text: string }) {
-  const { tex, aspect } = useMemo(() => bubbleTexture(text, SIGN_STYLE), [text]);
-  const ref = useRef<THREE.Sprite>(null);
-  useFrame(({ clock }) => {
-    if (ref.current) ref.current.position.y = 0.95 + Math.sin(clock.elapsedTime * 1.3) * 0.03;
-  });
-  return (
-    <sprite ref={ref} position={[0, 0.95, 0]} scale={[1.15, 1.15 * aspect, 1]} renderOrder={9}>
-      <spriteMaterial map={tex} transparent depthWrite={false} depthTest={false} />
-    </sprite>
-  );
+  return <TableSign text={text} style={SIGN_STYLE} y={0.95} width={1.15} />;
 }
 
 function TrickPile({ plays }: { plays: DalmutiTable3DProps["plays"] }) {

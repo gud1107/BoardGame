@@ -42,6 +42,11 @@ export interface TableGeo {
 }
 
 const GeoContext = createContext<TableGeo | null>(null);
+/** Same as `useTableGeo`, but null outside a `TableScene` instead of throwing. */
+export function useTableGeoOptional(): TableGeo | null {
+  return useContext(GeoContext);
+}
+
 /** Seat geometry for centrepieces / extras rendered inside a `TableScene`. */
 export function useTableGeo(): TableGeo {
   const g = useContext(GeoContext);

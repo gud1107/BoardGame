@@ -4,8 +4,8 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
-import { FlatCard, FlyIn, GlowDisc, PopIn } from "@/games/shared/three/tablePieces";
-import { bubbleTexture, paintedTexture, FONTS, type BubbleStyle } from "@/games/shared/three/tableKit";
+import { FlatCard, FlyIn, GlowDisc, PopIn, TableSign } from "@/games/shared/three/tablePieces";
+import { paintedTexture, FONTS, type BubbleStyle } from "@/games/shared/three/tableKit";
 import type { PersonMood } from "@/games/shared/three/SeatedPerson";
 
 /**
@@ -421,16 +421,7 @@ function MissionTrack(props: Pick<AvalonTable3DProps, "teamSizes" | "twoFails" |
 const SIGN_STYLE: BubbleStyle = { bg: "rgba(20,24,48,0.92)", fg: "#fde68a", border: "#d4a52c", size: 42 };
 
 function CenterSign({ text }: { text: string }) {
-  const { tex, aspect } = useMemo(() => bubbleTexture(text, SIGN_STYLE), [text]);
-  const ref = useRef<THREE.Sprite>(null);
-  useFrame(({ clock }) => {
-    if (ref.current) ref.current.position.y = 1.0 + Math.sin(clock.elapsedTime * 1.3) * 0.03;
-  });
-  return (
-    <sprite ref={ref} position={[0, 1.0, 0]} scale={[1.15, 1.15 * aspect, 1]} renderOrder={9}>
-      <spriteMaterial map={tex} transparent depthWrite={false} depthTest={false} />
-    </sprite>
-  );
+  return <TableSign text={text} style={SIGN_STYLE} y={1.0} width={1.15} />;
 }
 
 /** Face-down quest cards gathering in the centre while the team plays them, then shuffled face up. */

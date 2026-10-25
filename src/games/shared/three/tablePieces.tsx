@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { bubbleTexture, clamp01, easeInOut, easeOutBack, emojiTexture, paintedTexture, type BubbleStyle } from "./tableKit";
 import { distanceBoost } from "./ScreenSprite";
+import { useTableGeoOptional } from "./TableScene";
 
 /**
  * Small props shared by the 3D table games: cards, coins, fly-in animation,
@@ -184,12 +185,48 @@ export function GlowDisc({ color, r = 0.4, opacity = 0.35, pulse = true }: { col
   );
 }
 
+const signWorld = new THREE.Vector3();
+/** World head height of the seated rigs and how far below it the chin sits (cartoon head is the bigger one). */
+const FAR_HEAD_Y = 1.52;
+const FAR_CHIN = 0.26;
+
+/**
+ * Local y for a floating label of world height `h` (parent-local `wantY`) that must not cover
+ * the face of the player sitting opposite the camera: seen from the viewer's seat, the table
+ * centre at sign height and the far player's face sit on almost the same line of sight
+ * (both ~8.5° below the horizon at 4 seats), so a fixed y hides that face. Each frame this
+ * drops the label until its top edge clears the far chin, i.e. it hangs over the far
+ * player's chest / table edge instead. Lower `wantY`s are kept. No-op outside a TableScene.
+ */
+export function clearOfFarFace(obj: THREE.Object3D, camera: THREE.Camera, seatR: number, wantY: number, h: number): number {
+  const parent = obj.parent;
+  if (!parent) return wantY;
+  parent.getWorldPosition(signWorld);
+  const cx = camera.position.x - signWorld.x;
+  const cz = camera.position.z - signWorld.z;
+  const near = Math.hypot(cx, cz);
+  if (near < 0.5) return wantY;
+  // the far face is straight on past the sign, at the seat ring
+  const far = near + seatR - Math.min(seatR, Math.hypot(signWorld.x, signWorld.z));
+  const chinDrop = Math.atan2(camera.position.y - (FAR_HEAD_Y - FAR_CHIN), far);
+  const half = Math.atan2(h / 2, near);
+  const centerDrop = chinDrop + 0.014 + half;
+  const worldY = camera.position.y - near * Math.tan(centerDrop);
+  const localY = worldY - signWorld.y;
+  // never sink into the table top
+  return Math.max(h / 2 + 0.06, Math.min(wantY, localY));
+}
+
 /** The floating sign over the table centre (phase / current bid …). */
 export function TableSign({ text, y = 0.95, width = 1.15, style }: { text: string; y?: number; width?: number; style: BubbleStyle }) {
   const { tex, aspect } = useMemo(() => bubbleTexture(text, { size: 42, ...style }), [text, style]);
   const ref = useRef<THREE.Sprite>(null);
-  useFrame(({ clock }) => {
-    if (ref.current) ref.current.position.y = y + Math.sin(clock.elapsedTime * 1.3) * 0.03;
+  const geo = useTableGeoOptional();
+  useFrame(({ clock, camera }) => {
+    const s = ref.current;
+    if (!s) return;
+    const base = geo ? clearOfFarFace(s, camera, geo.seatR, y, width * aspect) : y;
+    s.position.y = base + Math.sin(clock.elapsedTime * 1.3) * 0.03;
   });
   return (
     <sprite ref={ref} position={[0, y, 0]} scale={[width, width * aspect, 1]} renderOrder={9}>

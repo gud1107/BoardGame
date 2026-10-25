@@ -4,8 +4,8 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
-import { FlatCard, FloatIcon, PopIn } from "@/games/shared/three/tablePieces";
-import { bubbleTexture, paintedTexture, FONTS, type BubbleStyle } from "@/games/shared/three/tableKit";
+import { FlatCard, FloatIcon, PopIn, TableSign } from "@/games/shared/three/tablePieces";
+import { paintedTexture, FONTS, type BubbleStyle } from "@/games/shared/three/tableKit";
 import type { PersonMood } from "@/games/shared/three/SeatedPerson";
 
 /**
@@ -221,11 +221,6 @@ function Spotlight({ seat }: { seat: number }) {
 const SIGN_STYLE: BubbleStyle = { bg: "rgba(28,10,10,0.92)", fg: "#fde68a", border: "#b91c1c", size: 42 };
 
 function CenterSign({ text, night }: { text: string; night: boolean }) {
-  const { tex, aspect } = useMemo(() => bubbleTexture(text, SIGN_STYLE), [text]);
-  const ref = useRef<THREE.Sprite>(null);
-  useFrame(({ clock }) => {
-    if (ref.current) ref.current.position.y = 0.95 + Math.sin(clock.elapsedTime * 1.3) * 0.03;
-  });
   return (
     <group>
       {/* a candle that's the only light at night */}
@@ -238,9 +233,7 @@ function CenterSign({ text, night }: { text: string; night: boolean }) {
         <meshBasicMaterial color="#ffc46b" />
       </mesh>
       <pointLight position={[0, 0.35, 0]} color="#ffb35c" intensity={night ? 3 : 0.6} distance={4} decay={2} />
-      <sprite ref={ref} position={[0, 0.95, 0]} scale={[1.15, 1.15 * aspect, 1]} renderOrder={9}>
-        <spriteMaterial map={tex} transparent depthWrite={false} depthTest={false} />
-      </sprite>
+      <TableSign text={text} style={SIGN_STYLE} y={0.95} width={1.15} />
     </group>
   );
 }

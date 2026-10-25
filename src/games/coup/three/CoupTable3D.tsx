@@ -4,8 +4,8 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
-import { CoinStack, FlatCard, FlyIn, ImpactRing, StandingCard } from "@/games/shared/three/tablePieces";
-import { bubbleTexture, paintedTexture, FONTS, type BubbleStyle } from "@/games/shared/three/tableKit";
+import { CoinStack, FlatCard, FlyIn, ImpactRing, StandingCard, TableSign } from "@/games/shared/three/tablePieces";
+import { paintedTexture, FONTS, type BubbleStyle } from "@/games/shared/three/tableKit";
 import type { PersonMood } from "@/games/shared/three/SeatedPerson";
 import { PORTRAIT } from "../CardArt";
 import { CHARACTER_EMOJI, CHARACTER_NAMES, type Character } from "../engine";
@@ -416,11 +416,6 @@ function AttackArrow({ from, to, color }: { from: number; to: number; color: str
 /** Treasury coins + the face-down court deck in the middle. */
 function Treasury({ deckCount, sign, beatKey, flash }: { deckCount: number; sign: string; beatKey: string; flash: string | null }) {
   const back = backTexture();
-  const { tex, aspect } = useMemo(() => bubbleTexture(sign, SIGN_STYLE), [sign]);
-  const ref = useRef<THREE.Sprite>(null);
-  useFrame(({ clock }) => {
-    if (ref.current) ref.current.position.y = 0.95 + Math.sin(clock.elapsedTime * 1.3) * 0.03;
-  });
   return (
     <group>
       <group position={[-0.2, 0, 0]}>
@@ -437,9 +432,7 @@ function Treasury({ deckCount, sign, beatKey, flash }: { deckCount: number; sign
         <CoinStack count={14} />
       </group>
       {flash && <ImpactRing key={beatKey} color={flash} size={1.2} />}
-      <sprite ref={ref} position={[0, 0.95, 0]} scale={[1.2, 1.2 * aspect, 1]} renderOrder={9}>
-        <spriteMaterial map={tex} transparent depthWrite={false} depthTest={false} />
-      </sprite>
+      <TableSign text={sign} style={SIGN_STYLE} y={0.95} width={1.2} />
     </group>
   );
 }

@@ -5,8 +5,8 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
-import { Clickable, GlowDisc, HitBox, PopIn } from "@/games/shared/three/tablePieces";
-import { bubbleTexture, easeInOut, paintedTexture, polar, type BubbleStyle } from "@/games/shared/three/tableKit";
+import { Clickable, GlowDisc, HitBox, PopIn, TableSign } from "@/games/shared/three/tablePieces";
+import { easeInOut, paintedTexture, polar, type BubbleStyle } from "@/games/shared/three/tableKit";
 import type { PersonMood } from "@/games/shared/three/SeatedPerson";
 
 /**
@@ -429,15 +429,12 @@ function BidCenter({ bid, reveal, names }: { bid: PerudoTable3DProps["bid"]; rev
     : bid
       ? `${FACE_NAME[bid.face]} ${bid.quantity}개 이상\n${names[bid.seat] ?? ""}`
       : "첫 선언 대기";
-  const { tex, aspect } = useMemo(() => bubbleTexture(text, SIGN_STYLE), [text]);
   const spin = useRef<THREE.Group>(null);
-  const sign = useRef<THREE.Sprite>(null);
   useFrame(({ clock }) => {
     if (spin.current) {
       spin.current.rotation.y = clock.elapsedTime * 0.6;
       spin.current.position.y = 0.42 + Math.sin(clock.elapsedTime * 1.6) * 0.04;
     }
-    if (sign.current) sign.current.position.y = 0.92 + Math.sin(clock.elapsedTime * 1.3) * 0.025;
   });
   return (
     <group>
@@ -449,9 +446,7 @@ function BidCenter({ bid, reveal, names }: { bid: PerudoTable3DProps["bid"]; rev
         </group>
       )}
       <GlowDisc color={reveal ? (reveal.actualCount >= reveal.quantity ? "#22c55e" : "#ef4444") : "#e3a73b"} r={0.42} opacity={0.22} />
-      <sprite ref={sign} position={[0, 0.92, 0]} scale={[1.2, 1.2 * aspect, 1]} renderOrder={9}>
-        <spriteMaterial map={tex} transparent depthWrite={false} depthTest={false} />
-      </sprite>
+      <TableSign text={text} style={SIGN_STYLE} y={0.92} width={1.2} />
     </group>
   );
 }
