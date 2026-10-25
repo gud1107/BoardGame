@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import * as THREE from "three";
 import TableScene, { type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
-import { CardRow, DeckPile, FlatCard, StandingCard, TableSign } from "@/games/shared/three/tablePieces";
+import { HeldFan, CardRow, DeckPile, FlatCard, StandingCard, TableSign } from "@/games/shared/three/tablePieces";
 import { IndoorRoom } from "@/games/shared/three/environments";
 import { imageCardTexture, simpleBackTexture, type BubbleStyle } from "@/games/shared/three/tableKit";
 import type { PersonMood } from "@/games/shared/three/SeatedPerson";
@@ -203,9 +203,11 @@ export default function LoveLetterTable3D(props: LoveLetterTable3DProps & { name
       ring: s.protectedNow ? "#7dd3fc" : null,
       bubble: said ? { text: said.text, style: said.bad ? BAD : SAY, key: `${props.eventKey}-${s.seat}`, width: 0.95 } : null,
       tag: s.seat === viewerSeat ? { text: s.protectedNow ? "🛡️ 하녀 보호 중" : "💌 내 차례 대기", color: "#fb7185" } : null,
+      held: s.alive && s.seat !== viewerSeat && !s.hand && s.handSize > 0 ? <HeldFan count={s.handSize} back={back()} /> : null,
       front: (
         <group>
-          {s.alive && <Hand s={s} isViewer={s.seat === viewerSeat} />}
+          {/* my own hand, or one that's been revealed, lies face-up on the table; hidden hands are held */}
+          {s.alive && (s.seat === viewerSeat || s.hand) && <Hand s={s} isViewer={s.seat === viewerSeat} />}
           {s.protectedNow && <Shield />}
           <group position={[0, 0, -0.26]}>
             <CardRow faces={s.discards.map(face)} back={back()} w={0.1} h={0.14} perRow={6} />

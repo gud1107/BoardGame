@@ -64,9 +64,9 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
-    version: "v1.97.1",
+    version: "v1.98.0",
     releaseDate: "2026-10-25",
-    title: "💡 3D 테이블 24종 — 조명·그림자·질감 한 단계 업그레이드",
+    title: "💡 3D 테이블 — 조명·선명도 업그레이드, 손패를 쥐고 성격이 생긴 인물들",
     changes: [
       { game: "common", type: "IMPROVE", desc: "💡 3D 테이블 게임 24종에 은은한 환경광 — 나무·금속·컵·얼굴이 빛을 받아 입체적으로 보여요" },
       { game: "common", type: "IMPROVE", desc: "🌑 사람·의자·테이블 아래 부드러운 접지 그림자, PC에서는 틈새 음영·빛 번짐·가장자리 비네트까지 (느린 기기는 자동으로 꺼져요)" },
@@ -74,6 +74,8 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       { game: "common", type: "FIX", desc: "💇 사실적인 인물의 앞머리 사이로 두피가 비치던 문제 수정" },
       { game: "common", type: "FIX", desc: "🪧 3D 테이블 가운데 안내판이 맞은편 사람 얼굴을 가리지 않게 — 얼굴 아래로 알아서 내려가요 (23종)" },
       { game: "common", type: "IMPROVE", desc: "⚡ 느린 휴대폰에서 3D 화질 조절이 수십 초 → 몇 초 만에 끝나 시작 직후 버벅임이 짧아졌어요" },
+      { game: "common", type: "IMPROVE", desc: "🃏 3D 인물이 손패를 두 손으로 쥐고, 빈손은 테이블 위에 올려요 — 허공에 뜬 손 없음 (8종)" },
+      { game: "common", type: "FEAT", desc: "🎭 인물마다 성격 — 뚫어지게 보는·수줍은·두리번·집중·멍때림·산만, 시선과 버릇이 달라요 · 👀 눈도 조금 더 크게" },
     ],
   },
   {

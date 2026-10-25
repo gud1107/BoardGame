@@ -3,7 +3,8 @@
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { blinking, FACES, Hat, POSES, type PersonMood, type Pose, type SeatedPersonProps } from "./SeatedPerson";
+import { blinking, FACES, Hat, holdsInMood, POSES, STRONG_MOODS, type PersonMood, type Pose, type SeatedPersonProps } from "./SeatedPerson";
+import { PERSONA_STYLE, personaGaze } from "./persona";
 import { createMotion, HANDS, stepMotion, type MotionState } from "./motion";
 import { eyeBandTexture, mouthTexture, type EyeState, type FaceSpec, type Gender, type MouthShape } from "./glamFace";
 
@@ -82,6 +83,14 @@ const OVERRIDES: Partial<Record<PersonMood, Pose>> = {
 };
 
 const RESTING = new Set<PersonMood>(["rest", "think", "talk", "write", "nervous", "sad"]);
+/**
+ * Gripping a held hand of cards with adult arms: hands meet at (±0.06, 1.00, 0.50)
+ * person-local, elbows outside the torso (solved by forward kinematics over this rig's chain,
+ * like SeatedPerson's HOLD_ARMS). [lSx, lSy, lSz, lE, rSx, rSy, rSz, rE]; spine ≥ 0.08.
+ */
+const REAL_HOLD = [-1.08, 0.84, -0.16, -1.2, -1.08, -0.84, 0.16, -1.2];
+const REAL_HOLD_POINT: [number, number, number] = [0, 0.497, 0.399];
+const tmpGaze = new THREE.Vector3();
 
 // skin, hair, lip and top come from the shared PersonLook (@/lib/character/avatar); these stay per-seat
 const IRIS = ["#3a2416", "#4a2e1a", "#2e1d12", "#553620", "#3f2a1c"];
@@ -110,6 +119,7 @@ export default function RealisticPerson(props: SeatedPersonProps) {
   const seg = lowDetail ? 14 : 28;
   const root = useRef<THREE.Group>(null);
   const spine = useRef<THREE.Group>(null);
+  const heldRef = useRef<THREE.Group>(null);
   const head = useRef<THREE.Group>(null);
   const lS = useRef<THREE.Group>(null);
   const lE = useRef<THREE.Group>(null);
@@ -167,24 +177,27 @@ export default function RealisticPerson(props: SeatedPersonProps) {
     const now = clock.elapsedTime;
     if (!cur.current) cur.current = { m: createMotion(OVERRIDES.rest ?? POSES.rest, HANDS.rest), brow: 0, eye: 1, sweat: 0, look: [0, 0], out: 0, rest: 1 };
     const c = cur.current;
+    const ps = PERSONA_STYLE[props.persona ?? "focused"];
     let mood: PersonMood = props.out ? "slump" : props.mood;
     if (mood === "rest") {
       const slot = Math.floor((now + seed * 2.3) / 7);
       if ((now + seed * 2.3) % 7 < 2.2) {
         const r = hash(seed, slot);
-        if (r < 0.25) mood = "think";
-        else if (r < 0.35) mood = "shrug";
+        if (r < ps.fidget * 0.7) mood = "think";
+        else if (r < ps.fidget) mood = props.persona === "shy" ? "nervous" : "shrug";
       }
     }
+    const holding = !!props.held && holdsInMood(mood);
+    if (heldRef.current) heldRef.current.visible = holding;
     const face = FACES[mood];
     const rate = 1 - Math.exp(-dt * 6);
     // body + hands: key pose, gestures and idle life, chased by springs (motion.ts)
     const q = stepMotion(c.m, mood, OVERRIDES[mood] ?? POSES[mood], now, dt, seed);
     c.brow += (face.brow - c.brow) * rate;
-    c.eye += (face.eye - c.eye) * rate;
+    c.eye += (face.eye * ps.eye - c.eye) * rate;
     c.sweat += (face.sweat - c.sweat) * (1 - Math.exp(-dt * 3));
     c.out += ((props.out ? 1 : 0) - c.out) * (1 - Math.exp(-dt * 3));
-    const spineX = q[0] * 0.8;
+    const spineX = (holding ? Math.max(q[0], 0.08) : q[0]) * 0.8;
     // breathing: chest rises a touch, shoulders follow
     const breath = Math.sin(now * 1.35 + seed) * (1 - c.out);
     if (root.current) root.current.position.y = breath * 0.003;
@@ -194,7 +207,12 @@ export default function RealisticPerson(props: SeatedPersonProps) {
     }
     let yaw = 0;
     let pitch = 0;
-    const la = props.lookAt;
+    // the game's cue, or wherever this temperament drifts to while nothing strong is going on (persona.ts)
+    const gaze = props.out ? { kind: "cue" as const } : personaGaze(props.persona ?? "focused", now, seed, STRONG_MOODS.has(mood) || !props.persona);
+    let la = props.lookAt ?? null;
+    if (gaze.kind === "viewer" && props.viewerAt) la = props.viewerAt;
+    else if (gaze.kind === "down") la = tmpGaze.set(position.x + Math.sin(facing) * 0.75, 0.93, position.z + Math.cos(facing) * 0.75);
+    else if (gaze.kind === "away") la = null;
     if (la && !props.out) {
       const dx = la.x - position.x;
       const dz = la.z - position.z;
@@ -204,22 +222,35 @@ export default function RealisticPerson(props: SeatedPersonProps) {
       yaw = Math.max(-my, Math.min(my, Math.atan2(lx, Math.max(0.05, lz))));
       pitch = Math.max(-0.4, Math.min(0.5, Math.atan2(1.4 - la.y, Math.max(0.3, Math.hypot(dx, dz))) * 0.7));
     }
-    c.look[0] += (yaw - c.look[0]) * (1 - Math.exp(-dt * 4));
-    c.look[1] += (pitch - c.look[1]) * (1 - Math.exp(-dt * 4));
-    const drift = la ? 0.35 : 1;
+    if (gaze.kind === "away") {
+      yaw = gaze.yaw;
+      pitch = gaze.pitch;
+    }
+    pitch += ps.pitch;
+    c.look[0] += (yaw - c.look[0]) * (1 - Math.exp(-dt * ps.turn * 0.8));
+    c.look[1] += (pitch - c.look[1]) * (1 - Math.exp(-dt * ps.turn * 0.8));
+    const drift = (la ? 0.35 : 1) * ps.drift;
     head.current?.rotation.set(q[3] * 0.8 + c.look[1], q[4] * drift + c.look[0], q[5] * 0.8);
     const pointYaw = mood === "point" ? c.look[0] : 0;
     // adult arms are shorter than the cartoon rig's: in the resting-type poses, lift the upper arm a
     // touch and bend the elbow more so the forearms lie on the table edge (other poses stay as authored)
-    const resting = RESTING.has(mood) ? 1 : 0;
+    const resting = RESTING.has(mood) && !holding ? 1 : 0;
     c.rest += (resting * (1 - c.out) - c.rest) * rate;
     const lift = -0.08 * c.rest;
     const bend = -0.42 * c.rest;
     const leftOnly = mood === "think" || mood === "talk" || mood === "write";
-    lS.current?.rotation.set(q[6] + lift, q[7], q[8]);
-    lE.current?.rotation.set(q[9] + bend, 0, 0);
-    rS.current?.rotation.set(q[10] + (leftOnly ? 0 : lift) + (mood === "point" ? c.look[1] * 0.6 : 0), q[11] + pointYaw * 0.9, q[12]);
-    rE.current?.rotation.set(q[13] + (leftOnly ? 0 : bend), 0, 0);
+    if (holding) {
+      // the springs in motion.ts animate the authored pose; a grip is static enough to set directly
+      lS.current?.rotation.set(REAL_HOLD[0], REAL_HOLD[1], REAL_HOLD[2]);
+      lE.current?.rotation.set(REAL_HOLD[3], 0, 0);
+      rS.current?.rotation.set(REAL_HOLD[4], REAL_HOLD[5], REAL_HOLD[6]);
+      rE.current?.rotation.set(REAL_HOLD[7], 0, 0);
+    } else {
+      lS.current?.rotation.set(q[6] + lift, q[7], q[8]);
+      lE.current?.rotation.set(q[9] + bend, 0, 0);
+      rS.current?.rotation.set(q[10] + (leftOnly ? 0 : lift) + (mood === "point" ? c.look[1] * 0.6 : 0), q[11] + pointYaw * 0.9, q[12]);
+      rE.current?.rotation.set(q[13] + (leftOnly ? 0 : bend), 0, 0);
+    }
     lW.current?.rotation.set(0.15 + q[14], 0, q[15]);
     rW.current?.rotation.set(0.15 + q[16], 0, q[17]);
     // fingers curl at the knuckle; pointing keeps the index straight
@@ -383,6 +414,11 @@ export default function RealisticPerson(props: SeatedPersonProps) {
         ))}
 
         <group ref={spine} position={[0, 0.53, -0.05]}>
+          {props.held && (
+            <group ref={heldRef} position={REAL_HOLD_POINT} rotation-y={Math.PI} scale={0.7}>
+              {props.held}
+            </group>
+          )}
           <mesh geometry={torsoGeo} scale={[1, 1, 0.64]} castShadow>
             <meshPhysicalMaterial ref={topMat} color={p.top} roughness={0.92} sheen={0.6} sheenColor={shade(p.top, 1.4)} sheenRoughness={0.8} />
           </mesh>

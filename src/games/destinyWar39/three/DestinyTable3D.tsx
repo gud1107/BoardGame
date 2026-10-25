@@ -1,7 +1,7 @@
 "use client";
 
 import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
-import { FlatCard, FlyIn, ImpactRing, StandingCard, TableSign } from "@/games/shared/three/tablePieces";
+import { HeldFan, FlatCard, FlyIn, ImpactRing, StandingCard, TableSign } from "@/games/shared/three/tablePieces";
 import { OutdoorPlaza } from "@/games/shared/three/environments";
 import { simpleBackTexture, simpleCardTexture, type BubbleStyle } from "@/games/shared/three/tableKit";
 import type { PersonMood } from "@/games/shared/three/SeatedPerson";
@@ -106,16 +106,9 @@ export default function DestinyTable3D(props: DestinyTable3DProps) {
       active: actingSeat === s.seat,
       bubble: props.lastTurnWinner === s.seat && phase === "playing" ? { text: "이 턴은 내 것!", style: WIN, key: props.lastTurnKey, width: 0.7 } : null,
       tag: s.seat === viewerSeat ? { text: `🎯 내 예측 ${typeof pred === "number" ? pred : pred === "hidden" ? "히든" : "…"} · 🏆 ${s.wins}`, color: "#e879f9" } : null,
+      held: s.seat !== viewerSeat && s.handCount > 0 ? <HeldFan count={s.handCount} back={back()} max={9} /> : null,
       front: (
         <group>
-          {s.seat !== viewerSeat &&
-            Array.from({ length: Math.min(9, s.handCount) }, (_, i) => (
-              <group key={i} rotation-z={(i - (s.handCount - 1) / 2) * 0.1} position={[0, 0.02, 0.12]}>
-                <group position={[0, 0.06, 0]}>
-                  <StandingCard face={back()} back={back()} w={0.12} h={0.17} tilt={-0.4} />
-                </group>
-              </group>
-            ))}
           <group position={[0.4, 0, 0.02]}>
             <StandingCard face={predictionTex(pred)} back={back()} w={0.12} h={0.17} tilt={-0.6} />
           </group>

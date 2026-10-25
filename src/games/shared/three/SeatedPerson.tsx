@@ -5,6 +5,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { createMotion, HANDS, stepMotion, type MotionState } from "./motion";
 import { kpopEyeTexture } from "./kpopEyes";
+import { PERSONA_STYLE, personaGaze, type Persona } from "./persona";
 
 /**
  * A seated table player for the "real people around a table" 3D boards
@@ -55,28 +56,59 @@ interface PoseSpec {
   rE?: number;
 }
 const REST: Required<PoseSpec> = { spine: [0, 0, 0], head: [0.1, 0, 0], lS: [-0.75, 0, 0.12], lE: -0.9, rS: [-0.75, 0, -0.12], rE: -0.9 };
-function P(spec: PoseSpec): Pose {
-  const s = { ...REST, ...spec };
+/**
+ * The cartoon rig's resting base: leaning in a touch with the forearms laid on the felt
+ * (hands ~0.1 inside the rim). REST left the hands hovering just outside the table edge.
+ * Solved by forward kinematics over this rig's chain (spine → shoulder → elbow → hand);
+ * see SeatedPerson.test.ts.
+ */
+const TABLE_REST: Required<PoseSpec> = { spine: [0.12, 0, 0], head: [-0.02, 0, 0], lS: [-1.03, 0, 0.12], lE: -0.58, rS: [-1.03, 0, -0.12], rE: -0.58 };
+function P(spec: PoseSpec, base: Required<PoseSpec> = REST): Pose {
+  const s = { ...base, ...spec };
   return [...s.spine, ...s.head, ...s.lS, s.lE, ...s.rS, s.rE];
 }
 
-export const POSES: Record<PersonMood, Pose> = {
-  rest: P({}),
-  think: P({ spine: [0.08, 0, 0], head: [0.05, 0, 0.14], rS: [-1.2, -0.55, 0], rE: -1.95 }),
-  talk: P({ spine: [0.05, 0, 0], head: [0.02, 0, 0], rS: [-1.05, -0.3, -0.15], rE: -1.45 }),
-  point: P({ spine: [0.14, 0, 0], head: [0.02, 0, 0], rS: [-1.5, 0, -0.05], rE: -0.1 }),
-  nervous: P({ spine: [0.14, 0, 0], head: [0.22, 0, 0], lS: [-0.85, 0.35, 0.15], lE: -1.1, rS: [-0.85, -0.35, -0.15], rE: -1.1 }),
-  cheer: P({ spine: [-0.08, 0, 0], head: [-0.2, 0, 0], lS: [-2.9, 0, -0.35], lE: -0.2, rS: [-2.9, 0, 0.35], rE: -0.2 }),
-  sad: P({ spine: [0.24, 0, 0], head: [0.5, 0, 0], lS: [-0.45, 0, 0.1], lE: -0.5, rS: [-0.45, 0, -0.1], rE: -0.5 }),
-  shock: P({ spine: [-0.1, 0, 0], head: [-0.12, 0, 0], lS: [-2.5, 0.3, -0.35], lE: -2.3, rS: [-2.5, -0.3, 0.35], rE: -2.3 }),
-  laugh: P({ spine: [-0.22, 0, 0], head: [-0.32, 0, 0], lS: [-0.5, 0.3, 0.25], lE: -1.2, rS: [-0.5, -0.3, -0.25], rE: -1.2 }),
-  smug: P({ spine: [-0.16, 0, 0], head: [-0.12, 0, 0.12], lS: [-1.25, 0.75, 0.1], lE: -1.75, rS: [-1.15, -0.75, -0.1], rE: -1.8 }),
-  clap: P({ spine: [0.04, 0, 0], head: [0, 0, 0], lS: [-1.1, 0.55, 0], lE: -1.4, rS: [-1.1, -0.55, 0], rE: -1.4 }),
-  raise: P({ spine: [-0.04, 0, 0], head: [-0.05, 0, 0], rS: [-2.85, 0, 0.3], rE: -0.25 }),
-  write: P({ spine: [0.26, 0, 0], head: [0.42, 0, 0], lS: [-1.05, 0.3, 0.1], lE: -1.2, rS: [-1.1, -0.2, -0.1], rE: -1.05 }),
-  shrug: P({ head: [0, 0, 0.15], lS: [-0.55, 0.2, 0.65], lE: -1.6, rS: [-0.55, -0.2, -0.65], rE: -1.6 }),
-  slump: P({ spine: [0.5, 0, 0.08], head: [0.65, 0, 0.35], lS: [-1.3, 0.35, 0], lE: -0.7, rS: [-1.3, -0.35, 0], rE: -0.7 }),
+const SPECS: Record<PersonMood, PoseSpec> = {
+  rest: {},
+  think: { spine: [0.08, 0, 0], head: [0.05, 0, 0.14], rS: [-1.2, -0.55, 0], rE: -1.95 },
+  talk: { spine: [0.05, 0, 0], head: [0.02, 0, 0], rS: [-1.05, -0.3, -0.15], rE: -1.45 },
+  point: { spine: [0.14, 0, 0], head: [0.02, 0, 0], rS: [-1.5, 0, -0.05], rE: -0.1 },
+  nervous: { spine: [0.14, 0, 0], head: [0.22, 0, 0], lS: [-0.85, 0.35, 0.15], lE: -1.1, rS: [-0.85, -0.35, -0.15], rE: -1.1 },
+  cheer: { spine: [-0.08, 0, 0], head: [-0.2, 0, 0], lS: [-2.9, 0, -0.35], lE: -0.2, rS: [-2.9, 0, 0.35], rE: -0.2 },
+  sad: { spine: [0.24, 0, 0], head: [0.5, 0, 0], lS: [-0.45, 0, 0.1], lE: -0.5, rS: [-0.45, 0, -0.1], rE: -0.5 },
+  shock: { spine: [-0.1, 0, 0], head: [-0.12, 0, 0], lS: [-2.5, 0.3, -0.35], lE: -2.3, rS: [-2.5, -0.3, 0.35], rE: -2.3 },
+  laugh: { spine: [-0.22, 0, 0], head: [-0.32, 0, 0], lS: [-0.5, 0.3, 0.25], lE: -1.2, rS: [-0.5, -0.3, -0.25], rE: -1.2 },
+  smug: { spine: [-0.16, 0, 0], head: [-0.12, 0, 0.12], lS: [-1.25, 0.75, 0.1], lE: -1.75, rS: [-1.15, -0.75, -0.1], rE: -1.8 },
+  clap: { spine: [0.04, 0, 0], head: [0, 0, 0], lS: [-1.1, 0.55, 0], lE: -1.4, rS: [-1.1, -0.55, 0], rE: -1.4 },
+  raise: { spine: [-0.04, 0, 0], head: [-0.05, 0, 0], rS: [-2.85, 0, 0.3], rE: -0.25 },
+  write: { spine: [0.26, 0, 0], head: [0.42, 0, 0], lS: [-1.05, 0.3, 0.1], lE: -1.2, rS: [-1.1, -0.2, -0.1], rE: -1.05 },
+  shrug: { head: [0, 0, 0.15], lS: [-0.55, 0.2, 0.65], lE: -1.6, rS: [-0.55, -0.2, -0.65], rE: -1.6 },
+  slump: { spine: [0.5, 0, 0.08], head: [0.65, 0, 0.35], lS: [-1.3, 0.35, 0], lE: -0.7, rS: [-1.3, -0.35, 0], rE: -0.7 },
 };
+
+const mapSpecs = (base: Required<PoseSpec>) => Object.fromEntries(Object.entries(SPECS).map(([k, v]) => [k, P(v, base)])) as Record<PersonMood, Pose>;
+/** Shared key poses (the realistic rig layers its adult-arm correction on these). */
+export const POSES: Record<PersonMood, Pose> = mapSpecs(REST);
+/** The cartoon rig's poses: same specs, but any arm a mood leaves free rests on the table. */
+export const TABLE_POSES: Record<PersonMood, Pose> = mapSpecs(TABLE_REST);
+/**
+ * Holding a hand of cards: both hands meet in front of the chest just above the rim
+ * (±0.08, 1.06, 0.50 person-local), elbows kept outside the torso. Replaces the arm
+ * channels (6-13) and the spine lean of the calm moods while a seat has something `held`.
+ */
+export const HOLD_ARMS = { spine: 0.08, arms: [-0.9, 0.8, 0.08, -1.28, -0.9, -0.8, -0.08, -1.28] };
+/** Where a held hand of cards sits in the spine group's frame (the hold point above, minus the lean). */
+export const HOLD_POINT: [number, number, number] = [0, 0.52, 0.52];
+const HOLD_MOODS = new Set<PersonMood>(["rest", "talk", "nervous", "smug", "write", "sad"]);
+/** Whether a seat with something `held` grips it in this mood (big reactions let go for the gesture). */
+export const holdsInMood = (mood: PersonMood) => HOLD_MOODS.has(mood);
+export function holdPose(pose: Pose, mood: PersonMood): Pose {
+  if (!HOLD_MOODS.has(mood)) return pose;
+  const out = [...pose];
+  out[0] = Math.max(out[0], HOLD_ARMS.spine);
+  for (let i = 0; i < 8; i++) out[6 + i] = HOLD_ARMS.arms[i];
+  return out;
+}
 
 export interface Face {
   brow: number; // −1 angry … +1 worried
@@ -539,13 +571,24 @@ export interface SeatedPersonProps {
   headSlot?: ReactNode;
   /** Rendered at the body root (e.g. a name tag above the head). */
   children?: ReactNode;
+  /** Temperament: where a calm player's eyes wander and how restless they are (persona.ts). */
+  persona?: Persona;
+  /** The viewer's head (world) — what a "starer" keeps looking at. */
+  viewerAt?: THREE.Vector3 | null;
+  /** Held in both hands in front of the chest (e.g. a fan of cards), authored like a seat's `front`: +z toward the holder. */
+  held?: ReactNode;
 }
+
+/** Moods with something to react to: every persona follows the game's cue then. */
+export const STRONG_MOODS = new Set<PersonMood>(["point", "cheer", "shock", "laugh", "clap", "raise", "slump", "sad"]);
+const tmpGaze = new THREE.Vector3();
 
 export default function SeatedPerson(props: SeatedPersonProps) {
   const { look, color, position, facing, lowDetail, seed } = props;
   const seg = lowDetail ? 10 : 20;
   const root = useRef<THREE.Group>(null);
   const spine = useRef<THREE.Group>(null);
+  const heldRef = useRef<THREE.Group>(null);
   const head = useRef<THREE.Group>(null);
   const lS = useRef<THREE.Group>(null);
   const lE = useRef<THREE.Group>(null);
@@ -577,25 +620,30 @@ export default function SeatedPerson(props: SeatedPersonProps) {
 
   useFrame(({ clock }, dt) => {
     const now = clock.elapsedTime;
-    if (!cur.current) cur.current = { m: createMotion(POSES.rest, HANDS.rest), brow: 0, eye: 1, sweat: 0, look: [0, 0], out: 0 };
+    if (!cur.current) cur.current = { m: createMotion(TABLE_POSES.rest, HANDS.rest), brow: 0, eye: 1, sweat: 0, look: [0, 0], out: 0 };
     const c = cur.current;
+    const ps = PERSONA_STYLE[props.persona ?? "focused"];
     let mood: PersonMood = props.out ? "slump" : props.mood;
-    // idle fidgets when nothing is going on
+    // idle fidgets when nothing is going on — how often depends on the temperament
     if (mood === "rest") {
       const slot = Math.floor((now + seed * 2.3) / 7);
       const inSlot = (now + seed * 2.3) % 7;
       if (inSlot < 2.2) {
         const r = hash(seed, slot);
-        if (r < 0.25) mood = "think";
-        else if (r < 0.35) mood = "shrug";
+        if (r < ps.fidget * 0.7) mood = "think";
+        else if (r < ps.fidget) mood = props.persona === "shy" ? "nervous" : "shrug";
       }
     }
     const face = FACES[mood];
     const rate = 1 - Math.exp(-dt * 7);
-    // body + hands: key pose, gestures and idle life, chased by springs (motion.ts)
-    const q = stepMotion(c.m, mood, POSES[mood], now, dt, seed);
+    // body + hands: key pose, gestures and idle life, chased by springs (motion.ts);
+    // free arms rest on the table, and a held hand of cards is gripped in front of the chest
+    const pose = props.held ? holdPose(TABLE_POSES[mood], mood) : TABLE_POSES[mood];
+    const q = stepMotion(c.m, mood, pose, now, dt, seed);
+    // a big reaction lets go of the cards for the gesture — put them out of sight meanwhile
+    if (heldRef.current) heldRef.current.visible = holdsInMood(mood);
     c.brow += (face.brow - c.brow) * rate;
-    c.eye += (face.eye - c.eye) * rate;
+    c.eye += (face.eye * ps.eye - c.eye) * rate;
     c.sweat += (face.sweat - c.sweat) * (1 - Math.exp(-dt * 3));
     c.out += ((props.out ? 1 : 0) - c.out) * (1 - Math.exp(-dt * 3));
 
@@ -604,10 +652,15 @@ export default function SeatedPerson(props: SeatedPersonProps) {
       spine.current.rotation.set(q[0], q[1], q[2]);
       spine.current.scale.y = 1 + Math.sin(now * 1.6 + seed) * 0.006;
     }
-    // head turn toward lookAt (in this person's local frame)
+    // head turn toward the gaze target (in this person's local frame): the game's cue, or
+    // wherever this temperament drifts to while nothing strong is going on
     let yaw = 0;
     let pitch = 0;
-    const la = props.lookAt;
+    const gaze = props.out ? { kind: "cue" as const } : personaGaze(props.persona ?? "focused", now, seed, STRONG_MOODS.has(mood) || !props.persona);
+    let la = props.lookAt ?? null;
+    if (gaze.kind === "viewer" && props.viewerAt) la = props.viewerAt;
+    else if (gaze.kind === "down") la = tmpGaze.set(position.x + Math.sin(facing) * 0.75, 0.93, position.z + Math.cos(facing) * 0.75);
+    else if (gaze.kind === "away") la = null;
     if (la && !props.out) {
       const dx = la.x - position.x;
       const dz = la.z - position.z;
@@ -618,10 +671,15 @@ export default function SeatedPerson(props: SeatedPersonProps) {
       const dist = Math.hypot(dx, dz);
       pitch = Math.max(-0.4, Math.min(0.5, Math.atan2(1.45 - la.y, Math.max(0.3, dist)) * 0.7));
     }
-    c.look[0] += (yaw - c.look[0]) * (1 - Math.exp(-dt * 5));
-    c.look[1] += (pitch - c.look[1]) * (1 - Math.exp(-dt * 5));
+    if (gaze.kind === "away") {
+      yaw = gaze.yaw;
+      pitch = gaze.pitch;
+    }
+    pitch += ps.pitch;
+    c.look[0] += (yaw - c.look[0]) * (1 - Math.exp(-dt * ps.turn));
+    c.look[1] += (pitch - c.look[1]) * (1 - Math.exp(-dt * ps.turn));
     // a look target steadies the head: idle drift is mostly cancelled while gazing at someone
-    const drift = la ? 0.35 : 1;
+    const drift = (la ? 0.35 : 1) * ps.drift;
     head.current?.rotation.set(q[3] + c.look[1], q[4] * drift + c.look[0], q[5]);
     const pointYaw = mood === "point" ? c.look[0] : 0;
     lS.current?.rotation.set(q[6], q[7], q[8]);
@@ -722,6 +780,12 @@ export default function SeatedPerson(props: SeatedPersonProps) {
       )}
       <group ref={root}>
         <group ref={spine} position={[0, 0.55, -0.06]}>
+          {/* a held hand of cards rides in the spine frame, so it stays between the hands whatever the lean */}
+          {props.held && (
+            <group ref={heldRef} position={HOLD_POINT} rotation-y={Math.PI} scale={0.85}>
+              {props.held}
+            </group>
+          )}
           <group scale={[bw, b.h, b.d]}>
           <mesh geometry={coatGeo} scale={[1, 1, 0.78]} castShadow>
             <meshStandardMaterial ref={coatMat} color={look.coat} roughness={0.78} />
@@ -767,8 +831,9 @@ export default function SeatedPerson(props: SeatedPersonProps) {
             <group ref={eyes} position={[0, 0.02, 0.165]}>
               {[-1, 1].map((s) => (
                 // painted anime eye (kpopEyes.ts) on a card that follows the head's curve; the left one is mirrored
-                <mesh key={s} position={[0.067 * s, 0, 0.021]} rotation-y={0.38 * s} scale={[s, 1, 1]} renderOrder={2}>
-                  <planeGeometry args={[0.1, 0.078]} />
+                // ~15% larger than the first cut (asked for "a little bigger"), nudged out/up to stay on the curve
+                <mesh key={s} position={[0.07 * s, 0.004, 0.019]} rotation-y={0.4 * s} scale={[s, 1, 1]} renderOrder={2}>
+                  <planeGeometry args={[0.115, 0.09]} />
                   <meshStandardMaterial map={eyeTex} transparent roughness={0.25} depthWrite={false} polygonOffset polygonOffsetFactor={-2} side={THREE.DoubleSide} />
                 </mesh>
               ))}

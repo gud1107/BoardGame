@@ -12,6 +12,7 @@ import ScreenSprite from "./ScreenSprite";
 import SpeechBubble from "./SpeechBubble";
 import { AdaptiveResolution, BlobShadow, PerfHud, PostFx, StudioEnvironment } from "./sceneFx";
 import { labelTexture, polar, seatAngle, type BubbleStyle } from "./tableKit";
+import { personaFor } from "./persona";
 
 /**
  * The shared "real people around a table" scene for the card / social
@@ -89,6 +90,8 @@ export interface TableSeat {
   chair?: "wood" | "stool" | "throne";
   headSlot?: ReactNode;
   front?: ReactNode;
+  /** Held in both hands in front of the chest instead of standing on the table (e.g. this seat's hand of cards, backs out). Same frame as `front`. */
+  held?: ReactNode;
   /** Overrides the theme's seat colour (name tag, tie, my placard). */
   color?: string;
   /** 연결 끊김 — the name tag gets a 📴 mark. */
@@ -341,6 +344,9 @@ function SeatView({ s, geo, theme, lowDetail, ringColor }: { s: TableSeat; geo: 
             chair={chair === "throne" ? "none" : chair}
             chairColor={theme.chairColor}
             headSlot={s.headSlot}
+            persona={personaFor(s.seat)}
+            viewerAt={geo.headOf(geo.viewerSeat)}
+            held={s.held}
           >
             {(s.ring || hover) && <FloorRing color={hover && !s.ring ? "#fde68a" : (s.ring ?? "#fde68a")} />}
             {/* the stack (sub · name · tag · bubble) grows as one block with distance */}

@@ -2,7 +2,7 @@
 
 import * as THREE from "three";
 import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
-import { FlatCard, FlyIn, GlowDisc, ImpactRing, StandingCard, TableSign } from "@/games/shared/three/tablePieces";
+import { HeldFan, FlatCard, FlyIn, GlowDisc, ImpactRing, TableSign } from "@/games/shared/three/tablePieces";
 import { IndoorRoom } from "@/games/shared/three/environments";
 import { simpleBackTexture, simpleCardTexture, type BubbleStyle } from "@/games/shared/three/tableKit";
 import type { PersonMood } from "@/games/shared/three/SeatedPerson";
@@ -109,14 +109,9 @@ export default function TelepathyTable3D(props: TelepathyTable3DProps) {
       ring: s.reaching ? "#facc15" : null,
       bubble: s.reaching ? { text: "✋", style: SIGN, key: `r${props.pile.length}`, width: 0.3 } : null,
       tag: s.seat === viewerSeat ? { text: `🂠 내 카드 ${s.handCount}장`, color: s.color } : null,
+      held: s.seat !== viewerSeat && s.handCount > 0 ? <HeldFan count={s.handCount} back={back()} /> : null,
       front: (
         <group>
-          {s.seat !== viewerSeat &&
-            Array.from({ length: s.handCount }, (_, i) => (
-              <group key={i} position={[(i - (s.handCount - 1) / 2) * 0.13, 0, 0.06]}>
-                <StandingCard face={back()} back={back()} w={0.13} h={0.18} tilt={-0.3} />
-              </group>
-            ))}
           {phase === "sync" && s.holding && <GlowDisc color={s.color} r={0.16} opacity={0.5} />}
         </group>
       ),

@@ -2,7 +2,7 @@
 
 import * as THREE from "three";
 import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
-import { FlatCard, FlyIn, ImpactRing, PopIn, StandingCard, TableSign } from "@/games/shared/three/tablePieces";
+import { HeldFan, FlatCard, FlyIn, ImpactRing, PopIn, TableSign } from "@/games/shared/three/tablePieces";
 import { OutdoorPlaza } from "@/games/shared/three/environments";
 import { simpleBackTexture, simpleCardTexture, type BubbleStyle } from "@/games/shared/three/tableKit";
 import type { PersonMood } from "@/games/shared/three/SeatedPerson";
@@ -58,21 +58,6 @@ function Cucumbers({ count, threshold }: { count: number; threshold: number }) {
         <mesh key={i} geometry={cucumberGeo} position={[(i % 4) * 0.07 - 0.1, 0.03 + Math.floor(i / 4) * 0.055, Math.sin(i * 3.1) * 0.02]} rotation={[0, Math.sin(i * 5.3) * 0.4, Math.PI / 2]} castShadow>
           <meshStandardMaterial color={count >= threshold - 1 ? "#4d7c0f" : "#16a34a"} roughness={0.55} />
         </mesh>
-      ))}
-    </group>
-  );
-}
-
-function HandFan({ count }: { count: number }) {
-  const b = back();
-  return (
-    <group position={[0, 0.02, 0.08]}>
-      {Array.from({ length: count }, (_, i) => (
-        <group key={i} rotation-z={(i - (count - 1) / 2) * 0.12} position={[0, 0, i * -0.003]}>
-          <group position={[0, 0.06, 0]}>
-            <StandingCard face={b} back={b} w={0.15} h={0.21} tilt={-0.45} />
-          </group>
-        </group>
       ))}
     </group>
   );
@@ -140,9 +125,9 @@ export default function CucumberTable3D(props: CucumberTable3DProps) {
       active: activeSeat === s.seat && !s.eliminated,
       bubble: winnerSeat === s.seat ? { text: props.finalTrick ? "오이 먹었다… 🥒" : "이 트릭은 내 거!", style: props.finalTrick ? WARN : WIN, key: `w${props.roundNumber}-${props.trickNumber}`, width: 0.78 } : null,
       tag: s.seat === viewerSeat ? { text: `🥒 내 오이 ${s.cucumbers}/${props.threshold}`, color: "#84cc16" } : null,
+      held: s.seat !== viewerSeat && !s.eliminated && s.handCount > 0 ? <HeldFan count={s.handCount} back={back()} /> : null,
       front: (
         <group>
-          {s.seat !== viewerSeat && !s.eliminated && s.handCount > 0 && <HandFan count={s.handCount} />}
           <group position={[0.38, 0, 0.05]}>
             <Cucumbers count={s.cucumbers} threshold={props.threshold} />
           </group>

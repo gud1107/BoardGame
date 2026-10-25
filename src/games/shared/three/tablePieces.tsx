@@ -236,6 +236,26 @@ export function TableSign({ text, y = 0.95, width = 1.15, style }: { text: strin
   );
 }
 
+/**
+ * A hand of cards held up in both hands (`TableSeat.held`): fanned out from the grip at the
+ * origin, backs toward the table. Replaces the fans that used to stand on the felt out of
+ * the player's reach while their hands hovered empty.
+ */
+export function HeldFan({ count, back, max = 10, w = 0.2, h = 0.28 }: { count: number; back: THREE.Texture; max?: number; w?: number; h?: number }) {
+  const shown = Math.min(count, max);
+  const spread = Math.min(0.2, 1.4 / Math.max(1, shown));
+  return (
+    <group>
+      {Array.from({ length: shown }, (_, i) => (
+        <group key={i} rotation-z={(i - (shown - 1) / 2) * spread} position={[0, 0, i * -0.004]}>
+          {/* tipped well back like a real grip, so the backs read from above the table, not edge-on */}
+          <StandingCard face={back} back={back} w={w} h={h} tilt={-0.75} />
+        </group>
+      ))}
+    </group>
+  );
+}
+
 /** A closed leather pouch — "has chips, count hidden". */
 export function ChipPouch({ color = "#7c4a24" }: { color?: string }) {
   return (

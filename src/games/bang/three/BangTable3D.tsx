@@ -2,7 +2,7 @@
 
 import * as THREE from "three";
 import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
-import { DeckPile, FlatCard, FlyIn, ImpactRing, PopIn, StandingCard, TableSign } from "@/games/shared/three/tablePieces";
+import { HeldFan, DeckPile, FlatCard, FlyIn, ImpactRing, PopIn, TableSign } from "@/games/shared/three/tablePieces";
 import { OutdoorPlaza } from "@/games/shared/three/environments";
 import { simpleBackTexture, simpleCardTexture, type BubbleStyle } from "@/games/shared/three/tableKit";
 import type { PersonMood } from "@/games/shared/three/SeatedPerson";
@@ -149,6 +149,7 @@ export default function BangTable3D(props: BangTable3DProps) {
       bubble,
       tag: s.role === "sheriff" && s.alive ? { text: "⭐ 보안관", color: "#fbbf24" } : null,
       onSelect: s.targetable && props.onTarget ? () => props.onTarget!(s.seat) : null,
+      held: s.alive && s.seat !== viewerSeat && s.handCount > 0 ? <HeldFan count={s.handCount} back={back()} max={8} /> : null,
       front: (
         <group>
           {(Object.keys(s.equipment) as EquipSlot[]).map((slot) => (
@@ -159,17 +160,6 @@ export default function BangTable3D(props: BangTable3DProps) {
             </group>
           ))}
           {s.alive && <Bullets life={s.life} max={s.maxLife} />}
-          {s.alive && s.seat !== viewerSeat && (
-            <group position={[0, 0, 0.32]}>
-              {Array.from({ length: Math.min(8, s.handCount) }, (_, i) => (
-                <group key={i} rotation-z={(i - (s.handCount - 1) / 2) * 0.12}>
-                  <group position={[0, 0.06, 0]}>
-                    <StandingCard face={back()} back={back()} w={0.12} h={0.17} tilt={-0.4} />
-                  </group>
-                </group>
-              ))}
-            </group>
-          )}
         </group>
       ),
     };

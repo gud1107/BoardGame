@@ -1,7 +1,7 @@
 "use client";
 
 import TableScene, { type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
-import { Clickable, DeckPile, FlatCard, GlowDisc, HitBox, PopIn, StandingCard, TableSign } from "@/games/shared/three/tablePieces";
+import { HeldFan, Clickable, DeckPile, FlatCard, GlowDisc, HitBox, PopIn, TableSign } from "@/games/shared/three/tablePieces";
 import { OutdoorPlaza } from "@/games/shared/three/environments";
 import { simpleBackTexture, simpleCardTexture, type BubbleStyle } from "@/games/shared/three/tableKit";
 import type { PersonMood } from "@/games/shared/three/SeatedPerson";
@@ -97,21 +97,6 @@ function Lanes({ lanes, target, onLane }: { lanes: Record<Color, Card[]>; target
   );
 }
 
-function Hand({ count }: { count: number }) {
-  const b = back();
-  return (
-    <group position={[0, 0, 0.2]}>
-      {Array.from({ length: count }, (_, i) => (
-        <group key={i} rotation-z={(i - (count - 1) / 2) * 0.1} position={[0, 0.02, i * -0.003]}>
-          <group position={[0, 0.06, 0]}>
-            <StandingCard face={b} back={b} w={0.13} h={0.19} tilt={-0.4} />
-          </group>
-        </group>
-      ))}
-    </group>
-  );
-}
-
 function Center(p: LostCitiesTable3DProps) {
   return (
     <group>
@@ -184,10 +169,10 @@ export default function LostCitiesTable3D(props: LostCitiesTable3DProps) {
       lookSeat: "center",
       active: activeSeat === seat,
       tag: isViewer ? { text: "🧭 아래 손패에서 카드 선택", color: "#e9b949" } : null,
+      held: !isViewer && props.handCounts[seat] > 0 ? <HeldFan count={props.handCounts[seat]} back={back()} /> : null,
       front: (
         <group>
           <Lanes lanes={props.expeditions[seat]} target={isViewer ? props.laneTarget : null} onLane={isViewer ? props.onLane : null} />
-          {!isViewer && <Hand count={props.handCounts[seat]} />}
         </group>
       ),
     };

@@ -4,7 +4,7 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
-import { FlatCard, FlyIn, ImpactRing, StandingCard, FloatIcon, TableSign } from "@/games/shared/three/tablePieces";
+import { FlatCard, FlyIn, HeldFan, ImpactRing, FloatIcon, TableSign } from "@/games/shared/three/tablePieces";
 import { paintedTexture, FONTS, type BubbleStyle } from "@/games/shared/three/tableKit";
 import type { HatKind, PersonMood } from "@/games/shared/three/SeatedPerson";
 import { CARD_RANK_INFO } from "../CardArt";
@@ -337,24 +337,6 @@ function ThroneHall({ lowDetail }: { lowDetail: boolean }) {
 // Table props
 // ---------------------------------------------------------------------------
 
-/** A seat's remaining hand: a fan of card backs held up toward the owner. */
-function HandFan({ count }: { count: number }) {
-  const back = cardBack();
-  const shown = Math.min(count, 13);
-  const spread = Math.min(0.11, 1.1 / Math.max(1, shown));
-  return (
-    <group position={[0, 0.02, 0.06]}>
-      {Array.from({ length: shown }, (_, i) => (
-        <group key={i} rotation-z={(i - (shown - 1) / 2) * spread} position={[0, 0, i * -0.003]}>
-          <group position={[0, 0.06, 0]}>
-            <StandingCard face={back} back={back} w={0.17} h={0.24} tilt={-0.45} />
-          </group>
-        </group>
-      ))}
-    </group>
-  );
-}
-
 /** One play in the centre pile: the cards fanned face up. */
 function PlayFan({ cards }: { cards: Card[] }) {
   const back = cardBack();
@@ -474,7 +456,7 @@ export default function DalmutiTable3D(props: DalmutiTable3DProps) {
         : s.finishedOrder !== null && s.handCount === 0 && lastPlay?.seat === s.seat
           ? { text: `${s.finishedOrder}등 탈출! 🎉`, style: FINISH_STYLE, key: `f${s.finishedOrder}`, width: 0.8 }
           : null,
-      front: s.seat !== viewerSeat && s.handCount > 0 ? <HandFan count={s.handCount} /> : null,
+      held: s.seat !== viewerSeat && s.handCount > 0 ? <HeldFan count={s.handCount} back={cardBack()} max={13} /> : null,
     };
   });
 

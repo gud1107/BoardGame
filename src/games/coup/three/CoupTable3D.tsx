@@ -4,7 +4,7 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
-import { CoinStack, FlatCard, FlyIn, ImpactRing, StandingCard, TableSign } from "@/games/shared/three/tablePieces";
+import { HeldFan, CoinStack, FlatCard, FlyIn, ImpactRing, StandingCard, TableSign } from "@/games/shared/three/tablePieces";
 import { paintedTexture, FONTS, type BubbleStyle } from "@/games/shared/three/tableKit";
 import type { PersonMood } from "@/games/shared/three/SeatedPerson";
 import { PORTRAIT } from "../CardArt";
@@ -347,7 +347,8 @@ function Palazzo({ lowDetail }: { lowDetail: boolean }) {
 
 function InfluenceCards({ seat }: { seat: CoupSeat3D }) {
   const back = backTexture();
-  const hidden = seat.myCards ? seat.myCards.map((c) => characterTexture(c)) : Array.from({ length: seat.hiddenCount }, () => null);
+  // others' hidden influence is held in their hands (see `held`); only mine stands face-up here
+  const hidden = seat.myCards ? seat.myCards.map((c) => characterTexture(c)) : [];
   return (
     <group>
       {hidden.map((tex, i) => (
@@ -527,6 +528,7 @@ export default function CoupTable3D(props: CoupTable3DProps) {
       ring: awaiting.includes(s.seat) ? "#f59e0b" : null,
       tag: s.seat === viewerSeat ? { text: `🪙 ${s.coins}코인 · 영향력 ${s.hiddenCount}`, color: "#c9a13a" } : s.coins >= 10 && !out ? { text: "⚠️ 쿠데타 필수", color: "#ef4444" } : null,
       bubble,
+      held: !s.myCards && s.hiddenCount > 0 ? <HeldFan count={s.hiddenCount} back={backTexture()} /> : null,
       front: <InfluenceCards seat={s} />,
     };
   });
