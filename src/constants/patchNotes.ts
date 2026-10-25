@@ -70,6 +70,8 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     changes: [
       { game: "common", type: "IMPROVE", desc: "💡 3D 테이블 게임 24종에 은은한 환경광 — 나무·금속·컵·얼굴이 빛을 받아 입체적으로 보여요" },
       { game: "common", type: "IMPROVE", desc: "🌑 사람·의자·테이블 아래 부드러운 접지 그림자, PC에서는 틈새 음영·빛 번짐·가장자리 비네트까지 (느린 기기는 자동으로 꺼져요)" },
+      { game: "common", type: "IMPROVE", desc: "🔍 휴대폰에서도 3D가 선명하게 — 화면 해상도 그대로 그리고 계단 현상 제거, 버벅이면 자동으로 낮춰요" },
+      { game: "common", type: "FIX", desc: "💇 사실적인 인물의 앞머리 사이로 두피가 비치던 문제 수정" },
     ],
   },
   {

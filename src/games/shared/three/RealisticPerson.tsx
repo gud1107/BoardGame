@@ -464,9 +464,10 @@ export default function RealisticPerson(props: SeatedPersonProps) {
             <mesh ref={browR} geometry={p.gender === "f" ? browArch : browBold} position={[0.031, 0.05, 0.105]} scale={[-1, 1, 1]}>
               <meshStandardMaterial color={shade(p.hair, 0.7)} roughness={0.8} />
             </mesh>
-            {/* hair */}
+            {/* hair — the cap reaches down to y≈0.076 at the front so every fringe overlaps it
+                (at 0.42π the hairline sat near the crown and bare scalp showed between cap and fringe) */}
             <mesh position={[0, 0.016, -0.008]} rotation-x={-0.42} scale={[0.99, 1.03, 1.12]}>
-              <sphereGeometry args={[0.118, seg + 4, seg, 0, Math.PI * 2, 0, Math.PI * 0.42]} />
+              <sphereGeometry args={[0.118, seg + 4, seg, 0, Math.PI * 2, 0, Math.PI * 0.47]} />
               {hairMat}
             </mesh>
             <mesh position={[0, -0.004, -0.018]} scale={[0.96, 1.0, 1.08]}>

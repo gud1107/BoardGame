@@ -17,6 +17,9 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
  * Keep it short (≤ 80 chars), headline features only.
  */
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
+  "2026-10-25": {
+    common: "💡 3D 테이블 24종 환경광·접지 그림자·후처리, 🔍 휴대폰에서도 선명한 3D, 💇 앞머리 두피 비침 수정",
+  },
   "2026-10-23": {
     "prism-five": "🦸 신규 변신 히어로 액션 — 고유 규칙이 다른 5명, 콤보·필살기, 괴인 보스 브레이크, 🤖 거대 로봇전",
     "city-chase": "🦹 도둑을 직접 조종해 털고 숨기, 🚓👮🚁 경찰 3종·수갑 검거, 👀 읽기 쉬운 3D·탑뷰, 🔦 화려한 수색",

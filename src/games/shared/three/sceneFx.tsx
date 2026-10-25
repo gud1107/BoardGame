@@ -77,6 +77,36 @@ export function BlobShadow({ radius, y = 0.012, opacity = 1, stretch = 1 }: { ra
   );
 }
 
+/**
+ * Starts at the device's real pixel ratio (capped at 2) so text and edges stay crisp on
+ * phones, then steps down by 0.25 (to 1) whenever a ~1.5s window averages under ~45fps.
+ * A fixed low cap (the old 1.25 on mobile) rendered a 3× phone at ~40% resolution.
+ */
+export function AdaptiveResolution({ max = 2 }: { max?: number }) {
+  const setDpr = useThree((s) => s.setDpr);
+  const force = useMemo(() => forcedFx(), []);
+  const dpr = useRef(1);
+  const perf = useRef({ frames: 0, acc: 0 });
+  useEffect(() => {
+    dpr.current = Math.max(1, Math.min(max, window.devicePixelRatio || 1));
+    setDpr(dpr.current);
+  }, [max, setDpr]);
+  useFrame((_, delta) => {
+    if (force || dpr.current <= 1) return;
+    const p = perf.current;
+    p.frames++;
+    if (p.frames > 60) p.acc += Math.min(delta, 0.25);
+    if (p.frames < 150) return;
+    if (p.acc / 90 > 1 / 45) {
+      dpr.current = Math.max(1, dpr.current - 0.25);
+      setDpr(dpr.current);
+    }
+    p.frames = 0;
+    p.acc = 0;
+  });
+  return null;
+}
+
 /** QA override: `?fx=hi` keeps the full chain even on a slow (e.g. headless/software) GPU. */
 function forcedFx(): boolean {
   if (typeof window === "undefined") return false;

@@ -10,7 +10,7 @@ import { useRoomCharacter } from "@/lib/character/roomCharacters";
 import RealisticPerson from "./RealisticPerson";
 import ScreenSprite from "./ScreenSprite";
 import SpeechBubble from "./SpeechBubble";
-import { BlobShadow, PostFx, StudioEnvironment } from "./sceneFx";
+import { AdaptiveResolution, BlobShadow, PostFx, StudioEnvironment } from "./sceneFx";
 import { labelTexture, polar, seatAngle, type BubbleStyle } from "./tableKit";
 
 /**
@@ -423,6 +423,7 @@ function SceneContents(props: TableSceneProps) {
         <directionalLight position={[0, 2.6, geo.seatR + 2]} intensity={0.9} color="#fff4e6" />
       )}
       <FirstPersonCamera seatR={geo.seatR} tableY={TABLE_Y} overview={props.overview} seats={n} eyeLevel={theme.personStyle === "realistic"} />
+      <AdaptiveResolution />
       {!lowDetail && <PostFx bloom={theme.fx?.bloom ?? 0.28} />}
     </GeoContext.Provider>
   );
@@ -433,9 +434,10 @@ export default function TableScene(props: TableSceneProps) {
   return (
     <Canvas
       shadows={high}
-      // the post chain renders at full pixel ratio several times over — cap it a little lower
-      dpr={high ? [1, 1.5] : [1, 1.25]}
-      gl={{ antialias: high, powerPreference: "high-performance" }}
+      // AdaptiveResolution picks the real ratio (≤ 2) and steps it down on a slow device;
+      // MSAA stays on for phones too — it's cheap on tile GPUs and the tags/edges jagged without it
+      dpr={[1, 2]}
+      gl={{ antialias: true, powerPreference: "high-performance" }}
       camera={{ fov: 58, position: [0, 2.4, 4.2], near: 0.05, far: 120 }}
       style={{ touchAction: "pan-y" }}
       onPointerMissed={() => {
