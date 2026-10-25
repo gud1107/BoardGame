@@ -81,6 +81,9 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       { game: "common", type: "FEAT", desc: "🏛️ 3D 배경을 고풍스럽게 — 실내는 다마스크 벽지·판넬 벽·금박 액자 유화·커튼·촛대, 야외는 돌길·난간·가로등·돌 화분 (19종)" },
       { game: "common", type: "IMPROVE", desc: "📱 휴대폰에서 이름표·말풍선이 더 크게, 옆자리 말풍선은 화면 안으로 당기고 말한 사람까지 같은 색 선으로 이어요 · 🔇 소리를 꺼도 한마디가 말풍선으로" },
       { game: "common", type: "FIX", desc: "🎨 말풍선 이름 탭 글자가 밝은 좌석색(초록 등)에서 안 보이던 문제, 밝은 창문 앞 보조 이름표가 흐리던 문제 수정" },
+      { game: "love-letter", type: "FIX", desc: "🏁 라이트 모드 결과 화면에서 플레이어 이름이 어두운 배경에 묻혀 안 보이던 문제 수정" },
+      { game: "for-sale", type: "FIX", desc: "🏁 라이트 모드 결과 표의 이름·점수가 어두운 배경에 묻혀 안 보이던 문제 수정" },
+      { game: "five-cucumbers", type: "FIX", desc: "🏁 라이트 모드 결과 표의 이름이 어두운 배경에 묻혀 안 보이던 문제 수정" },
     ],
   },
   {

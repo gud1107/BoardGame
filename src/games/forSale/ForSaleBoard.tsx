@@ -127,25 +127,26 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
     const winner = rankings.filter((r) => r.rank === 1);
     return (
       <div
-        className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 light:border-slate-200 light:shadow-md p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
+        // dark in both themes (inline gradient): no light: overrides — they put slate-900 names on the dark panel
+        className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 light:shadow-md p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
         // Hardcoded dark inline gradient — intentionally left as-is per theme-system guidance.
         style={{ background: "linear-gradient(160deg,#0c2b3a 0%,#081c26 55%,#040d12 100%)" }}
       >
         <span className="text-5xl">🏆</span>
-        <h2 className="text-2xl font-bold text-sky-100 light:text-sky-700">
+        <h2 className="text-2xl font-bold text-sky-100">
           {winner.map((w) => names[w.seat]).join(", ")}
           {winner.length > 1 ? "님이 공동 승리했습니다!" : "님이 최고 부동산 중개인이 되었습니다!"}
         </h2>
-        <p className="text-xs text-white/50 light:text-slate-500">수표 총액 + 남은 동전 합산이 가장 높은 사람이 승리합니다.</p>
+        <p className="text-xs text-white/50">수표 총액 + 남은 동전 합산이 가장 높은 사람이 승리합니다.</p>
         <div className="w-full overflow-x-auto">
           <table className="w-full min-w-[420px] border-collapse text-xs">
             <thead>
-              <tr className="text-white/50 light:text-slate-500">
-                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-left">순위</th>
-                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-left">플레이어</th>
-                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-right">수표 합계</th>
-                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-right">남은 동전</th>
-                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-right">총점</th>
+              <tr className="text-white/50">
+                <th className="border-b border-white/10 px-2 py-2 text-left">순위</th>
+                <th className="border-b border-white/10 px-2 py-2 text-left">플레이어</th>
+                <th className="border-b border-white/10 px-2 py-2 text-right">수표 합계</th>
+                <th className="border-b border-white/10 px-2 py-2 text-right">남은 동전</th>
+                <th className="border-b border-white/10 px-2 py-2 text-right">총점</th>
               </tr>
             </thead>
             <tbody>
@@ -153,15 +154,15 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
                 const p = state.players.find((pl) => pl.seat === seat)!;
                 const checksSum = p.checks.reduce((s, c) => s + c, 0);
                 return (
-                  <tr key={seat} className={rank === 1 ? "bg-sky-400/10 light:bg-sky-50" : ""}>
-                    <td className="border-b border-white/5 light:border-slate-100 px-2 py-2 text-left font-bold text-sky-200 light:text-sky-700">{rank === 1 ? "🏆 1" : rank}</td>
-                    <td className="border-b border-white/5 light:border-slate-100 px-2 py-2 text-left text-white light:text-slate-900">
+                  <tr key={seat} className={rank === 1 ? "bg-sky-400/10" : ""}>
+                    <td className="border-b border-white/5 px-2 py-2 text-left font-bold text-sky-200">{rank === 1 ? "🏆 1" : rank}</td>
+                    <td className="border-b border-white/5 px-2 py-2 text-left text-white">
                       {names[seat]}
-                      {seat === viewerSeat && <span className="ml-1 text-sky-200 light:text-sky-700">(나)</span>}
+                      {seat === viewerSeat && <span className="ml-1 text-sky-200">(나)</span>}
                     </td>
-                    <td className="border-b border-white/5 light:border-slate-100 px-2 py-2 text-right text-emerald-300 light:text-emerald-600">{formatDollars(checksSum)}</td>
-                    <td className="border-b border-white/5 light:border-slate-100 px-2 py-2 text-right text-amber-300 light:text-amber-600">{formatDollars(p.cash)}</td>
-                    <td className="border-b border-white/5 light:border-slate-100 px-2 py-2 text-right font-bold text-white light:text-slate-900">{formatDollars(total)}</td>
+                    <td className="border-b border-white/5 px-2 py-2 text-right text-emerald-300">{formatDollars(checksSum)}</td>
+                    <td className="border-b border-white/5 px-2 py-2 text-right text-amber-300">{formatDollars(p.cash)}</td>
+                    <td className="border-b border-white/5 px-2 py-2 text-right font-bold text-white">{formatDollars(total)}</td>
                   </tr>
                 );
               })}

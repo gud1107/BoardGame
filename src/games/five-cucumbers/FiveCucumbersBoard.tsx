@@ -403,42 +403,43 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
     const tied = rankings.filter((r) => r.rank === 1).length > 1;
     return (
       <div
-        className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 light:border-slate-200 light:shadow-md p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
+        // dark in both themes (inline gradient): no light: overrides — they put slate-900 names on the dark panel
+        className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 light:shadow-md p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
         // Hardcoded dark inline gradient — intentionally left as-is per theme-system guidance.
         style={{ background: "linear-gradient(160deg,#132a1c 0%,#0d1e14 55%,#070f0a 100%)" }}
       >
         <span className="text-5xl">{tied ? "🥒" : "🏆"}</span>
-        <h2 className="text-2xl font-bold text-emerald-100 light:text-emerald-700">
+        <h2 className="text-2xl font-bold text-emerald-100">
           {tied ? "공동 최후 생존!" : `${names[winner.seat]}님 최후 생존 승리!`}
         </h2>
-        <p className="text-xs text-white/50 light:text-slate-500">오이를 가장 적게 먹고 가장 오래 살아남은 사람이 이기는 게임입니다.</p>
+        <p className="text-xs text-white/50">오이를 가장 적게 먹고 가장 오래 살아남은 사람이 이기는 게임입니다.</p>
         <div className="w-full overflow-x-auto">
           <table className="w-full min-w-[480px] border-collapse text-xs">
             <thead>
-              <tr className="text-white/50 light:text-slate-500">
-                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-left">순위</th>
-                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-left">플레이어</th>
-                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-right">최종 오이</th>
-                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-right">생존</th>
+              <tr className="text-white/50">
+                <th className="border-b border-white/10 px-2 py-2 text-left">순위</th>
+                <th className="border-b border-white/10 px-2 py-2 text-left">플레이어</th>
+                <th className="border-b border-white/10 px-2 py-2 text-right">최종 오이</th>
+                <th className="border-b border-white/10 px-2 py-2 text-right">생존</th>
               </tr>
             </thead>
             <tbody>
               {rankings.map(({ seat, rank, cucumbers, eliminatedAtRound }) => (
-                <tr key={seat} className={rank === 1 ? "bg-emerald-400/10 light:bg-emerald-50" : ""}>
-                  <td className="border-b border-white/5 light:border-slate-100 px-2 py-2 text-left font-bold text-emerald-200 light:text-emerald-700">{rank === 1 ? "🏆 1" : rank}</td>
-                  <td className="border-b border-white/5 light:border-slate-100 px-2 py-2 text-left text-white light:text-slate-900">
+                <tr key={seat} className={rank === 1 ? "bg-emerald-400/10" : ""}>
+                  <td className="border-b border-white/5 px-2 py-2 text-left font-bold text-emerald-200">{rank === 1 ? "🏆 1" : rank}</td>
+                  <td className="border-b border-white/5 px-2 py-2 text-left text-white">
                     <span className="flex items-center gap-1.5">
                       <Avatar size={20} />
                       {names[seat]}
-                      {seat === viewerSeat && <span className="text-emerald-200 light:text-emerald-700">(나)</span>}
+                      {seat === viewerSeat && <span className="text-emerald-200">(나)</span>}
                     </span>
                   </td>
-                  <td className="border-b border-white/5 light:border-slate-100 px-2 py-2 text-right">
-                    <span className="inline-flex items-center gap-1 text-rose-200 light:text-rose-600">
+                  <td className="border-b border-white/5 px-2 py-2 text-right">
+                    <span className="inline-flex items-center gap-1 text-rose-200">
                       <CucumberIcon className="h-3.5 w-3.5" /> {cucumbers}
                     </span>
                   </td>
-                  <td className="border-b border-white/5 light:border-slate-100 px-2 py-2 text-right text-white/60 light:text-slate-500">
+                  <td className="border-b border-white/5 px-2 py-2 text-right text-white/60">
                     {eliminatedAtRound === null ? "끝까지 생존" : `${eliminatedAtRound}라운드까지`}
                   </td>
                 </tr>

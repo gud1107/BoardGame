@@ -139,14 +139,16 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
     const rankings = computeRankings(state);
     return (
       <div
-        className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 light:border-slate-200 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
+        // this panel is dark in both themes (inline gradient), so it skips the light: text overrides —
+        // they turned the names slate-900 on maroon in light mode
+        className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
         style={{ background: "linear-gradient(160deg,#3a1024 0%,#1e0a15 55%,#0a0308 100%)" }}
       >
         <span className="text-5xl">💌</span>
         <h2 className="text-2xl font-bold text-rose-100">
           {state.winnerSeats.map((s) => names[s] ?? "상대").join(", ")}님이 공주의 마음을 얻었습니다!
         </h2>
-        <p className="text-xs text-white/50 light:text-slate-500">
+        <p className="text-xs text-white/50">
           {state.endReason === "elimination" ? "최후까지 살아남아 승리했습니다." : "덱이 소진되어 손패를 공개해 승자를 가렸습니다."}
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
@@ -163,11 +165,11 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
                   // wrongly imply hidden info still exists, so show a plain
                   // "탈락" marker instead (their held card, if any, already
                   // surfaced in their discard pile per engine.ts module doc #1).
-                  <div className="flex h-20 w-14 items-center justify-center rounded-lg border border-white/10 light:border-slate-200 bg-black/30 light:bg-white/80 light:shadow-sm text-lg opacity-50">
+                  <div className="flex h-20 w-14 items-center justify-center rounded-lg border border-white/10 bg-black/30 light:bg-white/80 text-lg opacity-50">
                     💔
                   </div>
                 )}
-                <span className="text-[10px] text-white/60 light:text-slate-600">{names[p.seat] ?? "상대"}</span>
+                <span className="text-[10px] text-white/60">{names[p.seat] ?? "상대"}</span>
               </div>
             );
           })}
@@ -175,10 +177,10 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
         <div className="w-full overflow-x-auto">
           <table className="w-full min-w-[380px] border-collapse text-xs">
             <thead>
-              <tr className="text-white/50 light:text-slate-500">
-                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-left">순위</th>
-                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-left">플레이어</th>
-                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-left">버린 카드</th>
+              <tr className="text-white/50">
+                <th className="border-b border-white/10 px-2 py-2 text-left">순위</th>
+                <th className="border-b border-white/10 px-2 py-2 text-left">플레이어</th>
+                <th className="border-b border-white/10 px-2 py-2 text-left">버린 카드</th>
               </tr>
             </thead>
             <tbody>
@@ -186,12 +188,12 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
                 const p = state.players.find((pl) => pl.seat === seat)!;
                 return (
                   <tr key={seat} className={rank === 1 ? "bg-rose-400/10" : ""}>
-                    <td className="border-b border-white/5 light:border-slate-200 px-2 py-2 text-left font-bold text-rose-200">{rank === 1 ? "💌 1" : rank}</td>
-                    <td className="border-b border-white/5 light:border-slate-200 px-2 py-2 text-left text-white light:text-slate-900">
+                    <td className="border-b border-white/5 px-2 py-2 text-left font-bold text-rose-200">{rank === 1 ? "💌 1" : rank}</td>
+                    <td className="border-b border-white/5 px-2 py-2 text-left text-white">
                       {names[seat] ?? "상대"}
                       {seat === viewerSeat && <span className="ml-1 text-rose-200">(나)</span>}
                     </td>
-                    <td className="border-b border-white/5 light:border-slate-200 px-2 py-2 text-left text-white/60 light:text-slate-600">
+                    <td className="border-b border-white/5 px-2 py-2 text-left text-white/60">
                       {p.discardPile.length === 0 ? "—" : p.discardPile.map((c) => c.number).join(", ")}
                     </td>
                   </tr>
