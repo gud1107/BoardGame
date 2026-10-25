@@ -18,7 +18,7 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
  */
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
   "2026-10-25": {
-    common: "💡 3D 테이블 환경광·그림자·후처리, 🔍 휴대폰 선명도, 🃏 손패 쥐기·🎭 인물별 성격, 🪧 얼굴 가리던 안내판 수정",
+    common: "💡 3D 테이블 조명·선명도, 🃏 손패 쥐기·🎭 성격·🗣️ 감정 음성, 💬 말한 사람 표시, 🏛️ 고풍스러운 배경",
   },
   "2026-10-23": {
     "prism-five": "🦸 신규 변신 히어로 액션 — 고유 규칙이 다른 5명, 콤보·필살기, 괴인 보스 브레이크, 🤖 거대 로봇전",
