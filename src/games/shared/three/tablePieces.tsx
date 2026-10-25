@@ -213,8 +213,9 @@ export function clearOfFarFace(obj: THREE.Object3D, camera: THREE.Camera, seatR:
   const centerDrop = chinDrop + 0.014 + half;
   const worldY = camera.position.y - near * Math.tan(centerDrop);
   const localY = worldY - signWorld.y;
-  // never sink into the table top
-  return Math.max(h / 2 + 0.06, Math.min(wantY, localY));
+  // the sprite draws on top (no depth test), so a tall multi-line sign may overlap the felt —
+  // only stop it right at the table top; clamping at h/2 pushed 3-line signs back over the face
+  return Math.max(0.12, Math.min(wantY, localY));
 }
 
 /** The floating sign over the table centre (phase / current bid …). */
