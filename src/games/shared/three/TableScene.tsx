@@ -10,6 +10,7 @@ import { useRoomCharacter } from "@/lib/character/roomCharacters";
 import RealisticPerson from "./RealisticPerson";
 import ScreenSprite from "./ScreenSprite";
 import SpeechBubble from "./SpeechBubble";
+import { BlobShadow, PostFx, StudioEnvironment } from "./sceneFx";
 import { labelTexture, polar, seatAngle, type BubbleStyle } from "./tableKit";
 
 /**
@@ -109,6 +110,8 @@ export interface TableTheme {
   nameY?: number;
   /** "realistic" = adult proportions, modelled faces and hands (RealisticPerson); default cartoon rig. */
   personStyle?: "cartoon" | "realistic";
+  /** Render polish: image-based light strength (0 = off) and bloom strength (0 = off). */
+  fx?: { env?: number; bloom?: number };
 }
 
 export interface TableSceneProps {
@@ -165,6 +168,7 @@ function Table({ tableR, theme, lowDetail }: { tableR: number; theme: TableTheme
         <cylinderGeometry args={[0.75, 0.85, 0.08, 24]} />
         <meshStandardMaterial color={t.base} roughness={0.55} />
       </mesh>
+      <BlobShadow radius={tableR + 0.35} y={0.008} opacity={0.75} />
     </group>
   );
 }
@@ -297,7 +301,8 @@ function SeatView({ s, geo, theme, lowDetail, ringColor }: { s: TableSeat; geo: 
           <group {...handlers} position={[0, 0.06, 0]} rotation-x={-0.5}>
             <mesh>
               <boxGeometry args={[0.5, 0.12, 0.02]} />
-              <meshStandardMaterial color={hover ? "#fde68a" : theme.table.inlay} metalness={0.6} roughness={0.35} emissive={s.ring ?? "#000"} emissiveIntensity={s.ring ? 0.7 : 0} />
+              {/* dark rim-wood plate: with the environment map lit, a gold metal plate reads bright and swallows the name */}
+              <meshStandardMaterial color={hover ? "#fde68a" : theme.table.rim} metalness={0.15} roughness={0.45} emissive={s.ring ?? "#000"} emissiveIntensity={s.ring ? 0.7 : 0} />
             </mesh>
             <mesh position={[0, 0, 0.012]}>
               <planeGeometry args={[0.48, 0.12]} />
@@ -310,6 +315,9 @@ function SeatView({ s, geo, theme, lowDetail, ringColor }: { s: TableSeat; geo: 
         </group>
       ) : (
         <group {...handlers}>
+          <group position={polar(angle, geo.seatR - 0.12)}>
+            <BlobShadow radius={0.62} y={0.01} opacity={s.out ? 0.5 : 0.85} />
+          </group>
           {chair === "throne" && (
             <group position={polar(angle, geo.seatR)} rotation-y={angle + Math.PI}>
               <Throne color={theme.chairColor} />
@@ -388,12 +396,16 @@ function SceneContents(props: TableSceneProps) {
       headOf: (seat) => (seat === viewerSeat ? new THREE.Vector3(0, 1.9, seatR + 0.6) : polar(angleOf(seat), seatR - 0.05, HEAD_Y)),
     };
   }, [n, viewerSeat, theme.personStyle]);
+  const env = theme.fx?.env ?? 0.42;
+  const envOn = env > 0;
 
   return (
     <GeoContext.Provider value={geo}>
       <color attach="background" args={[theme.background]} />
       <fog attach="fog" args={[theme.background, theme.fog[0], theme.fog[1]]} />
-      <ambientLight color={theme.ambient[0]} intensity={theme.ambient[1]} />
+      {/* the environment map now supplies soft fill, so the flat ambient term is trimmed to keep each theme's mood */}
+      {envOn && <StudioEnvironment intensity={env} />}
+      <ambientLight color={theme.ambient[0]} intensity={theme.ambient[1] * (envOn ? 0.65 : 1)} />
       <hemisphereLight args={theme.hemi} />
       {theme.fills.map(([c, i, x, y, z], k) => (
         <directionalLight key={k} color={c} intensity={i} position={[x, y, z]} />
@@ -411,6 +423,7 @@ function SceneContents(props: TableSceneProps) {
         <directionalLight position={[0, 2.6, geo.seatR + 2]} intensity={0.9} color="#fff4e6" />
       )}
       <FirstPersonCamera seatR={geo.seatR} tableY={TABLE_Y} overview={props.overview} seats={n} eyeLevel={theme.personStyle === "realistic"} />
+      {!lowDetail && <PostFx bloom={theme.fx?.bloom ?? 0.28} />}
     </GeoContext.Provider>
   );
 }
@@ -420,7 +433,8 @@ export default function TableScene(props: TableSceneProps) {
   return (
     <Canvas
       shadows={high}
-      dpr={high ? [1, 1.75] : [1, 1.25]}
+      // the post chain renders at full pixel ratio several times over — cap it a little lower
+      dpr={high ? [1, 1.5] : [1, 1.25]}
       gl={{ antialias: high, powerPreference: "high-performance" }}
       camera={{ fov: 58, position: [0, 2.4, 4.2], near: 0.05, far: 120 }}
       style={{ touchAction: "pan-y" }}

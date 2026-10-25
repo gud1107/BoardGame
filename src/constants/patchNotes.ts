@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.97.1",
+    releaseDate: "2026-10-25",
+    title: "💡 3D 테이블 24종 — 조명·그림자·질감 한 단계 업그레이드",
+    changes: [
+      { game: "common", type: "IMPROVE", desc: "💡 3D 테이블 게임 24종에 은은한 환경광 — 나무·금속·컵·얼굴이 빛을 받아 입체적으로 보여요" },
+      { game: "common", type: "IMPROVE", desc: "🌑 사람·의자·테이블 아래 부드러운 접지 그림자, PC에서는 틈새 음영·빛 번짐·가장자리 비네트까지 (느린 기기는 자동으로 꺼져요)" },
+    ],
+  },
+  {
     version: "v1.97.0",
     releaseDate: "2026-10-23",
     title: "💎 스플렌더 대결 — 판은 반듯하게, 보석만 3D로",

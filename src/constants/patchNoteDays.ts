@@ -20,6 +20,7 @@ export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGa
   "2026-10-23": {
     "prism-five": "🦸 신규 변신 히어로 액션 — 고유 규칙이 다른 5명, 콤보·필살기, 괴인 보스 브레이크, 🤖 거대 로봇전",
     "city-chase": "🦹 도둑을 직접 조종해 털고 숨기, 🚓👮🚁 경찰 3종·수갑 검거, 👀 읽기 쉬운 3D·탑뷰, 🔦 화려한 수색",
+    "splendor-duel": "💎 보석판은 2D 나선 그대로 반듯하게, 보석만 빛나는 입체 3D — 가져가면 들려 올라 내 자리로",
   },
   "2026-10-22": {
     common: "🧑‍🎤 3D 캐릭터가 K-pop 아이돌로, 📋 캐릭터 목록에서 내 캐릭터 선택, 🤲 손까지 자연스러운 동작",
