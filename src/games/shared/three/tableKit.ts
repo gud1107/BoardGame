@@ -199,8 +199,8 @@ export function bubbleTexture(text: string, style: BubbleStyle): { tex: THREE.Ca
   ctx.textBaseline = "middle";
   lines.forEach((l, i) => ctx.fillText(l, W / 2, top + pad * 0.65 + lineH * (i + 0.5) + (tabH ? 14 : 0)));
   if (style.who) {
-    // bots are named "[Lv.5] AI 봇 3" — the tab only has room for who it is, not the level
-    const who = style.who.replace(/^\[[^\]]*\]\s*/, "") || style.who;
+    // bots are named "🤖 [Lv.5] AI 봇 3" — the tab only has room for who it is, not the level
+    const who = style.who.replace(/\[Lv\.\d+\]\s*/, "").trim() || style.who;
     const name = [...who].length > 8 ? `${[...who].slice(0, 7).join("")}…` : who;
     ctx.font = `800 60px ${TEXT_FONT}, ${EMOJI_FONT}`;
     const tw = Math.min(boxW - 40, ctx.measureText(name).width + 40);
