@@ -125,8 +125,20 @@ function pickVoice(gender: "f" | "m", seat: number): SpeechSynthesisVoice | null
   return pool[seat % pool.length];
 }
 
-/** Say this seat's line for `mood`, if sound is on and the gate lets it through. Safe to call anywhere. */
-export function speakEmotion(o: { seat: number; mood: PersonMood; persona: Persona; gender: "f" | "m" }) {
+/**
+ * The next line this seat says for `mood` (null for silent moods) — shown as a caption bubble
+ * whether or not sound is on, then handed to `speakEmotion`, so players with the sound off
+ * (or a device without a Korean voice) still get the reaction.
+ */
+export function nextEmotionLine(seat: number, mood: PersonMood, persona: Persona): string | null {
+  if (!isVoiced(mood)) return null;
+  const n = (said.get(seat) ?? 0) + 1;
+  said.set(seat, n);
+  return voiceLine(persona, mood, seat, n);
+}
+
+/** Say `text` in this seat's voice, if sound is on and the gate lets it through. Safe to call anywhere. */
+export function speakEmotion(o: { seat: number; mood: PersonMood; persona: Persona; gender: "f" | "m"; text: string }) {
   if (!isVoiced(o.mood)) return;
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
   const settings = useAudioSettingsStore.getState();
@@ -135,11 +147,9 @@ export function speakEmotion(o: { seat: number; mood: PersonMood; persona: Perso
   const verdict = gate.allow(o.seat, o.mood, performance.now() / 1000, synth.speaking || synth.pending);
   if (verdict === "skip") return;
   if (verdict === "cut") synth.cancel();
-  const n = (said.get(o.seat) ?? 0) + 1;
-  said.set(o.seat, n);
   const p = voiceProfile(o.seat, o.gender, o.persona);
   try {
-    const u = new SpeechSynthesisUtterance(voiceLine(o.persona, o.mood, o.seat, n));
+    const u = new SpeechSynthesisUtterance(o.text);
     u.lang = "ko-KR";
     u.pitch = p.pitch;
     u.rate = p.rate;

@@ -13,7 +13,7 @@ import SpeechBubble from "./SpeechBubble";
 import { AdaptiveResolution, BlobShadow, PerfHud, PostFx, StudioEnvironment } from "./sceneFx";
 import { labelTexture, polar, seatAngle, type BubbleStyle } from "./tableKit";
 import { personaFor } from "./persona";
-import { speakEmotion } from "@/lib/audio/characterVoice";
+import { nextEmotionLine, speakEmotion } from "@/lib/audio/characterVoice";
 
 /**
  * The shared "real people around a table" scene for the card / social
@@ -295,6 +295,9 @@ function SpeakerPulse({ color, popKey, y, size = 0.75 }: { color: string; popKey
   );
 }
 
+/** Caption for a voiced reaction (characterVoice.ts): light and italic-feeling, so it reads as an aside, not a game call. */
+const EMOTE_STYLE: BubbleStyle = { bg: "rgba(255,255,255,0.93)", fg: "#3f3f46", border: "#a1a1aa", size: 48 };
+
 /** Pointer handlers that ignore drags (the canvas drag looks around). */
 function useSelect(onSelect: (() => void) | null | undefined) {
   const [hover, setHover] = useState(false);
@@ -340,15 +343,30 @@ function SeatView({ s, geo, theme, lowDetail, ringColor }: { s: TableSeat; geo: 
   const Person = theme.personStyle === "realistic" ? RealisticPerson : SeatedPerson;
   // the game turning this person's mood emotional is their cue to say something, in their own
   // voice and words (characterVoice.ts); never on first mount, never for my own seat
+  // the same line shows as a short caption bubble, so it reaches players with the sound off too
   const prevMood = useRef(s.mood);
+  const lastLine = useRef(-Infinity);
+  const [emote, setEmote] = useState<{ text: string; key: string } | null>(null);
   useEffect(() => {
     if (prevMood.current === s.mood) return;
     prevMood.current = s.mood;
     if (isViewer || s.out) return;
-    speakEmotion({ seat: s.seat, mood: s.mood, persona: personaFor(s.seat), gender: look.gender });
+    const now = performance.now();
+    if (now - lastLine.current < 2500) return;
+    const text = nextEmotionLine(s.seat, s.mood, personaFor(s.seat));
+    if (!text) return;
+    lastLine.current = now;
+    speakEmotion({ seat: s.seat, mood: s.mood, persona: personaFor(s.seat), gender: look.gender, text });
+    const key = `${s.seat}:${now}`;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a timed caption triggered by a prop change
+    setEmote({ text, key });
+    const t = window.setTimeout(() => setEmote((e) => (e?.key === key ? null : e)), 2400);
+    return () => window.clearTimeout(t);
   }, [s.mood, s.seat, s.out, isViewer, look.gender]);
+  // a game bubble always wins the spot above the head
+  const shownBubble = useMemo(() => s.bubble ?? (emote ? { text: emote.text, style: EMOTE_STYLE, key: emote.key, width: 0.8 } : null), [s.bubble, emote]);
   // every bubble carries its speaker: a name tab in the seat colour (and a matching border)
-  const bubbleStyle = useMemo(() => (s.bubble ? { ...s.bubble.style, who: isViewer ? "나" : s.name, whoColor: color } : null), [s.bubble, isViewer, s.name, color]);
+  const bubbleStyle = useMemo(() => (shownBubble ? { ...shownBubble.style, who: isViewer ? "나" : s.name, whoColor: color } : null), [shownBubble, isViewer, s.name, color]);
 
   return (
     <group>
@@ -407,10 +425,10 @@ function SeatView({ s, geo, theme, lowDetail, ringColor }: { s: TableSeat; geo: 
             {(s.ring || hover) && <FloorRing color={hover && !s.ring ? "#fde68a" : (s.ring ?? "#fde68a")} />}
             {/* the stack (sub · name · tag · bubble) grows as one block with distance */}
             <ScreenSprite anchorY={labelBase} position={[0, nameY, 0]} scale={[0.86, 0.21]} map={labelTexture(s.away ? `📴 ${s.name}` : s.name, s.away ? "#71717a" : color)} />
-            {s.sub && <ScreenSprite anchorY={labelBase} position={[0, nameY - 0.2, 0]} scale={[0.7, 0.175]} map={labelTexture(s.sub, color, { bg: "rgba(0,0,0,0.55)" })} />}
+            {s.sub && <ScreenSprite anchorY={labelBase} position={[0, nameY - 0.2, 0]} scale={[0.7, 0.175]} map={labelTexture(s.sub, color, { bg: "rgba(0,0,0,0.75)" })} />}
             {s.tag && <ScreenSprite anchorY={labelBase} position={[0, nameY + 0.22, 0]} scale={[0.7, 0.175]} map={labelTexture(s.tag.text, s.tag.color, { bg: s.tag.bg ?? "rgba(20,10,10,0.85)" })} />}
-            {s.bubble && bubbleStyle && <SpeechBubble anchorY={labelBase} text={s.bubble.text} style={bubbleStyle} y={bubbleY} popKey={s.bubble.key} width={Math.max(0.62, s.bubble.width ?? 1.0)} />}
-            {s.bubble && <SpeakerPulse color={color} popKey={s.bubble.key} y={theme.personStyle === "realistic" ? 1.52 : 1.66} size={theme.personStyle === "realistic" ? 0.55 : 0.8} />}
+            {shownBubble && bubbleStyle && <SpeechBubble anchorY={labelBase} text={shownBubble.text} style={bubbleStyle} y={bubbleY} popKey={shownBubble.key} width={Math.max(0.62, shownBubble.width ?? 1.0)} />}
+            {shownBubble && <SpeakerPulse color={color} popKey={shownBubble.key} y={theme.personStyle === "realistic" ? 1.52 : 1.66} size={theme.personStyle === "realistic" ? 0.55 : 0.8} />}
           </Person>
           {/* generous invisible hit box so a tap on the chair area counts too */}
           {s.onSelect && (

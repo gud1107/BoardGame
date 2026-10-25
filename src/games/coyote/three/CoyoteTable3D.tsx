@@ -480,7 +480,7 @@ function SceneContents(props: CoyoteTable3DProps) {
                 headSlot={!s.out && <ForeheadCard card={s.card} struck={s.struck} visible={!revealed} />}
               >
                 <ScreenSprite position={[0, 2.18, 0]} scale={[0.82, 0.2]} map={labelTexture(s.name, color)} />
-                <ScreenSprite position={[0, 1.99, 0]} scale={[0.62, 0.155]} map={labelTexture(s.out ? "💀 탈락" : `${"❤️".repeat(Math.max(0, s.hearts))}${"🤍".repeat(Math.max(0, props.maxHearts - s.hearts))}`, s.out ? "#7f1d1d" : "#f43f5e", { bg: "rgba(0,0,0,0.55)" })} />
+                <ScreenSprite position={[0, 1.99, 0]} scale={[0.62, 0.155]} map={labelTexture(s.out ? "💀 탈락" : `${"❤️".repeat(Math.max(0, s.hearts))}${"🤍".repeat(Math.max(0, props.maxHearts - s.hearts))}`, s.out ? "#7f1d1d" : "#f43f5e", { bg: "rgba(0,0,0,0.75)" })} />
                 {bubble && <SpeechBubble text={bubble.text} style={{ ...bubble.style, who: s.name, whoColor: color }} y={2.55} popKey={bubble.key} />}
               </SeatedPerson>
             )}

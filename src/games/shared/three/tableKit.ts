@@ -173,7 +173,7 @@ export function bubbleTexture(text: string, style: BubbleStyle): { tex: THREE.Ca
   const boxH = lines.length * lineH + pad * 1.3 + (style.who ? 20 : 0);
   const tail = 26;
   // a name tab sits on the top edge (half above it), so who's talking reads without hunting
-  const tabH = style.who ? 70 : 0;
+  const tabH = style.who ? 82 : 0;
   const top = 4 + tabH / 2;
   const H = Math.ceil(top + boxH + tail + 8);
   const c = document.createElement("canvas");
@@ -202,17 +202,19 @@ export function bubbleTexture(text: string, style: BubbleStyle): { tex: THREE.Ca
     // bots are named "[Lv.5] AI 봇 3" — the tab only has room for who it is, not the level
     const who = style.who.replace(/^\[[^\]]*\]\s*/, "") || style.who;
     const name = [...who].length > 8 ? `${[...who].slice(0, 7).join("")}…` : who;
-    ctx.font = `800 48px ${TEXT_FONT}, ${EMOJI_FONT}`;
+    ctx.font = `800 60px ${TEXT_FONT}, ${EMOJI_FONT}`;
     const tw = Math.min(boxW - 40, ctx.measureText(name).width + 40);
     const tx = Math.max(6, x0 + 22);
     const tc = style.whoColor ?? style.border;
     ctx.fillStyle = tc;
     ctx.beginPath();
-    ctx.roundRect(tx, 4, tw, tabH - 4, 32);
+    ctx.roundRect(tx, 4, tw, tabH - 4, 38);
     ctx.fill();
-    // dark or light lettering, whichever reads on the seat colour
-    const rgb = new THREE.Color(tc);
-    ctx.fillStyle = rgb.r * 0.299 + rgb.g * 0.587 + rgb.b * 0.114 > 0.55 ? "#1c1917" : "#ffffff";
+    // white or near-black lettering, whichever has the higher WCAG contrast on the seat colour
+    // (a 0.55 brightness cut put white on #4ade80 green — 1.7:1; best-of-two keeps all ≥ 4.2:1)
+    const rgb = new THREE.Color(tc); // linear components
+    const lum = 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
+    ctx.fillStyle = 1.05 / (lum + 0.05) >= (lum + 0.05) / 0.061 ? "#ffffff" : "#1c1917";
     ctx.textAlign = "left";
     ctx.fillText(name, tx + 20, 4 + (tabH - 4) / 2 + 2);
   }
