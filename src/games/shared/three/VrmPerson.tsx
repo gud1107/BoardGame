@@ -5,7 +5,7 @@ import { createPortal, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils, type VRM, type VRMHumanBoneName } from "@pixiv/three-vrm";
-import type { VrmModel } from "@/lib/character/avatar";
+import { DYED_BY_DEFAULT, VRM_WARDROBE, type VrmModel, type WardrobeSlot } from "@/lib/character/avatar";
 import SeatedPerson, { blinking, FACES, Hat, holdPose, holdsInMood, STRONG_MOODS, TABLE_POSES, type PersonLook, type PersonMood, type SeatedPersonProps } from "./SeatedPerson";
 import { createMotion, HANDS, stepMotion, type MotionState } from "./motion";
 import { PERSONA_STYLE, personaGaze } from "./persona";
@@ -21,8 +21,9 @@ import { armJointQuat, fingerCurl, toVrm0, upperArmQuat } from "./vrmPose";
  * - The cartoon rig stands in while the model downloads, and for good if it fails.
  * - Every seat parses its own copy (bones/expressions are per instance), but
  *   textures are shared per model so a full table uploads each image once.
- * - Look → model: men get Seed-san, women alternate between the two pixiv
- *   samples; hair / outfit / skin colours are tinted from the PersonLook.
+ * - Look → model: the profile's `model`, else a per-gender default cast (DEFAULT_CAST);
+ *   classic VRoid models can borrow each other's hair / outfit / shoes (`graft`), and
+ *   hair / outfit / skin colours are tinted from the PersonLook.
  *
  * Models live in public/models/vrm (licences in CREDITS.md).
  * Local frame: +z faces the table, origin = the chair's floor point.
@@ -31,16 +32,43 @@ import { armJointQuat, fingerCurl, toVrm0, upperArmQuat } from "./vrmPose";
 type ModelKey = VrmModel;
 
 /** Per model: meshes to hide (props that don't belong at a card table) and which materials are skin / top. */
-const MODELS: Record<ModelKey, { hide: string[]; skin: string[]; tops: string[] }> = {
+type ModelSpec = { hide: string[]; skin: string[]; tops: string[] };
+/** The classic VRoid exports name materials like "F00_001_01_Tops_01_CLOTH" / "…_Body_00_SKIN". */
+const CLASSIC: ModelSpec = { hide: [], skin: ["_skin"], tops: ["tops", "onepice"] };
+const MODELS: Record<ModelKey, ModelSpec> = {
   "pixiv-sample": { hide: [], skin: ["skin"], tops: ["tops"] },
   "three-vrm-girl": { hide: [], skin: ["body", "face"], tops: ["tops"] },
   "seed-san": { hide: ["robo_arm"], skin: ["body_bake"], tops: ["huku_bake"] },
+  "vroid-d": CLASSIC,
+  "vroid-d-darkness": CLASSIC,
+  "vroid-e": CLASSIC,
+  "vroid-f": CLASSIC,
+  "vroid-g": CLASSIC,
+  "vroid-hair-f": CLASSIC,
+  "vroid-shino": CLASSIC,
+  "vroid-hair-m": CLASSIC,
+  "vroid-fumiriya": CLASSIC,
+};
+
+/** Seats nobody styled: a varied cast per gender, stable per seat. */
+const DEFAULT_CAST: Record<"f" | "m", ModelKey[]> = {
+  f: ["pixiv-sample", "vroid-d", "three-vrm-girl", "vroid-g", "vroid-shino", "vroid-hair-f", "vroid-e", "vroid-f"],
+  m: ["seed-san", "vroid-hair-m", "vroid-fumiriya"],
 };
 
 function modelFor(look: PersonLook, seed: number): ModelKey {
   if (look.model) return look.model;
-  if (look.gender === "m") return "seed-san";
-  return seed % 2 === 0 ? "pixiv-sample" : "three-vrm-girl";
+  const cast = DEFAULT_CAST[look.gender];
+  return cast[Math.floor(seed / 2) % cast.length];
+}
+
+/** Which wardrobe slot a material belongs to (the classic VRoid naming; three-vrm-girl's plain names match too). */
+function slotOf(materialName: string): WardrobeSlot | null {
+  const n = materialName.toLowerCase();
+  if (n.includes("hair")) return "hair";
+  if (n.includes("shoes")) return "shoes";
+  if (/tops|bottoms|onepice|accessory/.test(n)) return "outfit";
+  return null;
 }
 
 /** Seated head height of the cartoon rig — TableScene's gaze and label maths assume about this. */
@@ -67,6 +95,13 @@ function materialsOf(root: THREE.Object3D): THREE.Material[] {
  * fixed mean), so the hair colour tinted on top reads the same on every model —
  * multiplying a colour over the near-black hair of two of the models stays black.
  */
+const liftedCache = new WeakMap<THREE.Texture, THREE.Texture>();
+function lifted(tex: THREE.Texture): THREE.Texture {
+  let t = liftedCache.get(tex);
+  if (!t) liftedCache.set(tex, (t = liftToGrey(tex)));
+  return t;
+}
+
 function liftToGrey(tex: THREE.Texture): THREE.Texture {
   const img = tex.image as CanvasImageSource & { width: number; height: number };
   if (!img?.width) return tex;
@@ -111,17 +146,6 @@ function shareTextures(key: ModelKey, vrm: VRM) {
   const mats = materialsOf(vrm.scene) as unknown as Record<string, THREE.Texture | undefined>[];
   const base = shared[key];
   if (!base) {
-    // first copy of this model: neutralise the hair textures once; every later copy shares them
-    const lifted = new Map<THREE.Texture, THREE.Texture>();
-    for (const m of mats) {
-      if (!(m as unknown as THREE.Material).name.toLowerCase().includes("hair")) continue;
-      for (const k of ["map", "shadeMultiplyTexture"] as const) {
-        const t = m[k];
-        if (!t?.isTexture) continue;
-        if (!lifted.has(t)) lifted.set(t, liftToGrey(t));
-        m[k] = lifted.get(t);
-      }
-    }
     shared[key] = mats.map((m) => Object.fromEntries(TEXTURE_KEYS.filter((k) => m[k]?.isTexture).map((k) => [k, m[k]!])));
     return;
   }
@@ -174,6 +198,64 @@ async function parseVrm(key: ModelKey): Promise<VRM> {
 }
 
 /**
+ * Wardrobe donors: a model parsed once (never shown) whose hair / outfit / shoes
+ * meshes other seats borrow. Their geometry is shared by every seat wearing them.
+ */
+const donors = new Map<ModelKey, Promise<VRM>>();
+function loadDonor(key: ModelKey): Promise<VRM> {
+  let d = donors.get(key);
+  if (!d) donors.set(key, (d = loadVrm(key)));
+  return d;
+}
+
+function firstMaterial(mesh: THREE.Mesh): THREE.Material {
+  return Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+}
+
+/**
+ * Dress `vrm` in the donor's meshes for `slot`: hide its own, and re-skin the donor's
+ * onto this skeleton by bone name (the classic VRoid family shares `J_Bip_*`). Bones
+ * only the donor has (its hair joints) are copied in at their rest pose, so borrowed
+ * hair doesn't sway.
+ */
+function graft(vrm: VRM, donor: VRM, slot: WardrobeSlot) {
+  const own = new Map<string, THREE.Object3D>();
+  vrm.scene.traverse((o) => {
+    if ((o as THREE.Bone).isBone && !own.has(o.name)) own.set(o.name, o);
+    const mesh = o as THREE.Mesh;
+    if (mesh.isMesh && !mesh.userData.grafted && slotOf(firstMaterial(mesh).name) === slot) mesh.visible = false;
+  });
+  const mapBone = (b: THREE.Object3D): THREE.Object3D => {
+    const hit = own.get(b.name);
+    if (hit) return hit;
+    const copy = new THREE.Bone();
+    copy.name = b.name;
+    copy.position.copy(b.position);
+    copy.quaternion.copy(b.quaternion);
+    copy.scale.copy(b.scale);
+    const parent = b.parent && b.parent !== donor.scene ? mapBone(b.parent) : vrm.scene;
+    parent.add(copy);
+    own.set(b.name, copy);
+    return copy;
+  };
+  const meshes: THREE.SkinnedMesh[] = [];
+  donor.scene.traverse((o) => {
+    const mesh = o as THREE.SkinnedMesh;
+    if (mesh.isSkinnedMesh && slotOf(firstMaterial(mesh).name) === slot) meshes.push(mesh);
+  });
+  for (const src of meshes) {
+    const material = Array.isArray(src.material) ? src.material.map((m) => m.clone()) : src.material.clone();
+    for (const m of Array.isArray(material) ? material : [material]) memoProgramKey(m);
+    const mesh = new THREE.SkinnedMesh(src.geometry, material);
+    mesh.name = src.name;
+    mesh.userData.grafted = true;
+    mesh.frustumCulled = false;
+    vrm.scene.add(mesh);
+    mesh.bind(new THREE.Skeleton(src.skeleton.bones.map(mapBone) as THREE.Bone[], src.skeleton.boneInverses), src.bindMatrix);
+  }
+}
+
+/**
  * three.js re-derives every material's program key whenever the light state differs
  * between render passes — each frame here. MToon's key is a serialised define list,
  * so cache it until the material itself changes (`needsUpdate` bumps `version`).
@@ -192,12 +274,12 @@ function memoProgramKey(m: THREE.Material) {
   };
 }
 
-/** Geometry and materials are per seat; textures are shared, so they stay. */
+/** Geometry and materials are per seat; textures are shared, so they stay (and borrowed geometry belongs to its donor). */
 function release(vrm: VRM) {
   vrm.scene.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
-    mesh.geometry.dispose();
+    if (!mesh.userData.grafted) mesh.geometry.dispose();
     for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) m.dispose();
   });
 }
@@ -206,17 +288,34 @@ type Tintable = THREE.Material & { color?: THREE.Color; shadeColorFactor?: THREE
 const GREY = new THREE.Color("#57534e");
 const WHITE = new THREE.Color("#ffffff");
 
-/** Hair / top / skin colours from the look (multiplied over the textures); greyed out when eliminated. */
+/**
+ * Hair / top / skin colours from the look (multiplied over the textures); greyed out when
+ * eliminated. Dyed hair swaps in a grey-lifted texture so any colour reads (two models'
+ * hair is painted near-black); undyed hair and tops keep their painted colours.
+ */
 function tint(vrm: VRM, key: ModelKey, look: PersonLook, out: boolean) {
   const M = MODELS[key];
-  for (const m of materialsOf(vrm.scene) as Tintable[]) {
+  const dyeHair = look.hairDye ?? DYED_BY_DEFAULT.has(key);
+  const dyeTop = look.outfitDye ?? DYED_BY_DEFAULT.has(key);
+  for (const m of materialsOf(vrm.scene) as (Tintable & { map?: THREE.Texture | null; shadeMultiplyTexture?: THREE.Texture | null })[]) {
     if (!m.color) continue;
     const n = m.name.toLowerCase();
-    const ud = m.userData as { base?: THREE.Color; shade?: THREE.Color };
+    const ud = m.userData as { base?: THREE.Color; shade?: THREE.Color; map?: THREE.Texture | null; shadeTex?: THREE.Texture | null };
     ud.base ??= m.color.clone();
     if (m.shadeColorFactor) ud.shade ??= m.shadeColorFactor.clone();
-    const skin = M.skin.some((k) => (k.length > 4 ? n.includes(k) : n === k));
-    const hex = n.includes("hair") ? look.hair : M.tops.some((k) => n.includes(k)) ? look.coat : skin ? look.skin : null;
+    const hair = n.includes("hair");
+    if (hair) {
+      if (!("map" in ud)) {
+        ud.map = m.map ?? null;
+        ud.shadeTex = m.shadeMultiplyTexture ?? null;
+      }
+      m.map = dyeHair && ud.map ? lifted(ud.map) : (ud.map ?? null);
+      if ("shadeMultiplyTexture" in m) m.shadeMultiplyTexture = dyeHair && ud.shadeTex ? lifted(ud.shadeTex) : (ud.shadeTex ?? null);
+    }
+    // borrowed parts keep their donor's material names, so match both spellings
+    const skin = M.skin.some((k) => (k.length > 4 ? n.includes(k) : n === k)) || CLASSIC.skin.some((k) => n.includes(k));
+    const top = M.tops.some((k) => n.includes(k)) || CLASSIC.tops.some((k) => n.includes(k));
+    const hex = hair ? (dyeHair ? look.hair : null) : top ? (dyeTop ? look.coat : null) : skin ? look.skin : null;
     const c = hex ? new THREE.Color(hex) : ud.base.clone();
     if (skin) c.lerp(WHITE, 0.55);
     if (out) c.lerp(GREY, 0.55);
@@ -405,10 +504,23 @@ export default function VrmPerson(props: VrmPersonProps) {
   const { look, position, facing, seed } = props;
   const key = modelFor(look, seed);
   const [vrm, setVrm] = useState<VRM | null>(null);
+  const { hairFrom, outfitFrom, shoesFrom } = look;
   useEffect(() => {
     let alive = true;
     let got: VRM | null = null;
-    loadVrm(key).then(
+    const borrow = (
+      [
+        ["hair", hairFrom],
+        ["outfit", outfitFrom],
+        ["shoes", shoesFrom],
+      ] as const
+    ).filter((e): e is readonly [WardrobeSlot, ModelKey] => !!e[1] && e[1] !== key && !!VRM_WARDROBE[key] && !!VRM_WARDROBE[e[1]]);
+    loadVrm(key)
+      .then(async (v) => {
+        for (const [slot, from] of borrow) graft(v, await loadDonor(from), slot);
+        return v;
+      })
+      .then(
       (v) => {
         got = v;
         if (alive) setVrm(v);
@@ -421,7 +533,7 @@ export default function VrmPerson(props: VrmPersonProps) {
       setVrm(null);
       if (got) release(got);
     };
-  }, [key]);
+  }, [key, hairFrom, outfitFrom, shoesFrom]);
   useEffect(() => {
     if (vrm) tint(vrm, key, look, !!props.out);
   }, [vrm, key, look, props.out]);

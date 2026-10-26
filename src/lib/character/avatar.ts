@@ -29,11 +29,69 @@ export type EyeShape = "round" | "fox" | "puppy" | "sharp";
 export type FaceMark = "none" | "mole" | "freckles";
 /**
  * Which VRoid (VRM) body the 3D tables use — files in public/models/vrm. The model
- * fixes the face and hair cut; the colours below are tinted onto it.
+ * fixes the face; hair, outfit and shoes can come from another model of the
+ * classic family (`VRM_WARDROBE`), and colours are tinted on top.
  */
-export type VrmModel = "pixiv-sample" | "three-vrm-girl" | "seed-san";
+export type VrmModel =
+  | "pixiv-sample"
+  | "three-vrm-girl"
+  | "seed-san"
+  | "vroid-d"
+  | "vroid-d-darkness"
+  | "vroid-e"
+  | "vroid-f"
+  | "vroid-g"
+  | "vroid-hair-f"
+  | "vroid-shino"
+  | "vroid-hair-m"
+  | "vroid-fumiriya";
 /** The gender each model reads as (voice pitch, hair-colour list). */
-export const VRM_MODEL_GENDER: Record<VrmModel, PersonGender> = { "pixiv-sample": "f", "three-vrm-girl": "f", "seed-san": "m" };
+export const VRM_MODEL_GENDER: Record<VrmModel, PersonGender> = {
+  "pixiv-sample": "f",
+  "three-vrm-girl": "f",
+  "seed-san": "m",
+  "vroid-d": "f",
+  "vroid-d-darkness": "f",
+  "vroid-e": "f",
+  "vroid-f": "f",
+  "vroid-g": "f",
+  "vroid-hair-f": "f",
+  "vroid-shino": "f",
+  "vroid-hair-m": "m",
+  "vroid-fumiriya": "m",
+};
+/**
+ * The classic VRoid family (VRM 0.x exports sharing one `J_Bip_*` skeleton): their
+ * hair, outfit and shoes can be worn by each other. pixiv-sample (VRM 1.0, mirrored
+ * axes) and Seed-san (another rig) only ever wear their own. Each entry names what
+ * that model contributes when worn by someone else.
+ */
+export const VRM_WARDROBE: Partial<Record<VrmModel, { hair: string; outfit: string; shoes: string }>> = {
+  "three-vrm-girl": { hair: "흑발 생머리", outfit: "반팔 티·반바지", shoes: "흰 스니커즈" },
+  "vroid-d": { hair: "남색 단발 헤어핀", outfit: "교복 (빨간 리본)", shoes: "교복 로퍼" },
+  "vroid-d-darkness": { hair: "은발 엘프", outfit: "블랙 고스 코트", shoes: "블랙 부츠" },
+  "vroid-e": { hair: "밤색 단발", outfit: "크림 원피스", shoes: "메리제인" },
+  "vroid-f": { hair: "은발 사이버", outfit: "사이버 수트", shoes: "사이버 부츠" },
+  "vroid-g": { hair: "민트·핑크 롱 포니", outfit: "핑크 드레스", shoes: "드레스 슈즈" },
+  "vroid-hair-f": { hair: "고양이 귀 트윈테일", outfit: "화이트 재킷", shoes: "화이트 부츠" },
+  "vroid-shino": { hair: "남색 생머리", outfit: "교복 (파란 리본)", shoes: "로퍼" },
+  "vroid-hair-m": { hair: "흑발 숏컷", outfit: "화이트 후드", shoes: "스니커즈" },
+  "vroid-fumiriya": { hair: "주황 투블럭", outfit: "교복 (넥타이)", shoes: "로퍼" },
+};
+export type WardrobeSlot = "hair" | "outfit" | "shoes";
+/** Models whose hair / top take the look's colours unless told otherwise (`hairDye`/`outfitDye`): the original three, which presets colour-tint. */
+export const DYED_BY_DEFAULT: ReadonlySet<VrmModel> = new Set<VrmModel>(["pixiv-sample", "three-vrm-girl", "seed-san"]);
+/**
+ * What `model` may wear in each slot: any classic model's hair, and outfits/shoes
+ * cut for the same body (men's and women's VRoid bodies differ). Empty for models
+ * outside the classic family.
+ */
+export function wardrobeFor(model: VrmModel): Record<WardrobeSlot, VrmModel[]> {
+  if (!VRM_WARDROBE[model]) return { hair: [], outfit: [], shoes: [] };
+  const all = Object.keys(VRM_WARDROBE) as VrmModel[];
+  const same = all.filter((m) => VRM_MODEL_GENDER[m] === VRM_MODEL_GENDER[model]);
+  return { hair: all, outfit: same, shoes: same };
+}
 
 export interface PersonLook {
   gender: PersonGender;
@@ -54,10 +112,21 @@ export interface PersonLook {
   mark: FaceMark;
   /** VRM body; unset → chosen from gender and seat (VrmPerson). */
   model?: VrmModel;
+  /** Hair / outfit / shoes borrowed from another classic model (`wardrobeFor`); unset → the model's own. */
+  hairFrom?: VrmModel;
+  outfitFrom?: VrmModel;
+  shoesFrom?: VrmModel;
+  /**
+   * Tint the hair / the top with `hair` / `coat`. Unset: on for the original three
+   * models (their presets are colour-tinted), off for the classic family, whose
+   * hand-painted colours are the point.
+   */
+  hairDye?: boolean;
+  outfitDye?: boolean;
 }
 
 /** The part of a look a player can choose in their profile (+ which preset it started from, for the list's highlight). */
-export type AvatarProfile = Partial<Pick<PersonLook, "gender" | "skin" | "hair" | "hairStyle" | "coat" | "shirt" | "glasses" | "lip" | "build" | "face" | "eyes" | "mark" | "model">> & { presetId?: string };
+export type AvatarProfile = Partial<Pick<PersonLook, "gender" | "skin" | "hair" | "hairStyle" | "coat" | "shirt" | "glasses" | "lip" | "build" | "face" | "eyes" | "mark" | "model" | "hairFrom" | "outfitFrom" | "shoesFrom" | "hairDye" | "outfitDye">> & { presetId?: string };
 
 /** Bump when the stored shape changes incompatibly; sanitizeAvatar can then migrate by version. */
 export const AVATAR_VERSION = 1;
@@ -74,7 +143,20 @@ const opt = <T,>(id: T, label: string): Option<T> => ({ id, label });
  */
 export const AVATAR_OPTIONS = {
   gender: [opt<PersonGender>("f", "여자"), opt<PersonGender>("m", "남자")],
-  model: [opt<VrmModel>("pixiv-sample", "갈색 긴 머리"), opt<VrmModel>("three-vrm-girl", "흑발 생머리"), opt<VrmModel>("seed-san", "짧은 흑발")],
+  model: [
+    opt<VrmModel>("pixiv-sample", "갈색 긴 머리"),
+    opt<VrmModel>("three-vrm-girl", "흑발 생머리"),
+    opt<VrmModel>("vroid-d", "남색 단발 교복"),
+    opt<VrmModel>("vroid-shino", "남색 생머리 교복"),
+    opt<VrmModel>("vroid-e", "밤색 단발 꼬마"),
+    opt<VrmModel>("vroid-g", "민트·핑크 공주"),
+    opt<VrmModel>("vroid-hair-f", "고양이 귀 트윈테일"),
+    opt<VrmModel>("vroid-f", "은발 사이버"),
+    opt<VrmModel>("vroid-d-darkness", "은발 다크 엘프"),
+    opt<VrmModel>("seed-san", "짧은 흑발 탐험가"),
+    opt<VrmModel>("vroid-hair-m", "흑발 후드 소년"),
+    opt<VrmModel>("vroid-fumiriya", "주황 머리 교복"),
+  ],
   // K-pop idol cast: fair-to-warm East Asian skin
   skin: [opt("#fbe4d5", "밝은 톤"), opt("#f6d9c4", "핑크 톤"), opt("#f2cfb5", "웜 톤"), opt("#f9ddca", "아이보리"), opt("#ecc6a8", "건강한 톤"), opt("#f4d6c0", "내추럴")],
   // mostly natural black/brown with the odd idol dye
@@ -97,13 +179,15 @@ export const AVATAR_OPTIONS = {
   lip: [opt("#e05a6e", "로즈"), opt("#d8485e", "체리"), opt("#e8766e", "코랄"), opt("#c94a62", "말린 장미"), opt("#ef8a84", "피치"), opt("#d4607a", "핑크"), opt("#c27a6e", "내추럴")],
 } as const;
 
+type WardrobeKey = "hairFrom" | "outfitFrom" | "shoesFrom" | "hairDye" | "outfitDye";
+
 export interface CharacterPreset {
   id: string;
   /** Fictional stage name — never a real idol. */
   name: string;
   /** One-line concept shown under the card. */
   concept: string;
-  look: Required<Omit<AvatarProfile, "presetId">>;
+  look: Required<Omit<AvatarProfile, "presetId" | WardrobeKey>> & Pick<AvatarProfile, WardrobeKey>;
 }
 
 const preset = (id: string, name: string, concept: string, look: CharacterPreset["look"]): CharacterPreset => ({ id, name, concept, look });
@@ -127,6 +211,16 @@ export const CHARACTER_PRESETS: readonly CharacterPreset[] = [
   preset("hyun", "현", "차분한 브레인", { gender: "m", skin: "#f4d6c0", hair: "#1e1714", hairStyle: "comma", coat: "#c9b28f", shirt: "#ffffff", glasses: true, lip: "#c27a6e", build: "standard", face: "round", eyes: "round", mark: "none", model: "seed-san" }),
   preset("riku", "리쿠", "블루블랙 헤어", { gender: "m", skin: "#f9ddca", hair: "#2a3148", hairStyle: "curtain", coat: "#8fb6d9", shirt: "#eeeae2", glasses: false, lip: "#c27a6e", build: "broad", face: "vline", eyes: "sharp", mark: "none", model: "seed-san" }),
   preset("ian", "이안", "애쉬 브라운 막내", { gender: "m", skin: "#ecc6a8", hair: "#5a4c48", hairStyle: "dandy", coat: "#9fc8b4", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "petite", face: "round", eyes: "puppy", mark: "freckles", model: "seed-san" }),
+  // the classic VRoid cast: their own hand-painted hair and outfit colours (no dye)
+  preset("danbi", "단비", "남색 단발 교복", { gender: "f", skin: "#fbe4d5", hair: "#16110f", hairStyle: "straight", coat: "#2b3a5c", shirt: "#ffffff", glasses: false, lip: "#e05a6e", build: "petite", face: "oval", eyes: "sharp", mark: "none", model: "vroid-d" }),
+  preset("sua", "수아", "남색 생머리 교복", { gender: "f", skin: "#fbe4d5", hair: "#16110f", hairStyle: "straight", coat: "#2b3a5c", shirt: "#ffffff", glasses: false, lip: "#d4607a", build: "slim", face: "oval", eyes: "fox", mark: "mole", model: "vroid-shino" }),
+  preset("bomi", "보미", "밤색 단발 꼬마", { gender: "f", skin: "#f9ddca", hair: "#5e3c2c", hairStyle: "straight", coat: "#ece4d6", shirt: "#ffffff", glasses: false, lip: "#ef8a84", build: "petite", face: "round", eyes: "round", mark: "freckles", model: "vroid-e" }),
+  preset("ella", "엘라", "민트·핑크 공주", { gender: "f", skin: "#fbe4d5", hair: "#d7b48c", hairStyle: "pony", coat: "#e7b7c4", shirt: "#fdf1f4", glasses: false, lip: "#e8766e", build: "slim", face: "round", eyes: "puppy", mark: "none", model: "vroid-g" }),
+  preset("nabi", "나비", "고양이 귀 트윈테일", { gender: "f", skin: "#f6d9c4", hair: "#16110f", hairStyle: "pony", coat: "#ece4d6", shirt: "#ffffff", glasses: false, lip: "#d8485e", build: "petite", face: "vline", eyes: "fox", mark: "none", model: "vroid-hair-f" }),
+  preset("vita", "비타", "은발 사이버", { gender: "f", skin: "#fbe4d5", hair: "#d9d6de", hairStyle: "hush", coat: "#8fb6d9", shirt: "#1f1f24", glasses: false, lip: "#c94a62", build: "standard", face: "square", eyes: "round", mark: "none", model: "vroid-f" }),
+  preset("ria", "리아", "은발 다크 엘프", { gender: "f", skin: "#fbe4d5", hair: "#d9d6de", hairStyle: "straight", coat: "#1c1c22", shirt: "#1f1f24", glasses: false, lip: "#c94a62", build: "slim", face: "square", eyes: "fox", mark: "mole", model: "vroid-d-darkness" }),
+  preset("geonu", "건우", "흑발 후드 소년", { gender: "m", skin: "#f6d9c4", hair: "#121010", hairStyle: "comma", coat: "#ece4d6", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "slim", face: "oval", eyes: "round", mark: "none", model: "vroid-hair-m" }),
+  preset("haechan", "해찬", "주황 머리 교복", { gender: "m", skin: "#f9ddca", hair: "#6b4a3a", hairStyle: "dandy", coat: "#2b3a5c", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "standard", face: "vline", eyes: "puppy", mark: "freckles", model: "vroid-fumiriya" }),
 ];
 
 const STYLES_F: HairStyle[] = ["straight", "hush", "pony"];
@@ -190,7 +284,10 @@ export function sanitizeAvatar(raw: unknown): AvatarProfile {
     const v = r[k];
     if (typeof v === "string" && (ids(AVATAR_OPTIONS[k]) as readonly string[]).includes(v)) (out as Record<string, string>)[k] = v;
   }
-  if (typeof r.model === "string" && (ids(AVATAR_OPTIONS.model) as readonly string[]).includes(r.model)) out.model = r.model as VrmModel;
+  const isModel = (v: unknown): v is VrmModel => typeof v === "string" && (ids(AVATAR_OPTIONS.model) as readonly string[]).includes(v);
+  if (isModel(r.model)) out.model = r.model;
+  for (const k of ["hairFrom", "outfitFrom", "shoesFrom"] as const) if (isModel(r[k]) && VRM_WARDROBE[r[k] as VrmModel]) out[k] = r[k] as VrmModel;
+  for (const k of ["hairDye", "outfitDye"] as const) if (typeof r[k] === "boolean") out[k] = r[k] as boolean;
   if (typeof r.presetId === "string" && CHARACTER_PRESETS.some((c) => c.id === r.presetId)) out.presetId = r.presetId;
   return out;
 }
@@ -206,6 +303,17 @@ export function resolveLook(seat: number, hats?: readonly HatKind[], profile?: u
   const p = sanitizeAvatar(profile);
   // a chosen VRM body decides how the character reads (older profiles may lack gender)
   if (p.model && !p.gender) p.gender = VRM_MODEL_GENDER[p.model];
+  // borrowed parts only where they fit this body (a stale pick after a body change is dropped)
+  if (p.model) {
+    const w = wardrobeFor(p.model);
+    if (p.hairFrom && !w.hair.includes(p.hairFrom)) delete p.hairFrom;
+    if (p.outfitFrom && !w.outfit.includes(p.outfitFrom)) delete p.outfitFrom;
+    if (p.shoesFrom && !w.shoes.includes(p.shoesFrom)) delete p.shoesFrom;
+  } else {
+    delete p.hairFrom;
+    delete p.outfitFrom;
+    delete p.shoesFrom;
+  }
   if (p.gender && p.gender !== base.gender) {
     const other = defaultLook(seat + 1, hats);
     base.hairStyle = other.hairStyle;

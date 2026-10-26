@@ -93,3 +93,25 @@ describe("VRM model choice", () => {
   });
 });
 
+describe("VRoid wardrobe", () => {
+  it("sanitize keeps wardrobe picks from the classic family only", async () => {
+    expect(sanitizeAvatar({ hairFrom: "vroid-g", outfitFrom: "pixiv-sample", shoesFrom: "nope", hairDye: true })).toEqual({ hairFrom: "vroid-g", hairDye: true });
+  });
+
+  it("hair crosses genders, outfits and shoes don't, and the original models wear only their own", async () => {
+    const { wardrobeFor } = await import("./avatar");
+    expect(wardrobeFor("vroid-d").hair).toContain("vroid-hair-m");
+    expect(wardrobeFor("vroid-d").outfit).not.toContain("vroid-fumiriya");
+    expect(wardrobeFor("vroid-hair-m").shoes).toEqual(["vroid-hair-m", "vroid-fumiriya"]);
+    expect(wardrobeFor("pixiv-sample")).toEqual({ hair: [], outfit: [], shoes: [] });
+    expect(wardrobeFor("seed-san").hair).toEqual([]);
+  });
+
+  it("resolveLook drops a borrowed part that doesn't fit the chosen body", () => {
+    const l = resolveLook(0, undefined, { model: "vroid-fumiriya", outfitFrom: "vroid-g", hairFrom: "vroid-g" });
+    expect(l.outfitFrom).toBeUndefined();
+    expect(l.hairFrom).toBe("vroid-g");
+    expect(resolveLook(0, undefined, { model: "seed-san", hairFrom: "vroid-g" }).hairFrom).toBeUndefined();
+  });
+});
+

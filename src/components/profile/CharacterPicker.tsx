@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
-import { AVATAR_OPTIONS, CHARACTER_PRESETS, resolveLook, VRM_MODEL_GENDER, type AvatarProfile, type PersonLook, type VrmModel } from "@/lib/character/avatar";
+import { AVATAR_OPTIONS, CHARACTER_PRESETS, DYED_BY_DEFAULT, resolveLook, VRM_MODEL_GENDER, VRM_WARDROBE, wardrobeFor, type AvatarProfile, type PersonLook, type VrmModel, type WardrobeSlot } from "@/lib/character/avatar";
 import { useMyCharacter } from "@/lib/character/myCharacter";
 
 const CharacterPreview3D = dynamic(() => import("./CharacterPreview3D"), {
@@ -31,6 +31,11 @@ function toProfile(l: PersonLook): AvatarProfile {
     eyes: l.eyes,
     mark: l.mark,
     model: l.model,
+    hairFrom: l.hairFrom,
+    outfitFrom: l.outfitFrom,
+    shoesFrom: l.shoesFrom,
+    hairDye: l.hairDye,
+    outfitDye: l.outfitDye,
   };
 }
 
@@ -38,7 +43,11 @@ const PRESET_THUMBS = CHARACTER_PRESETS.map((c) => ({ key: c.id, look: c.look })
 
 /** The model the preview seat would get with no choice made (seat 0 is a woman → the pixiv sample). */
 const DEFAULT_MODEL: VrmModel = "pixiv-sample";
-const MODEL_ICON: Record<VrmModel, string> = { "pixiv-sample": "👩", "three-vrm-girl": "👩", "seed-san": "👨" };
+const SLOT_ROWS: [WardrobeSlot, string, "hairFrom" | "outfitFrom" | "shoesFrom"][] = [
+  ["hair", "💇 헤어스타일", "hairFrom"],
+  ["outfit", "👗 옷", "outfitFrom"],
+  ["shoes", "👟 신발", "shoesFrom"],
+];
 
 /**
  * 3D character picker (profile → 캐릭터 선택): pick one of the listed
@@ -58,7 +67,8 @@ export default function CharacterPicker() {
     void init();
   }, [init]);
 
-  const look = resolveLook(PREVIEW_SEAT, ["none"], character);
+  const resolved = resolveLook(PREVIEW_SEAT, ["none"], character);
+  const look: PersonLook = { ...resolved, model: resolved.model ?? DEFAULT_MODEL };
   // a manual tweak means it's no longer exactly that preset
   const update = (patch: AvatarProfile) => save({ ...toProfile(look), ...patch });
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
@@ -67,9 +77,13 @@ export default function CharacterPicker() {
   const setModel = (m: VrmModel) => {
     if (m === model) return;
     const g = VRM_MODEL_GENDER[m];
-    // switching between a woman's and a man's body starts from that gender's first hair colour
-    update({ model: m, gender: g, ...(g !== look.gender ? { hair: (g === "f" ? AVATAR_OPTIONS.hairF : AVATAR_OPTIONS.hairM)[0].id } : {}) });
+    // switching between a woman's and a man's body starts from that gender's first hair colour;
+    // borrowed parts that don't fit the new body are dropped by resolveLook, and dyeing resets
+    update({ model: m, gender: g, hairDye: undefined, outfitDye: undefined, ...(g !== look.gender ? { hair: (g === "f" ? AVATAR_OPTIONS.hairF : AVATAR_OPTIONS.hairM)[0].id } : {}) });
   };
+  const wardrobe = wardrobeFor(model);
+  const hairDye = look.hairDye ?? DYED_BY_DEFAULT.has(model);
+  const outfitDye = look.outfitDye ?? DYED_BY_DEFAULT.has(model);
   const hairs = look.gender === "f" ? AVATAR_OPTIONS.hairF : AVATAR_OPTIONS.hairM;
 
   return (
@@ -121,26 +135,50 @@ export default function CharacterPicker() {
         <summary className="cursor-pointer select-none text-xs font-semibold text-white/70 light:text-slate-600">✏️ 직접 꾸미기</summary>
         <div className="mt-2 flex flex-col gap-3">
 
-      <Row label="캐릭터">
+      <Row label="캐릭터 (얼굴·몸)">
         {AVATAR_OPTIONS.model.map((o) => (
           <Chip key={o.id} selected={model === o.id} onClick={() => setModel(o.id)}>
-            {MODEL_ICON[o.id]} {o.label}
+            {VRM_MODEL_GENDER[o.id] === "f" ? "👩" : "👨"} {o.label}
           </Chip>
         ))}
       </Row>
+      {wardrobe.hair.length > 0 ? (
+        SLOT_ROWS.map(([slot, label, field]) => (
+          <Row key={slot} label={label}>
+            <Chip selected={!look[field] || look[field] === model} onClick={() => update({ [field]: undefined })}>
+              기본 ({VRM_WARDROBE[model]![slot]})
+            </Chip>
+            {wardrobe[slot]
+              .filter((m) => m !== model)
+              .map((m) => (
+                <Chip key={m} selected={look[field] === m} onClick={() => update({ [field]: m })}>
+                  {VRM_WARDROBE[m]![slot]}
+                </Chip>
+              ))}
+          </Row>
+        ))
+      ) : (
+        <p className="text-[11px] text-white/45 light:text-slate-500">이 캐릭터는 헤어·옷·신발을 바꿀 수 없어요 (다른 캐릭터들과 뼈대가 달라요). 색은 바꿀 수 있어요.</p>
+      )}
       <Row label="머리색">
+        <Chip selected={!hairDye} onClick={() => update({ hairDye: false })}>
+          원래 색
+        </Chip>
         {hairs.map((o) => (
-          <Swatch key={o.id} color={o.id} label={o.label} selected={look.hair === o.id} onClick={() => update({ hair: o.id })} />
+          <Swatch key={o.id} color={o.id} label={o.label} selected={hairDye && look.hair === o.id} onClick={() => update({ hair: o.id, hairDye: true })} />
+        ))}
+      </Row>
+      <Row label="옷 색 (상의)">
+        <Chip selected={!outfitDye} onClick={() => update({ outfitDye: false })}>
+          원래 색
+        </Chip>
+        {AVATAR_OPTIONS.coat.map((o) => (
+          <Swatch key={o.id} color={o.id} label={o.label} selected={outfitDye && look.coat === o.id} onClick={() => update({ coat: o.id, outfitDye: true })} />
         ))}
       </Row>
       <Row label="피부톤">
         {AVATAR_OPTIONS.skin.map((o) => (
           <Swatch key={o.id} color={o.id} label={o.label} selected={look.skin === o.id} onClick={() => update({ skin: o.id })} />
-        ))}
-      </Row>
-      <Row label="옷 색">
-        {AVATAR_OPTIONS.coat.map((o) => (
-          <Swatch key={o.id} color={o.id} label={o.label} selected={look.coat === o.id} onClick={() => update({ coat: o.id })} />
         ))}
       </Row>
         </div>

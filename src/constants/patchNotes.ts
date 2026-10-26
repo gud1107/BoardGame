@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.102.0",
+    releaseDate: "2026-10-27",
+    title: "👗 VRoid 캐릭터 12명 + 헤어·옷·신발 바꿔 입기",
+    changes: [
+      { game: "common", type: "FEAT", desc: "👗 3D 캐릭터가 12명으로 — 교복·고스 코트·사이버 수트·드레스 등, 클래식 VRoid 캐릭터끼리 헤어·옷·신발을 바꿔 입을 수 있어요" },
+      { game: "common", type: "FEAT", desc: "🎨 머리·상의는 '원래 색' 또는 원하는 색으로 — 프로필 캐릭터 목록에 새 캐릭터 9명 추가" },
+    ],
+  },
+  {
     version: "v1.101.0",
     releaseDate: "2026-10-27",
     title: "🧑‍🎤 프로필에서 VRoid 캐릭터 고르기 + 3D 렉 줄이기",

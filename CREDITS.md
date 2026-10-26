@@ -108,6 +108,29 @@ Wikimedia Commons의 CC0/퍼블릭 도메인 파일(최대 1280×1400 축소본)
 | `three-vrm-girl.vrm` | three-vrm-girl | pixiv Inc. | VRoid Hub 라이선스 (otherPermissionUrl) | 법인 포함 허용 | 허용 | 불필요 | https://github.com/pixiv/three-vrm/tree/v0.6.11/packages/three-vrm/examples/models |
 | `seed-san.vrm` | Seed-san | VirtualCast, Inc. | VRM Public License 1.0 | 법인 포함 허용 | 허용(재배포 포함) | **필요** | https://github.com/vrm-c/vrm-specification/tree/master/samples/Seed-san |
 
+
+### VRoid 클래식 캐스트 (2026-10-27 추가)
+
+pixiv VRoid 프로젝트가 VRoid Studio 초기(0.x) 버전 샘플로 공개한 모델입니다. 각 파일의 VRM 메타 정보에
+VRoid Hub 라이선스(`corporate_commercial_use=allow`, `modification=allow`, `redistribution=allow`, `credit=unnecessary`)가
+들어 있고, Base/Hair 샘플과 D_Darkness는 `licenseName: CC0`까지 적혀 있습니다(2026-10-27 파일에서 직접 확인).
+받은 곳: https://opengameart.org/content/vroid-studio-cc0-models (저작자 표기: VRoidプロジェクト).
+텍스처 해상도 축소 + 표정용 법선 데이터만 지웠고(형태·표정·뼈대는 그대로) 파일 이름은 아래처럼 바꿨습니다.
+
+| 파일 | 원본 | 원래 이름 |
+|---|---|---|
+| `vroid-d.vrm` | AvatarSample_D | 千駄ヶ谷渋 |
+| `vroid-d-darkness.vrm` | AvatarSample_D_Darkness | AvatarSample_D |
+| `vroid-e.vrm` | AvatarSample_E | ビビ |
+| `vroid-f.vrm` | AvatarSample_F | ヴィータ |
+| `vroid-g.vrm` | AvatarSample_G | ヴィクトリア・ルービン |
+| `vroid-hair-f.vrm` | HairSample_Female | HairSample_Female |
+| `vroid-shino.vrm` | Sendagaya Shino | 千駄ヶ谷篠 |
+| `vroid-hair-m.vrm` | HairSample_Male | HairSample_Male |
+| `vroid-fumiriya.vrm` | Sakurada Fumiriya | 桜田史利矢 |
+
+이 9개와 `three-vrm-girl`은 같은 뼈대(`J_Bip_*`)를 써서, 게임 안에서 헤어·옷·신발을 서로 바꿔 입힐 수 있습니다(`VRM_WARDROBE`).
+
 - **Seed-san은 출처 표기가 필요합니다.** 2026-10-27 패치노트(v1.100.0)와 이 문서에 "Seed-san © VirtualCast, Inc."로 표기했습니다.
 - 로봇 팔(`robo_arm` 메시)은 보드게임 테이블에 맞지 않아 화면에서만 숨깁니다(파일은 그대로).
 

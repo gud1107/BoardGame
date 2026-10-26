@@ -18,7 +18,7 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
  */
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
   "2026-10-27": {
-    common: "🧑‍🎤 3D 인물이 VRoid 캐릭터로 — 프로필에서 고르기, 🙌 손이 몸을 뚫지 않게, ⚡ 렉 줄이기",
+    common: "🧑‍🎤 3D 인물이 VRoid 캐릭터 12명으로 — 👗 헤어·옷·신발 바꿔 입기, 🙌 자연스러운 손, ⚡ 렉 줄이기",
   },
   "2026-10-25": {
     common: "💡 3D 테이블 조명·선명도, 🃏 손패 쥐기·🎭 성격·🗣️ 감정 음성, 💬 말한 사람 표시, 🏛️ 고풍스러운 배경",
