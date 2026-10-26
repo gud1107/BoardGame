@@ -1001,13 +1001,14 @@ function PoliceUnit({ at, index, active }: { at: Point; index: number; active: b
         )}
         {index !== 2 && (
           // a bobbing marker that stays on top of the buildings, so a ground unit is never lost behind one
-          <mesh ref={beacon} position={[0, 1.75, 0]} rotation-x={Math.PI} renderOrder={21}>
-            <coneGeometry args={[0.17, 0.3, 4]} />
+          // drawn just under the unit's tag (renderOrder 20) so the cone never covers the "🚓1" text
+          <mesh ref={beacon} position={[0, 1.75, 0]} rotation-x={Math.PI} renderOrder={19}>
+            <coneGeometry args={[0.255, 0.45, 4]} />
             <meshBasicMaterial color={style.hex} depthTest={false} depthWrite={false} transparent />
           </mesh>
         )}
         {index === 2 && <HeliModel color={style.hex} rotor={rotor} />}
-        <Tag text={`${style.icon}${index + 1}`} color={style.hex} position={[0, index === 2 ? 0.75 : index === 1 ? 2.45 : 1.9, 0]} height={active ? 0.46 : 0.38} front={active || index !== 2} />
+        <Tag text={`${style.icon}${index + 1}`} color={style.hex} position={[0, index === 2 ? 0.95 : index === 1 ? 2.7 : 2.1, 0]} height={active ? 0.69 : 0.57} front={active || index !== 2} />
       </group>
     </>
   );
