@@ -25,45 +25,47 @@ export function cellLabel(cell: Cell): string {
 }
 
 /**
- * What each of the 25 buildings is (2026-10-27, user request: "은행, 우체국처럼 실제 건물로").
- * Purely cosmetic — the rules only ever see the cell number. `kind` picks the 3D storefront:
- * classic = columns, office = plain sign, shop = awning + display window, cross = roof red cross,
- * garage = big bay door, clock = facade clock + flag.
+ * What each of the 25 buildings is (2026-10-27, user request: "은행, 우체국처럼 실제 건물로", then
+ * "간판 글씨 말고 외형으로"). Purely cosmetic — the rules only ever see the cell number. Each type has
+ * its own 3D silhouette (`shape`, built in three/landmarks.tsx); `sign` is its accent colour.
  */
-export type BuildingKind = "classic" | "office" | "shop" | "cross" | "garage" | "clock";
+export type BuildingShape =
+  | "bank" | "postOffice" | "hospital" | "convenience" | "cafe" | "school" | "jewelry" | "fireStation"
+  | "bakery" | "museum" | "hotel" | "pharmacy" | "cinema" | "mart" | "library" | "florist" | "cityHall"
+  | "restaurant" | "gym" | "salon" | "arcade" | "laundry" | "chicken" | "bookstore" | "toyStore";
 export interface BuildingType {
   name: string;
   icon: string;
   wall: string;
   sign: string;
-  kind: BuildingKind;
+  shape: BuildingShape;
 }
 const BUILDING_LIST: BuildingType[] = [
-  { name: "은행", icon: "🏦", wall: "#64748b", sign: "#b45309", kind: "classic" },
-  { name: "우체국", icon: "📮", wall: "#7f1d1d", sign: "#dc2626", kind: "office" },
-  { name: "병원", icon: "🏥", wall: "#94a3b8", sign: "#0369a1", kind: "cross" },
-  { name: "편의점", icon: "🏪", wall: "#475569", sign: "#16a34a", kind: "shop" },
-  { name: "카페", icon: "☕", wall: "#57423a", sign: "#78350f", kind: "shop" },
-  { name: "학교", icon: "🏫", wall: "#7c5a3a", sign: "#1d4ed8", kind: "clock" },
-  { name: "보석상", icon: "💎", wall: "#3b3561", sign: "#7c3aed", kind: "shop" },
-  { name: "소방서", icon: "🚒", wall: "#57534e", sign: "#b91c1c", kind: "garage" },
-  { name: "빵집", icon: "🍞", wall: "#6b4f3a", sign: "#c2410c", kind: "shop" },
-  { name: "박물관", icon: "🏛️", wall: "#78716c", sign: "#57534e", kind: "classic" },
-  { name: "호텔", icon: "🏨", wall: "#3f3f5a", sign: "#be185d", kind: "office" },
-  { name: "약국", icon: "💊", wall: "#3d5a50", sign: "#059669", kind: "shop" },
-  { name: "영화관", icon: "🎬", wall: "#2e1065", sign: "#c026d3", kind: "office" },
-  { name: "마트", icon: "🛒", wall: "#334155", sign: "#ea580c", kind: "shop" },
-  { name: "도서관", icon: "📚", wall: "#6b5b4b", sign: "#0f766e", kind: "classic" },
-  { name: "꽃집", icon: "🌸", wall: "#5b4b6b", sign: "#db2777", kind: "shop" },
-  { name: "시청", icon: "🏢", wall: "#6b7280", sign: "#1e40af", kind: "classic" },
-  { name: "식당", icon: "🍜", wall: "#5a3e2b", sign: "#dc2626", kind: "shop" },
-  { name: "헬스장", icon: "💪", wall: "#1f3b4d", sign: "#0284c7", kind: "office" },
-  { name: "미용실", icon: "💇", wall: "#4b5563", sign: "#9333ea", kind: "shop" },
-  { name: "오락실", icon: "🎮", wall: "#312e81", sign: "#4f46e5", kind: "office" },
-  { name: "세탁소", icon: "🧺", wall: "#3f5a6b", sign: "#0891b2", kind: "shop" },
-  { name: "치킨집", icon: "🍗", wall: "#5c4033", sign: "#d97706", kind: "shop" },
-  { name: "서점", icon: "📖", wall: "#44403c", sign: "#15803d", kind: "shop" },
-  { name: "완구점", icon: "🧸", wall: "#4c3d5c", sign: "#e11d48", kind: "shop" },
+  { name: "은행", icon: "🏦", wall: "#64748b", sign: "#b45309", shape: "bank" },
+  { name: "우체국", icon: "📮", wall: "#7f1d1d", sign: "#dc2626", shape: "postOffice" },
+  { name: "병원", icon: "🏥", wall: "#94a3b8", sign: "#0369a1", shape: "hospital" },
+  { name: "편의점", icon: "🏪", wall: "#475569", sign: "#16a34a", shape: "convenience" },
+  { name: "카페", icon: "☕", wall: "#57423a", sign: "#78350f", shape: "cafe" },
+  { name: "학교", icon: "🏫", wall: "#7c5a3a", sign: "#1d4ed8", shape: "school" },
+  { name: "보석상", icon: "💎", wall: "#3b3561", sign: "#7c3aed", shape: "jewelry" },
+  { name: "소방서", icon: "🚒", wall: "#57534e", sign: "#b91c1c", shape: "fireStation" },
+  { name: "빵집", icon: "🍞", wall: "#6b4f3a", sign: "#c2410c", shape: "bakery" },
+  { name: "박물관", icon: "🏛️", wall: "#78716c", sign: "#57534e", shape: "museum" },
+  { name: "호텔", icon: "🏨", wall: "#3f3f5a", sign: "#be185d", shape: "hotel" },
+  { name: "약국", icon: "💊", wall: "#3d5a50", sign: "#059669", shape: "pharmacy" },
+  { name: "영화관", icon: "🎬", wall: "#2e1065", sign: "#c026d3", shape: "cinema" },
+  { name: "마트", icon: "🛒", wall: "#334155", sign: "#ea580c", shape: "mart" },
+  { name: "도서관", icon: "📚", wall: "#6b5b4b", sign: "#0f766e", shape: "library" },
+  { name: "꽃집", icon: "🌸", wall: "#5b4b6b", sign: "#db2777", shape: "florist" },
+  { name: "시청", icon: "🏢", wall: "#6b7280", sign: "#1e40af", shape: "cityHall" },
+  { name: "식당", icon: "🍜", wall: "#5a3e2b", sign: "#dc2626", shape: "restaurant" },
+  { name: "헬스장", icon: "💪", wall: "#1f3b4d", sign: "#0284c7", shape: "gym" },
+  { name: "미용실", icon: "💇", wall: "#4b5563", sign: "#9333ea", shape: "salon" },
+  { name: "오락실", icon: "🎮", wall: "#312e81", sign: "#4f46e5", shape: "arcade" },
+  { name: "세탁소", icon: "🧺", wall: "#3f5a6b", sign: "#0891b2", shape: "laundry" },
+  { name: "치킨집", icon: "🍗", wall: "#5c4033", sign: "#d97706", shape: "chicken" },
+  { name: "서점", icon: "📖", wall: "#44403c", sign: "#15803d", shape: "bookstore" },
+  { name: "완구점", icon: "🧸", wall: "#4c3d5c", sign: "#e11d48", shape: "toyStore" },
 ];
 /** 7 is coprime with 25, so every building appears exactly once and similar kinds spread out. */
 export function buildingType(cell: Cell): BuildingType {
