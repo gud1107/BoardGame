@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.100.2",
+    releaseDate: "2026-10-27",
+    title: "🙌 3D 인물 손이 얼굴·몸을 뚫지 않게",
+    changes: [
+      { game: "common", type: "IMPROVE", desc: "🙌 3D 인물의 손이 얼굴·머리·몸통을 뚫고 지나가지 않아요 — 환호는 V자로, 놀랄 땐 두 손이 얼굴을 감싸듯" },
+      { game: "telepathy", type: "FIX", desc: "🤫 카드를 낼 사람이 손을 들 때 '잠깐만요, 저 할게요' 같은 말을 하지 않아요 — 말 없이 하는 게임이니까요" },
+    ],
+  },
+  {
     version: "v1.100.1",
     releaseDate: "2026-10-27",
     title: "🥒 오이 다섯 개도 VRoid 캐릭터로",

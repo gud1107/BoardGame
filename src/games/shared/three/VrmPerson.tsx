@@ -147,6 +147,101 @@ const hash = (a: number, b: number) => {
  * resting shoulders swing in a little less and the elbows bend a little more.
  */
 const TUCK = { shoulder: 0.32, elbow: -0.45 };
+/**
+ * Raised-arm moods splay the cartoon's short arms inward above its big head; on adult
+ * proportions they'd cross over the scalp, so those shoulders open outward instead
+ * (pose channels 8 = left shoulder z, 12 = right shoulder z).
+ */
+const VRM_POSES: Record<PersonMood, number[]> = (() => {
+  const out = Object.fromEntries(Object.entries(TABLE_POSES).map(([k, v]) => [k, [...v]])) as Record<PersonMood, number[]>;
+  out.cheer[8] = 0.3;
+  out.cheer[12] = -0.3;
+  out.raise[12] = -0.18;
+  // hands-to-cheeks: keep the gesture but frame the face instead of covering it
+  out.shock[8] = 0.5;
+  out.shock[12] = -0.5;
+  return out;
+})();
+
+/**
+ * Self-collision in the model's own (unscaled) units: a head sphere and a torso capsule.
+ * Hands and forearms that end up inside them — any mood, gesture or idle drift — are
+ * pushed out by turning the upper arm, the way a person moves the whole arm.
+ */
+const BODY_COLLIDERS = { headR: 0.13, headUp: 0.08, torsoR: 0.125, handR: 0.035 };
+const tA = new THREE.Vector3();
+const tB = new THREE.Vector3();
+const tC = new THREE.Vector3();
+const tN = new THREE.Vector3();
+const tAxis = new THREE.Vector3();
+const tQ = new THREE.Quaternion();
+const tParent = new THREE.Quaternion();
+
+/** Deepest penetration of point `p` (radius `pr`) into the head sphere / torso capsule; writes the outward normal to `n`. */
+function penetration(p: THREE.Vector3, pr: number, head: THREE.Vector3, headR: number, t0: THREE.Vector3, t1: THREE.Vector3, torsoR: number, n: THREE.Vector3): number {
+  let best = 0;
+  const dHead = p.distanceTo(head);
+  if (headR + pr - dHead > best) {
+    best = headR + pr - dHead;
+    n.subVectors(p, head).normalize();
+  }
+  // closest point on the spine segment
+  tC.subVectors(t1, t0);
+  const k = Math.max(0, Math.min(1, tC.dot(tB.subVectors(p, t0)) / tC.lengthSq()));
+  tC.multiplyScalar(k).add(t0);
+  const dTorso = p.distanceTo(tC);
+  if (torsoR + pr - dTorso > best) {
+    best = torsoR + pr - dTorso;
+    n.subVectors(p, tC).normalize();
+  }
+  return best;
+}
+
+function resolveArmCollisions(vrm: VRM, scale: number) {
+  const h = vrm.humanoid;
+  const node = (b: VRMHumanBoneName) => h.getNormalizedBoneNode(b);
+  const headBone = node("head");
+  const hips = node("hips");
+  const top = node("upperChest") ?? node("chest");
+  if (!headBone || !hips || !top) return;
+  h.normalizedHumanBonesRoot.updateWorldMatrix(true, true);
+  const head = headBone.localToWorld(new THREE.Vector3(0, BODY_COLLIDERS.headUp, 0));
+  const t0 = hips.getWorldPosition(new THREE.Vector3());
+  const t1 = top.getWorldPosition(new THREE.Vector3());
+  const headR = BODY_COLLIDERS.headR * scale, torsoR = BODY_COLLIDERS.torsoR * scale, pr = BODY_COLLIDERS.handR * scale;
+  for (const side of ["left", "right"] as const) {
+    const upper = node(`${side}UpperArm`), lower = node(`${side}LowerArm`), hand = node(`${side}Hand`);
+    if (!upper || !lower || !hand) continue;
+    for (let it = 0; it < 4; it++) {
+      const shoulder = upper.getWorldPosition(tA);
+      const pHand = hand.getWorldPosition(new THREE.Vector3());
+      const pFore = lower.getWorldPosition(new THREE.Vector3()).lerp(pHand, 0.5);
+      const pTip = hand.localToWorld(new THREE.Vector3((side === "left" ? 1 : -1) * 0.07 * (vrm.meta.metaVersion === "0" ? -1 : 1), 0, 0));
+      let worst = 0;
+      let at: THREE.Vector3 | null = null;
+      const n = new THREE.Vector3();
+      for (const p of [pHand, pTip, pFore]) {
+        const d = penetration(p, pr, head, headR, t0, t1, torsoR, tN);
+        if (d > worst) {
+          worst = d;
+          at = p;
+          n.copy(tN);
+        }
+      }
+      if (!at) break;
+      const lever = tB.subVectors(at, shoulder);
+      const len = lever.length();
+      tAxis.crossVectors(lever, n);
+      if (tAxis.lengthSq() < 1e-8) tAxis.set(0, 1, 0);
+      tAxis.normalize();
+      // rotate the upper arm in world space by just enough to clear, then back into its parent's frame
+      tQ.setFromAxisAngle(tAxis, (worst + 0.004 * scale) / len);
+      upper.parent!.getWorldQuaternion(tParent);
+      upper.quaternion.premultiply(tParent.clone().invert().multiply(tQ).multiply(tParent));
+      upper.updateWorldMatrix(false, true);
+    }
+  }
+}
 
 export default function VrmPerson(props: SeatedPersonProps) {
   const { look, position, facing, seed } = props;
@@ -201,7 +296,7 @@ export default function VrmPerson(props: SeatedPersonProps) {
       }
     }
     const holding = !!props.held;
-    const pose = holding ? holdPose(TABLE_POSES[mood], mood) : TABLE_POSES[mood];
+    const pose = holding ? holdPose(VRM_POSES[mood], mood) : VRM_POSES[mood];
     const p = stepMotion(c.m, mood, pose, now, dt, seed);
     if (heldRef.current) heldRef.current.visible = holdsInMood(mood);
 
@@ -260,6 +355,8 @@ export default function VrmPerson(props: SeatedPersonProps) {
     };
     arm("l", 6, p[9], p[14], p[15], p[18], 0);
     arm("r", 10, p[13], p[16], p[17], p[19], mood === "point" ? c.look[0] * 0.9 : 0);
+
+    resolveArmCollisions(vrm, fit.scale);
 
     // face: the FACES table → VRM preset expressions
     const f = FACES[mood];

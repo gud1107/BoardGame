@@ -139,6 +139,8 @@ export interface TableSceneProps {
   ringColor?: string;
   /** 0..1 multiplier for the hanging lamp (eases toward it), e.g. dimmed at night. */
   lampDim?: number;
+  /** Moods that stay silent at this table (no voice line, no caption) — e.g. 텔레파시 bans talking. */
+  quietMoods?: readonly PersonMood[];
 }
 
 // ---------------------------------------------------------------------------
@@ -324,7 +326,7 @@ function useSelect(onSelect: (() => void) | null | undefined) {
   };
 }
 
-function SeatView({ s, geo, theme, lowDetail, ringColor }: { s: TableSeat; geo: TableGeo; theme: TableTheme; lowDetail: boolean; ringColor: string }) {
+function SeatView({ s, geo, theme, lowDetail, ringColor, quietMoods }: { s: TableSeat; geo: TableGeo; theme: TableTheme; lowDetail: boolean; ringColor: string; quietMoods?: readonly PersonMood[] }) {
   const angle = geo.angleOf(s.seat);
   const isViewer = s.seat === geo.viewerSeat;
   const color = s.color ?? theme.seatColors[s.seat % theme.seatColors.length];
@@ -351,7 +353,7 @@ function SeatView({ s, geo, theme, lowDetail, ringColor }: { s: TableSeat; geo: 
   useEffect(() => {
     if (prevMood.current === s.mood) return;
     prevMood.current = s.mood;
-    if (isViewer || s.out) return;
+    if (isViewer || s.out || quietMoods?.includes(s.mood)) return;
     const now = performance.now();
     if (now - lastLine.current < 2500) return;
     const text = nextEmotionLine(s.seat, s.mood, personaFor(s.seat));
@@ -363,7 +365,7 @@ function SeatView({ s, geo, theme, lowDetail, ringColor }: { s: TableSeat; geo: 
     setEmote({ text, key });
     const t = window.setTimeout(() => setEmote((e) => (e?.key === key ? null : e)), 2400);
     return () => window.clearTimeout(t);
-  }, [s.mood, s.seat, s.out, isViewer, look.gender]);
+  }, [s.mood, s.seat, s.out, isViewer, look.gender, quietMoods]);
   // a game bubble always wins the spot above the head
   const shownBubble = useMemo(() => s.bubble ?? (emote ? { text: emote.text, style: EMOTE_STYLE, key: emote.key, width: 0.8 } : null), [s.bubble, emote]);
   // every bubble carries its speaker: a name tab in the seat colour (and a matching border)
@@ -502,7 +504,7 @@ function SceneContents(props: TableSceneProps) {
       <Table tableR={geo.tableR} theme={theme} lowDetail={lowDetail} />
       <group position={[0, TABLE_Y, 0]}>{props.center}</group>
       {props.seats.map((s) => (
-        <SeatView key={s.seat} s={s} geo={geo} theme={theme} lowDetail={lowDetail} ringColor={props.ringColor ?? "#fbbf24"} />
+        <SeatView key={s.seat} s={s} geo={geo} theme={theme} lowDetail={lowDetail} ringColor={props.ringColor ?? "#fbbf24"} quietMoods={props.quietMoods} />
       ))}
       {props.extras}
       {theme.personStyle === "realistic" && (

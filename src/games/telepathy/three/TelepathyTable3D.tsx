@@ -67,6 +67,8 @@ function Pile({ pile, colors }: { pile: TelepathyTable3DProps["pile"]; colors: R
   );
 }
 
+const QUIET: readonly PersonMood[] = ["raise"];
+
 const THEME: TableTheme = {
   background: "#070816",
   fog: [9, 22],
@@ -125,6 +127,8 @@ export default function TelepathyTable3D(props: TelepathyTable3DProps) {
       viewerSeat={viewerSeat}
       seats={seats}
       theme={THEME}
+      // 더마인드는 말로 신호를 줄 수 없다 — 손을 드는 자리도 "저 할게요" 같은 말은 하지 않는다
+      quietMoods={QUIET}
       environment={
         <IndoorRoom
           lowDetail={props.lowDetail}
