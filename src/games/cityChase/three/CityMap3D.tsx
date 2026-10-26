@@ -810,7 +810,6 @@ function CaughtScene({ cell }: { cell: Cell }) {
   const copAnim = useRef<FigureAnim>({ walk: 0, phase: 0, crouch: 0, cuffed: 0, look: 0 });
   const t0 = useRef<number | null>(null);
   const [dx, , dz] = hidePos(cell);
-  const [click, setClick] = useState(false);
   useFrame(({ clock }, dt) => {
     if (t0.current === null) t0.current = clock.elapsedTime;
     const t = clock.elapsedTime - t0.current - (FX.hit + 0.2);
@@ -827,7 +826,6 @@ function CaughtScene({ cell }: { cell: Cell }) {
     copAnim.current.phase += dt * 14 * copAnim.current.walk;
     thiefAnim.current.cuffed = easeOut((t - 1.0) / 0.3);
     thiefAnim.current.look = Math.sin(t * 2) * 0.3;
-    if (!click && t > 1.0) setClick(true);
     if (light.current) light.current.color.set(Math.sin(t * 10) > 0 ? "#ef4444" : "#3b82f6");
   });
   return (
@@ -843,7 +841,8 @@ function CaughtScene({ cell }: { cell: Cell }) {
         </group>
       </group>
       <pointLight ref={light} position={[dx, 1.2, dz + 0.5]} intensity={8} distance={4} />
-      {click && <Tag text="🔗 수갑 철컥! 검거" color="#ef4444" bg="rgba(127,29,29,0.95)" position={[dx, 0.9, dz + 1.0]} height={0.42} front />}
+      {/* no floating "수갑 철컥" tag here any more — it piled onto the route pad and unit tags right over
+          the catch spot; the caption lives in the persistent DOM banner at the top of the canvas */}
     </group>
   );
 }
@@ -1484,10 +1483,13 @@ export default function CityMap3D(props: CityMapProps & { lowDetail: boolean; al
       >
         {camMode === "top" ? "🎥 입체 시점" : "🗺️ 탑뷰"}
       </button>
+      {/* Live catch flash only — it sits over the back row, so it must not stay. The lasting "where" lives in
+          the board's status line above the canvas (CityChaseBoard), and the 3D tag that used to hover over
+          the catch spot is gone so only the route pad marks it. */}
       {reveal && reveal.result === "caught" && (
-        <div className="pointer-events-none absolute inset-x-0 top-12 z-50 flex justify-center">
-          <div className="rounded-2xl bg-red-600/90 px-5 py-3 text-center text-lg font-black text-white shadow-2xl" style={{ animation: "cc3d-pop .5s ease-out 2.4s both, cc3d-fade .5s ease-in 4.8s forwards" }}>
-            🔗 수갑 철컥! {cellLabel(reveal.cell)}에서 검거
+        <div className="pointer-events-none absolute inset-x-0 top-12 z-50 flex justify-center px-2">
+          <div className="max-w-full truncate rounded-2xl bg-red-600/90 px-4 py-2 text-center text-base font-black text-white shadow-2xl sm:text-lg" style={{ animation: "cc3d-pop .5s ease-out 2.4s both, cc3d-fade .5s ease-in 4.8s forwards" }}>
+            🔗 수갑 철컥! {cellLabel(reveal.cell)} {buildingType(reveal.cell).icon} {buildingType(reveal.cell).name}에서 검거
           </div>
         </div>
       )}
@@ -1496,8 +1498,7 @@ export default function CityMap3D(props: CityMapProps & { lowDetail: boolean; al
       </span>
       <style>{`
         @keyframes cc3d-pop { 0% { transform: scale(.3); opacity: 0 } 60% { transform: scale(1.15); opacity: 1 } 100% { transform: scale(1) } }
-        @keyframes cc3d-fade { to { opacity: 0; transform: scale(.9) } }
-      `}</style>
+        @keyframes cc3d-fade { to { opacity: 0; transform: scale(.9) } }      `}</style>
     </div>
   );
 }

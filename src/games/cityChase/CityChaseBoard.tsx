@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { preferLowDetail, useBoardView } from "@/games/shared/three/viewPref";
-import CityMap, { cellLabel, HELI_STYLES, TOKEN_CLASS, TokenChip, unitName } from "./CityMap";
+import CityMap, { buildingType, cellLabel, HELI_STYLES, TOKEN_CLASS, TokenChip, unitName } from "./CityMap";
 import {
   currentActor,
   currentPoliceBelief,
@@ -125,7 +125,12 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
   const status = (() => {
     if (over) {
       if (state.endReason === "trapped") return { tone: "police", text: `🚧 도둑이 막다른 곳에 갇혔습니다! 경찰 팀 승리 (${state.round}라운드)` };
-      if (state.winner === "police") return { tone: "police", text: `🚨 검거 성공! 경찰 팀 승리 (${state.round}라운드)` };
+      if (state.winner === "police") {
+        // name the catch spot up here, above the board — on the 3D view the spot itself is busy with the route pad and unit tags
+        const at = state.path[state.path.length - 1];
+        const where = at === undefined ? "" : `${cellLabel(at)} ${buildingType(at).icon} ${buildingType(at).name}에서 `;
+        return { tone: "police", text: `🚨 ${where}검거 성공! 경찰 팀 승리 (${state.round}라운드)` };
+      }
       return { tone: "thief", text: `🏁 ${thiefName}이(가) 11라운드를 버텨내고 도주 성공!` };
     }
     if (state.phase === "thief") {

@@ -60,12 +60,12 @@ const BUILDING_LIST: BuildingType[] = [
   { name: "시청", icon: "🏢", wall: "#6b7280", sign: "#1e40af", shape: "cityHall" },
   { name: "식당", icon: "🍜", wall: "#5a3e2b", sign: "#dc2626", shape: "restaurant" },
   { name: "헬스장", icon: "💪", wall: "#1f3b4d", sign: "#0284c7", shape: "gym" },
-  { name: "미용실", icon: "💇", wall: "#4b5563", sign: "#9333ea", shape: "salon" },
+  { name: "미용실", icon: "💇", wall: "#4b5563", sign: "#be185d", shape: "salon" },
   { name: "오락실", icon: "🎮", wall: "#312e81", sign: "#4f46e5", shape: "arcade" },
   { name: "세탁소", icon: "🧺", wall: "#3f5a6b", sign: "#0891b2", shape: "laundry" },
   { name: "치킨집", icon: "🍗", wall: "#5c4033", sign: "#d97706", shape: "chicken" },
   { name: "서점", icon: "📖", wall: "#44403c", sign: "#15803d", shape: "bookstore" },
-  { name: "완구점", icon: "🧸", wall: "#4c3d5c", sign: "#e11d48", shape: "toyStore" },
+  { name: "완구점", icon: "🧸", wall: "#4c3d5c", sign: "#0d9488", shape: "toyStore" },
 ];
 /** 7 is coprime with 25, so every building appears exactly once and similar kinds spread out. */
 export function buildingType(cell: Cell): BuildingType {

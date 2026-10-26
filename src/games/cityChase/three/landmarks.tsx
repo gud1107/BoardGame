@@ -7,7 +7,12 @@
  * Local coords of one shop: origin = footprint centre on the ground, south (camera) wall at
  * z = F, roof top at y = h + 0.08. Tall props sit on the back half of the roof (z < 0) so the
  * floating "🏦C4" roof tag in front of them stays readable. Everything is plain boxes /
- * cylinders / cones — no lights, no textures — and lives only while the shop isn't see-through.
+ * cylinders / cones — no lights, no textures — and fades with the walls when the shop is searched.
+ *
+ * Trail-chip lane: the chip of a robbed shop lies on the sidewalk in front of the door at x ≈ -0.4
+ * (`Chip` in CityMap3D). Nothing next to that spot may wear a token colour (yellow #facc15, cyan
+ * #22d3ee, purple #a855f7, red #ef4444) or a player could misread the chip — so token-coloured
+ * street props sit on the right (x > 0) and lit windows / neon stay pale or off-palette.
  */
 import * as THREE from "three";
 import type { BuildingShape, BuildingType } from "../CityMap";
@@ -57,7 +62,7 @@ function Door({ w = 0.3, c = "#0f172a", open }: { w?: number; c?: string; open: 
 }
 
 /** Lit shop windows either side of the door. */
-function Display({ c = "#fde68a", wide = false }: { c?: string; wide?: boolean }) {
+function Display({ c = "#fef3c7", wide = false }: { c?: string; wide?: boolean }) {
   return (
     <>
       {[-1, 1].map((sgn) => (
@@ -160,8 +165,8 @@ const SHAPES: Record<BuildingShape, Build> = {
     <>
       <Door w={0.4} c="#1e3a5f" open={open} />
       <Bx p={[0, 0.4, F + 0.01]} s={[1.3, 0.05, 0.02]} c="#fef2f2" glow />
-      <Bx p={[-0.42, 0.16, F + 0.17]} s={[0.2, 0.32, 0.18]} c="#dc2626" />
-      <Cy p={[-0.42, 0.32, F + 0.17]} r={0.1} len={0.18} c="#dc2626" rot={[Math.PI / 2, 0, 0]} />
+      <Bx p={[0.42, 0.16, F + 0.17]} s={[0.2, 0.32, 0.18]} c="#dc2626" />
+      <Cy p={[0.42, 0.32, F + 0.17]} r={0.1} len={0.18} c="#dc2626" rot={[Math.PI / 2, 0, 0]} />
       <Cy p={[0.35, R + 0.35, -0.35]} r={0.015} r2={0.03} len={0.7} c="#cbd5e1" seg={6} />
       <Cy p={[0.35, R + 0.25, -0.35]} r={0.12} len={0.03} c="#e5e7eb" rot={[0.9, 0, 0]} />
     </>
@@ -222,10 +227,10 @@ const SHAPES: Record<BuildingShape, Build> = {
   cinema: (b, R, open) => (
     <>
       <Door w={0.36} open={open} />
-      <Bx p={[0, 0.42, F + 0.12]} s={[1.1, 0.16, 0.22]} c="#fde047" glow />
+      <Bx p={[0, 0.42, F + 0.12]} s={[1.1, 0.16, 0.22]} c="#fff7ed" glow />
       <Bx p={[0, 0.42, F + 0.235]} s={[0.96, 0.1, 0.01]} c="#7e22ce" glow />
       {[-0.42, 0.42].map((x) => (
-        <Bx key={x} p={[x, 0.17, F + 0.01]} s={[0.2, 0.28, 0.01]} c={x < 0 ? "#f472b6" : "#38bdf8"} glow />
+        <Bx key={x} p={[x, 0.17, F + 0.01]} s={[0.2, 0.28, 0.01]} c={x < 0 ? "#9d174d" : "#1e3a8a"} glow />
       ))}
       <Cy p={[0.3, R + 0.2, -0.3]} r={0.17} len={0.06} c="#1f2937" rot={[Math.PI / 2, 0, 0]} />
       <Cy p={[-0.05, R + 0.2, -0.3]} r={0.17} len={0.06} c="#1f2937" rot={[Math.PI / 2, 0, 0]} />
@@ -235,7 +240,7 @@ const SHAPES: Record<BuildingShape, Build> = {
   gym: (b, R, open) => (
     <>
       <Door w={0.44} c="#1e3a5f" open={open} />
-      <Display c="#7dd3fc" wide />
+      <Display c="#e0f2fe" wide />
       <Cy p={[0, R + 0.16, -0.2]} r={0.035} len={0.8} c="#cbd5e1" rot={[0, 0, Math.PI / 2]} />
       {[-0.36, 0.36].map((x) => (
         <Cy key={x} p={[x, R + 0.16, -0.2]} r={0.16} len={0.12} c="#111827" rot={[0, 0, Math.PI / 2]} />
@@ -248,7 +253,7 @@ const SHAPES: Record<BuildingShape, Build> = {
       <Door w={0.36} c="#1e1b4b" open={open} />
       {[
         [0.42, "#f472b6"],
-        [0.5, "#22d3ee"],
+        [0.5, "#a3e635"],
       ].map(([y, c]) => (
         <Bx key={c as string} p={[0, y as number, F + 0.01]} s={[1.3, 0.035, 0.01]} c={c as string} glow />
       ))}
@@ -256,7 +261,7 @@ const SHAPES: Record<BuildingShape, Build> = {
       <Cy p={[0, R + 0.22, -0.25]} r={0.03} len={0.3} c="#9ca3af" seg={8} />
       <mesh position={[0, R + 0.4, -0.25]}>
         <sphereGeometry args={[0.1, 14, 10]} />
-        <meshBasicMaterial color="#ef4444" />
+        <meshBasicMaterial color="#f43f5e" />
       </mesh>
     </>
   ),
@@ -361,12 +366,12 @@ const SHAPES: Record<BuildingShape, Build> = {
       <Door open={open} />
       <Display c="#fce7f3" />
       <Awning c={b.sign} />
-      {[-0.45, -0.3, 0.3, 0.45].map((x, k) => (
+      {[0.22, 0.37, 0.52].map((x, k) => (
         <group key={x}>
           <Bx p={[x, 0.05, F + 0.12]} s={[0.12, 0.1, 0.12]} c="#78350f" />
           <mesh position={[x, 0.14, F + 0.12]}>
             <sphereGeometry args={[0.07, 8, 6]} />
-            <meshStandardMaterial color={["#f472b6", "#facc15", "#fb7185", "#c084fc"][k]} />
+            <meshStandardMaterial color={["#f9a8d4", "#fefce8", "#fdba74"][k]} />
           </mesh>
         </group>
       ))}
@@ -401,7 +406,7 @@ const SHAPES: Record<BuildingShape, Build> = {
       {[-0.42, 0.42].map((x) => (
         <mesh key={x} position={[x, 0.18, F + 0.006]}>
           <circleGeometry args={[0.11, 18]} />
-          <meshBasicMaterial color="#a5f3fc" />
+          <meshBasicMaterial color="#e2e8f0" />
         </mesh>
       ))}
       {[-0.5, 0.5].map((x) => (
@@ -426,8 +431,8 @@ const SHAPES: Record<BuildingShape, Build> = {
       <Door open={open} />
       <Display />
       <Awning c={b.sign} />
-      <Umbrella p={[-0.42, 0, F + 0.2]} c="#f97316" />
-      <Umbrella p={[0.42, 0, F + 0.2]} c="#facc15" />
+      <Umbrella p={[0.24, 0, F + 0.2]} c="#16a34a" />
+      <Umbrella p={[0.52, 0, F + 0.2]} c="#f8fafc" />
       <Cy p={[0.3, R + 0.15, -0.35]} r={0.06} len={0.3} c="#6b7280" seg={8} />
     </>
   ),
@@ -437,10 +442,10 @@ const SHAPES: Record<BuildingShape, Build> = {
       <Door open={open} />
       <Display c="#fecaca" />
       <Cy p={[0, R + 0.17, 0]} r={0} r2={1.0} len={0.34} c="#b91c1c" seg={4} rot={[0, Math.PI / 4, 0]} />
-      {[-0.42, 0.42].map((x) => (
+      {[0.24, 0.42].map((x) => (
         <mesh key={x} position={[x, 0.42, F + 0.1]}>
           <sphereGeometry args={[0.06, 10, 8]} />
-          <meshBasicMaterial color="#f87171" />
+          <meshBasicMaterial color="#fb923c" />
         </mesh>
       ))}
     </>
