@@ -699,6 +699,8 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
             bidderName={names[res.bid.seat]}
             bidNumber={res.bid.number}
             verdict={verdictShown ? (res.loserWasBidder ? "bidder" : "caller") : null}
+            viewerRole={res.callerSeat === viewerSeat ? "caller" : res.bid.seat === viewerSeat ? "bidder" : null}
+            myCard={viewerSeat === qSeat ? (questionResolvedCard ?? res.tableCards[viewerSeat]) : (res.tableCards[viewerSeat] ?? null)}
           />
           {res.nightCardHolderSeat !== null && <p className="break-keep text-white/60 light:text-slate-500">🌙 {names[res.nightCardHolderSeat]}님이 다음 라운드의 선이 됩니다</p>}
           <p className={`break-keep font-semibold text-white transition-opacity light:text-slate-900 ${verdictShown ? "opacity-100" : "opacity-0"}`}>
@@ -760,13 +762,28 @@ function ShowdownMatchup({
   bidderName,
   bidNumber,
   verdict,
+  viewerRole,
+  myCard,
 }: {
   callerName: string;
   bidderName: string;
   bidNumber: number;
   /** 하트를 잃은 쪽 — null이면 아직 판정 전(카운트업 중). */
   verdict: "caller" | "bidder" | null;
+  /** 내가 대진표의 어느 쪽인지 — null이면 구경하는 생존자(대진표 아래 줄로 보여 줌). */
+  viewerRole: "caller" | "bidder" | null;
+  /** 내 이마 카드("?"였다면 바뀐 카드) — 탈락해서 카드가 없으면 null. */
+  myCard: Card | null;
 }) {
+  // 판정이 찍힌 뒤 "판정 승리 / 하트 −1" 아래로 내 이마 카드가 떨어져 내려온다 —
+  // 라운드 내내 못 본 내 숫자를 결과와 같이 바로 확인하게.
+  const showMyCard = verdict !== null && myCard !== null;
+  const myCardDrop = (
+    <div className="mt-1 flex flex-col items-center gap-0.5" style={{ animation: "coyote-my-card-drop 0.55s cubic-bezier(.2,1.4,.4,1) 0.25s both" }}>
+      <span className="text-[10px] font-bold text-orange-100/80 light:text-slate-600">👀 내 숫자</span>
+      <CardFace card={myCard} size="sm" highlight />
+    </div>
+  );
   function side(role: "caller" | "bidder") {
     const lost = verdict === role;
     const won = verdict !== null && !lost;
@@ -797,14 +814,18 @@ function ShowdownMatchup({
           </span>
         )}
         {won && <span className="mt-0.5 text-xs font-bold text-emerald-300 light:text-emerald-700">✓ 판정 승리</span>}
+        {showMyCard && viewerRole === role && myCardDrop}
       </div>
     );
   }
   return (
-    <div className="flex items-stretch gap-2">
-      {side("caller")}
-      <span className="self-center text-xs font-black text-white/50 light:text-slate-400">VS</span>
-      {side("bidder")}
+    <div className="flex flex-col gap-2">
+      <div className="flex items-stretch gap-2">
+        {side("caller")}
+        <span className="self-center text-xs font-black text-white/50 light:text-slate-400">VS</span>
+        {side("bidder")}
+      </div>
+      {showMyCard && viewerRole === null && myCardDrop}
     </div>
   );
 }

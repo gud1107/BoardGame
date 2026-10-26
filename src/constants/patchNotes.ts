@@ -64,6 +64,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.98.2",
+    releaseDate: "2026-10-26",
+    title: "🐺 코요테 판정에서 내 숫자 바로 확인",
+    changes: [
+      { game: "coyote", type: "IMPROVE", desc: "👀 판정이 나면 대진표의 내 칸('판정 승리'/'하트 −1') 아래로 내 이마 카드가 떨어져 내려와요 — 구경 중이면 대진표 아래에" },
+    ],
+  },
+  {
     version: "v1.98.1",
     releaseDate: "2026-10-26",
     title: "🗣️ 3D 인물의 한마디를 사람처럼",

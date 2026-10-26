@@ -2117,6 +2117,22 @@ html {
   }
 }
 
+/* 판정 표시: 대진표의 내 칸 아래로 내 이마 카드가 위에서 툭 떨어져 자리 잡음. */
+@keyframes coyote-my-card-drop {
+  0% {
+    opacity: 0;
+    transform: translateY(-28px) rotate(-8deg);
+  }
+  65% {
+    opacity: 1;
+    transform: translateY(4px) rotate(2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* 판정 표시: 하트를 잃은 쪽에 "💔 −1"이 튀어나왔다 자리 잡음. */
 @keyframes coyote-heart-loss-pop {
   0% {
