@@ -831,9 +831,24 @@ function CaughtScene({ cell }: { cell: Cell }) {
 // Police units: 🚓 car · 👮 officer · 🚁 helicopter (same rules, different looks)
 // ---------------------------------------------------------------------------
 
-function PoliceCarModel({ lights }: { lights: React.RefObject<THREE.Group | null> }) {
+/**
+ * See-through silhouette of a ground unit: a box hugging the model that only paints where something
+ * nearer (a shop in front) already filled the depth buffer, so a unit behind a building still shows as a
+ * coloured ghost. Where the unit is in plain view the box's own front faces lose the depth test → invisible.
+ */
+function XRay({ size, y, color }: { size: V3; y: number; color: string }) {
   return (
-    <group scale={0.95}>
+    <mesh position={[0, y, 0]} renderOrder={30}>
+      <boxGeometry args={size} />
+      <meshBasicMaterial color={color} transparent opacity={0.55} depthWrite={false} depthFunc={THREE.GreaterDepth} />
+    </mesh>
+  );
+}
+
+function PoliceCarModel({ lights, stripe }: { lights: React.RefObject<THREE.Group | null>; stripe: string }) {
+  return (
+    <group scale={1.25}>
+      <XRay size={[0.5, 0.52, 0.96]} y={0.24} color={stripe} />
       <mesh position={[0, 0.15, 0]} castShadow>
         <boxGeometry args={[0.46, 0.2, 0.9]} />
         <meshStandardMaterial color="#f8fafc" metalness={0.3} roughness={0.35} />
@@ -844,11 +859,16 @@ function PoliceCarModel({ lights }: { lights: React.RefObject<THREE.Group | null
           <meshStandardMaterial color="#0f172a" metalness={0.3} roughness={0.4} />
         </mesh>
       ))}
+      {/* unit-colour stripe along both doors — matches its ring, chip and tag */}
+      <mesh position={[0, 0.17, 0]}>
+        <boxGeometry args={[0.47, 0.05, 0.38]} />
+        <meshBasicMaterial color={stripe} />
+      </mesh>
       <mesh position={[0, 0.32, -0.04]}>
         <boxGeometry args={[0.42, 0.16, 0.46]} />
         <meshStandardMaterial color="#1e293b" metalness={0.5} roughness={0.15} />
       </mesh>
-      <group ref={lights} position={[0, 0.43, -0.04]}>
+      <group ref={lights} position={[0, 0.44, -0.04]} scale={1.3}>
         <mesh position={[-0.09, 0, 0]}>
           <boxGeometry args={[0.14, 0.06, 0.1]} />
           <meshBasicMaterial color="#ef4444" />
@@ -915,6 +935,7 @@ function PoliceUnit({ at, index, active }: { at: Point; index: number; active: b
   const ref = useRef<THREE.Group>(null);
   const ring = useRef<THREE.Mesh>(null);
   const ringMat = useRef<THREE.MeshBasicMaterial>(null);
+  const poolMat = useRef<THREE.MeshBasicMaterial>(null);
   const lights = useRef<THREE.Group>(null);
   const rotor = useRef<THREE.Group>(null);
   const beacon = useRef<THREE.Mesh>(null);
@@ -943,19 +964,25 @@ function PoliceUnit({ at, index, active }: { at: Point; index: number; active: b
     if (lights.current) lights.current.scale.x = Math.sin(clock.elapsedTime * 12) > 0 ? 1 : -1;
     if (rotor.current) rotor.current.rotation.y += dt * 28;
     if (beacon.current) {
-      beacon.current.position.y = (index === 1 ? 1.6 : 1.1) + Math.sin(clock.elapsedTime * 4) * 0.06;
+      beacon.current.position.y = (index === 1 ? 1.85 : 1.25) + Math.sin(clock.elapsedTime * 4) * 0.06;
       beacon.current.rotation.y = clock.elapsedTime * 2;
     }
     if (ring.current) ring.current.scale.setScalar(active ? 1.15 + Math.sin(clock.elapsedTime * 5) * 0.15 : 1);
-    if (ringMat.current) ringMat.current.opacity = active ? 0.95 : 0.6;
+    if (ringMat.current) ringMat.current.opacity = active ? 0.95 : 0.75;
+    if (poolMat.current) poolMat.current.opacity = (active ? 0.5 : 0.3) + Math.sin(clock.elapsedTime * 3) * 0.08;
   });
   return (
     <>
       {/* where the unit stands on the road grid — always on the ground, even for the helicopter */}
       <group position={[px(j), 0.02, pz(i)]}>
+        {/* a pool of the unit's colour lighting up the crossing */}
+        <mesh rotation-x={-Math.PI / 2} position={[0, 0.005, 0]} renderOrder={3}>
+          <circleGeometry args={[0.5, 32]} />
+          <meshBasicMaterial ref={poolMat} color={style.hex} transparent opacity={0.3} depthWrite={false} blending={THREE.AdditiveBlending} />
+        </mesh>
         <mesh ref={ring} rotation-x={-Math.PI / 2} renderOrder={4}>
-          <ringGeometry args={[0.34, 0.46, 32]} />
-          <meshBasicMaterial ref={ringMat} color={style.hex} transparent opacity={0.6} depthWrite={false} />
+          <ringGeometry args={[0.4, 0.54, 32]} />
+          <meshBasicMaterial ref={ringMat} color={style.hex} transparent opacity={0.75} depthWrite={false} />
         </mesh>
         {index === 2 && (
           <mesh position={[0, HELI_ALT / 2, 0]}>
@@ -965,21 +992,22 @@ function PoliceUnit({ at, index, active }: { at: Point; index: number; active: b
         )}
       </group>
       <group ref={ref}>
-        {index === 0 && <PoliceCarModel lights={lights} />}
+        {index === 0 && <PoliceCarModel lights={lights} stripe={style.hex} />}
         {index === 1 && (
-          <group scale={PERSON * 1.2}>
+          <group scale={PERSON * 1.4}>
+            <XRay size={[0.36, 0.78, 0.34]} y={0.38} color={style.hex} />
             <Figure kind="officer" anim={anim} vest={style.hex} />
           </group>
         )}
         {index !== 2 && (
           // a bobbing marker that stays on top of the buildings, so a ground unit is never lost behind one
           <mesh ref={beacon} position={[0, 1.75, 0]} rotation-x={Math.PI} renderOrder={21}>
-            <coneGeometry args={[0.12, 0.22, 4]} />
+            <coneGeometry args={[0.17, 0.3, 4]} />
             <meshBasicMaterial color={style.hex} depthTest={false} depthWrite={false} transparent />
           </mesh>
         )}
         {index === 2 && <HeliModel color={style.hex} rotor={rotor} />}
-        <Tag text={`${style.icon}${index + 1}`} color={style.hex} position={[0, index === 2 ? 0.75 : index === 1 ? 2.05 : 1.55, 0]} height={active ? 0.4 : 0.32} front={active || index !== 2} />
+        <Tag text={`${style.icon}${index + 1}`} color={style.hex} position={[0, index === 2 ? 0.75 : index === 1 ? 2.45 : 1.9, 0]} height={active ? 0.46 : 0.38} front={active || index !== 2} />
       </group>
     </>
   );
