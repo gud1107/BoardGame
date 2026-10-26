@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import SeatedPerson, { blinking } from "@/games/shared/three/SeatedPerson";
+import { blinking } from "@/games/shared/three/SeatedPerson";
+import VrmPerson from "@/games/shared/three/VrmPerson";
 import { resolveLook, type AvatarProfile } from "@/lib/character/avatar";
 
 /**
@@ -29,13 +30,15 @@ function Shooter({ items, onShot }: { items: readonly ThumbItem[]; onShot: (key:
   const todo = useMemo(() => items.filter((p) => !cache.has(p.key)), [items]);
   const [i, setI] = useState(0);
   const frames = useRef(0);
+  // the VRM swaps in for the cartoon stand-in once loaded — never shoot the stand-in
+  const [ready, setReady] = useState<string | null>(null);
   const p = todo[i];
   const look = useMemo(() => (p ? resolveLook(0, ["none"], p.look) : null), [p]);
   const pos = useMemo(() => new THREE.Vector3(0, 0, 0), []);
   const eye = useMemo(() => new THREE.Vector3(0, 1.62, 3), []);
 
   useFrame(({ clock }) => {
-    if (!p) return;
+    if (!p || ready !== p.key) return;
     // let the pose/face springs settle, and never freeze a portrait mid-blink
     if (++frames.current < 8 || blinking(clock.elapsedTime, 3)) return;
     const url = gl.domElement.toDataURL("image/png");
@@ -45,13 +48,13 @@ function Shooter({ items, onShot }: { items: readonly ThumbItem[]; onShot: (key:
     setI((k) => k + 1);
   });
   if (!p || !look) return null;
-  return <SeatedPerson key={p.key} seed={3} look={look} color="#f43f5e" position={pos} facing={0} mood="rest" lookAt={eye} maxYaw={0.2} lowDetail={false} chair="none" />;
+  return <VrmPerson key={p.key} seed={3} look={look} color="#f43f5e" position={pos} facing={0} mood="rest" lookAt={eye} maxYaw={0.2} lowDetail={false} chair="none" onReady={() => setReady(p.key)} />;
 }
 
 /** "bust" = head and shoulders (the preset cards); "face" = a tight head shot that still reads in a 28px profile circle. */
 const FRAMING = {
-  bust: { fov: 20, y: 1.55 },
-  face: { fov: 10.5, y: 1.5 },
+  bust: { fov: 13, y: 1.43 },
+  face: { fov: 7, y: 1.52 },
 } as const;
 
 export default function CharacterThumbs3D({

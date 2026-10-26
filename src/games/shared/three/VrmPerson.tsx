@@ -5,6 +5,7 @@ import { createPortal, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils, type VRM, type VRMHumanBoneName } from "@pixiv/three-vrm";
+import type { VrmModel } from "@/lib/character/avatar";
 import SeatedPerson, { blinking, FACES, Hat, holdPose, holdsInMood, STRONG_MOODS, TABLE_POSES, type PersonLook, type PersonMood, type SeatedPersonProps } from "./SeatedPerson";
 import { createMotion, HANDS, stepMotion, type MotionState } from "./motion";
 import { PERSONA_STYLE, personaGaze } from "./persona";
@@ -27,7 +28,7 @@ import { armJointQuat, fingerCurl, toVrm0, upperArmQuat } from "./vrmPose";
  * Local frame: +z faces the table, origin = the chair's floor point.
  */
 
-type ModelKey = "pixiv-sample" | "three-vrm-girl" | "seed-san";
+type ModelKey = VrmModel;
 
 /** Per model: meshes to hide (props that don't belong at a card table) and which materials are skin / top. */
 const MODELS: Record<ModelKey, { hide: string[]; skin: string[]; tops: string[] }> = {
@@ -37,6 +38,7 @@ const MODELS: Record<ModelKey, { hide: string[]; skin: string[]; tops: string[] 
 };
 
 function modelFor(look: PersonLook, seed: number): ModelKey {
+  if (look.model) return look.model;
   if (look.gender === "m") return "seed-san";
   return seed % 2 === 0 ? "pixiv-sample" : "three-vrm-girl";
 }
@@ -60,10 +62,66 @@ function materialsOf(root: THREE.Object3D): THREE.Material[] {
   return out;
 }
 
+/**
+ * A hair texture as bright grey with its strand detail kept (luminance rescaled to a
+ * fixed mean), so the hair colour tinted on top reads the same on every model —
+ * multiplying a colour over the near-black hair of two of the models stays black.
+ */
+function liftToGrey(tex: THREE.Texture): THREE.Texture {
+  const img = tex.image as CanvasImageSource & { width: number; height: number };
+  if (!img?.width) return tex;
+  const canvas = document.createElement("canvas");
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return tex;
+  ctx.drawImage(img, 0, 0);
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const px = data.data;
+  let sum = 0;
+  let n = 0;
+  for (let i = 0; i < px.length; i += 4) {
+    if (px[i + 3] < 16) continue;
+    sum += 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2];
+    n++;
+  }
+  const mean = n ? sum / n : 128;
+  // compress the range a little so near-black strands don't vanish, then centre it bright
+  for (let i = 0; i < px.length; i += 4) {
+    const l = 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2];
+    px[i] = px[i + 1] = px[i + 2] = Math.max(0, Math.min(255, 205 + (l - mean) * 0.9));
+  }
+  ctx.putImageData(data, 0, 0);
+  const out = new THREE.CanvasTexture(canvas);
+  out.flipY = tex.flipY;
+  out.colorSpace = tex.colorSpace;
+  out.wrapS = tex.wrapS;
+  out.wrapT = tex.wrapT;
+  out.magFilter = tex.magFilter;
+  out.minFilter = tex.minFilter;
+  out.channel = tex.channel;
+  out.offset.copy(tex.offset);
+  out.repeat.copy(tex.repeat);
+  out.rotation = tex.rotation;
+  out.center.copy(tex.center);
+  return out;
+}
+
 function shareTextures(key: ModelKey, vrm: VRM) {
   const mats = materialsOf(vrm.scene) as unknown as Record<string, THREE.Texture | undefined>[];
   const base = shared[key];
   if (!base) {
+    // first copy of this model: neutralise the hair textures once; every later copy shares them
+    const lifted = new Map<THREE.Texture, THREE.Texture>();
+    for (const m of mats) {
+      if (!(m as unknown as THREE.Material).name.toLowerCase().includes("hair")) continue;
+      for (const k of ["map", "shadeMultiplyTexture"] as const) {
+        const t = m[k];
+        if (!t?.isTexture) continue;
+        if (!lifted.has(t)) lifted.set(t, liftToGrey(t));
+        m[k] = lifted.get(t);
+      }
+    }
     shared[key] = mats.map((m) => Object.fromEntries(TEXTURE_KEYS.filter((k) => m[k]?.isTexture).map((k) => [k, m[k]!])));
     return;
   }
@@ -79,7 +137,19 @@ function shareTextures(key: ModelKey, vrm: VRM) {
   });
 }
 
-async function loadVrm(key: ModelKey): Promise<VRM> {
+/**
+ * Parsing a VRM blocks the main thread for a while; a full table mounting at once
+ * would stack those into one long freeze, so seats parse one at a time with a
+ * frame in between.
+ */
+let parseQueue: Promise<unknown> = Promise.resolve();
+function loadVrm(key: ModelKey): Promise<VRM> {
+  const job = parseQueue.then(() => parseVrm(key));
+  parseQueue = job.catch(() => undefined).then(() => new Promise((r) => requestAnimationFrame(() => r(undefined))));
+  return job;
+}
+
+async function parseVrm(key: ModelKey): Promise<VRM> {
   files[key] ??= fetch(`/models/vrm/${key}.vrm`).then((r) => {
     if (!r.ok) throw new Error(`${key}.vrm: ${r.status}`);
     return r.arrayBuffer();
@@ -93,13 +163,33 @@ async function loadVrm(key: ModelKey): Promise<VRM> {
   VRMUtils.combineSkeletons(gltf.scene);
   VRMUtils.rotateVRM0(vrm);
   vrm.scene.traverse((o) => {
-    // skinned bounds don't follow the seated pose
+    // skinned bounds don't follow the seated pose; no shadow-map pass either (a second
+    // skinned render per seat) — TableScene's blob shadow grounds the seat instead
     o.frustumCulled = false;
-    if ((o as THREE.Mesh).isMesh) o.castShadow = true;
     if (MODELS[key].hide.includes(o.name)) o.visible = false;
   });
   shareTextures(key, vrm);
+  for (const m of materialsOf(vrm.scene)) memoProgramKey(m);
   return vrm;
+}
+
+/**
+ * three.js re-derives every material's program key whenever the light state differs
+ * between render passes — each frame here. MToon's key is a serialised define list,
+ * so cache it until the material itself changes (`needsUpdate` bumps `version`).
+ */
+function memoProgramKey(m: THREE.Material) {
+  const own = m.customProgramCacheKey;
+  if (own === THREE.Material.prototype.customProgramCacheKey) return;
+  let version = -1;
+  let key = "";
+  m.customProgramCacheKey = () => {
+    if (m.version !== version) {
+      version = m.version;
+      key = own.call(m);
+    }
+    return key;
+  };
 }
 
 /** Geometry and materials are per seat; textures are shared, so they stay. */
@@ -136,7 +226,31 @@ function tint(vrm: VRM, key: ModelKey, look: PersonLook, out: boolean) {
 }
 
 const FINGERS = ["Index", "Middle", "Ring", "Little"] as const;
+/** Per-frame scratch (useFrame runs for every seat, every frame — allocating here means GC hitches). */
+const fQ = new THREE.Quaternion();
+const fE = new THREE.Euler();
 const JOINTS = ["Proximal", "Intermediate", "Distal"] as const;
+/** Bone names per side, built once (template strings in the frame loop are garbage too). */
+const SIDE = {
+  l: {
+    upper: "leftUpperArm",
+    lower: "leftLowerArm",
+    hand: "leftHand",
+    thumb: "leftThumbProximal",
+    fingers: FINGERS.flatMap((f) => JOINTS.map((j) => [`left${f}${j}` as VRMHumanBoneName, j] as const)),
+  },
+  r: {
+    upper: "rightUpperArm",
+    lower: "rightLowerArm",
+    hand: "rightHand",
+    thumb: "rightThumbProximal",
+    fingers: FINGERS.flatMap((f) => JOINTS.map((j) => [`right${f}${j}` as VRMHumanBoneName, j] as const)),
+  },
+} as const;
+const LEGS = [
+  ["leftUpperLeg", "leftLowerLeg", -0.06],
+  ["rightUpperLeg", "rightLowerLeg", 0.06],
+] as const;
 const tmpGaze = new THREE.Vector3();
 const hash = (a: number, b: number) => {
   const x = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
@@ -176,6 +290,15 @@ const tN = new THREE.Vector3();
 const tAxis = new THREE.Vector3();
 const tQ = new THREE.Quaternion();
 const tParent = new THREE.Quaternion();
+const tParentInv = new THREE.Quaternion();
+const cHead = new THREE.Vector3();
+const cT0 = new THREE.Vector3();
+const cT1 = new THREE.Vector3();
+const cHand = new THREE.Vector3();
+const cFore = new THREE.Vector3();
+const cTip = new THREE.Vector3();
+const cNormal = new THREE.Vector3();
+const cPoints = [cHand, cTip, cFore];
 
 /** Deepest penetration of point `p` (radius `pr`) into the head sphere / torso capsule; writes the outward normal to `n`. */
 function penetration(p: THREE.Vector3, pr: number, head: THREE.Vector3, headR: number, t0: THREE.Vector3, t1: THREE.Vector3, torsoR: number, n: THREE.Vector3): number {
@@ -197,30 +320,60 @@ function penetration(p: THREE.Vector3, pr: number, head: THREE.Vector3, headR: n
   return best;
 }
 
-function resolveArmCollisions(vrm: VRM, scale: number) {
-  const h = vrm.humanoid;
-  const node = (b: VRMHumanBoneName) => h.getNormalizedBoneNode(b);
-  const headBone = node("head");
-  const hips = node("hips");
-  const top = node("upperChest") ?? node("chest");
-  if (!headBone || !hips || !top) return;
-  h.normalizedHumanBonesRoot.updateWorldMatrix(true, true);
-  const head = headBone.localToWorld(new THREE.Vector3(0, BODY_COLLIDERS.headUp, 0));
-  const t0 = hips.getWorldPosition(new THREE.Vector3());
-  const t1 = top.getWorldPosition(new THREE.Vector3());
-  const headR = BODY_COLLIDERS.headR * scale, torsoR = BODY_COLLIDERS.torsoR * scale, pr = BODY_COLLIDERS.handR * scale;
-  for (const side of ["left", "right"] as const) {
+type Chains = { torso: THREE.Object3D[]; head: THREE.Object3D; hips: THREE.Object3D; top: THREE.Object3D; arms: { upper: THREE.Object3D; lower: THREE.Object3D; hand: THREE.Object3D; chain: THREE.Object3D[]; tip: number }[] };
+const chainCache = new WeakMap<VRM, Chains | null>();
+
+/** The normalized bones the collision pass reads, root-first so a parent is always refreshed before its child. */
+function chainsOf(vrm: VRM): Chains | null {
+  if (chainCache.has(vrm)) return chainCache.get(vrm)!;
+  const node = (b: VRMHumanBoneName) => vrm.humanoid.getNormalizedBoneNode(b);
+  const torso = (["hips", "spine", "chest", "upperChest", "neck", "head"] as const).map(node).filter((n): n is THREE.Object3D => !!n);
+  const head = node("head"), hips = node("hips"), top = node("upperChest") ?? node("chest");
+  const flip = vrm.meta.metaVersion === "0" ? -1 : 1;
+  const arms = (["left", "right"] as const).flatMap((side) => {
     const upper = node(`${side}UpperArm`), lower = node(`${side}LowerArm`), hand = node(`${side}Hand`);
-    if (!upper || !lower || !hand) continue;
+    if (!upper || !lower || !hand) return [];
+    const chain = [node(`${side}Shoulder`), upper, lower, hand].filter((n): n is THREE.Object3D => !!n);
+    return [{ upper, lower, hand, chain, tip: (side === "left" ? 1 : -1) * 0.07 * flip }];
+  });
+  const out = head && hips && top ? { torso, head, hips, top, arms } : null;
+  chainCache.set(vrm, out);
+  return out;
+}
+
+/**
+ * Recompute world matrices down a parent→child chain only. (getWorldPosition & co. walk
+ * every ancestor up to the scene root on each call — far too slow per seat per frame.)
+ * The VRM's own ancestors keep last frame's matrices, which is fine: the seat doesn't move.
+ */
+function refresh(chain: THREE.Object3D[]) {
+  for (const n of chain) {
+    n.updateMatrix();
+    n.matrixWorld.multiplyMatrices(n.parent!.matrixWorld, n.matrix);
+  }
+}
+
+const tScale = new THREE.Vector3();
+
+function resolveArmCollisions(vrm: VRM, scale: number) {
+  const c = chainsOf(vrm);
+  if (!c) return;
+  refresh(c.torso);
+  const head = cHead.set(0, BODY_COLLIDERS.headUp, 0).applyMatrix4(c.head.matrixWorld);
+  const t0 = cT0.setFromMatrixPosition(c.hips.matrixWorld);
+  const t1 = cT1.setFromMatrixPosition(c.top.matrixWorld);
+  const headR = BODY_COLLIDERS.headR * scale, torsoR = BODY_COLLIDERS.torsoR * scale, pr = BODY_COLLIDERS.handR * scale;
+  for (const arm of c.arms) {
+    refresh(arm.chain);
     for (let it = 0; it < 4; it++) {
-      const shoulder = upper.getWorldPosition(tA);
-      const pHand = hand.getWorldPosition(new THREE.Vector3());
-      const pFore = lower.getWorldPosition(new THREE.Vector3()).lerp(pHand, 0.5);
-      const pTip = hand.localToWorld(new THREE.Vector3((side === "left" ? 1 : -1) * 0.07 * (vrm.meta.metaVersion === "0" ? -1 : 1), 0, 0));
+      const shoulder = tA.setFromMatrixPosition(arm.upper.matrixWorld);
+      const pHand = cHand.setFromMatrixPosition(arm.hand.matrixWorld);
+      cFore.setFromMatrixPosition(arm.lower.matrixWorld).lerp(pHand, 0.5);
+      cTip.set(arm.tip, 0, 0).applyMatrix4(arm.hand.matrixWorld);
       let worst = 0;
       let at: THREE.Vector3 | null = null;
-      const n = new THREE.Vector3();
-      for (const p of [pHand, pTip, pFore]) {
+      const n = cNormal;
+      for (const p of cPoints) {
         const d = penetration(p, pr, head, headR, t0, t1, torsoR, tN);
         if (d > worst) {
           worst = d;
@@ -236,14 +389,19 @@ function resolveArmCollisions(vrm: VRM, scale: number) {
       tAxis.normalize();
       // rotate the upper arm in world space by just enough to clear, then back into its parent's frame
       tQ.setFromAxisAngle(tAxis, (worst + 0.004 * scale) / len);
-      upper.parent!.getWorldQuaternion(tParent);
-      upper.quaternion.premultiply(tParent.clone().invert().multiply(tQ).multiply(tParent));
-      upper.updateWorldMatrix(false, true);
+      arm.upper.parent!.matrixWorld.decompose(tC, tParent, tScale);
+      arm.upper.quaternion.premultiply(tParentInv.copy(tParent).invert().multiply(tQ).multiply(tParent));
+      refresh(arm.chain);
     }
   }
 }
 
-export default function VrmPerson(props: SeatedPersonProps) {
+export interface VrmPersonProps extends SeatedPersonProps {
+  /** Called once the VRM has replaced the cartoon stand-in (e.g. to take a portrait). */
+  onReady?: () => void;
+}
+
+export default function VrmPerson(props: VrmPersonProps) {
   const { look, position, facing, seed } = props;
   const key = modelFor(look, seed);
   const [vrm, setVrm] = useState<VRM | null>(null);
@@ -267,6 +425,15 @@ export default function VrmPerson(props: SeatedPersonProps) {
   useEffect(() => {
     if (vrm) tint(vrm, key, look, !!props.out);
   }, [vrm, key, look, props.out]);
+  const { onReady } = props;
+  useEffect(() => {
+    if (vrm) onReady?.();
+  }, [vrm, onReady]);
+  // low-spec devices skip MToon's outline pass (it draws every mesh a second time)
+  useEffect(() => {
+    if (!vrm) return;
+    for (const m of materialsOf(vrm.scene)) if ((m as { isOutline?: boolean }).isOutline) m.visible = !props.lowDetail;
+  }, [vrm, props.lowDetail]);
 
   // fit: thighs level on the seat, head at the cartoon rig's height
   const fit = useMemo(() => {
@@ -278,6 +445,7 @@ export default function VrmPerson(props: SeatedPersonProps) {
   }, [vrm]);
 
   const heldRef = useRef<THREE.Group>(null);
+  const springDt = useRef(0);
   const cur = useRef<{ m: MotionState; look: [number, number] } | null>(null);
   useFrame(({ clock }, dt) => {
     if (!vrm || !fit) return;
@@ -305,11 +473,11 @@ export default function VrmPerson(props: SeatedPersonProps) {
       const n = vrm.humanoid.getNormalizedBoneNode(b);
       if (n) n.quaternion.copy(vrm0 ? toVrm0(quat) : quat);
     };
-    const eul = (b: VRMHumanBoneName, x: number, y: number, z: number) => set(b, new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z)));
+    const eul = (b: VRMHumanBoneName, x: number, y: number, z: number) => set(b, fQ.setFromEuler(fE.set(x, y, z)));
 
-    for (const s of ["left", "right"] as const) {
-      eul(`${s}UpperLeg`, -Math.PI / 2, 0, s === "left" ? -0.06 : 0.06);
-      eul(`${s}LowerLeg`, Math.PI / 2, 0, 0);
+    for (const [upperLeg, lowerLeg, splay] of LEGS) {
+      eul(upperLeg, -Math.PI / 2, 0, splay);
+      eul(lowerLeg, Math.PI / 2, 0, 0);
     }
     eul("spine", p[0] * 0.6, p[1] * 0.6, p[2] * 0.6);
     eul("chest", p[0] * 0.4, p[1] * 0.4, p[2] * 0.4);
@@ -346,12 +514,12 @@ export default function VrmPerson(props: SeatedPersonProps) {
     // arms: resting tables tuck the long arms in; gestures and held cards keep the shared angles
     const tuck = !holding && (mood === "rest" || mood === "think" || mood === "write" || mood === "nervous" || mood === "smug" || mood === "sad") ? 1 : 0;
     const arm = (s: "l" | "r", o: number, elbow: number, wx: number, wz: number, curl: number, yawAdd: number) => {
-      const side = s === "l" ? "left" : "right";
-      set(`${side}UpperArm`, upperArmQuat(s, p[o] + TUCK.shoulder * tuck, p[o + 1] + yawAdd, p[o + 2]));
-      set(`${side}LowerArm`, armJointQuat(s, elbow + TUCK.elbow * tuck, 0));
-      set(`${side}Hand`, armJointQuat(s, wx, wz));
-      for (const f of FINGERS) for (const j of JOINTS) eul(`${side}${f}${j}`, 0, 0, fingerCurl(s, curl, j));
-      eul(`${side}ThumbProximal`, 0, (s === "l" ? 1 : -1) * curl * 0.5, 0);
+      const b = SIDE[s];
+      set(b.upper, upperArmQuat(s, p[o] + TUCK.shoulder * tuck, p[o + 1] + yawAdd, p[o + 2], fQ));
+      set(b.lower, armJointQuat(s, elbow + TUCK.elbow * tuck, 0, fQ));
+      set(b.hand, armJointQuat(s, wx, wz, fQ));
+      for (const [name, j] of b.fingers) eul(name, 0, 0, fingerCurl(s, curl, j));
+      eul(b.thumb, 0, (s === "l" ? 1 : -1) * curl * 0.5, 0);
     };
     arm("l", 6, p[9], p[14], p[15], p[18], 0);
     arm("r", 10, p[13], p[16], p[17], p[19], mood === "point" ? c.look[0] * 0.9 : 0);
@@ -370,7 +538,20 @@ export default function VrmPerson(props: SeatedPersonProps) {
       em.setValue("aa", mood === "talk" ? 0.25 + Math.abs(Math.sin(now * 11)) * 0.45 : f.mouth === "o" && f.eye <= 1.3 ? 0.35 : 0);
       em.setValue("blink", grin > 0.9 ? 0 : f.eye < 0.3 ? 1 : blinking(now, seed) ? 1 : 0);
     }
-    vrm.update(dt);
+    // VRM.update, unrolled so the hair/cloth springs can run at 30 Hz (off on low-spec
+    // devices) — they cost more than the rest of the rig, and the eye can't tell
+    vrm.humanoid.update();
+    vrm.lookAt?.update(dt);
+    vrm.expressionManager?.update();
+    vrm.nodeConstraintManager?.update();
+    if (!props.lowDetail) {
+      springDt.current += dt;
+      if (springDt.current >= 1 / 30) {
+        vrm.springBoneManager?.update(springDt.current);
+        springDt.current = 0;
+      }
+    }
+    vrm.materials?.forEach((m) => (m as { update?: (d: number) => void }).update?.(dt));
   });
 
   if (!vrm || !fit) return <SeatedPerson {...props} />;

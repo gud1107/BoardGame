@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.101.0",
+    releaseDate: "2026-10-27",
+    title: "🧑‍🎤 프로필에서 VRoid 캐릭터 고르기 + 3D 렉 줄이기",
+    changes: [
+      { game: "common", type: "FEAT", desc: "🧑‍🎤 프로필 캐릭터도 3D 테이블과 같은 VRoid 캐릭터로 — 몸(3종)·머리색·피부톤·옷 색을 고르면 그대로 보여요" },
+      { game: "common", type: "IMPROVE", desc: "⚡ 3D 테이블 렉 줄이기 — 캐릭터를 한 명씩 차례로 불러오고, 매 프레임 계산·그림자를 줄였어요(휴대폰은 머리카락 흔들림 끔)" },
+    ],
+  },
+  {
     version: "v1.100.2",
     releaseDate: "2026-10-27",
     title: "🙌 3D 인물 손이 얼굴·몸을 뚫지 않게",

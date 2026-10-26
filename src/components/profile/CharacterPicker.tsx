@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
-import { AVATAR_OPTIONS, CHARACTER_PRESETS, resolveLook, type AvatarProfile, type PersonGender, type PersonLook } from "@/lib/character/avatar";
+import { AVATAR_OPTIONS, CHARACTER_PRESETS, resolveLook, VRM_MODEL_GENDER, type AvatarProfile, type PersonLook, type VrmModel } from "@/lib/character/avatar";
 import { useMyCharacter } from "@/lib/character/myCharacter";
 
 const CharacterPreview3D = dynamic(() => import("./CharacterPreview3D"), {
@@ -30,23 +30,21 @@ function toProfile(l: PersonLook): AvatarProfile {
     face: l.face,
     eyes: l.eyes,
     mark: l.mark,
+    model: l.model,
   };
 }
 
 const PRESET_THUMBS = CHARACTER_PRESETS.map((c) => ({ key: c.id, look: c.look }));
 
-/** The 3D-look rows of "직접 꾸미기" that are plain chip choices. */
-const SHAPE_ROWS = [
-  ["build", "체격"],
-  ["face", "얼굴형"],
-  ["eyes", "눈매"],
-  ["mark", "포인트"],
-] as const;
+/** The model the preview seat would get with no choice made (seat 0 is a woman → the pixiv sample). */
+const DEFAULT_MODEL: VrmModel = "pixiv-sample";
+const MODEL_ICON: Record<VrmModel, string> = { "pixiv-sample": "👩", "three-vrm-girl": "👩", "seed-san": "👨" };
 
 /**
  * 3D character picker (profile → 캐릭터 선택): pick one of the listed
  * characters (`CHARACTER_PRESETS` — the same one as anyone else is fine), or
- * fine-tune under "직접 꾸미기". Every tap saves immediately
+ * fine-tune under "직접 꾸미기": the VRoid body (`model`) and the colours tinted
+ * onto it — the only parts the 3D tables' VRM characters show. Every tap saves immediately
  * (`useMyCharacter`), and the other players see it at the 3D tables via the
  * room's presence (`roomCharacters.ts`). Options come from `AVATAR_OPTIONS`,
  * so adding a colour or cut there shows up here automatically.
@@ -65,16 +63,12 @@ export default function CharacterPicker() {
   const update = (patch: AvatarProfile) => save({ ...toProfile(look), ...patch });
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const onShot = useCallback((id: string, url: string) => setThumbs((t) => (t[id] === url ? t : { ...t, [id]: url })), []);
-  const setGender = (g: PersonGender) => {
-    if (g === look.gender) return;
-    const f = g === "f";
-    update({
-      gender: g,
-      hairStyle: f ? "straight" : "comma",
-      hair: (f ? AVATAR_OPTIONS.hairF : AVATAR_OPTIONS.hairM)[0].id,
-      lip: f ? AVATAR_OPTIONS.lip[0].id : "#c27a6e",
-      glasses: f ? false : look.glasses,
-    });
+  const model = look.model ?? DEFAULT_MODEL;
+  const setModel = (m: VrmModel) => {
+    if (m === model) return;
+    const g = VRM_MODEL_GENDER[m];
+    // switching between a woman's and a man's body starts from that gender's first hair colour
+    update({ model: m, gender: g, ...(g !== look.gender ? { hair: (g === "f" ? AVATAR_OPTIONS.hairF : AVATAR_OPTIONS.hairM)[0].id } : {}) });
   };
   const hairs = look.gender === "f" ? AVATAR_OPTIONS.hairF : AVATAR_OPTIONS.hairM;
 
@@ -127,30 +121,13 @@ export default function CharacterPicker() {
         <summary className="cursor-pointer select-none text-xs font-semibold text-white/70 light:text-slate-600">✏️ 직접 꾸미기</summary>
         <div className="mt-2 flex flex-col gap-3">
 
-      <Row label="성별">
-        {AVATAR_OPTIONS.gender.map((o) => (
-          <Chip key={o.id} selected={look.gender === o.id} onClick={() => setGender(o.id)}>
-            {o.id === "f" ? "👩 " : "👨 "}
-            {o.label}
+      <Row label="캐릭터">
+        {AVATAR_OPTIONS.model.map((o) => (
+          <Chip key={o.id} selected={model === o.id} onClick={() => setModel(o.id)}>
+            {MODEL_ICON[o.id]} {o.label}
           </Chip>
         ))}
       </Row>
-      <Row label="헤어스타일">
-        {AVATAR_OPTIONS.hairStyle.map((o) => (
-          <Chip key={o.id} selected={look.hairStyle === o.id} onClick={() => update({ hairStyle: o.id })}>
-            {o.label}
-          </Chip>
-        ))}
-      </Row>
-      {SHAPE_ROWS.map(([k, label]) => (
-        <Row key={k} label={label}>
-          {AVATAR_OPTIONS[k].map((o) => (
-            <Chip key={o.id} selected={look[k] === o.id} onClick={() => update({ [k]: o.id })}>
-              {o.label}
-            </Chip>
-          ))}
-        </Row>
-      ))}
       <Row label="머리색">
         {hairs.map((o) => (
           <Swatch key={o.id} color={o.id} label={o.label} selected={look.hair === o.id} onClick={() => update({ hair: o.id })} />
@@ -165,19 +142,6 @@ export default function CharacterPicker() {
         {AVATAR_OPTIONS.coat.map((o) => (
           <Swatch key={o.id} color={o.id} label={o.label} selected={look.coat === o.id} onClick={() => update({ coat: o.id })} />
         ))}
-      </Row>
-      <Row label="입술">
-        {AVATAR_OPTIONS.lip.map((o) => (
-          <Swatch key={o.id} color={o.id} label={o.label} selected={look.lip === o.id} onClick={() => update({ lip: o.id })} />
-        ))}
-      </Row>
-      <Row label="안경">
-        <Chip selected={!look.glasses} onClick={() => update({ glasses: false })}>
-          없음
-        </Chip>
-        <Chip selected={look.glasses} onClick={() => update({ glasses: true })}>
-          👓 동그란 안경
-        </Chip>
       </Row>
         </div>
       </details>

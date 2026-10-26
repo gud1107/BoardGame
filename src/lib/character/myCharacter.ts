@@ -33,11 +33,14 @@ export interface Portrait {
   url: string;
 }
 
+/** Bump when the rig that draws portraits changes, so saved portraits get re-shot (2 = VRoid). */
+const PORTRAIT_RIG = 2;
+
 /** Stable identity of a look for portrait caching (field order and presetId don't matter). */
 export function portraitKey(look: AvatarProfile): string {
   const { presetId: _presetId, ...rest } = look;
   void _presetId;
-  return JSON.stringify(Object.keys(rest).sort().map((k) => [k, rest[k as keyof typeof rest]]));
+  return JSON.stringify([PORTRAIT_RIG, ...Object.keys(rest).sort().map((k) => [k, rest[k as keyof typeof rest]])]);
 }
 
 function readJson<T>(key: string): T | null {

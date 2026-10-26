@@ -75,3 +75,21 @@ describe("character individuality", () => {
     }
   });
 });
+
+describe("VRM model choice", () => {
+  it("sanitize keeps a known model and drops unknown ones", () => {
+    expect(sanitizeAvatar({ model: "seed-san" })).toEqual({ model: "seed-san" });
+    expect(sanitizeAvatar({ model: "../evil.vrm" })).toEqual({});
+  });
+
+  it("a chosen model sets the gender when the profile has none", () => {
+    expect(resolveLook(0, undefined, { model: "seed-san" }).gender).toBe("m");
+    expect(resolveLook(1, undefined, { model: "three-vrm-girl" }).gender).toBe("f");
+  });
+
+  it("every preset names a model that matches its gender", async () => {
+    const { CHARACTER_PRESETS, VRM_MODEL_GENDER } = await import("./avatar");
+    for (const c of CHARACTER_PRESETS) expect(VRM_MODEL_GENDER[c.look.model]).toBe(c.look.gender);
+  });
+});
+
