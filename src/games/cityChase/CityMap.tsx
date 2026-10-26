@@ -25,6 +25,52 @@ export function cellLabel(cell: Cell): string {
 }
 
 /**
+ * What each of the 25 buildings is (2026-10-27, user request: "은행, 우체국처럼 실제 건물로").
+ * Purely cosmetic — the rules only ever see the cell number. `kind` picks the 3D storefront:
+ * classic = columns, office = plain sign, shop = awning + display window, cross = roof red cross,
+ * garage = big bay door, clock = facade clock + flag.
+ */
+export type BuildingKind = "classic" | "office" | "shop" | "cross" | "garage" | "clock";
+export interface BuildingType {
+  name: string;
+  icon: string;
+  wall: string;
+  sign: string;
+  kind: BuildingKind;
+}
+const BUILDING_LIST: BuildingType[] = [
+  { name: "은행", icon: "🏦", wall: "#64748b", sign: "#b45309", kind: "classic" },
+  { name: "우체국", icon: "📮", wall: "#7f1d1d", sign: "#dc2626", kind: "office" },
+  { name: "병원", icon: "🏥", wall: "#94a3b8", sign: "#0369a1", kind: "cross" },
+  { name: "편의점", icon: "🏪", wall: "#475569", sign: "#16a34a", kind: "shop" },
+  { name: "카페", icon: "☕", wall: "#57423a", sign: "#78350f", kind: "shop" },
+  { name: "학교", icon: "🏫", wall: "#7c5a3a", sign: "#1d4ed8", kind: "clock" },
+  { name: "보석상", icon: "💎", wall: "#3b3561", sign: "#7c3aed", kind: "shop" },
+  { name: "소방서", icon: "🚒", wall: "#57534e", sign: "#b91c1c", kind: "garage" },
+  { name: "빵집", icon: "🍞", wall: "#6b4f3a", sign: "#c2410c", kind: "shop" },
+  { name: "박물관", icon: "🏛️", wall: "#78716c", sign: "#57534e", kind: "classic" },
+  { name: "호텔", icon: "🏨", wall: "#3f3f5a", sign: "#be185d", kind: "office" },
+  { name: "약국", icon: "💊", wall: "#3d5a50", sign: "#059669", kind: "shop" },
+  { name: "영화관", icon: "🎬", wall: "#2e1065", sign: "#c026d3", kind: "office" },
+  { name: "마트", icon: "🛒", wall: "#334155", sign: "#ea580c", kind: "shop" },
+  { name: "도서관", icon: "📚", wall: "#6b5b4b", sign: "#0f766e", kind: "classic" },
+  { name: "꽃집", icon: "🌸", wall: "#5b4b6b", sign: "#db2777", kind: "shop" },
+  { name: "시청", icon: "🏢", wall: "#6b7280", sign: "#1e40af", kind: "classic" },
+  { name: "식당", icon: "🍜", wall: "#5a3e2b", sign: "#dc2626", kind: "shop" },
+  { name: "헬스장", icon: "💪", wall: "#1f3b4d", sign: "#0284c7", kind: "office" },
+  { name: "미용실", icon: "💇", wall: "#4b5563", sign: "#9333ea", kind: "shop" },
+  { name: "오락실", icon: "🎮", wall: "#312e81", sign: "#4f46e5", kind: "office" },
+  { name: "세탁소", icon: "🧺", wall: "#3f5a6b", sign: "#0891b2", kind: "shop" },
+  { name: "치킨집", icon: "🍗", wall: "#5c4033", sign: "#d97706", kind: "shop" },
+  { name: "서점", icon: "📖", wall: "#44403c", sign: "#15803d", kind: "shop" },
+  { name: "완구점", icon: "🧸", wall: "#4c3d5c", sign: "#e11d48", kind: "shop" },
+];
+/** 7 is coprime with 25, so every building appears exactly once and similar kinds spread out. */
+export function buildingType(cell: Cell): BuildingType {
+  return BUILDING_LIST[(cell * 7) % BUILDING_LIST.length];
+}
+
+/**
  * The rulebook's 3 helicopters, dressed as a mixed police squad (2026-10-23, user
  * request): car / officer / helicopter. Purely cosmetic — the engine still calls
  * them helis and all three move and search by exactly the same rules.
@@ -90,11 +136,10 @@ export function TokenChip({ color, round, size = "sm", caption = false }: { colo
 const STEP = 100 / GRID; // % distance between two road lines
 const INSET = 2.6; // % gap between a building and the road centre line
 
-// Deterministic per-building look (height tier + facade hue) so the skyline isn't a flat grid.
-const FACADES = ["#334155", "#3f3f5a", "#2f4858", "#44403c", "#3b3561", "#1f3b4d"];
+// Deterministic per-building look (height tier + the building type's wall colour) so the skyline isn't a flat grid.
 function buildingLook(cell: Cell) {
   const h = (cell * 7 + 3) % 5;
-  return { lift: 4 + h * 2, facade: FACADES[(cell * 5 + 1) % FACADES.length], windows: 2 + (cell % 3) };
+  return { lift: 4 + h * 2, facade: buildingType(cell).wall, windows: 2 + (cell % 3) };
 }
 
 export interface HeliControls {
@@ -225,7 +270,7 @@ export default function CityMap({ state, showSecret, revealRoute = false, thiefT
                   animation: lifting ? `${reveal!.result === "caught" ? "cc-lift-stay" : "cc-lift"} 1.8s ease-in-out forwards` : undefined,
                   zIndex: lifting ? 20 : 1,
                 }}
-                aria-label={`${cellLabel(cell)} 건물${isSearchTarget ? " 수색" : isThiefTarget ? "으로 이동" : ""}`}
+                aria-label={`${cellLabel(cell)} ${buildingType(cell).name}${isSearchTarget ? " 수색" : isThiefTarget ? "으로 이동" : ""}`}
               >
                 {/* facade (depth) */}
                 <div className="absolute inset-x-0 bottom-0 top-[18%] rounded-lg" style={{ background: look.facade, boxShadow: "0 6px 10px rgba(0,0,0,.5)" }} />
@@ -262,6 +307,9 @@ export default function CityMap({ state, showSecret, revealRoute = false, thiefT
                 )}
                 {isSearchTarget && (
                   <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-base sm:text-xl">🔍</span>
+                )}
+                {!isSearchTarget && !isThiefTarget && (
+                  <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm opacity-80 sm:text-lg">{buildingType(cell).icon}</span>
                 )}
                 {isThiefTarget && !isSearchTarget && (
                   <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs font-bold text-amber-100 drop-shadow-[0_0_4px_rgba(253,224,71,0.9)] sm:text-sm">➜</span>

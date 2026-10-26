@@ -18,7 +18,7 @@ import {
   type SearchRecord,
   type TokenColor,
 } from "../engine";
-import { cellLabel, HELI_STYLES, type CityMapProps } from "../CityMap";
+import { buildingType, cellLabel, HELI_STYLES, type BuildingType, type CityMapProps } from "../CityMap";
 import { clamp01, easeInOut, easeOut } from "@/games/shared/three/tableKit";
 
 /**
@@ -48,8 +48,6 @@ const PERSON = 1.5;
 
 const TOKEN_HEX: Record<TokenColor, string> = { yellow: "#facc15", blue: "#22d3ee", purple: "#a855f7", red: "#ef4444" };
 const TOKEN_ICON: Record<TokenColor, string> = { yellow: "🟡", blue: "🔵", purple: "🟣", red: "🔴" };
-const FACADES = ["#475569", "#57534e", "#3f5a6b", "#5b4b6b", "#4b5563", "#3d5a50"];
-const AWNINGS = ["#dc2626", "#16a34a", "#2563eb", "#d97706", "#9333ea", "#0891b2"];
 
 /** Low-rise shops (0.6~1.12) so the back rows and every intersection stay visible. */
 function buildingHeight(cell: Cell): number {
@@ -221,6 +219,154 @@ function policeTapeTexture(): THREE.CanvasTexture {
   return tapeTex;
 }
 
+const signCache = new Map<string, THREE.CanvasTexture>();
+/** Shop sign over the door: "🏦 은행" in white on the building's sign colour. */
+function signTexture(b: BuildingType): THREE.CanvasTexture {
+  const hit = signCache.get(b.name);
+  if (hit) return hit;
+  const c = document.createElement("canvas");
+  c.width = 512;
+  c.height = 160;
+  const ctx = c.getContext("2d")!;
+  ctx.fillStyle = b.sign;
+  ctx.beginPath();
+  ctx.roundRect(3, 3, 506, 154, 18);
+  ctx.fill();
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = "rgba(255,255,255,0.75)";
+  ctx.stroke();
+  const text = `${b.icon} ${b.name}`;
+  const font = (px: number) => `900 ${px}px 'Pretendard','Apple SD Gothic Neo','Malgun Gothic','Segoe UI Emoji','Apple Color Emoji',sans-serif`;
+  let size = 104;
+  ctx.font = font(size);
+  while (ctx.measureText(text).width > 476 && size > 40) ctx.font = font((size -= 4));
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, 256, 86);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  signCache.set(b.name, tex);
+  return tex;
+}
+
+/**
+ * The street face of a building, by type (local coords, south wall at z = FOOT/2): door + sign for all,
+ * then classic = steps/columns/entablature, shop = awning + two lit display windows, office = glass doors
+ * + canopy, cross = roof red cross, garage = striped bay door, clock = roof clock tower + flag.
+ */
+function Storefront({ b, h, open, signMat }: { b: BuildingType; h: number; open: boolean; signMat: React.RefObject<THREE.MeshBasicMaterial | null> }) {
+  const z = FOOT / 2;
+  const door = open ? "#fef9c3" : "#0f172a";
+  return (
+    <>
+      {b.kind === "garage" ? (
+        <>
+          <mesh position={[0, 0.17, z + 0.005]}>
+            <planeGeometry args={[0.66, 0.34]} />
+            <meshBasicMaterial color={open ? "#fef9c3" : "#991b1b"} />
+          </mesh>
+          {[0.08, 0.17, 0.26].map((y) => (
+            <mesh key={y} position={[0, y, z + 0.008]}>
+              <planeGeometry args={[0.66, 0.015]} />
+              <meshBasicMaterial color="#fecaca" />
+            </mesh>
+          ))}
+        </>
+      ) : (
+        <mesh position={[0, 0.17, z + 0.005]}>
+          <planeGeometry args={[b.kind === "office" ? 0.44 : 0.3, 0.34]} />
+          <meshBasicMaterial color={b.kind === "office" && !open ? "#1e3a5f" : door} />
+        </mesh>
+      )}
+      {/* rooftop sign on the front edge, leaning back toward the camera — a sign over the door
+          hides behind the next row of shops from the default south view */}
+      <mesh position={[0, h + 0.2, z - 0.12]} rotation-x={-0.75}>
+        <planeGeometry args={[1.24, 0.4]} />
+        <meshBasicMaterial ref={signMat} map={signTexture(b)} transparent side={THREE.DoubleSide} />
+      </mesh>
+      {b.kind === "classic" && (
+        <>
+          <mesh position={[0, 0.02, z + 0.1]}>
+            <boxGeometry args={[1.22, 0.04, 0.2]} />
+            <meshStandardMaterial color="#d6d3d1" roughness={0.8} />
+          </mesh>
+          {[-0.44, -0.2, 0.2, 0.44].map((x) => (
+            <mesh key={x} position={[x, 0.21, z + 0.12]}>
+              <cylinderGeometry args={[0.04, 0.045, 0.34, 8]} />
+              <meshStandardMaterial color="#e7e5e4" roughness={0.7} />
+            </mesh>
+          ))}
+          <mesh position={[0, 0.41, z + 0.11]}>
+            <boxGeometry args={[1.22, 0.06, 0.22]} />
+            <meshStandardMaterial color="#e7e5e4" roughness={0.7} />
+          </mesh>
+        </>
+      )}
+      {b.kind === "shop" && (
+        <>
+          <mesh position={[0, 0.38, z + 0.1]} rotation-x={0.5}>
+            <boxGeometry args={[1.0, 0.02, 0.22]} />
+            <meshStandardMaterial color={b.sign} roughness={0.8} />
+          </mesh>
+          {[-0.4, 0.4].map((x) => (
+            <mesh key={x} position={[x, 0.17, z + 0.006]}>
+              <planeGeometry args={[0.3, 0.24]} />
+              <meshBasicMaterial color="#fde68a" transparent opacity={0.85} />
+            </mesh>
+          ))}
+        </>
+      )}
+      {(b.kind === "office" || b.kind === "cross") && (
+        <mesh position={[0, 0.37, z + 0.08]}>
+          <boxGeometry args={[0.7, 0.03, 0.16]} />
+          <meshStandardMaterial color={b.kind === "cross" ? "#f8fafc" : "#1f2937"} roughness={0.6} />
+        </mesh>
+      )}
+      {b.kind === "cross" &&
+        [
+          [0.4, 0.12],
+          [0.12, 0.4],
+        ].map(([w, d], k) => (
+          <mesh key={k} position={[0, h + 0.1, -0.22]}>
+            <boxGeometry args={[w, 0.04, d]} />
+            <meshBasicMaterial color="#ef4444" />
+          </mesh>
+        ))}
+      {b.kind === "clock" && (
+        <>
+          <mesh position={[-0.3, h + 0.2, -0.3]}>
+            <boxGeometry args={[0.28, 0.4, 0.14]} />
+            <meshStandardMaterial color={b.wall} roughness={0.7} />
+          </mesh>
+          <mesh position={[-0.3, h + 0.27, -0.225]}>
+            <circleGeometry args={[0.1, 20]} />
+            <meshBasicMaterial color="#f8fafc" />
+          </mesh>
+          {[
+            [0.08, 0],
+            [0.06, Math.PI / 2],
+          ].map(([l, rot], k) => (
+            <mesh key={k} position={[-0.3, h + 0.27, -0.22]} rotation-z={rot}>
+              <planeGeometry args={[0.016, l]} />
+              <meshBasicMaterial color="#0f172a" />
+            </mesh>
+          ))}
+          <mesh position={[0.48, h + 0.25, -0.4]}>
+            <cylinderGeometry args={[0.012, 0.012, 0.5, 6]} />
+            <meshStandardMaterial color="#cbd5e1" />
+          </mesh>
+          <mesh position={[0.57, h + 0.42, -0.4]}>
+            <planeGeometry args={[0.18, 0.11]} />
+            <meshBasicMaterial color={b.sign} side={THREE.DoubleSide} />
+          </mesh>
+        </>
+      )}
+    </>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Ground
 // ---------------------------------------------------------------------------
@@ -323,10 +469,11 @@ function Building({
   const plot = useRef<THREE.MeshBasicMaterial>(null);
   const halo = useRef<THREE.MeshBasicMaterial>(null);
   const dim = useRef(0);
+  const sign = useRef<THREE.MeshBasicMaterial>(null);
   const siren = useRef<THREE.Group>(null);
   const alarmAt = useRef<{ key: number; at: number } | null>(null);
-  const facade = FACADES[(cell * 5 + 1) % FACADES.length];
-  const awning = AWNINGS[(cell * 5 + 2) % AWNINGS.length];
+  const kind = buildingType(cell);
+  const facade = kind.wall;
   const [tex, glow] = useMemo(
     () =>
       (["map", "glow"] as const).map((k) => {
@@ -367,13 +514,14 @@ function Building({
       plot.current.color.copy(plotBase).lerp(plotTint, tone ? 0.55 + pulse * 0.45 : zone ? 0.75 : 0).lerp(night, d * 0.8);
       plot.current.opacity = tone || zone ? 0.95 : 0.8;
     }
+    if (sign.current) sign.current.color.setScalar(1 - d * 0.7);
     if (halo.current) halo.current.opacity = 0.25 + pulse * 0.55;
     if (siren.current) {
       siren.current.rotation.y = t * (alarming ? 14 : 5);
       siren.current.scale.setScalar(alarming ? 1.5 : 1);
     }
   });
-  const label = `${tone === "search" ? "🔍 " : tone === "thief" ? "🏃 " : robbed ? "🚧 " : ""}${cellLabel(cell)}`;
+  const label = `${tone === "search" ? "🔍 " : tone === "thief" ? "🏃 " : robbed ? "🚧 " : ""}${kind.icon}${cellLabel(cell)}`;
   const roofLabel = heat > 0.004 ? `${label} ${Math.round(heat * 100)}%` : label;
   const labelColor = alarm && robbed ? "#ef4444" : tone === "search" ? zone ?? "#38bdf8" : tone === "thief" ? "#fde047" : dimmed ? "#475569" : heat > 0.004 ? "#f43f5e" : robbed ? "#facc15" : "#94a3b8";
   const noteText = note ? (note.result === "trail" ? `흔적${note.tokens.map((t) => TOKEN_ICON[t]).join("")} R${note.round}` : note.result === "caught" ? `🔗 검거` : `✕ 빈집 R${note.round}`) : null;
@@ -414,15 +562,8 @@ function Building({
       </mesh>
       {!ghost && (
         <>
-          {/* shop front: door + awning, facing the default camera (south) */}
-          <mesh position={[0, 0.2, front + 0.005]}>
-            <planeGeometry args={[0.3, 0.4]} />
-            <meshBasicMaterial color={tone === "thief" ? "#fef9c3" : "#0f172a"} />
-          </mesh>
-          <mesh position={[0, 0.46, front + 0.1]} rotation-x={0.5}>
-            <boxGeometry args={[0.6, 0.02, 0.24]} />
-            <meshStandardMaterial color={awning} roughness={0.8} />
-          </mesh>
+          {/* street face by building type, facing the default camera (south) */}
+          <Storefront b={kind} h={h} open={tone === "thief"} signMat={sign} />
           {/* trash can by the door — the thief's hiding spot */}
           <mesh position={[can[0], 0.17, can[2]]} castShadow={!lowDetail}>
             <cylinderGeometry args={[0.13, 0.11, 0.34, 10]} />
@@ -454,9 +595,9 @@ function Building({
           </group>
         </>
       )}
-      <Tag text={roofLabel} color={labelColor} position={[0, h + 0.32, 0]} height={tone ? 0.42 : 0.36} front={!!tone} />
+      <Tag text={roofLabel} color={labelColor} position={[0, h + 0.45, -0.3]} height={tone ? 0.42 : 0.36} front={!!tone} />
       {alarm && robbed && <Tag text="🚨 이미 턴 곳 — 들켜요!" color="#ef4444" bg="rgba(127,29,29,0.95)" position={[0, h + 0.8, 0]} height={0.32} front />}
-      {noteText && !ghost && !tone && <Tag text={noteText} color={note!.result === "trail" ? "#fbbf24" : "#94a3b8"} bg={note!.result === "trail" ? "rgba(120,53,15,0.92)" : "rgba(30,41,59,0.9)"} position={[0, h + 0.72, 0]} height={0.28} />}
+      {noteText && !ghost && !tone && <Tag text={noteText} color={note!.result === "trail" ? "#fbbf24" : "#94a3b8"} bg={note!.result === "trail" ? "rgba(120,53,15,0.92)" : "rgba(30,41,59,0.9)"} position={[0, h + 0.85, -0.3]} height={0.28} />}
       {clickable && (
         <mesh position={[0, h / 2, 0]} visible={false}>
           <boxGeometry args={[STEP * 0.92, h + 1, STEP * 0.92]} />
