@@ -28,7 +28,8 @@ describe("spoken phrasing", () => {
       for (const m of MOODS)
         for (let n = 0; n < 12; n++)
           for (const ph of spokenPhrases(voiceLine(p, m, n % 8, n))) {
-            expect(ph.text).not.toMatch(/[~…\p{Extended_Pictographic}]/u);
+            // Hangul syllables and plain punctuation only — "~" is read as "물결표", "ㅋㅋ" as "키읔키읔"
+            expect(ph.text).toMatch(/^[가-힣 ,.!?]+$/);
             expect(ph.text.replace(/[.!?,\s]/g, "").length).toBeGreaterThan(0);
           }
   });

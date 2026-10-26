@@ -67,6 +67,9 @@ interface Shot {
   place: string;
 }
 
+/** 내레이션용 "n째 날" — 숫자를 넘기면 TTS가 "데이 이"처럼 읽는다. */
+const NTH_DAY = ["첫째", "둘째", "셋째", "넷째", "다섯째", "여섯째", "일곱째"];
+
 /** 프레임마다 깔 영상·자막·내레이션. */
 function vlogShot(f: Frame, i: number, last: number, rec: DayRecord, day: number): Shot {
   const o = f.outcome;
@@ -75,7 +78,7 @@ function vlogShot(f: Frame, i: number, last: number, rec: DayRecord, day: number
     return {
       clip: "wake",
       caption: `Day ${day + 1} · ${dayName} 갓생 브이로그 시작 🌅`,
-      speech: day === 0 ? `안녕하세요, 갓생로그예요. 오늘부터 일주일 동안 갓생 살기 도전합니다. 첫날 ${dayName}, 시작해 볼게요.` : `안녕하세요, 갓생로그예요. 오늘은 ${dayName}, 데이 ${day + 1}! 오늘도 시작해 볼게요.`,
+      speech: day === 0 ? `안녕하세요, 갓생로그예요. 오늘부터 일주일 동안 갓생 살기 도전합니다. 첫날 ${dayName}, 시작해 볼게요.` : `안녕하세요, 갓생로그예요. 오늘은 ${dayName}, 도전 ${NTH_DAY[day] ?? "마지막"} 날! 오늘도 시작해 볼게요.`,
       place: "🏠 내 방",
     };
   if (!o || i === last) {

@@ -64,6 +64,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.98.2",
+    releaseDate: "2026-10-27",
+    title: "🎙️ 브이로그 내레이션 숫자 읽기 다듬기",
+    changes: [
+      { game: "god-life-planner", type: "FIX", desc: "🎙️ 하루 다시 보기 내레이션이 '데이 이'처럼 숫자를 읽던 문제 — 이제 '도전 둘째 날!'처럼 자연스럽게 말해요" },
+    ],
+  },
+  {
     version: "v1.99.0",
     releaseDate: "2026-10-26",
     title: "🏁 코요테 마지막 승부 다시 보기 + 이전 판정 기록",
