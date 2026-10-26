@@ -757,3 +757,17 @@ describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 gameOver�
     expect(computeRankings(state)).toHaveLength(5);
   });
 });
+
+describe("판정 기록 (resolutionHistory)", () => {
+  it("records every showdown in order, through the game-ending one", () => {
+    const state = playFullBotGame(4, 4242, () => 5);
+    expect(state.phase).toBe("gameOver");
+    const history = state.resolutionHistory ?? [];
+    // 판정 1번 = 하트 1개 — 기록 수는 이번 게임에서 깎인 하트 총수와 같다.
+    const heartsLost = state.players.reduce((sum, p) => sum + (STARTING_HEARTS - Math.max(0, p.hearts)), 0);
+    expect(history).toHaveLength(heartsLost);
+    expect(history.map((h) => h.roundNumber)).toEqual(history.map((_, i) => i + 1));
+    expect(history[history.length - 1].resolution).toBe(state.lastResolution);
+    for (const p of state.players) expect(history[history.length - 1].heartsAfter[p.seat]).toBe(p.hearts);
+  });
+});

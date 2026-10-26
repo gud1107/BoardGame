@@ -2133,6 +2133,16 @@ html {
   }
 }
 
+/* 마지막 승부: "🏆 최종 순위 보기" 버튼이 최소 유지 시간 동안 왼쪽부터 차오름. */
+@keyframes coyote-hold-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
 /* 판정 표시: 하트를 잃은 쪽에 "💔 −1"이 튀어나왔다 자리 잡음. */
 @keyframes coyote-heart-loss-pop {
   0% {

@@ -183,6 +183,14 @@ export interface Resolution {
   nightCardHolderSeat: SeatIndex | null;
 }
 
+/** One finished showdown, kept for the in-game "📜 이전 결과" log — everything in it was already public at reveal time. */
+export interface RoundResult {
+  roundNumber: number;
+  resolution: Resolution;
+  /** Every seat's hearts right after this showdown's heart loss. */
+  heartsAfter: Record<SeatIndex, number>;
+}
+
 export interface CoyoteState {
   playerCount: number;
   players: PlayerState[];
@@ -210,6 +218,8 @@ export interface CoyoteState {
   /** Seats in the order they were eliminated (hearts hit 0) — needed for final rankings. */
   eliminationOrder: SeatIndex[];
   winnerSeat: SeatIndex | null;
+  /** Every showdown so far, oldest first. Optional so hand-built test/legacy states stay valid. */
+  resolutionHistory?: RoundResult[];
   /** Personal-stats counters (src/games/shared/statTally.ts) — see coyote/stats.ts. */
   statTally?: StatTally;
 }
@@ -441,6 +451,11 @@ function resolveCoyoteCall(state: CoyoteState, callerSeat: SeatIndex, bid: Bid):
     }
   }
 
+  const resolutionHistory = [
+    ...(state.resolutionHistory ?? []),
+    { roundNumber: state.roundNumber, resolution, heartsAfter: Object.fromEntries(players.map((p) => [p.seat, p.hearts])) },
+  ];
+
   const alive = players.filter((p) => p.hearts > 0).map((p) => p.seat);
   if (alive.length <= 1) {
     return {
@@ -448,13 +463,14 @@ function resolveCoyoteCall(state: CoyoteState, callerSeat: SeatIndex, bid: Bid):
       players,
       phase: "gameOver",
       lastResolution: resolution,
+      resolutionHistory,
       eliminationOrder,
       winnerSeat: alive[0] ?? null,
       statTally,
     };
   }
 
-  return { ...state, players, phase: "reveal", lastResolution: resolution, eliminationOrder, statTally };
+  return { ...state, players, phase: "reveal", lastResolution: resolution, resolutionHistory, eliminationOrder, statTally };
 }
 
 /**

@@ -8,6 +8,7 @@ import type { CoyoteSeat3D } from "./three/CoyoteTable3D";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import RulebookModal from "./RulebookModal";
+import CoyoteHistoryModal from "./CoyoteHistory";
 import CoyoteSoundHud from "./CoyoteSoundHud";
 import { getCoyoteSound } from "./coyoteSound";
 import { coyoteSoundCues } from "./coyoteWesternScore";
@@ -71,6 +72,9 @@ export interface CoyoteBoardProps {
   onGameEnd: () => void;
 }
 
+/** 게임을 끝낸 마지막 승부의 판정 화면을 최종 순위로 넘기기 전 최소한 보여 주는 시간. */
+const FINAL_SHOWDOWN_HOLD_MS = 5000;
+
 function randomSeed(): number {
   return Math.floor(Math.random() * 1_000_000_000);
 }
@@ -98,6 +102,8 @@ function seatPosition(relativeIndex: number, total: number): CSSProperties {
 
 export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: CoyoteBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const history = state.resolutionHistory ?? [];
   const { view: boardView, setView: setBoardView, canToggle } = useBoardView("coyote-view");
   const [lowDetail] = useState(preferLowDetail);
 
@@ -173,6 +179,10 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
   // 트롬본이 울리는 순간(탈락이면 데스 연출 시작, 스킵이면 즉시)에 맞춘다. 그
   // 전엔 "외친 사람 / 선언한 사람" 역할 표시만 보여서 결과를 미리 스포하지 않는다.
   const [verdictShown, setVerdictShown] = useState(false);
+  // 마지막 승부(phase가 곧장 "gameOver")도 일반 판정처럼 테이블+판정 패널로
+  // 먼저 보여 주고, FINAL_SHOWDOWN_HOLD_MS가 지나야 "🏆 최종 순위 보기"가 열린다.
+  const [finalHoldDone, setFinalHoldDone] = useState(false);
+  const [rankingOpen, setRankingOpen] = useState(false);
   const skippedRef = useRef(false);
   // Coyote Sound Suite: whether this resolution's heart-loss trombone already
   // played — the skip button plays it early, the timer must not repeat it.
@@ -185,6 +195,8 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
     setDeathStage(hasDeathStage ? "pending" : "done");
     setRevealSettled(false);
     setVerdictShown(false);
+    setFinalHoldDone(false);
+    setRankingOpen(false);
     setDisplayedTotal(0);
     setCountingActive(noSpecialStages); // no special-card stage to play -> count up right away
     setShowFormula(noSpecialStages);
@@ -262,6 +274,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
       timers.push(window.setTimeout(() => setDeathStage("done"), deathStartAt + DEATH_SHAKE_MS + DEATH_SHATTER_MS + DEATH_SKULL_MS));
     }
     timers.push(window.setTimeout(() => setRevealSettled(true), REVEAL_HOLD_MS));
+    if (state.phase === "gameOver") timers.push(window.setTimeout(() => setFinalHoldDone(true), FINAL_SHOWDOWN_HOLD_MS));
     return () => timers.forEach((id) => window.clearTimeout(id));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on `res` identity only, restarts exactly once per new "코요테!" call
   }, [res]);
@@ -334,16 +347,28 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
   const rulebookButton = (
     <button
       onClick={() => setRulebookOpen(true)}
-      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] whitespace-nowrap text-white/60 transition hover:border-white/30 hover:text-white"
     >
       📖 코요테 룰북
     </button>
+  );
+  const historyButton = history.length > 0 && (
+    <button
+      onClick={() => setHistoryOpen(true)}
+      title="이전 판정 결과 보기"
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] whitespace-nowrap text-white/60 transition hover:border-white/30 hover:text-white"
+    >
+      📜 기록 {history.length}
+    </button>
+  );
+  const historyModal = historyOpen && (
+    <CoyoteHistoryModal history={history} names={names} viewerSeat={viewerSeat} gameOver={state.phase === "gameOver"} onClose={() => setHistoryOpen(false)} />
   );
 
   // ---------------------------------------------------------------------
   // Game over
   // ---------------------------------------------------------------------
-  if (state.phase === "gameOver") {
+  if (state.phase === "gameOver" && (rankingOpen || !res)) {
     const rankings = computeRankings(state);
     const winner = rankings.find((r) => r.rank === 1)!;
     return (
@@ -384,9 +409,28 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
             </tbody>
           </table>
         </div>
+        <div className="flex flex-wrap justify-center gap-2">
+          {res && (
+            <button
+              onClick={() => setRankingOpen(false)}
+              className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/80 transition hover:border-white/40 hover:text-white"
+            >
+              🏁 마지막 승부 다시 보기
+            </button>
+          )}
+          {history.length > 0 && (
+            <button
+              onClick={() => setHistoryOpen(true)}
+              className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/80 transition hover:border-white/40 hover:text-white"
+            >
+              📜 판정 기록 {history.length}판
+            </button>
+          )}
+        </div>
         <button onClick={onGameEnd} className="rounded-full bg-amber-500 px-8 py-3 font-medium text-black transition hover:bg-amber-400">
           결과 확정하고 계속하기
         </button>
+        {historyModal}
         {howl && <CoyoteHowlBanner callerName={howl.callerName} onDone={() => setHowl(null)} />}
         {plusOneFx && <PlusOneUsedBanner seatName={plusOneFx.seatName} onDone={() => setPlusOneFx(null)} />}
         {deathStage === "skull" && justEliminatedSeatValue !== null && <DeathStampOverlay name={names[justEliminatedSeatValue]} />}
@@ -570,15 +614,16 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
         <span>
           {state.playerCount}인 · {state.roundNumber}라운드 · 하트 {STARTING_HEARTS}개 모두 잃으면 탈락
         </span>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
           {canToggle && (
             <button
               onClick={() => setBoardView(boardView === "3d" ? "2d" : "3d")}
-              className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+              className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] whitespace-nowrap text-white/60 transition hover:border-white/30 hover:text-white"
             >
               {boardView === "3d" ? "🖼️ 2D로" : "🧊 3D로"}
             </button>
           )}
+          {historyButton}
           <CoyoteSoundHud />
           {rulebookButton}
         </div>
@@ -692,8 +737,9 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
           슬래시→계산식 순서로 이어지는 연출 포함)는 최소 REVEAL_HOLD_MS(3초)간
           유지되며, 그동안 "다음 라운드" 대신 "⏩ 스킵" 버튼만 노출된다(클릭 시
           handleSkipReveal이 즉시 최종 계산식+하이라이트 완료 화면으로 전환). */}
-      {state.phase === "reveal" && res && (
+      {state.phase !== "playing" && res && (
         <div className="relative z-10 flex flex-col gap-2 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-center text-xs light:border-rose-300 light:bg-rose-50">
+          {state.phase === "gameOver" && <p className="text-sm font-black tracking-wide text-amber-200 light:text-amber-700">🏁 마지막 승부</p>}
           <ShowdownMatchup
             callerName={names[res.callerSeat]}
             bidderName={names[res.bid.seat]}
@@ -702,7 +748,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
             viewerRole={res.callerSeat === viewerSeat ? "caller" : res.bid.seat === viewerSeat ? "bidder" : null}
             myCard={viewerSeat === qSeat ? (questionResolvedCard ?? res.tableCards[viewerSeat]) : (res.tableCards[viewerSeat] ?? null)}
           />
-          {res.nightCardHolderSeat !== null && <p className="break-keep text-white/60 light:text-slate-500">🌙 {names[res.nightCardHolderSeat]}님이 다음 라운드의 선이 됩니다</p>}
+          {res.nightCardHolderSeat !== null && state.phase === "reveal" && <p className="break-keep text-white/60 light:text-slate-500">🌙 {names[res.nightCardHolderSeat]}님이 다음 라운드의 선이 됩니다</p>}
           <p className={`break-keep font-semibold text-white transition-opacity light:text-slate-900 ${verdictShown ? "opacity-100" : "opacity-0"}`}>
             {res.loserWasBidder
               ? `${names[res.bid.seat]}님이 오버 배팅으로 하트 1개를 잃었습니다.`
@@ -723,7 +769,23 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
               callerWon={res.loserWasBidder}
             />
           )}
-          {revealSettled ? (
+          {state.phase === "gameOver" && (
+            <button
+              disabled={!finalHoldDone}
+              onClick={() => setRankingOpen(true)}
+              className="relative mx-auto mt-1 overflow-hidden rounded-full bg-amber-500 px-6 py-2 text-xs font-bold text-black transition hover:bg-amber-400 disabled:cursor-wait disabled:bg-amber-500/40 disabled:text-black/60"
+            >
+              {!finalHoldDone && (
+                <span
+                  aria-hidden
+                  className="absolute inset-0 origin-left bg-amber-400/70"
+                  style={{ animation: `coyote-hold-fill ${FINAL_SHOWDOWN_HOLD_MS}ms linear both` }}
+                />
+              )}
+              <span className="relative">🏆 최종 순위 보기</span>
+            </button>
+          )}
+          {state.phase === "gameOver" && revealSettled ? null : revealSettled ? (
             <button
               onClick={() => onAction({ type: "continue", seed: randomSeed() })}
               className="mx-auto mt-1 rounded-full bg-amber-500 px-6 py-2 text-xs font-bold text-black transition hover:bg-amber-400"
@@ -742,6 +804,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
       )}
 
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
+      {historyModal}
       {howl && <CoyoteHowlBanner callerName={howl.callerName} onDone={() => setHowl(null)} durationMs={1300} />}
       {plusOneFx && <PlusOneUsedBanner seatName={plusOneFx.seatName} onDone={() => setPlusOneFx(null)} />}
       {questionStage === "popup" && res && qSeat !== null && (

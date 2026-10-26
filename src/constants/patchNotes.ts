@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.99.0",
+    releaseDate: "2026-10-26",
+    title: "🏁 코요테 마지막 승부 다시 보기 + 이전 판정 기록",
+    changes: [
+      { game: "coyote", type: "IMPROVE", desc: "🏁 게임을 끝낸 마지막 승부도 판정 화면을 그대로 보여 줘요 — 최소 5초 뒤에 '🏆 최종 순위 보기'가 열리고, 순위 화면에서 다시 볼 수도 있어요" },
+      { game: "coyote", type: "FEAT", desc: "📜 '기록' 버튼으로 이번 게임의 지난 판정을 최신순으로 — 누가 외쳤나·계산식·모두의 카드·하트 잃은 사람까지" },
+    ],
+  },
+  {
     version: "v1.98.2",
     releaseDate: "2026-10-26",
     title: "🐺 코요테 판정에서 내 숫자 바로 확인",
