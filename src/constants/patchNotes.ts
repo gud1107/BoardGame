@@ -64,6 +64,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.100.1",
+    releaseDate: "2026-10-27",
+    title: "🥒 오이 다섯 개도 VRoid 캐릭터로",
+    changes: [
+      { game: "five-cucumbers", type: "IMPROVE", desc: "🧑‍🎤 오이 다섯 개 테이블 인물도 다른 3D 게임과 같은 VRoid 캐릭터로 — 테이블 크기·시점도 똑같이 맞췄어요" },
+    ],
+  },
+  {
     version: "v1.100.0",
     releaseDate: "2026-10-27",
     title: "🧑‍🎤 3D 테이블 인물이 VRoid 캐릭터로",

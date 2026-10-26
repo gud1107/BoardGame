@@ -101,7 +101,6 @@ const THEME: TableTheme = {
   chairColor: "#6b4a2a",
   seatColors: SEAT_COLORS,
   hats: ["none", "cap", "none", "beret", "none", "none"],
-  personStyle: "realistic",
 };
 
 const SIGN: BubbleStyle = { bg: "rgba(20,40,20,0.9)", fg: "#ecfccb", border: "#84cc16" };
