@@ -323,6 +323,7 @@ function Building({
   const halo = useRef<THREE.MeshBasicMaterial>(null);
   const dim = useRef(0);
   const deco = useRef<THREE.Group>(null);
+  const decoFade = useRef(1);
   const siren = useRef<THREE.Group>(null);
   const alarmAt = useRef<{ key: number; at: number } | null>(null);
   const kind = buildingType(cell);
@@ -367,15 +368,28 @@ function Building({
       plot.current.color.copy(plotBase).lerp(plotTint, tone ? 0.55 + pulse * 0.45 : zone ? 0.75 : 0).lerp(night, d * 0.8);
       plot.current.opacity = tone || zone ? 0.95 : 0.8;
     }
-    // landmark props follow the dim too (only re-tinted while the fade is moving, or right after a remount)
+    // Landmark props follow the dim and the search see-through together with the walls — they used to
+    // unmount on search, so a dome or spire vanished in one frame and read as "the building collapsed".
+    // Only re-touched while either fade is moving (or right after a remount).
+    decoFade.current += ((ghost ? 0.2 : 1) - decoFade.current) * Math.min(1, dt * 5);
+    const fade = decoFade.current;
     const dg = deco.current;
-    if (dg && Math.abs((dg.userData.d ?? -1) - d) > 0.002) {
+    if (dg && (Math.abs((dg.userData.d ?? -1) - d) > 0.002 || Math.abs((dg.userData.fade ?? -1) - fade) > 0.002)) {
       dg.userData.d = d;
+      dg.userData.fade = fade;
       dg.traverse((o) => {
         const m = (o as THREE.Mesh).material as THREE.MeshBasicMaterial | undefined;
         if (!m?.color) return;
-        m.userData.base ??= m.color.clone();
+        if (!m.userData.base) {
+          // switch to blended once up front (transparent is part of the shader key) instead of toggling per search
+          m.userData.base = m.color.clone();
+          m.userData.opacity = m.opacity;
+          m.transparent = true;
+          m.needsUpdate = true;
+        }
         m.color.copy(m.userData.base).lerp(night, d * 0.7);
+        m.opacity = m.userData.opacity * fade;
+        m.depthWrite = fade > 0.95;
       });
     }
     if (halo.current) halo.current.opacity = 0.25 + pulse * 0.55;
@@ -423,12 +437,13 @@ function Building({
         <boxGeometry args={[FOOT + 0.06, 0.08, FOOT + 0.06]} />
         <meshStandardMaterial ref={roof} color={baseRoof} roughness={0.7} transparent depthWrite={!ghost} />
       </mesh>
+      {/* the building type's own shape (bank columns, museum dome, …), facing the default camera (south);
+          stays mounted on search and fades with the walls in useFrame */}
+      <group ref={deco}>
+        <Landmark b={kind} h={h} open={tone === "thief"} />
+      </group>
       {!ghost && (
         <>
-          {/* the building type's own shape (bank columns, museum dome, …), facing the default camera (south) */}
-          <group ref={deco}>
-            <Landmark b={kind} h={h} open={tone === "thief"} />
-          </group>
           {/* trash can by the door — the thief's hiding spot */}
           <mesh position={[can[0], 0.17, can[2]]} castShadow={!lowDetail}>
             <cylinderGeometry args={[0.13, 0.11, 0.34, 10]} />
