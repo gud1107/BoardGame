@@ -1386,6 +1386,19 @@ vitest 24/24(+registry), tsc 0 에러(`.next/dev/types`의 다른 세션 `tmp-wa
   - **숫자 표기 원칙(요청서와 다름)**: 경찰에게 보이는 칩에는 색만으로 이미 알 수 있는 번호(노랑 1·보라 6·빨강 11)만 표시, **파랑은 번호 없이** 표시. 파랑에 실제 라운드를 찍으면 경찰이 도둑이 언제 그 건물에 있었는지 정확히 알게 되어 숨바꼭질의 핵심 비공개 정보가 무너짐. 도둑 본인 뷰는 자기 경로를 아니까 모든 칩에 실제 번호 표시.
   - 엔드게임 경로 리플레이 패드(빨강/6번 보라)는 기존 그대로.
 
+### 🚁 시티 체이스 (City Chase) 도둑 이동 가능/불가 칸 글로우·딤 — 2026-10-26
+(요청서가 전제한 `handoff.md`(소문자)는 없음 — 이 섹션에 이어 기록. 이동 규칙은 새로 만들지 않음.)
+- **판정 출처**: 기존 `engine.ts`의 `legalThiefCells()`(상·하·좌·우 + 이미 턴 건물 재진입 금지 하우스 룰) → `CityChaseBoard.tsx`의
+  `thiefTargets`. 이 값은 "도둑 본인 화면 + 내 차례 + `phase === "thief"`"일 때만 존재하므로, 턴이 끝나면(undefined) 효과가 자동으로 꺼진다.
+  1라운드는 25칸 전부 합법이라 딤 없음. 경찰 화면에는 아무 변화 없음(숨김 정보 그대로).
+- **2D `CityMap.tsx`**: 이동 가능 칸 = 금빛 `cc-reach` 1.8s 맥동(box-shadow + brightness, `ring-amber-200`, ➜ 발광) — 예전 빨간 `cc-siren`은 경찰 수색 대상에만 남김.
+  불가 칸 = 셀 래퍼에 `filter: brightness(.38) saturate(.45)` + 300ms 전환. 도둑이 숨어 있는 현재 칸(`carCell`)은 딤 제외.
+- **3D `three/CityMap3D.tsx`**: `Building`에 `dimmed` prop(호출부: `thiefTurn && !isThiefTarget && cell !== thiefAt`).
+  기존 `useFrame` 안에서 `dim` ref를 0↔1로 부드럽게 보간해 벽·지붕·인도 색을 밤색(#0b1220)으로, 창문 불빛(emissiveIntensity)을 ×0.15까지 낮춤.
+  이동 가능 칸은 금빛 emissive를 느린 호흡(sin t·3.2, 0.8~1.5) + 인도 테두리에 additive 후광 링 1장(칸 안쪽 반경 0.72~0.98, 옆 칸 침범 없음).
+  새 머티리얼·셰이더 전환 없음(`emissiveMap` 고정 원칙 유지), 추가 메시는 최대 4개라 모바일 부담 없음.
+- **검증**: tsc/eslint 통과, `CityChase.test.ts` 14개 통과, rolldown 번들 + swiftshader 헤드리스로 3라운드 도둑 턴 2D/3D 각 1장 캡처해 C4·B5만 빛나고 나머지 딤 확인.
+
 ## 💍 반지의 제왕: 가운데땅에서의 대결 (Duel for Middle-earth) — 전면 재구축 — 2026-09-25 (커밋/푸시, 배포는 웹훅 자동)
 
 **요청**: 같은 날 먼저 만든 2002년작 The Confrontation(안개 블러핑 이동) 버전을 전면 폐기하고, 룰북

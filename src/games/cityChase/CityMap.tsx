@@ -157,6 +157,7 @@ export default function CityMap({ state, showSecret, revealRoute = false, thiefT
         @keyframes cc-pad-in { 0% { transform: translate(-50%,-50%) scale(0); opacity: 0 } 70% { transform: translate(-50%,-50%) scale(1.2); opacity: 1 } 100% { transform: translate(-50%,-50%) scale(1); opacity: 1 } }
         @keyframes cc-fade-out { to { opacity: 0; transform: scale(.9) } }
         @keyframes cc-pop { 0% { transform: scale(.3); opacity: 0 } 60% { transform: scale(1.15); opacity: 1 } 100% { transform: scale(1) } }
+        @keyframes cc-reach { 0%, 100% { box-shadow: 0 0 6px 1px rgba(253,224,71,.35); filter: brightness(1.08) } 50% { box-shadow: 0 0 22px 6px rgba(253,224,71,.8); filter: brightness(1.3) } }
       `}</style>
       <div className="relative h-full w-full">
         {/* Roads */}
@@ -183,11 +184,14 @@ export default function CityMap({ state, showSecret, revealRoute = false, thiefT
           const contents = showSecret ? cellContents(state, cell) : null;
           const hasCar = showSecret && carCell === cell;
           const heatV = heat ? heat[cell] : 0;
+          // Thief's move turn: everything it can't drive to sinks into the dark (its own hideout stays lit).
+          const dimmed = !!thiefTargets && !isThiefTarget && cell !== carCell;
           return (
             <div
               key={cell}
-              className="absolute"
+              className="absolute transition-[filter] duration-300"
               style={{
+                filter: dimmed ? "brightness(.38) saturate(.45)" : undefined,
                 top: `${r * STEP + INSET}%`,
                 left: `${c * STEP + INSET}%`,
                 width: `${STEP - INSET * 2}%`,
@@ -228,12 +232,12 @@ export default function CityMap({ state, showSecret, revealRoute = false, thiefT
                 {/* roof */}
                 <div
                   className={`absolute inset-x-0 top-0 flex flex-col justify-center gap-[6%] rounded-lg px-[12%] ring-1 ${
-                    isSearchTarget ? "ring-2 ring-sky-300" : isThiefTarget ? "ring-2 ring-rose-400" : "ring-white/15"
+                    isSearchTarget ? "ring-2 ring-sky-300" : isThiefTarget ? "ring-2 ring-amber-200" : "ring-white/15"
                   } ${clickable ? "group-hover:brightness-125" : ""}`}
                   style={{
                     bottom: `${look.lift}%`,
                     background: `linear-gradient(160deg, color-mix(in srgb, ${look.facade} 70%, white 22%), ${look.facade})`,
-                    animation: isSearchTarget || isThiefTarget ? "cc-siren 1.6s ease-in-out infinite" : undefined,
+                    animation: isSearchTarget ? "cc-siren 1.6s ease-in-out infinite" : isThiefTarget ? "cc-reach 1.8s ease-in-out infinite" : undefined,
                   }}
                 >
                   {Array.from({ length: look.windows }, (_, w) => (
@@ -260,7 +264,7 @@ export default function CityMap({ state, showSecret, revealRoute = false, thiefT
                   <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-base sm:text-xl">🔍</span>
                 )}
                 {isThiefTarget && !isSearchTarget && (
-                  <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs font-bold text-rose-200 sm:text-sm">➜</span>
+                  <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs font-bold text-amber-100 drop-shadow-[0_0_4px_rgba(253,224,71,0.9)] sm:text-sm">➜</span>
                 )}
                 {/* Police notes: last search result on this building */}
                 {note && !lifting && (

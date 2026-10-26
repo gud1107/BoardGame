@@ -297,6 +297,7 @@ function Building({
   alarm,
   onClick,
   lowDetail,
+  dimmed,
 }: {
   cell: Cell;
   clickable: boolean;
@@ -312,12 +313,16 @@ function Building({
   alarm: Alarm | null;
   onClick: (e: ThreeEvent<MouseEvent>) => void;
   lowDetail: boolean;
+  /** Thief's move turn: a building it can't drive to fades into the dark. */
+  dimmed: boolean;
 }) {
   const [r, c] = cellRC(cell);
   const h = buildingHeight(cell);
   const mat = useRef<THREE.MeshStandardMaterial>(null);
   const roof = useRef<THREE.MeshStandardMaterial>(null);
   const plot = useRef<THREE.MeshBasicMaterial>(null);
+  const halo = useRef<THREE.MeshBasicMaterial>(null);
+  const dim = useRef(0);
   const siren = useRef<THREE.Group>(null);
   const alarmAt = useRef<{ key: number; at: number } | null>(null);
   const facade = FACADES[(cell * 5 + 1) % FACADES.length];
@@ -333,27 +338,36 @@ function Building({
     [h],
   );
   const baseRoof = useMemo(() => new THREE.Color(facade).lerp(new THREE.Color("#ffffff"), 0.25), [facade]);
+  const baseFacade = useMemo(() => new THREE.Color(facade), [facade]);
+  const night = useMemo(() => new THREE.Color("#0b1220"), []);
   const heatColor = useMemo(() => new THREE.Color("#f43f5e"), []);
   const plotBase = useMemo(() => new THREE.Color("#334155"), []);
-  const plotTint = useMemo(() => new THREE.Color(tone === "thief" ? "#fb7185" : zone ?? "#334155"), [tone, zone]);
+  const plotTint = useMemo(() => new THREE.Color(tone === "thief" ? "#fde047" : zone ?? "#334155"), [tone, zone]);
   useFrame(({ clock }, dt) => {
     const t = clock.elapsedTime;
     if (alarm && (!alarmAt.current || alarmAt.current.key !== alarm.key)) alarmAt.current = { key: alarm.key, at: t };
     const alarmT = alarmAt.current ? t - alarmAt.current.at : 99;
     const alarming = alarmT < 1.6;
-    const pulse = tone ? 0.5 + Math.sin(t * 5) * 0.5 : 0;
+    // thief targets breathe slowly (a soft "you can go here"), search targets keep the quick blink
+    const pulse = tone === "thief" ? 0.5 + Math.sin(t * 3.2) * 0.5 : tone ? 0.5 + Math.sin(t * 5) * 0.5 : 0;
+    dim.current += ((dimmed ? 1 : 0) - dim.current) * Math.min(1, dt * 6);
+    const d = dim.current;
     if (mat.current) {
       mat.current.opacity += ((ghost ? 0.16 : 1) - mat.current.opacity) * Math.min(1, dt * 5);
-      mat.current.emissiveIntensity = alarming ? (Math.sin(alarmT * 18) > 0 ? 1.4 : 0.2) : 0.65 + pulse * 0.35;
+      mat.current.emissiveIntensity = alarming
+        ? Math.sin(alarmT * 18) > 0 ? 1.4 : 0.2
+        : (tone === "thief" ? 0.8 + pulse * 0.7 : 0.65 + pulse * 0.35) * (1 - d * 0.85);
+      mat.current.color.copy(baseFacade).lerp(night, d * 0.7);
     }
     if (roof.current) {
       roof.current.opacity += ((ghost ? 0.2 : 1) - roof.current.opacity) * Math.min(1, dt * 5);
-      roof.current.color.copy(baseRoof).lerp(heatColor, Math.min(0.85, heat > 0.004 ? 0.15 + heat * 2.2 : 0));
+      roof.current.color.copy(baseRoof).lerp(heatColor, Math.min(0.85, heat > 0.004 ? 0.15 + heat * 2.2 : 0)).lerp(night, d * 0.7);
     }
     if (plot.current) {
-      plot.current.color.copy(plotBase).lerp(plotTint, tone ? 0.55 + pulse * 0.45 : zone ? 0.75 : 0);
+      plot.current.color.copy(plotBase).lerp(plotTint, tone ? 0.55 + pulse * 0.45 : zone ? 0.75 : 0).lerp(night, d * 0.8);
       plot.current.opacity = tone || zone ? 0.95 : 0.8;
     }
+    if (halo.current) halo.current.opacity = 0.25 + pulse * 0.55;
     if (siren.current) {
       siren.current.rotation.y = t * (alarming ? 14 : 5);
       siren.current.scale.setScalar(alarming ? 1.5 : 1);
@@ -361,7 +375,7 @@ function Building({
   });
   const label = `${tone === "search" ? "🔍 " : tone === "thief" ? "🏃 " : robbed ? "🚧 " : ""}${cellLabel(cell)}`;
   const roofLabel = heat > 0.004 ? `${label} ${Math.round(heat * 100)}%` : label;
-  const labelColor = alarm && robbed ? "#ef4444" : tone === "search" ? zone ?? "#38bdf8" : tone === "thief" ? "#fb7185" : heat > 0.004 ? "#f43f5e" : robbed ? "#facc15" : "#94a3b8";
+  const labelColor = alarm && robbed ? "#ef4444" : tone === "search" ? zone ?? "#38bdf8" : tone === "thief" ? "#fde047" : dimmed ? "#475569" : heat > 0.004 ? "#f43f5e" : robbed ? "#facc15" : "#94a3b8";
   const noteText = note ? (note.result === "trail" ? `흔적${note.tokens.map((t) => TOKEN_ICON[t]).join("")} R${note.round}` : note.result === "caught" ? `🔗 검거` : `✕ 빈집 R${note.round}`) : null;
   const front = FOOT / 2;
   const [cx0, , cz0] = canPos(cell);
@@ -373,13 +387,19 @@ function Building({
         <planeGeometry args={[FOOT + 0.42, FOOT + 0.42]} />
         <meshBasicMaterial ref={plot} color="#334155" transparent depthWrite={false} />
       </mesh>
+      {tone === "thief" && (
+        <mesh rotation-x={-Math.PI / 2} position={[0, 0.02, 0]}>
+          <ringGeometry args={[FOOT / 2 + 0.07, STEP / 2 - 0.02, 32]} />
+          <meshBasicMaterial ref={halo} color="#fde047" transparent opacity={0.5} depthWrite={false} blending={THREE.AdditiveBlending} />
+        </mesh>
+      )}
       <mesh position={[0, h / 2, 0]} castShadow={!lowDetail} receiveShadow>
         <boxGeometry args={[FOOT, h, FOOT]} />
         <meshStandardMaterial
           ref={mat}
           color={facade}
           map={tex}
-          emissive={alarm && robbed ? "#ef4444" : tone === "thief" ? "#fb7185" : tone === "search" ? zone ?? "#38bdf8" : "#ffffff"}
+          emissive={alarm && robbed ? "#ef4444" : tone === "thief" ? "#fde68a" : tone === "search" ? zone ?? "#38bdf8" : "#ffffff"}
           // keep the map fixed: swapping it null ↔ texture needs a shader recompile R3F doesn't trigger (→ all-white walls)
           emissiveMap={glow}
           emissiveIntensity={0.65}
@@ -397,7 +417,7 @@ function Building({
           {/* shop front: door + awning, facing the default camera (south) */}
           <mesh position={[0, 0.2, front + 0.005]}>
             <planeGeometry args={[0.3, 0.4]} />
-            <meshBasicMaterial color={tone === "thief" ? "#fecdd3" : "#0f172a"} />
+            <meshBasicMaterial color={tone === "thief" ? "#fef9c3" : "#0f172a"} />
           </mesh>
           <mesh position={[0, 0.46, front + 0.1]} rotation-x={0.5}>
             <boxGeometry args={[0.6, 0.02, 0.24]} />
@@ -1336,6 +1356,7 @@ function SceneContents(props: SceneProps) {
               alarm={alarm?.cell === cell ? alarm : null}
               onClick={(e) => clickable && tap(e, () => props.onCellClick?.(cell))}
               lowDetail={lowDetail}
+              dimmed={thiefTurn && !isThiefTarget && cell !== thiefAt}
             />
           </group>
         );
