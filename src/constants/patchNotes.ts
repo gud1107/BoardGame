@@ -64,7 +64,7 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
-    version: "v1.98.2",
+    version: "v1.99.1",
     releaseDate: "2026-10-27",
     title: "🎙️ 브이로그 내레이션 숫자 읽기 다듬기",
     changes: [
