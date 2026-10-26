@@ -64,6 +64,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.100.0",
+    releaseDate: "2026-10-27",
+    title: "🧑‍🎤 3D 테이블 인물이 VRoid 캐릭터로",
+    changes: [
+      { game: "common", type: "FEAT", desc: "🧑‍🎤 3D 테이블 인물이 VRoid 표준 캐릭터로 — 표정·흔들리는 머리카락, 여자는 pixiv 샘플 2종·남자는 Seed-san(© VirtualCast)" },
+    ],
+  },
+  {
     version: "v1.99.1",
     releaseDate: "2026-10-27",
     title: "🎙️ 브이로그 내레이션 숫자 읽기 다듬기",

@@ -31,7 +31,11 @@ describe("PATCH_NOTES", () => {
       const next = PATCH_NOTES[i + 1];
       expect(cur.releaseDate >= next.releaseDate).toBe(true);
       if (cur.releaseDate === next.releaseDate) {
-        expect(cur.version >= next.version).toBe(true);
+        // numeric per part — as strings "v1.100.0" would sort before "v1.99.1"
+        const nums = (v: string) => v.slice(1).split(".").map(Number);
+        const [a, b] = [nums(cur.version), nums(next.version)];
+        const diff = a.map((x, k) => x - b[k]).find((d) => d !== 0) ?? 0;
+        expect(diff).toBeGreaterThanOrEqual(0);
       }
     }
   });

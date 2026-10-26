@@ -4,10 +4,11 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import FirstPersonCamera from "./FirstPersonCamera";
-import SeatedPerson, { type HatKind, type PersonLook, type PersonMood } from "./SeatedPerson";
+import type { HatKind, PersonLook, PersonMood } from "./SeatedPerson";
 import { resolveLook, type AvatarProfile } from "@/lib/character/avatar";
 import { useRoomCharacter } from "@/lib/character/roomCharacters";
 import RealisticPerson from "./RealisticPerson";
+import VrmPerson, { VRM_NAME_Y } from "./VrmPerson";
 import ScreenSprite from "./ScreenSprite";
 import SpeechBubble from "./SpeechBubble";
 import { AdaptiveResolution, BlobShadow, PerfHud, PostFx, StudioEnvironment } from "./sceneFx";
@@ -334,13 +335,13 @@ function SeatView({ s, geo, theme, lowDetail, ringColor }: { s: TableSeat; geo: 
     return { ...base, ...(s.hat ? { hat: s.hat } : {}), ...s.look };
   }, [s.seat, s.hat, s.avatar, chosen, s.look, theme.hats]);
   const lookAt = s.lookSeat === "center" ? new THREE.Vector3(0, TABLE_Y, 0) : s.lookSeat === null || s.lookSeat === undefined ? null : geo.headOf(s.lookSeat);
-  const nameY = theme.nameY ?? (theme.personStyle === "realistic" ? 1.86 : 2.18);
+  const nameY = theme.nameY ?? (theme.personStyle === "realistic" ? 1.86 : VRM_NAME_Y);
   // bubble bottom edge (SpeechBubble centres itself above it when anchored)
   const bubbleY = nameY + (s.tag ? 0.34 : 0.14);
   const labelBase = nameY - (s.sub ? 0.29 : 0.11);
   const frontSpot = geo.spotOf(s.seat, isViewer ? 0.45 : 0.38);
   const chair = s.chair ?? theme.chair;
-  const Person = theme.personStyle === "realistic" ? RealisticPerson : SeatedPerson;
+  const Person = theme.personStyle === "realistic" ? RealisticPerson : VrmPerson;
   // the game turning this person's mood emotional is their cue to say something, in their own
   // voice and words (characterVoice.ts); never on first mount, never for my own seat
   // the same line shows as a short caption bubble, so it reaches players with the sound off too
@@ -428,7 +429,7 @@ function SeatView({ s, geo, theme, lowDetail, ringColor }: { s: TableSeat; geo: 
             {s.sub && <ScreenSprite anchorY={labelBase} position={[0, nameY - 0.2, 0]} scale={[0.7, 0.175]} map={labelTexture(s.sub, color, { bg: "rgba(0,0,0,0.75)" })} />}
             {s.tag && <ScreenSprite anchorY={labelBase} position={[0, nameY + 0.22, 0]} scale={[0.7, 0.175]} map={labelTexture(s.tag.text, s.tag.color, { bg: s.tag.bg ?? "rgba(20,10,10,0.85)" })} />}
             {shownBubble && bubbleStyle && <SpeechBubble anchorY={labelBase} text={shownBubble.text} style={bubbleStyle} y={bubbleY} popKey={shownBubble.key} width={Math.max(0.62, shownBubble.width ?? 1.0)} />}
-            {shownBubble && <SpeakerPulse color={color} popKey={shownBubble.key} y={theme.personStyle === "realistic" ? 1.52 : 1.66} size={theme.personStyle === "realistic" ? 0.55 : 0.8} />}
+            {shownBubble && <SpeakerPulse color={color} popKey={shownBubble.key} y={theme.personStyle === "realistic" ? 1.52 : 1.5} size={theme.personStyle === "realistic" ? 0.55 : 0.8} />}
           </Person>
           {/* generous invisible hit box so a tap on the chair area counts too */}
           {s.onSelect && (

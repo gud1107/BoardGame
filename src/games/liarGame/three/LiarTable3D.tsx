@@ -4,7 +4,8 @@ import { useMemo, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import FirstPersonCamera from "@/games/shared/three/FirstPersonCamera";
-import SeatedPerson, { resolveLook, type PersonMood } from "@/games/shared/three/SeatedPerson";
+import { resolveLook, type PersonMood } from "@/games/shared/three/SeatedPerson";
+import VrmPerson from "@/games/shared/three/VrmPerson";
 import { roomCharacterOf, useRoomCharacters } from "@/lib/character/roomCharacters";
 import ScreenSprite from "@/games/shared/three/ScreenSprite";
 import SpeechBubble from "@/games/shared/three/SpeechBubble";
@@ -245,7 +246,7 @@ function SceneContents(props: LiarTable3DProps) {
         const isViewer = s.seat === viewerSeat;
         const color = SEAT_COLORS[s.seat % SEAT_COLORS.length];
         const lookAt = s.lookSeat === null ? new THREE.Vector3(0, TABLE_Y, 0) : headOf(s.lookSeat);
-        const bubble = s.bubble ? <SpeechBubble text={s.bubble.text} style={{ ...BUBBLES[s.bubble.kind], who: s.name, whoColor: color }} y={2.62} popKey={s.bubble.key} width={s.bubble.kind === "status" ? 0.62 : 1.05} /> : null;
+        const bubble = s.bubble ? <SpeechBubble text={s.bubble.text} style={{ ...BUBBLES[s.bubble.kind], who: s.name, whoColor: color }} y={2.42} popKey={s.bubble.key} width={s.bubble.kind === "status" ? 0.62 : 1.05} /> : null;
         return (
           <group key={s.seat}>
             <SeatCard position={cardSpot(s.seat)} angle={angle} color={color} />
@@ -257,7 +258,7 @@ function SceneContents(props: LiarTable3DProps) {
                 )}
               </group>
             ) : (
-              <SeatedPerson
+              <VrmPerson
                 seed={s.seat * 5 + 2}
                 look={resolveLook(s.seat, ["none", "cap", "none", "fedora", "none", "beret"], roomCharacterOf(chars, s.name))}
                 color={color}
@@ -269,12 +270,12 @@ function SceneContents(props: LiarTable3DProps) {
                 chair="wood"
                 chairColor="#3f2a1d"
               >
-                <ScreenSprite position={[0, 2.15, 0]} scale={[0.86, 0.21]} map={labelTexture(`${s.name} · ${s.score}점`, color)} />
+                <ScreenSprite position={[0, 1.95, 0]} scale={[0.86, 0.21]} map={labelTexture(`${s.name} · ${s.score}점`, color)} />
                 {s.tag && (
-                  <ScreenSprite position={[0, 1.95, 0]} scale={[0.66, 0.165]} map={labelTexture(s.tag, "#f43f5e", { bg: "rgba(76,5,25,0.85)" })} />
+                  <ScreenSprite position={[0, 1.75, 0]} scale={[0.66, 0.165]} map={labelTexture(s.tag, "#f43f5e", { bg: "rgba(76,5,25,0.85)" })} />
                 )}
                 {bubble}
-              </SeatedPerson>
+              </VrmPerson>
             )}
           </group>
         );

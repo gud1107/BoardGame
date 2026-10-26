@@ -17,6 +17,7 @@
     "posters:stale": "node scripts/poster-videos/stale.mjs"
   },
   "dependencies": {
+    "@pixiv/three-vrm": "^3.4.1",
     "@react-three/fiber": "^9.8.1",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.111.0",

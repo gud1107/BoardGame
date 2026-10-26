@@ -95,3 +95,19 @@ Wikimedia Commons의 CC0/퍼블릭 도메인 파일(최대 1280×1400 축소본)
 | `idle` | 빈칸 | Coverr — https://coverr.co/videos/coverr-raindrops-on-the-window-7102 (인물 없음) |
 
 **Coverr** ([라이선스](https://coverr.co/license)): 상업·비상업 무료, 출처 표기 의무 없음, 영상 재판매·영상 제공 서비스 금지.
+
+## 3D 캐릭터 모델 (VRM)
+
+3D 테이블의 인물([src/games/shared/three/VrmPerson.tsx](src/games/shared/three/VrmPerson.tsx))이 쓰는 VRM 모델입니다.
+파일은 [public/models/vrm/](public/models/vrm/)에 있고, 모바일용으로 텍스처 해상도만 줄였습니다(형태·표정·뼈대는 원본 그대로).
+라이선스는 각 파일에 들어 있는 VRM 메타 정보를 2026-10-27에 직접 확인한 내용입니다.
+
+| 파일 | 모델 | 저작자 | 라이선스 | 상업 이용 | 수정 | 출처 표기 | 원본 |
+|---|---|---|---|---|---|---|---|
+| `pixiv-sample.vrm` | VRM1_Constraint_Twist_Sample | (c) 2022 pixiv Inc. | VRM Public License 1.0 | 법인 포함 허용 | 허용(재배포 포함) | 불필요 | https://github.com/vrm-c/vrm-specification/tree/master/samples/VRM1_Constraint_Twist_Sample |
+| `three-vrm-girl.vrm` | three-vrm-girl | pixiv Inc. | VRoid Hub 라이선스 (otherPermissionUrl) | 법인 포함 허용 | 허용 | 불필요 | https://github.com/pixiv/three-vrm/tree/v0.6.11/packages/three-vrm/examples/models |
+| `seed-san.vrm` | Seed-san | VirtualCast, Inc. | VRM Public License 1.0 | 법인 포함 허용 | 허용(재배포 포함) | **필요** | https://github.com/vrm-c/vrm-specification/tree/master/samples/Seed-san |
+
+- **Seed-san은 출처 표기가 필요합니다.** 2026-10-27 패치노트(v1.100.0)와 이 문서에 "Seed-san © VirtualCast, Inc."로 표기했습니다.
+- 로봇 팔(`robo_arm` 메시)은 보드게임 테이블에 맞지 않아 화면에서만 숨깁니다(파일은 그대로).
+

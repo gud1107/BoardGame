@@ -8,7 +8,8 @@ import { coyoteCardTexture } from "./cardTexture";
 import ScreenSprite, { distanceBoost } from "@/games/shared/three/ScreenSprite";
 import SpeechBubble from "@/games/shared/three/SpeechBubble";
 import FirstPersonCamera from "@/games/shared/three/FirstPersonCamera";
-import SeatedPerson, { resolveLook, type PersonMood } from "@/games/shared/three/SeatedPerson";
+import { resolveLook, type PersonMood } from "@/games/shared/three/SeatedPerson";
+import VrmPerson from "@/games/shared/three/VrmPerson";
 import { roomCharacterOf, useRoomCharacters } from "@/lib/character/roomCharacters";
 import { bubbleTexture, clamp01, easeInOut, easeOutBack, labelTexture, polar, seatAngle } from "@/games/shared/three/tableKit";
 
@@ -464,7 +465,7 @@ function SceneContents(props: CoyoteTable3DProps) {
         return (
           <group key={s.seat}>
             {!isViewer && (
-              <SeatedPerson
+              <VrmPerson
                 seed={s.seat * 3 + 1}
                 look={resolveLook(s.seat, ["none", "none", "beret", "none"], roomCharacterOf(chars, s.name))}
                 color={color}
@@ -479,10 +480,10 @@ function SceneContents(props: CoyoteTable3DProps) {
                 chairColor="#4a2c17"
                 headSlot={!s.out && <ForeheadCard card={s.card} struck={s.struck} visible={!revealed} />}
               >
-                <ScreenSprite position={[0, 2.18, 0]} scale={[0.82, 0.2]} map={labelTexture(s.name, color)} />
-                <ScreenSprite position={[0, 1.99, 0]} scale={[0.62, 0.155]} map={labelTexture(s.out ? "💀 탈락" : `${"❤️".repeat(Math.max(0, s.hearts))}${"🤍".repeat(Math.max(0, props.maxHearts - s.hearts))}`, s.out ? "#7f1d1d" : "#f43f5e", { bg: "rgba(0,0,0,0.75)" })} />
-                {bubble && <SpeechBubble text={bubble.text} style={{ ...bubble.style, who: s.name, whoColor: color }} y={2.55} popKey={bubble.key} />}
-              </SeatedPerson>
+                <ScreenSprite position={[0, 1.95, 0]} scale={[0.82, 0.2]} map={labelTexture(s.name, color)} />
+                <ScreenSprite position={[0, 1.76, 0]} scale={[0.62, 0.155]} map={labelTexture(s.out ? "💀 탈락" : `${"❤️".repeat(Math.max(0, s.hearts))}${"🤍".repeat(Math.max(0, props.maxHearts - s.hearts))}`, s.out ? "#7f1d1d" : "#f43f5e", { bg: "rgba(0,0,0,0.75)" })} />
+                {bubble && <SpeechBubble text={bubble.text} style={{ ...bubble.style, who: s.name, whoColor: color }} y={2.32} popKey={bubble.key} />}
+              </VrmPerson>
             )}
             {isViewer && bubble && (
               <group position={polar(0, tableR - 0.1, 0).toArray()}>
