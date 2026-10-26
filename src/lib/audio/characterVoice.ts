@@ -24,27 +24,78 @@ const VOICED = new Set<PersonMood>(["cheer", "shock", "laugh", "sad", "smug", "n
 export const isVoiced = (m: PersonMood): m is VoicedMood => VOICED.has(m);
 
 const BASE_LINES: Record<VoicedMood, string[]> = {
-  cheer: ["야호!", "좋았어!", "해냈다!"],
-  shock: ["헉!", "뭐야?!", "말도 안 돼!"],
-  laugh: ["하하하!", "푸하하!", "크크크"],
-  sad: ["아…", "에이…", "망했다…"],
-  smug: ["흥.", "역시 나지.", "후후"],
-  nervous: ["어, 어…", "아 떨린다…", "제발…"],
-  point: ["너!", "바로 너야!"],
-  clap: ["오~!", "나이스!"],
-  shrug: ["글쎄…?", "음…?"],
-  slump: ["으아…", "끝났다…"],
-  raise: ["저요!", "여기!"],
+  cheer: ["좋았어!", "됐다, 됐어!", "이야, 해냈네!"],
+  shock: ["헉, 진짜?", "어? 이게 뭐야?", "아니, 말도 안 돼!"],
+  laugh: ["아하하, 진짜 웃기다!", "푸하하, 이게 뭐야.", "하하, 못 말려."],
+  sad: ["아, 아깝다…", "에이, 이게 아닌데…", "아이고, 망했네…"],
+  smug: ["후후, 이 정도쯤이야.", "역시, 그럴 줄 알았지.", "뭐, 당연한 결과지."],
+  nervous: ["어, 어떡하지…", "아, 떨린다…", "제발, 제발…"],
+  point: ["너, 바로 너야!", "너지? 딱 보니까 알겠네."],
+  clap: ["오, 잘했네!", "와, 멋지다!", "나이스, 진짜 잘했어!"],
+  shrug: ["글쎄, 잘 모르겠는데?", "음, 어쩔 수 없지 뭐."],
+  slump: ["아, 끝났다…", "하아, 힘들다…"],
+  raise: ["저요, 저요!", "잠깐만요, 저 할게요!"],
 };
 
-/** Persona-flavoured lines; anything missing falls back to BASE_LINES. */
+/**
+ * Persona-flavoured lines; anything missing falls back to BASE_LINES. Written the way people
+ * actually talk at a table — an interjection, then a few plain words. `~` (drawn out) and
+ * `…` (trailing off) are for the caption; `spokenPhrases` turns them into intonation.
+ */
 const PERSONA_LINES: Record<Persona, Partial<Record<VoicedMood, string[]>>> = {
-  starer: { cheer: ["봤지?", "당연하지."], shock: ["…뭐?"], laugh: ["훗."], sad: ["…쳇."], smug: ["예상대로야.", "다 보였어."], point: ["너잖아."], nervous: ["…흠."] },
-  shy: { cheer: ["와… 됐다", "헤헤, 됐어요"], shock: ["어머…", "히익"], laugh: ["히히", "후훗"], sad: ["흑…", "아… 어떡해"], smug: ["헤헤"], point: ["저, 저기…"], raise: ["저, 저요…"], nervous: ["으… 떨려요"] },
-  scanner: { cheer: ["오오 좋아!"], shock: ["어디? 뭐?", "엥?!"], laugh: ["아하하!"], sad: ["어라…"], smug: ["그렇지~"], clap: ["오 대박!"] },
-  focused: { cheer: ["좋아.", "계획대로."], shock: ["음?!"], laugh: ["하."], sad: ["아쉽네."], smug: ["계산대로."], point: ["너다."], nervous: ["집중…"] },
-  dreamer: { cheer: ["어… 이겼네?", "오~ 좋다~"], shock: ["응…? 뭐야~"], laugh: ["헤헤헤…"], sad: ["아~ 그렇구나…"], smug: ["음~ 좋아~"], shrug: ["몰라~"] },
-  fidget: { cheer: ["앗싸! 앗싸!", "예스 예스!"], shock: ["헐 헐 헐!", "으악!"], laugh: ["깔깔깔!", "아 웃겨!"], sad: ["으아아 안 돼!"], smug: ["히힛!"], nervous: ["어떡해 어떡해!"], clap: ["짝짝짝!"] },
+  starer: {
+    cheer: ["봤지? 이게 실력이야.", "당연하지."],
+    shock: ["…뭐라고?", "흠, 이건 예상 못 했네."],
+    laugh: ["훗, 재밌네."],
+    sad: ["쳇, 이번엔 봐준다."],
+    smug: ["역시, 예상대로야.", "흠, 이 정도는 기본이지."],
+    point: ["너잖아. 숨길 생각 마."],
+    nervous: ["흠… 조금 까다롭군."],
+  },
+  shy: {
+    cheer: ["어, 됐다… 다행이에요.", "와, 제가 했어요!"],
+    shock: ["어머, 정말요?", "어, 어떡해요?"],
+    laugh: ["후후, 재밌어요.", "아, 정말 웃겨요."],
+    sad: ["아, 아쉬워요…", "어떡하죠, 망했어요…"],
+    smug: ["헤헤, 운이 좋았네요."],
+    point: ["저, 저기… 그쪽 아니에요?"],
+    raise: ["저, 저도 할게요."],
+    nervous: ["으, 너무 떨려요…"],
+  },
+  scanner: {
+    cheer: ["오, 좋아 좋아!", "그렇지, 바로 그거야!"],
+    shock: ["어? 어디, 뭔데?", "엥, 이게 왜?"],
+    laugh: ["아하하, 대박이다!"],
+    sad: ["어라, 이게 아닌데…"],
+    smug: ["그렇지, 내가 뭐랬어?"],
+    clap: ["오, 대박! 잘한다!"],
+  },
+  focused: {
+    cheer: ["좋아, 계획대로야.", "됐어, 깔끔하게."],
+    shock: ["음? 변수가 생겼군."],
+    laugh: ["하, 재미있네."],
+    sad: ["아쉽군. 다음엔 다르게 가야겠어."],
+    smug: ["계산한 대로야.", "자, 여기까지는 순조롭네."],
+    point: ["너다. 근거도 있어."],
+    nervous: ["집중하자. 아직 안 끝났어."],
+  },
+  dreamer: {
+    cheer: ["어, 이겼네? 좋다~", "오~ 나쁘지 않은데?"],
+    shock: ["응? 뭐야, 언제?"],
+    laugh: ["헤헤, 재밌다~"],
+    sad: ["아~ 그렇게 됐구나…"],
+    smug: ["으음~ 좋아, 좋아.", "뭐~ 이 정도면 괜찮지."],
+    shrug: ["글쎄~ 잘 모르겠어."],
+  },
+  fidget: {
+    cheer: ["앗싸, 됐다 됐어!", "예스! 이거지!"],
+    shock: ["헐, 헐, 진짜?", "으악, 안 돼!"],
+    laugh: ["아하하, 아 웃겨 진짜!"],
+    sad: ["아 안 돼, 안 돼…"],
+    smug: ["히히, 나 좀 잘하지?"],
+    nervous: ["어떡해, 어떡해!"],
+    clap: ["와, 최고다 진짜!"],
+  },
 };
 
 const hash = (a: number, b: number) => {
@@ -79,6 +130,39 @@ export function voiceProfile(seat: number, gender: "f" | "m", persona: Persona):
   const pitch = gender === "f" ? 1.3 + spread * 0.4 : 0.85 + spread * 0.3;
   const m = MANNER[persona];
   return { pitch: Math.max(0.5, Math.min(2, pitch)), rate: m.rate, volume: m.volume };
+}
+
+/** One breath of a line, with its intonation relative to the speaker's own pitch and pace. */
+export interface SpokenPhrase {
+  text: string;
+  pitch: number;
+  rate: number;
+}
+
+/**
+ * Caption → what the speech engine should say. TTS reads `~` aloud as "물결표" and gives every
+ * word the same flat pitch, so the line is cut into phrases at `~`, `…` and sentence ends and
+ * each one gets the contour a person would give it:
+ *   `~`  drawn out and lilting up       (음~ 좋아 → a slow, rising "음", then "좋아")
+ *   `…`  slower, falling, trailing off
+ *   `!`  brighter and a touch quicker
+ *   `?`  slight lift; the engine adds the question rise itself
+ * Commas stay inside a phrase — the engine already pauses there, and too many separate
+ * utterances sound choppy.
+ */
+export function spokenPhrases(line: string): SpokenPhrase[] {
+  const out: SpokenPhrase[] = [];
+  for (const m of line.matchAll(/([^~…!?.]*)([~…!?.]*)/g)) {
+    const words = m[1].replace(/[^\p{L}\p{N}\s,]/gu, "").replace(/\s+/g, " ").replace(/^[\s,]+|[\s,]+$/g, "");
+    if (!words) continue;
+    const end = m[2];
+    if (end.includes("~")) out.push({ text: words, pitch: 1.08, rate: 0.78 });
+    else if (end.includes("…")) out.push({ text: `${words}.`, pitch: 0.92, rate: 0.85 });
+    else if (end.includes("?")) out.push({ text: `${words}?`, pitch: end.includes("!") ? 1.1 : 1.04, rate: 1 });
+    else if (end.includes("!")) out.push({ text: `${words}!`, pitch: 1.1, rate: 1.06 });
+    else out.push({ text: `${words}.`, pitch: 1, rate: 1 });
+  }
+  return out;
 }
 
 /** Strong reactions may cut in over a line already playing; the rest wait their turn (are skipped). */
@@ -149,14 +233,17 @@ export function speakEmotion(o: { seat: number; mood: PersonMood; persona: Perso
   if (verdict === "cut") synth.cancel();
   const p = voiceProfile(o.seat, o.gender, o.persona);
   try {
-    const u = new SpeechSynthesisUtterance(o.text);
-    u.lang = "ko-KR";
-    u.pitch = p.pitch;
-    u.rate = p.rate;
-    u.volume = p.volume * settings.sfxVolume;
     const v = pickVoice(o.gender, o.seat);
-    if (v) u.voice = v;
-    synth.speak(u);
+    // queued back to back, so the phrases play as one line with a breath between them
+    for (const ph of spokenPhrases(o.text)) {
+      const u = new SpeechSynthesisUtterance(ph.text);
+      u.lang = "ko-KR";
+      u.pitch = Math.max(0, Math.min(2, p.pitch * ph.pitch));
+      u.rate = p.rate * ph.rate;
+      u.volume = p.volume * settings.sfxVolume;
+      if (v) u.voice = v;
+      synth.speak(u);
+    }
   } catch {
     // an old WebView without SpeechSynthesisUtterance — voices are decoration, stay silent
   }

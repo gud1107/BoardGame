@@ -64,6 +64,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.98.1",
+    releaseDate: "2026-10-26",
+    title: "🗣️ 3D 인물의 한마디를 사람처럼",
+    changes: [
+      { game: "common", type: "IMPROVE", desc: "🗣️ 3D 인물 대사를 실제 말투로 새로 쓰고 억양을 살렸어요 — '물결표'를 소리 내 읽지 않고, 늘이는 말은 느리게 올리고 말끝은 흐리게" },
+    ],
+  },
+  {
     version: "v1.98.0",
     releaseDate: "2026-10-25",
     title: "💡 3D 테이블 — 조명·선명도 업그레이드, 손패를 쥐고 성격이 생긴 인물들",

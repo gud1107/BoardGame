@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PERSONA_ORDER } from "@/games/shared/three/persona";
-import { isVoiced, VOICE_GAP, VoiceGate, voiceLine, voiceProfile, type VoicedMood } from "./characterVoice";
+import { isVoiced, spokenPhrases, VOICE_GAP, VoiceGate, voiceLine, voiceProfile, type VoicedMood } from "./characterVoice";
 
 const MOODS: VoicedMood[] = ["cheer", "shock", "laugh", "sad", "smug", "nervous", "point", "clap", "shrug", "slump", "raise"];
 
@@ -19,6 +19,33 @@ describe("character voice lines", () => {
     expect(isVoiced("think")).toBe(false);
     expect(isVoiced("talk")).toBe(false);
     expect(isVoiced("cheer")).toBe(true);
+  });
+});
+
+describe("spoken phrasing", () => {
+  it("never hands the speech engine a symbol it would read aloud", () => {
+    for (const p of PERSONA_ORDER)
+      for (const m of MOODS)
+        for (let n = 0; n < 12; n++)
+          for (const ph of spokenPhrases(voiceLine(p, m, n % 8, n))) {
+            expect(ph.text).not.toMatch(/[~…\p{Extended_Pictographic}]/u);
+            expect(ph.text.replace(/[.!?,\s]/g, "").length).toBeGreaterThan(0);
+          }
+  });
+
+  it("draws out a ~ phrase and lifts it, then says the rest plainly", () => {
+    const [um, good] = spokenPhrases("으음~ 좋아, 좋아.");
+    expect(um.text).toBe("으음");
+    expect(um.rate).toBeLessThan(1);
+    expect(um.pitch).toBeGreaterThan(1);
+    expect(good).toEqual({ text: "좋아, 좋아.", pitch: 1, rate: 1 });
+  });
+
+  it("lets a … phrase fall and an exclamation brighten", () => {
+    const [trail, bang] = spokenPhrases("어, 됐다… 와, 제가 했어요!");
+    expect(trail.pitch).toBeLessThan(1);
+    expect(bang.pitch).toBeGreaterThan(1);
+    expect(spokenPhrases("…뭐라고?")).toEqual([{ text: "뭐라고?", pitch: 1.04, rate: 1 }]);
   });
 });
 
