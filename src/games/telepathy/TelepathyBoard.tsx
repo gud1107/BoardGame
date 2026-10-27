@@ -1088,13 +1088,13 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
               </button>
             </div>
             <div className="flex min-h-0 flex-1 items-center justify-center gap-3">
-              <div className="flex w-[5.75rem] shrink-0 flex-col gap-1.5 sm:w-36">
+              <div className="flex w-[7.25rem] shrink-0 flex-col gap-1.5 sm:w-36">
                 <button
                   type="button"
                   onClick={() => onAction({ type: "starPropose", seat: mySeat })}
                   disabled={!canStar}
                   title={canStar ? "모두가 가장 낮은 카드 1장씩 공개하고 버려요 (전원 찬성 필요)" : starCooldown > 0 && state.phase === "playing" ? `${Math.ceil(starCooldown / 1000)}초 뒤 다시 제안 가능` : "카드를 내는 중에만 쓸 수 있어요"}
-                  className="min-h-11 rounded-xl border-2 border-amber-300/50 bg-amber-400/15 px-1 text-xs font-black text-amber-100 transition hover:bg-amber-400/25 disabled:opacity-40"
+                  className="min-h-11 rounded-xl border-2 border-amber-300/50 bg-amber-400/15 px-1 text-xs font-black whitespace-nowrap text-amber-100 transition hover:bg-amber-400/25 disabled:opacity-40"
                 >
                   ⚡ 번뜩임 {state.practice ? "∞" : state.stars}
                   {starCooldown > 0 && state.phase === "playing" && <span className="ml-0.5 text-[10px] font-semibold">({Math.ceil(starCooldown / 1000)}s)</span>}
@@ -1104,13 +1104,13 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
                   onClick={() => onAction({ type: "resync", seat: mySeat })}
                   disabled={state.phase !== "playing" || resyncLeft <= 0}
                   title="카드 내기를 잠깐 멈추고 모두 🖐 준비부터 다시 해요 (카드·하트·⚡ 그대로)"
-                  className="min-h-11 rounded-xl border-2 border-sky-300/50 bg-sky-400/10 px-1 text-xs font-black text-sky-100 transition hover:bg-sky-400/20 disabled:opacity-40"
+                  className="min-h-11 rounded-xl border-2 border-sky-300/50 bg-sky-400/10 px-1 text-[11px] font-black whitespace-nowrap sm:text-xs text-sky-100 transition hover:bg-sky-400/20 disabled:opacity-40"
                 >
                   🖐 다시 맞추기 {resyncLeft}
                 </button>
               </div>
               {holdButton(true)}
-              <div className="flex w-[5.75rem] shrink-0 flex-col items-start gap-1 sm:w-36">
+              <div className="flex w-[5rem] shrink-0 flex-col items-start gap-1 sm:w-36">
                 <span className="text-[10px] text-white/50">{sentCard !== null ? "보내는 중…" : visibleHand.length === 0 ? "손에 카드가 없어요" : "다음 카드"}</span>
                 <div className="flex flex-wrap gap-1">
                   {visibleHand.slice(1, 7).map((c) => (
@@ -1262,7 +1262,7 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
             aria-expanded={helpOpen}
             className="flex min-h-11 items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 text-left text-xs font-semibold text-white/75 transition hover:bg-white/[0.06] light:border-slate-200 light:bg-white light:text-slate-600"
           >
-            <span>{helpOpen ? "도움말 접기" : "❔ 도움말 펼치기 (⚡ 번뜩임 · 🖐 다시 맞추기 · 🤖 자동 내기)"}</span>
+            <span>{helpOpen ? "도움말 접기" : "❔ 도움말 펼치기 — ⚡ 🖐 🤖 버튼 설명"}</span>
             <span aria-hidden>{helpOpen ? "▴" : "▾"}</span>
           </button>
           {helpOpen && (
