@@ -11,7 +11,9 @@
 --   time), not the client-supplied played_at, in KST months.
 
 -- public_portrait + set_my_public_portrait live in player_stats.sql (the
--- /stats ranking shows the portrait too), which this file runs after.
+-- /stats ranking shows the portrait too), which this file runs after. The
+-- column is repeated here so running this file alone never fails on it.
+alter table public.user_profiles add column if not exists public_portrait text;
 
 -- One game's board. p_period 'month' = this KST month, anything else = all
 -- time. Most wins first (then win rate), matches with bots included — the
