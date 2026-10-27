@@ -602,10 +602,10 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
         // the canvas stops short of the bottom so the hand only hides the
         // near table rim, not the opponents or the trick in the middle.
         <div
-          className="relative z-10 h-[500px] w-full overflow-hidden rounded-2xl border border-black/50 sm:h-[600px] lg:h-[640px]"
+          className="relative z-10 h-[516px] w-full overflow-hidden rounded-2xl border border-black/50 sm:h-[616px] lg:h-[656px]"
           style={{ background: "#081108" }}
         >
-          <div className="absolute inset-x-0 top-0 bottom-[96px] sm:bottom-[120px] lg:bottom-[132px]">
+          <div className="absolute inset-x-0 top-0 bottom-[112px] sm:bottom-[136px] lg:bottom-[148px]">
             <CucumberTable3D
               playerCount={state.playerCount}
               viewerSeat={viewerSeat}
@@ -629,7 +629,8 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
           </div>
           <section
             ref={handSectionRef}
-            className="pointer-events-none absolute inset-x-0 bottom-0 px-2 pt-10 pb-2"
+            // pb-6: the fan's edge cards tilt/drop up to ~18px below the row
+            className="pointer-events-none absolute inset-x-0 bottom-0 px-2 pt-10 pb-6"
             style={{ background: "linear-gradient(180deg,rgba(8,17,8,0) 0%,rgba(8,17,8,0.86) 32%,rgba(8,17,8,0.97) 100%)" }}
           >
             <h3 className="mb-0.5 flex items-center justify-between px-1 text-[11px] font-semibold text-emerald-200/90">
