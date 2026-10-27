@@ -18,6 +18,7 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
  */
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
   "2026-10-27": {
+    "five-cucumbers": "🧑‍🎤 VRoid 캐릭터, 🃏 3D 테이블 아래 내 손패, 👀 낸 카드는 내 자리에서 똑바로 한 줄로",
     common: "🧑‍🎤 3D 인물이 VRoid 캐릭터 12명으로 — 👗 헤어·옷·신발 바꿔 입기, 🙌 자연스러운 손, ⚡ 렉 줄이기",
   },
   "2026-10-25": {
