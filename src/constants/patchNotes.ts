@@ -64,7 +64,7 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
-    version: "v1.105.1",
+    version: "v1.107.0",
     releaseDate: "2026-10-27",
     title: "🖼 프로필 이미지 업로드 제거",
     changes: [
