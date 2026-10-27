@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.108.0",
+    releaseDate: "2026-10-28",
+    title: "🏆 랭킹에 내 캐릭터 얼굴 + 게임별 이번 달 1위",
+    changes: [
+      { game: "common", type: "FEAT", desc: "🏆 공개 랭킹에 프로필에서 고른 3D 캐릭터 얼굴이 나와요 — 사이트에 다시 들어오면 자동으로 반영돼요" },
+      { game: "common", type: "FEAT", desc: "👑 게임 페이지 제목 아래 '이번 달 1위' — 누르면 이번 달·전체 랭킹을 캐릭터 얼굴과 함께 볼 수 있어요" },
+    ],
+  },
+  {
     version: "v1.107.0",
     releaseDate: "2026-10-27",
     title: "🖼 프로필 이미지 업로드 제거",
