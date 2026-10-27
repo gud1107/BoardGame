@@ -49,6 +49,7 @@ import { getTelepathyBgm } from "./telepathyBgm";
 import { loadBestRecords, readBestScore, saveBestScore } from "./bestScore";
 import BestRecordsPanel from "./BestRecordsPanel";
 import LeaderboardModal from "./LeaderboardModal";
+import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 
 /**
  * 텔레파시 online room. Host-authoritative realtime (see engine.ts): the
@@ -365,7 +366,7 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
     let sawFirstSync = false;
     channel.on("presence", { event: "sync" }, () => {
       const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
-      setOccupants(Object.values(raw).flat());
+      setOccupants(withUniqueNames(Object.values(raw).flat()));
       if (!sawFirstSync) {
         sawFirstSync = true;
         resolveFirstSync();

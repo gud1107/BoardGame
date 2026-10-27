@@ -48,6 +48,7 @@ import { stripControlChars } from "@/lib/chat/sanitize";
 import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/lib/chat/history";
 import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
+import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 
 /**
  * Which seat/role must act right now, for `useBotAutoplay` — mirrors
@@ -437,7 +438,7 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
 
     channel.on("presence", { event: "sync" }, () => {
       const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
-      setOccupants(Object.values(raw).flat());
+      setOccupants(withUniqueNames(Object.values(raw).flat()));
     });
 
     // Real disconnect (tab closed, network dropped, or an explicit leave) —
@@ -607,7 +608,8 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
         id: uuid(),
         channel: `room:hanamikoji:${roomCode}`,
         deviceId,
-        senderName: myName || "게스트",
+        // the roster label (withUniqueNames), so a shared nickname reads "상어 2" in chat too
+        senderName: occupantsRef.current.find((o) => o.deviceId === deviceId)?.name || myName || "게스트",
         body: clean,
         type: "USER",
         createdAt: new Date(now).toISOString(),

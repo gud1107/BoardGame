@@ -46,6 +46,7 @@ import {
   type BotTakeoverState,
 } from "@/games/shared/bot/botTakeover";
 import { selfResult } from "@/games/shared/selfResult";
+import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 
 /**
  * 라이어를 찾아라 온라인 대전 진입점 — 진실의 고개와 같은 락스텝 패턴(docs/cloud-sync.md).
@@ -342,7 +343,7 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
 
     channel.on("presence", { event: "sync" }, () => {
       const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
-      setOccupants(Object.values(raw).flat());
+      setOccupants(withUniqueNames(Object.values(raw).flat()));
       if (!sawFirstSync) {
         sawFirstSync = true;
         resolveFirstSync();

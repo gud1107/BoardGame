@@ -23,6 +23,7 @@ import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/
 import RulebookGate from "@/components/lobby/RulebookGate";
 import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
 import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
+import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 import {
   activeVoteFor,
   INITIAL_BOT_TAKEOVER_STATE,
@@ -315,7 +316,7 @@ export default function LotrDuelGame({ onComplete }: PlayableGameProps) {
 
     channel.on("presence", { event: "sync" }, () => {
       const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
-      setOccupants(Object.values(raw).flat());
+      setOccupants(withUniqueNames(Object.values(raw).flat()));
     });
 
     channel.on("presence", { event: "leave" }, ({ leftPresences }) => {

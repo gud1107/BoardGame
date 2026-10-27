@@ -50,6 +50,7 @@ import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
 import { selfResult } from "@/games/shared/selfResult";
 import { forSaleStatDetails } from "./stats";
+import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 
 /**
  * Small local system-log formatter for the "bid" headline action (see
@@ -411,7 +412,7 @@ export default function ForSaleGame({ onComplete }: PlayableGameProps) {
 
     channel.on("presence", { event: "sync" }, () => {
       const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
-      setOccupants(Object.values(raw).flat());
+      setOccupants(withUniqueNames(Object.values(raw).flat()));
       if (!sawFirstSync) {
         sawFirstSync = true;
         resolveFirstSync();
@@ -636,7 +637,8 @@ export default function ForSaleGame({ onComplete }: PlayableGameProps) {
         id: uuid(),
         channel: `room:for-sale:${roomCode}`,
         deviceId,
-        senderName: myName || "게스트",
+        // the roster label (withUniqueNames), so a shared nickname reads "상어 2" in chat too
+        senderName: occupantsRef.current.find((o) => o.deviceId === deviceId)?.name || myName || "게스트",
         body: clean,
         type: "USER",
         createdAt: new Date(now).toISOString(),

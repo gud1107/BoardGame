@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.114.0",
+    releaseDate: "2026-10-28",
+    title: "👥 같은 닉네임 구분 · 닉네임 하나로",
+    changes: [
+      { game: "common", type: "IMPROVE", desc: "👥 같은 방에 같은 닉네임이 둘 들어오면 늦게 앉은 쪽이 '상어 2'로 — 자리·결과·채팅에서 누가 누군지 구분돼요" },
+      { game: "common", type: "IMPROVE", desc: "🏆 프로필에서 게임 닉네임을 저장하면 공개 랭킹 닉네임도 같은 이름으로 (원하면 끌 수 있어요)" },
+      { game: "common", type: "IMPROVE", desc: "🏷️ 방 입장 칸이 자동으로 채워지면 '이 이름으로 들어가요' 안내가 떠요 — 모르고 들어가는 일이 없게" },
+    ],
+  },
+  {
     version: "v1.113.0",
     releaseDate: "2026-10-28",
     title: "🏷️ 게임 닉네임을 프로필에서 한 번에",

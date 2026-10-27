@@ -46,6 +46,7 @@ import {
 } from "@/games/shared/bot/botTakeover";
 import { selfResult } from "@/games/shared/selfResult";
 import { ratATatCatStatDetails } from "./stats";
+import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 
 /**
  * Online-room multiplayer entry point, same lockstep pattern as every other
@@ -284,7 +285,7 @@ export default function RatATatCatGame({ onComplete }: PlayableGameProps) {
 
     channel.on("presence", { event: "sync" }, () => {
       const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
-      setOccupants(Object.values(raw).flat());
+      setOccupants(withUniqueNames(Object.values(raw).flat()));
       if (!sawFirstSync) {
         sawFirstSync = true;
         resolveFirstSync();

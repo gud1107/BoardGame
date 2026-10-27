@@ -22,6 +22,7 @@ import RulebookGate from "@/components/lobby/RulebookGate";
 import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
 import { selfResult } from "@/games/shared/selfResult";
 import { greatLegacyStatDetails } from "./stats";
+import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 
 /**
  * Online-room multiplayer entry point, same lockstep pattern as
@@ -252,7 +253,7 @@ export default function GreatLegacyGame({ onComplete }: PlayableGameProps) {
 
     channel.on("presence", { event: "sync" }, () => {
       const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
-      setOccupants(Object.values(raw).flat());
+      setOccupants(withUniqueNames(Object.values(raw).flat()));
       if (!sawFirstSync) {
         sawFirstSync = true;
         resolveFirstSync();

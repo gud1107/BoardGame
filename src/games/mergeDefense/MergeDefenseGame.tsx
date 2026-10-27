@@ -78,6 +78,7 @@ import MergeDefenseResults, { type AutoSummary, type MatchRecord, type WaveHisto
 import WaitingRoomPanel from "./WaitingRoomPanel";
 import RoomSettings from "./RoomSettings";
 import { SEAT_COLORS } from "./render";
+import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 
 /**
  * Online-room entry point for 랜덤 합성 디펜스.
@@ -448,7 +449,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
 
     channel.on("presence", { event: "sync" }, () => {
       const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
-      setOccupants(Object.values(raw).flat());
+      setOccupants(withUniqueNames(Object.values(raw).flat()));
       if (!sawFirstSync) {
         sawFirstSync = true;
         resolveFirstSync();

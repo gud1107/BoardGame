@@ -49,6 +49,7 @@ import {
 import { selfResult } from "@/games/shared/selfResult";
 import { listPlayerStats } from "@/lib/stats/playerStats";
 import { applyRp, rpFromDetails, type RankResult } from "@/lib/stats/rankTier";
+import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 
 /**
  * 여관 난투 온라인 대전 진입점 — 갓생 플래너와 같은 락스텝 패턴(docs/cloud-sync.md).
@@ -360,7 +361,7 @@ export default function TavernBrawlGame({ onComplete }: PlayableGameProps) {
 
     channel.on("presence", { event: "sync" }, () => {
       const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
-      setOccupants(Object.values(raw).flat());
+      setOccupants(withUniqueNames(Object.values(raw).flat()));
       if (!sawFirstSync) {
         sawFirstSync = true;
         resolveFirstSync();

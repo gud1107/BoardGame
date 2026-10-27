@@ -47,6 +47,7 @@ import { selfResult } from "@/games/shared/selfResult";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { getCityChaseBgm } from "./cityChaseBgm";
+import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 
 /**
  * Online-room multiplayer entry point for 시티 체이스 — same lockstep pattern
@@ -291,7 +292,7 @@ export default function CityChaseGame({ onComplete }: PlayableGameProps) {
 
     channel.on("presence", { event: "sync" }, () => {
       const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
-      setOccupants(Object.values(raw).flat());
+      setOccupants(withUniqueNames(Object.values(raw).flat()));
       if (!sawFirstSync) {
         sawFirstSync = true;
         resolveFirstSync();

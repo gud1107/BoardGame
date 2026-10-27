@@ -71,6 +71,7 @@ import { selfResult } from "@/games/shared/selfResult";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { getInkDuelBgm } from "./inkDuelBgm";
+import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 
 /**
  * Online-room multiplayer entry point for 낙서 결투 — same lockstep pattern
@@ -543,7 +544,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
 
     channel.on("presence", { event: "sync" }, () => {
       const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
-      setOccupants(Object.values(raw).flat());
+      setOccupants(withUniqueNames(Object.values(raw).flat()));
       if (!sawFirstSync) {
         sawFirstSync = true;
         resolveFirstSync();

@@ -53,6 +53,7 @@ import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
 import { selfResult } from "@/games/shared/selfResult";
 import { fiveCucumbersStatDetails } from "./stats";
+import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 
 /** Whose decision `useBotAutoplay` should drive right now. */
 function fiveCucumbersCurrentActor(state: FiveCucumbersState): SeatIndex | null {
@@ -415,7 +416,7 @@ export default function FiveCucumbersGame({ onComplete }: PlayableGameProps) {
 
     channel.on("presence", { event: "sync" }, () => {
       const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
-      setOccupants(Object.values(raw).flat());
+      setOccupants(withUniqueNames(Object.values(raw).flat()));
       if (!sawFirstSync) {
         sawFirstSync = true;
         resolveFirstSync();
@@ -651,7 +652,8 @@ export default function FiveCucumbersGame({ onComplete }: PlayableGameProps) {
         id: uuid(),
         channel: `room:five-cucumbers:${roomCode}`,
         deviceId,
-        senderName: myName || "게스트",
+        // the roster label (withUniqueNames), so a shared nickname reads "상어 2" in chat too
+        senderName: occupantsRef.current.find((o) => o.deviceId === deviceId)?.name || myName || "게스트",
         body: clean,
         type: "USER",
         createdAt: new Date(now).toISOString(),

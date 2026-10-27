@@ -39,6 +39,7 @@ import {
   type BotTakeoverState,
 } from "@/games/shared/bot/botTakeover";
 import { selfResult } from "@/games/shared/selfResult";
+import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 
 /**
  * 진실의 고개 온라인 대전 진입점 — 다른 게임들과 동일한 락스텝 패턴
@@ -321,7 +322,7 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
 
     channel.on("presence", { event: "sync" }, () => {
       const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
-      setOccupants(Object.values(raw).flat());
+      setOccupants(withUniqueNames(Object.values(raw).flat()));
       if (!sawFirstSync) {
         sawFirstSync = true;
         resolveFirstSync();

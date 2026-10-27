@@ -51,6 +51,7 @@ import { formatBotTakeoverLog, formatPerudoRaiseLog } from "@/lib/chat/systemLog
 import ChatDrawer from "@/components/chat/ChatDrawer";
 import { selfResult } from "@/games/shared/selfResult";
 import { perudoStatDetails } from "./stats";
+import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 
 /** Whose decision is pending, for `useBotAutoplay` — just the active seat (Perudo has no separate response sub-phase). */
 function perudoCurrentActor(state: PerudoState): SeatIndex | null {
@@ -490,7 +491,7 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
 
     channel.on("presence", { event: "sync" }, () => {
       const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
-      setOccupants(Object.values(raw).flat());
+      setOccupants(withUniqueNames(Object.values(raw).flat()));
       if (!sawFirstSync) {
         sawFirstSync = true;
         resolveFirstSync();
@@ -836,7 +837,8 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
         id: uuid(),
         channel: `room:perudo:${roomCode}`,
         deviceId,
-        senderName: myName || "게스트",
+        // the roster label (withUniqueNames), so a shared nickname reads "상어 2" in chat too
+        senderName: occupantsRef.current.find((o) => o.deviceId === deviceId)?.name || myName || "게스트",
         body: clean,
         type: "USER",
         createdAt: new Date(now).toISOString(),

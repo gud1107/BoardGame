@@ -85,6 +85,9 @@ export default function RoomNicknameField({ value, onChange: onChangeProp, place
     if (!value.name.trim() && start) onChangeProp({ name: start, playerId: undefined });
   }, [nickHydrated, profileNick, hasRoster, guestMode, value.name, onChangeProp]);
   const typed = cleanNickname(value.name);
+  // the name the field starts with (filled in above): say so while it's still the one in the box
+  const autoName = nickHydrated ? startingNickname(profileNick) : "";
+  const showAuto = !!autoName && typed === autoName;
 
   if (session && hasRoster && !guestMode) {
     return (
@@ -123,6 +126,7 @@ export default function RoomNicknameField({ value, onChange: onChangeProp, place
   return (
     <div className="flex flex-col gap-2">
       <input
+        aria-label="내 닉네임"
         value={value.name}
         onChange={(e) => onChange({ name: e.target.value, playerId: undefined })}
         onKeyDown={(e) => {
@@ -132,8 +136,15 @@ export default function RoomNicknameField({ value, onChange: onChangeProp, place
           }
         }}
         placeholder={placeholder}
-        className={`rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400 ${classes.input}`}
+        className={`rounded-lg border bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none light:bg-white light:text-slate-900 light:placeholder:text-slate-400 ${
+          showAuto ? "border-amber-300/70 ring-2 ring-amber-300/30 light:border-amber-400" : "border-white/10 light:border-slate-300"
+        } ${classes.input}`}
       />
+      {showAuto && (
+        <p className="text-xs text-amber-200 light:text-amber-700">
+          🏷️ <b>&lsquo;{autoName}&rsquo;</b>(으)로 들어가요 — {profileNick === autoName ? "프로필의 게임 닉네임" : "지난번에 쓴 이름"}이에요. 다른 이름을 쓰려면 위 칸을 고치세요.
+        </p>
+      )}
       {typed && typed !== profileNick && (
         <button
           type="button"

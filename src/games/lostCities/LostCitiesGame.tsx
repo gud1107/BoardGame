@@ -36,6 +36,7 @@ import {
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { getLostCitiesBgm } from "./lostCitiesBgm";
+import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 
 /**
  * Online-room multiplayer entry point for 로스트 시티 — the same lockstep
@@ -311,7 +312,7 @@ export default function LostCitiesGame({ onComplete }: PlayableGameProps) {
 
     channel.on("presence", { event: "sync" }, () => {
       const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
-      setOccupants(Object.values(raw).flat());
+      setOccupants(withUniqueNames(Object.values(raw).flat()));
     });
 
     channel.on("presence", { event: "leave" }, ({ leftPresences }) => {

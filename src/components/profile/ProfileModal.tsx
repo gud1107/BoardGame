@@ -60,22 +60,28 @@ function GameNicknameEditor() {
   const init = useMyNickname((s) => s.init);
   const setNickname = useMyNickname((s) => s.set);
   const publicName = useProfileStore((s) => s.publicName);
+  const setPublicName = useProfileStore((s) => s.setPublicName);
   const [draft, setDraft] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // one name everywhere by default: the ranking shows the same name the table did
+  const [alsoRanking, setAlsoRanking] = useState(true);
   useEffect(() => {
     void init();
   }, [init]);
   const value = draft ?? nickname;
-  const dirty = cleanNickname(value) !== nickname;
+  const dirty = cleanNickname(value) !== nickname || (alsoRanking && !!nickname && nickname !== publicName);
 
   return (
     <form
       className="flex w-full flex-col gap-2"
       onSubmit={(e) => {
         e.preventDefault();
-        setNickname(value);
+        const clean = cleanNickname(value);
+        setNickname(clean);
         setDraft(null);
         setSaved(true);
+        // the ranking name is unique and stricter — a refusal shows under 랭킹 닉네임 below
+        if (alsoRanking && clean && clean !== publicName) void setPublicName(clean);
       }}
     >
       <label htmlFor="game-nickname" className="text-xs font-semibold text-white/70 light:text-slate-600">
@@ -97,6 +103,10 @@ function GameNicknameEditor() {
           저장
         </button>
       </div>
+      <label className="flex items-center gap-2 text-xs text-white/60 light:text-slate-500">
+        <input type="checkbox" checked={alsoRanking} onChange={(e) => setAlsoRanking(e.target.checked)} className="h-4 w-4 accent-rose-500" />
+        공개 랭킹에도 같은 이름으로 (다른 사람이 쓰고 있으면 랭킹 닉네임은 그대로예요)
+      </label>
       {saved ? (
         <p className="text-xs text-emerald-300 light:text-emerald-600">{nickname ? "저장했어요. 다음에 들어가는 방부터 이 닉네임이 입력돼요." : "지웠어요. 방에서 마지막으로 쓴 이름이 입력돼요."}</p>
       ) : (

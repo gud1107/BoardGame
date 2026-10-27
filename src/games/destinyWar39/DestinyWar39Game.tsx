@@ -63,6 +63,7 @@ import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/
 import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
 import { selfResult } from "@/games/shared/selfResult";
+import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 
 /**
  * e.g. "지수님이 27 카드를 냈습니다" / "지수님이 사신 카드를 냈습니다" for a
@@ -475,7 +476,7 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
 
     channel.on("presence", { event: "sync" }, () => {
       const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
-      setOccupants(Object.values(raw).flat());
+      setOccupants(withUniqueNames(Object.values(raw).flat()));
       if (!sawFirstSync) {
         sawFirstSync = true;
         resolveFirstSync();
@@ -773,7 +774,8 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
         id: uuid(),
         channel: `room:destiny-war-39:${roomCode}`,
         deviceId,
-        senderName: myName || "게스트",
+        // the roster label (withUniqueNames), so a shared nickname reads "상어 2" in chat too
+        senderName: occupantsRef.current.find((o) => o.deviceId === deviceId)?.name || myName || "게스트",
         body: clean,
         type: "USER",
         createdAt: new Date(now).toISOString(),

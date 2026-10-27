@@ -18,7 +18,7 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
  */
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
   "2026-10-28": {
-    common: "🏆 랭킹에 내 캐릭터 얼굴·👑 1위 칩, ✏️ 꾸미기 패널·💾 저장, 🏷️ 게임 닉네임 자동 입력, 🤲 카드 쥐는 손",
+    common: "🏆 랭킹에 캐릭터 얼굴·👑 1위 칩, ✏️ 꾸미기·💾 저장, 🏷️ 게임 닉네임·👥 같은 이름 구분, 🤲 카드 쥐는 손",
   },
   "2026-10-27": {
     "five-cucumbers": "🧑‍🎤 VRoid 캐릭터, 🃏 3D 테이블 아래 내 손패, 👀 낸 카드는 내 자리에서 똑바로 한 줄로",

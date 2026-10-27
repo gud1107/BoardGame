@@ -51,6 +51,7 @@ import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/
 import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
 import { selfResult } from "@/games/shared/selfResult";
+import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 
 /** Whose decision `useBotAutoplay` should drive right now — the one seat with a pending action across bidding/declaringSpatula/resolvingRift, or null once the round has ended and there's nothing left for any seat to decide. */
 function summonersRiftCurrentActor(state: SummonersRiftState): SeatIndex | null {
@@ -411,7 +412,7 @@ export default function SummonersRiftGame({ onComplete }: PlayableGameProps) {
 
     channel.on("presence", { event: "sync" }, () => {
       const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
-      setOccupants(Object.values(raw).flat());
+      setOccupants(withUniqueNames(Object.values(raw).flat()));
       if (!sawFirstSync) {
         sawFirstSync = true;
         resolveFirstSync();
@@ -636,7 +637,8 @@ export default function SummonersRiftGame({ onComplete }: PlayableGameProps) {
         id: uuid(),
         channel: `room:summoners-rift:${roomCode}`,
         deviceId,
-        senderName: myName || "게스트",
+        // the roster label (withUniqueNames), so a shared nickname reads "상어 2" in chat too
+        senderName: occupantsRef.current.find((o) => o.deviceId === deviceId)?.name || myName || "게스트",
         body: clean,
         type: "USER",
         createdAt: new Date(now).toISOString(),

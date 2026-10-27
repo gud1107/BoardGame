@@ -60,6 +60,7 @@ import { playTransitionSounds } from "./sounds";
 import { ChunkAssembler, splitIntoChunks, type SyncChunk } from "./syncChunks";
 import { selfResult } from "@/games/shared/selfResult";
 import { doodlePhoneStatDetails } from "./stats";
+import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 
 /**
  * Online room for 그림 전화기 — the standard lockstep room (docs/cloud-sync.md,
@@ -351,7 +352,7 @@ export default function DoodlePhoneGame({ onComplete }: PlayableGameProps) {
 
     channel.on("presence", { event: "sync" }, () => {
       const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
-      setOccupants(Object.values(raw).flat());
+      setOccupants(withUniqueNames(Object.values(raw).flat()));
       if (!sawFirstSync) {
         sawFirstSync = true;
         resolveFirstSync();
