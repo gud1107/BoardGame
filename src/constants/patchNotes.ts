@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.113.0",
+    releaseDate: "2026-10-28",
+    title: "🏷️ 게임 닉네임을 프로필에서 한 번에",
+    changes: [
+      { game: "common", type: "FEAT", desc: "🏷️ 프로필에 '게임 닉네임' — 한 번 정해 두면 모든 게임 방에 들어갈 때 자동으로 입력돼요 (방마다 바꾸는 것도 그대로 가능)" },
+      { game: "common", type: "IMPROVE", desc: "⭐ 방 입장 화면에서 새로 쓴 이름을 '기본 닉네임으로 저장' — 로그인 안 해도 이 기기에 기억돼요" },
+    ],
+  },
+  {
     version: "v1.112.0",
     releaseDate: "2026-10-28",
     title: "💾 내가 꾸민 캐릭터 저장",

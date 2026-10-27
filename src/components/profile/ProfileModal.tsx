@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Avatar from "@/components/common/Avatar";
 import { PUBLIC_NAME_RULE, useProfileStore } from "@/store/profileStore";
 import { useMyCharacter } from "@/lib/character/myCharacter";
 import CharacterStudio from "./CharacterStudio";
+import { cleanNickname, GAME_NICKNAME_MAX, useMyNickname } from "@/lib/identity/myNickname";
 import { useProfilePhoto } from "./ProfilePhoto";
 
 /**
@@ -23,6 +24,7 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
 
   return (
     <CharacterStudio title="🙂 프로필" onClose={onClose}>
+        <GameNicknameEditor />
         <PublicNameEditor />
         <div className="w-full border-t border-white/10 light:border-slate-200" />
         <Avatar src={photo} size={112} className="border-2" />
@@ -49,6 +51,63 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
         <div className="w-full border-t border-white/10 light:border-slate-200" />
         <span className="self-start text-xs font-semibold text-white/70 light:text-slate-600">🧑‍🎤 3D 게임 캐릭터</span>
     </CharacterStudio>
+  );
+}
+
+/** 게임 닉네임: what every online game's room field starts filled with (`myNickname.ts`). */
+function GameNicknameEditor() {
+  const nickname = useMyNickname((s) => s.nickname);
+  const init = useMyNickname((s) => s.init);
+  const setNickname = useMyNickname((s) => s.set);
+  const publicName = useProfileStore((s) => s.publicName);
+  const [draft, setDraft] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    void init();
+  }, [init]);
+  const value = draft ?? nickname;
+  const dirty = cleanNickname(value) !== nickname;
+
+  return (
+    <form
+      className="flex w-full flex-col gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setNickname(value);
+        setDraft(null);
+        setSaved(true);
+      }}
+    >
+      <label htmlFor="game-nickname" className="text-xs font-semibold text-white/70 light:text-slate-600">
+        게임 닉네임 <span className="font-normal text-white/40 light:text-slate-400">· 게임 방에 들어갈 때 자동으로 입력돼요</span>
+      </label>
+      <div className="flex gap-2">
+        <input
+          id="game-nickname"
+          value={value}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setSaved(false);
+          }}
+          maxLength={GAME_NICKNAME_MAX}
+          placeholder={publicName ?? "예: 상어"}
+          className="min-w-0 flex-1 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400"
+        />
+        <button type="submit" disabled={!dirty} className="shrink-0 rounded-xl bg-rose-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-400 disabled:opacity-40">
+          저장
+        </button>
+      </div>
+      {saved ? (
+        <p className="text-xs text-emerald-300 light:text-emerald-600">{nickname ? "저장했어요. 다음에 들어가는 방부터 이 닉네임이 입력돼요." : "지웠어요. 방에서 마지막으로 쓴 이름이 입력돼요."}</p>
+      ) : (
+        publicName &&
+        !nickname && (
+          <button type="button" onClick={() => setDraft(publicName)} className="self-start text-xs text-white/50 underline hover:text-white/80 light:text-slate-500 light:hover:text-slate-700">
+            랭킹 닉네임(&lsquo;{publicName}&rsquo;)과 같게
+          </button>
+        )
+      )}
+    </form>
   );
 }
 

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useBettingStore } from "@/store/bettingStore";
 import { rememberRoomNickname } from "@/lib/identity/lastNickname";
 import CharacterButton from "@/components/profile/CharacterButton";
+import { cleanNickname, startingNickname, useMyNickname } from "@/lib/identity/myNickname";
 
 export interface RoomIdentityValue {
   name: string;
@@ -54,6 +55,9 @@ const ACCENT_CLASSES: Record<NonNullable<Props["accent"]>, { input: string; chip
  * device* — see the plan/HANDOFF notes on why that's device-local, not
  * synced across every player's phone. When there's no active session this
  * renders identically to the old plain text input.
+ *
+ * The text input starts filled with the profile's 게임 닉네임 (`myNickname.ts`), or the
+ * last name typed into any room, and offers to make a newly typed name the default.
  */
 export default function RoomNicknameField({ value, onChange: onChangeProp, placeholder = "닉네임을 입력하세요", accent = "emerald", onEnter }: Props) {
   // Remember the typed name for the /visitors page (see lastNickname.ts).
@@ -65,6 +69,22 @@ export default function RoomNicknameField({ value, onChange: onChangeProp, place
   const hasRoster = Boolean(session && session.participants.length > 0);
   const [guestMode, setGuestMode] = useState(!hasRoster);
   const classes = ACCENT_CLASSES[accent];
+  const profileNick = useMyNickname((s) => s.nickname);
+  const nickHydrated = useMyNickname((s) => s.hydrated);
+  const initNick = useMyNickname((s) => s.init);
+  const setProfileNick = useMyNickname((s) => s.set);
+  useEffect(() => {
+    void initNick();
+  }, [initNick]);
+  // fill an empty name field once, when the profile nickname is known
+  const filled = useRef(false);
+  useEffect(() => {
+    if (filled.current || !nickHydrated || (hasRoster && !guestMode)) return;
+    filled.current = true;
+    const start = startingNickname(profileNick);
+    if (!value.name.trim() && start) onChangeProp({ name: start, playerId: undefined });
+  }, [nickHydrated, profileNick, hasRoster, guestMode, value.name, onChangeProp]);
+  const typed = cleanNickname(value.name);
 
   if (session && hasRoster && !guestMode) {
     return (
@@ -114,6 +134,15 @@ export default function RoomNicknameField({ value, onChange: onChangeProp, place
         placeholder={placeholder}
         className={`rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400 ${classes.input}`}
       />
+      {typed && typed !== profileNick && (
+        <button
+          type="button"
+          onClick={() => setProfileNick(typed)}
+          className="self-start text-xs text-white/50 underline hover:text-white/80 light:text-slate-500 light:hover:text-slate-700"
+        >
+          ⭐ &lsquo;{typed}&rsquo;을(를) 내 기본 닉네임으로 저장 (다음 방부터 자동 입력)
+        </button>
+      )}
       {hasRoster && (
         <button
           type="button"

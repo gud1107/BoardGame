@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { PlayableGameProps } from "../types";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
+import { readGameNickname, startingNickname } from "@/lib/identity/myNickname";
 import { recordSoloRun } from "@/lib/stats/soloResult";
 import { CRAB_COLORS, EVO_REVEAL, isUnlocked, MATCH_LENGTHS, roadmap, SHELL_BAND_LABEL, SHELL_PIECE_LABEL, SHELL_STYLE, SPECIES, SPECIES_LIST, type CrabColor, type ShieldKind, type SpeciesId, type WeaponKind } from "./data";
 import type { CrownLogEntry, MatchSummary, MomentEntry } from "./engine";
@@ -41,7 +42,8 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
   // Client-only component (dynamic import with ssr:false), so localStorage is safe here.
   const [save, setSave] = useState<CrabSave>(() => {
     const s = typeof window === "undefined" ? freshSave() : loadSave();
-    return s.name ? s : { ...s, name: participants[0]?.name?.slice(0, 10) ?? "" };
+    // an unnamed crab starts with the profile's 게임 닉네임 (myNickname.ts), else the participant name
+    return s.name ? s : { ...s, name: (startingNickname(readGameNickname()) || participants[0]?.name || "").slice(0, 10) };
   });
   const [screen, setScreen] = useState<Screen>("menu");
   const [runKey, setRunKey] = useState(0);
