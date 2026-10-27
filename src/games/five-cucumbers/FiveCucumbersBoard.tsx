@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import dynamic from "next/dynamic";
 import Avatar from "@/components/common/Avatar";
-import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
+import { Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import RulebookModal from "./RulebookModal";
 import CucumberSoundHud from "./CucumberSoundHud";
 import { getCucumberSound } from "./cucumberSound";
@@ -248,8 +248,14 @@ function fanStyle(index: number, total: number, overlapPx: number): CSSPropertie
 
 export default function FiveCucumbersBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: FiveCucumbersBoardProps) {
   const board3d = useBoardView("five-cucumbers-view");
+  // 3D = the table scene replaces the 2D trick area/scoreboard and the
+  // viewer's hand sits inside the scene's frame (DOM overlay, so the numbers
+  // stay crisp and tappable). The 2D DOM FX fly between those 2D sections, so
+  // they're off in 3D — the scene's own FlyIn/cucumber stacks cover it.
+  const is3D = board3d.view === "3d";
   const [lowDetail] = useState(preferLowDetail);
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  const [scoresOpen, setScoresOpen] = useState(false);
 
   // Whenever `state` changes, notice freshly-resolved tricks/rounds and flash
   // a transient banner about them — same "diff consecutive snapshots on
@@ -271,7 +277,7 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
     if (newTrick) setTrickFlash(newTrick);
     if (newRound) {
       setRoundFlash(newRound);
-      if (newRound.cucumberPenaltyEach > 0) {
+      if (newRound.cucumberPenaltyEach > 0 && !is3D) {
         setCucumberEvents((prev) => {
           let nextId = (prev.at(-1)?.id ?? 0) + 1;
           const created = buildCucumberPickupEvents(newRound.winnerSeats, newRound.cucumberPenaltyEach, () => nextId++);
@@ -279,7 +285,7 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
         });
       }
     }
-    if (cardPlay) {
+    if (cardPlay && !is3D) {
       setCardFlyEvents((prev) => [...prev, { ...cardPlay, id: (prev.at(-1)?.id ?? 0) + 1 }]);
     }
   }
@@ -340,6 +346,12 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
     setTrickFlash(null);
     setRoundFlash(null);
   }, []);
+  // Switching to 3D mid-flight: the 2D FX below stop rendering, so drop them
+  // rather than leave them queued to replay stale on the way back to 2D.
+  if (is3D && (cardFlyEvents.length > 0 || cucumberEvents.length > 0)) {
+    setCardFlyEvents([]);
+    setCucumberEvents([]);
+  }
   const handleCardFlyDone = useCallback((id: number) => {
     setCardFlyEvents((prev) => prev.filter((e) => e.id !== id));
   }, []);
@@ -484,6 +496,34 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
     onAction({ type: "playCard", seat: viewerSeat, cardId });
   }
 
+  const handFan =
+    me.hand.length === 0 ? (
+      <p className="text-xs text-white/30 light:text-slate-400">손패가 없습니다.</p>
+    ) : (
+      // Fanned overlap (task brief §2) instead of a wrapping grid — up to
+      // 7 cards at round start still fit a phone-width hand at the
+      // bigger card size, and each card pops forward on hover/tap. Never
+      // wraps in 3D: the overlay has room for exactly one row.
+      <div className={`flex justify-center pt-3 sm:pt-4 ${is3D ? "flex-nowrap" : "flex-wrap"}`}>
+        {me.hand.map((c, i) => {
+          const isLegal = isMyTurn && legal.has(c.id);
+          return (
+            <div key={c.id} className="relative" style={fanStyle(i, me.hand.length, 42)}>
+              <button
+                disabled={!isLegal}
+                onClick={() => playCard(c.id)}
+                className={`relative block transition ${
+                  isLegal ? "cursor-pointer hover:z-30 hover:-translate-y-4 hover:scale-105" : "cursor-not-allowed opacity-40"
+                }`}
+              >
+                <CardFace card={c} className={isLegal ? "shadow-[0_0_18px_-2px_rgba(251,191,36,0.9)] ring-2 ring-amber-300/80" : ""} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    );
+
   return (
     <div
       onPointerDownCapture={() => getCucumberSound().unlock()}
@@ -557,26 +597,48 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
                 : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
       </p>
 
-      {board3d.view === "3d" && (
-        <Frame3D hint="남의 손패는 장수만 · 드래그로 둘러보기">
-          <CucumberTable3D
-            playerCount={state.playerCount}
-            viewerSeat={viewerSeat}
-            seats={seatOrder.map((seat) => {
-              const p = state.players.find((pl) => pl.seat === seat)!;
-              return { seat, name: names[seat] ?? `${seat + 1}번`, handCount: p.hand.length, cucumbers: p.cucumbers, eliminated: p.eliminated, away: !connectedSeats.has(seat) };
-            })}
-            activeSeat={isHoldActive || gameJustEnded ? null : state.activeSeat}
-            plays={displayedTrickPlays.map((pl) => ({ seat: pl.seat, value: pl.card.value, id: pl.card.id }))}
-            winnerSeat={heldWinnerSeat}
-            finalTrick={isHoldActive ? heldIsFinalTrick : state.trickNumber === FINAL_TRICK_NUMBER}
-            trickNumber={isHoldActive ? trickFlash!.trickNumber : state.trickNumber}
-            roundNumber={state.roundNumber}
-            threshold={state.eliminationThreshold}
-            overview={gameJustEnded}
-            lowDetail={lowDetail}
-          />
-        </Frame3D>
+      {is3D && (
+        // Table on top, my hand laid over the bottom edge of the same frame —
+        // the canvas stops short of the bottom so the hand only hides the
+        // near table rim, not the opponents or the trick in the middle.
+        <div
+          className="relative z-10 h-[500px] w-full overflow-hidden rounded-2xl border border-black/50 sm:h-[600px] lg:h-[640px]"
+          style={{ background: "#081108" }}
+        >
+          <div className="absolute inset-x-0 top-0 bottom-[96px] sm:bottom-[120px] lg:bottom-[132px]">
+            <CucumberTable3D
+              playerCount={state.playerCount}
+              viewerSeat={viewerSeat}
+              seats={seatOrder.map((seat) => {
+                const p = state.players.find((pl) => pl.seat === seat)!;
+                return { seat, name: names[seat] ?? `${seat + 1}번`, handCount: p.hand.length, cucumbers: p.cucumbers, eliminated: p.eliminated, away: !connectedSeats.has(seat) };
+              })}
+              activeSeat={isHoldActive || gameJustEnded ? null : state.activeSeat}
+              plays={displayedTrickPlays.map((pl) => ({ seat: pl.seat, value: pl.card.value, id: pl.card.id }))}
+              winnerSeat={heldWinnerSeat}
+              finalTrick={isHoldActive ? heldIsFinalTrick : state.trickNumber === FINAL_TRICK_NUMBER}
+              trickNumber={isHoldActive ? trickFlash!.trickNumber : state.trickNumber}
+              roundNumber={state.roundNumber}
+              threshold={state.eliminationThreshold}
+              overview={gameJustEnded}
+              lowDetail={lowDetail}
+            />
+            <span className="pointer-events-none absolute top-2 left-1/2 max-w-[92%] -translate-x-1/2 truncate rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-white/75">
+              남의 손패는 장수만 · 드래그로 둘러보기
+            </span>
+          </div>
+          <section
+            ref={handSectionRef}
+            className="pointer-events-none absolute inset-x-0 bottom-0 px-2 pt-10 pb-2"
+            style={{ background: "linear-gradient(180deg,rgba(8,17,8,0) 0%,rgba(8,17,8,0.86) 32%,rgba(8,17,8,0.97) 100%)" }}
+          >
+            <h3 className="mb-0.5 flex items-center justify-between px-1 text-[11px] font-semibold text-emerald-200/90">
+              <span>🃏 내 손패 ({me.hand.length}장)</span>
+              {isMyTurn && <span className="text-amber-200">밝은 카드만 낼 수 있어요</span>}
+            </h3>
+            <div className="pointer-events-auto">{handFan}</div>
+          </section>
+        </div>
       )}
 
       {/* Current trick — during a hold this renders the just-resolved trick's
@@ -584,6 +646,7 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
           advanced) `state.trickPlays`, so the result stays visible & legible
           for the full hold window regardless of how fast the engine itself
           moved on. */}
+      {!is3D && (
       <section ref={trickAreaRef} className="flex flex-wrap items-start justify-center gap-2.5 rounded-2xl border border-white/10 light:border-slate-200 bg-black/25 light:bg-white/80 p-3">
         {displayedTrickPlays.length === 0 ? (
           <p className="py-6 text-xs text-white/30 light:text-slate-400">아직 아무도 카드를 내지 않았어요.</p>
@@ -601,6 +664,7 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
           ))
         )}
       </section>
+      )}
 
       {/* Trick-result hold: progress bar + countdown + skip, directly below
           the trick card area (task brief "트릭 카드 영역 바로 하단 중앙"). */}
@@ -621,7 +685,20 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
         </div>
       )}
 
-      {/* Scoreboard */}
+      {/* Scoreboard — in 3D the table already shows names/🥒 per seat, so the
+          full list folds behind a toggle instead of repeating it. */}
+      {is3D && (
+        <button
+          type="button"
+          onClick={() => setScoresOpen((v) => !v)}
+          aria-expanded={scoresOpen}
+          className="flex min-h-11 items-center justify-between rounded-xl border border-white/10 light:border-slate-200 bg-black/20 light:bg-white/70 px-3 text-xs font-semibold text-white/75 light:text-slate-600"
+        >
+          <span>📋 점수표 {scoresOpen ? "접기" : `펼치기 (${state.playerCount}명)`}</span>
+          <span aria-hidden>{scoresOpen ? "▴" : "▾"}</span>
+        </button>
+      )}
+      {(!is3D || scoresOpen) && (
       <section className="flex flex-col gap-1.5">
         {seatOrder.map((seat) => {
           const p = state.players.find((pl) => pl.seat === seat)!;
@@ -667,41 +744,20 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
           );
         })}
       </section>
+      )}
 
-      {/* My hand */}
-      <section
-        ref={handSectionRef}
-        className="rounded-2xl border border-emerald-300/20 light:border-emerald-300 light:shadow-sm p-2.5 sm:p-3"
-        // Hardcoded dark inline gradient — intentionally left as-is per theme-system guidance.
-        style={{ background: "linear-gradient(160deg,#173322 0%,#0f2116 55%,#081108 100%)" }}
-      >
-        <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-emerald-200/90 light:text-emerald-700 uppercase">🃏 내 손패 ({me.hand.length}장)</h3>
-        {me.hand.length === 0 ? (
-          <p className="text-xs text-white/30 light:text-slate-400">손패가 없습니다.</p>
-        ) : (
-          // Fanned overlap (task brief §2) instead of a wrapping grid — up to
-          // 7 cards at round start still fit a phone-width hand at the
-          // bigger card size, and each card pops forward on hover/tap.
-          <div className="flex flex-wrap justify-center pt-3 sm:pt-4">
-            {me.hand.map((c, i) => {
-              const isLegal = isMyTurn && legal.has(c.id);
-              return (
-                <div key={c.id} className="relative" style={fanStyle(i, me.hand.length, 42)}>
-                  <button
-                    disabled={!isLegal}
-                    onClick={() => playCard(c.id)}
-                    className={`relative block transition ${
-                      isLegal ? "cursor-pointer hover:z-30 hover:-translate-y-4 hover:scale-105" : "cursor-not-allowed opacity-40"
-                    }`}
-                  >
-                    <CardFace card={c} className={isLegal ? "shadow-[0_0_18px_-2px_rgba(251,191,36,0.9)] ring-2 ring-amber-300/80" : ""} />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
+      {/* My hand (2D — in 3D it's laid over the table frame above) */}
+      {!is3D && (
+        <section
+          ref={handSectionRef}
+          className="rounded-2xl border border-emerald-300/20 light:border-emerald-300 light:shadow-sm p-2.5 sm:p-3"
+          // Hardcoded dark inline gradient — intentionally left as-is per theme-system guidance.
+          style={{ background: "linear-gradient(160deg,#173322 0%,#0f2116 55%,#081108 100%)" }}
+        >
+          <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-emerald-200/90 light:text-emerald-700 uppercase">🃏 내 손패 ({me.hand.length}장)</h3>
+          {handFan}
+        </section>
+      )}
 
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
 

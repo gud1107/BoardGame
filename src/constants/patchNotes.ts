@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.103.0",
+    releaseDate: "2026-10-27",
+    title: "🥒 오이 다섯 개 3D — 내 손패를 테이블 위에",
+    changes: [
+      { game: "five-cucumbers", type: "IMPROVE", desc: "🃏 3D 화면에서 내 손패가 테이블 아래쪽에 바로 펼쳐져요 — 스크롤 없이 상대·트릭을 보면서 카드를 내요" },
+      { game: "five-cucumbers", type: "IMPROVE", desc: "📋 3D 테이블과 겹치던 트릭 칸·점수판은 정리 — 점수표는 '펼치기'로 언제든 볼 수 있어요" },
+    ],
+  },
+  {
     version: "v1.102.0",
     releaseDate: "2026-10-27",
     title: "👗 VRoid 캐릭터 12명 + 헤어·옷·신발 바꿔 입기",
