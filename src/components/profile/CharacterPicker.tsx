@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { AVATAR_OPTIONS, CHARACTER_PRESETS, DYED_BY_DEFAULT, resolveLook, VRM_MODEL_GENDER, VRM_WARDROBE, wardrobeFor, type AvatarProfile, type PersonLook, type VrmModel, type WardrobeSlot } from "@/lib/character/avatar";
-import { useMyCharacter } from "@/lib/character/myCharacter";
+import { MAX_SAVED, portraitKey, useMyCharacter } from "@/lib/character/myCharacter";
 
 const CharacterPreview3D = dynamic(() => import("./CharacterPreview3D"), {
   ssr: false,
@@ -83,7 +83,7 @@ function useCharacterEdit() {
 
 function Preview({ look }: { look: PersonLook }) {
   return (
-    <div className="h-48 w-full shrink-0 overflow-hidden rounded-xl bg-gradient-to-b from-[#3a3550] to-[#22202e]">
+    <div className="h-40 w-full shrink-0 overflow-hidden rounded-xl bg-gradient-to-b from-[#3a3550] to-[#22202e] sm:h-48">
       <CharacterPreview3D look={look} />
     </div>
   );
@@ -100,8 +100,13 @@ function Preview({ look }: { look: PersonLook }) {
  */
 export default function CharacterPicker({ showPreview = true, customizing = false, onCustomize }: { showPreview?: boolean; customizing?: boolean; onCustomize: () => void }) {
   const { character, save, clear, look } = useCharacterEdit();
+  const savedLooks = useMyCharacter((s) => s.saved);
+  const removeSaved = useMyCharacter((s) => s.removeSaved);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const onShot = useCallback((id: string, url: string) => setThumbs((t) => (t[id] === url ? t : { ...t, [id]: url })), []);
+  // saved looks get a thumbnail per look version, so editing one re-shoots it
+  const savedThumbs = useMemo(() => savedLooks.map((s) => ({ key: `saved:${portraitKey(s.look)}`, look: s.look })), [savedLooks]);
+  const mine = character ? portraitKey(character) : null;
 
   return (
     <div className="flex w-full flex-col gap-3">
@@ -122,6 +127,56 @@ export default function CharacterPicker({ showPreview = true, customizing = fals
       >
         ✏️ 직접 꾸미기 — 얼굴·메이크업·헤어·옷
       </button>
+      <Row label={`💾 내가 만든 캐릭터 (${savedLooks.length}/${MAX_SAVED})`}>
+        {savedLooks.length === 0 ? (
+          <p className="text-[11px] text-white/45 light:text-slate-500">직접 꾸미기에서 &lsquo;💾 저장&rsquo;을 누르면 여기에 모아 두고 언제든 다시 입을 수 있어요.</p>
+        ) : (
+          <div className="grid w-full grid-cols-3 gap-2 sm:grid-cols-4">
+            {savedLooks.map((sv) => {
+              const k = portraitKey(sv.look);
+              const selected = mine === k;
+              return (
+                <div key={sv.id} className="relative">
+                  <button
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => save({ ...sv.look })}
+                    className={`flex w-full flex-col items-center gap-0.5 rounded-xl border p-1.5 transition ${
+                      selected
+                        ? "border-rose-400 bg-rose-500/15 ring-2 ring-rose-400/40"
+                        : "border-white/10 bg-white/[0.03] hover:border-white/30 light:border-slate-200 light:bg-white light:hover:border-slate-400"
+                    }`}
+                  >
+                    <div className="aspect-square w-full overflow-hidden rounded-lg bg-gradient-to-b from-[#3a3550] to-[#22202e]">
+                      {thumbs[`saved:${k}`] ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- runtime-rendered data URL
+                        <img src={thumbs[`saved:${k}`]} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-2xl">💾</div>
+                      )}
+                    </div>
+                    <span className="line-clamp-1 text-xs font-semibold text-white light:text-slate-800">
+                      {selected && "✓ "}
+                      {sv.name}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`${sv.name} 삭제`}
+                    onClick={() => {
+                      if (window.confirm(`'${sv.name}'을(를) 삭제할까요?`)) removeSaved(sv.id);
+                    }}
+                    className="absolute -right-1.5 -top-1.5 grid h-7 w-7 place-items-center rounded-full border border-white/20 bg-[#151022] text-xs text-white/70 hover:text-white light:border-slate-300 light:bg-white light:text-slate-500"
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Row>
+
       <Row label="캐릭터 목록 · 다른 사람과 같은 캐릭터도 고를 수 있어요">
         <div className="grid w-full grid-cols-3 gap-2 sm:grid-cols-4">
           {CHARACTER_PRESETS.map((c) => {
@@ -157,6 +212,7 @@ export default function CharacterPicker({ showPreview = true, customizing = fals
         </div>
       </Row>
       <CharacterThumbs3D items={PRESET_THUMBS} onShot={onShot} />
+      {savedThumbs.length > 0 && <CharacterThumbs3D items={savedThumbs} onShot={onShot} />}
 
       <button
         type="button"
@@ -197,6 +253,7 @@ export function CharacterCustomizer({ onDone, doneLabel }: { onDone: () => void;
           </button>
         </div>
         <Preview look={look} />
+        <SaveBar look={look} />
       </div>
 
       <Row label="캐릭터 (얼굴·몸)">
@@ -347,5 +404,46 @@ function Swatch({ color, label, selected, onClick }: { color: string; label: str
     >
       {selected && <span className="text-xs font-bold text-white mix-blend-difference">✓</span>}
     </button>
+  );
+}
+
+/** 💾 저장: keep the current look under a name (same name = overwrite) for 내가 만든 캐릭터. */
+function SaveBar({ look }: { look: PersonLook }) {
+  const saved = useMyCharacter((s) => s.saved);
+  const saveLook = useMyCharacter((s) => s.saveLook);
+  const [name, setName] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+  const fallback = `내 캐릭터 ${saved.length + 1}`;
+  const target = name.trim() || fallback;
+  const overwrite = saved.some((s) => s.name === target);
+  const full = !overwrite && saved.length >= MAX_SAVED;
+  return (
+    <form
+      className="flex flex-col gap-1"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!saveLook(target, toProfile(look))) return setMsg(`가득 찼어요 (최대 ${MAX_SAVED}개) — 목록에서 하나 지우거나 같은 이름으로 덮어써 주세요.`);
+        setMsg(overwrite ? `'${target}'에 덮어썼어요.` : `'${target}'(으)로 저장했어요 — 캐릭터 목록 위 '내가 만든 캐릭터'에 있어요.`);
+        setName("");
+      }}
+    >
+      <div className="flex gap-2">
+        <input
+          value={name}
+          onChange={(e) => {
+            setName(e.target.value);
+            setMsg(null);
+          }}
+          maxLength={12}
+          placeholder={fallback}
+          aria-label="저장할 이름"
+          className="min-w-0 flex-1 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400"
+        />
+        <button type="submit" disabled={full} className="shrink-0 rounded-xl bg-rose-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-400 disabled:opacity-40">
+          💾 {overwrite ? "덮어쓰기" : "저장"}
+        </button>
+      </div>
+      {(msg || full) && <p className="text-[11px] text-white/60 light:text-slate-500">{msg ?? `가득 찼어요 (최대 ${MAX_SAVED}개) — 목록에서 하나 지우거나 같은 이름으로 덮어써 주세요.`}</p>}
+    </form>
   );
 }

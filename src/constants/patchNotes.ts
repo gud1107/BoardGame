@@ -64,6 +64,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.112.0",
+    releaseDate: "2026-10-28",
+    title: "💾 내가 꾸민 캐릭터 저장",
+    changes: [
+      { game: "common", type: "FEAT", desc: "💾 직접 꾸민 캐릭터를 이름 붙여 저장 — '내가 만든 캐릭터'에 최대 8개, 눌러서 바로 다시 입고 같은 이름이면 덮어써요" },
+    ],
+  },
+  {
     version: "v1.111.0",
     releaseDate: "2026-10-28",
     title: "🤲 3D 캐릭터 손 — 카드를 진짜로 쥐어요",
