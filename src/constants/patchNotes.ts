@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.105.0",
+    releaseDate: "2026-10-27",
+    title: "💄 캐릭터 메이크업 — 같은 얼굴도 다른 사람처럼",
+    changes: [
+      { game: "common", type: "FEAT", desc: "💄 프로필 '직접 꾸미기'에 메이크업 — 렌즈 색·아이섀도·블러셔·립·점/주근깨, 눈매와 얼굴형도 3D 얼굴에 실제로 보여요" },
+      { game: "common", type: "IMPROVE", desc: "👯 캐릭터 목록 21명이 서로 다른 얼굴로 — 같은 모델을 쓰던 캐릭터도 눈매·렌즈·메이크업이 달라지고, 설명도 실제 모습대로 바꿨어요" },
+    ],
+  },
+  {
     version: "v1.104.1",
     releaseDate: "2026-10-27",
     title: "🔉 3D 캐릭터 목소리는 중요한 순간에만",

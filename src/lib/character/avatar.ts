@@ -123,10 +123,18 @@ export interface PersonLook {
    */
   hairDye?: boolean;
   outfitDye?: boolean;
+  /**
+   * Make-up on the VRoid face (VrmPerson paints it onto the face texture, which every
+   * VRoid export lays out the same way): coloured lenses, blusher, eyeshadow. Unset = none.
+   * `lip`, `mark` and `eyes` (눈매 → face morphs + eye size) and `face` (head width) apply too.
+   */
+  iris?: string;
+  blush?: string;
+  shadow?: string;
 }
 
 /** The part of a look a player can choose in their profile (+ which preset it started from, for the list's highlight). */
-export type AvatarProfile = Partial<Pick<PersonLook, "gender" | "skin" | "hair" | "hairStyle" | "coat" | "shirt" | "glasses" | "lip" | "build" | "face" | "eyes" | "mark" | "model" | "hairFrom" | "outfitFrom" | "shoesFrom" | "hairDye" | "outfitDye">> & { presetId?: string };
+export type AvatarProfile = Partial<Pick<PersonLook, "gender" | "skin" | "hair" | "hairStyle" | "coat" | "shirt" | "glasses" | "lip" | "build" | "face" | "eyes" | "mark" | "model" | "hairFrom" | "outfitFrom" | "shoesFrom" | "hairDye" | "outfitDye" | "iris" | "blush" | "shadow">> & { presetId?: string };
 
 /** Bump when the stored shape changes incompatibly; sanitizeAvatar can then migrate by version. */
 export const AVATAR_VERSION = 1;
@@ -176,10 +184,14 @@ export const AVATAR_OPTIONS = {
   face: [opt<FaceShape>("oval", "계란형"), opt<FaceShape>("vline", "V라인"), opt<FaceShape>("round", "동글동글"), opt<FaceShape>("square", "각진 턱선")],
   eyes: [opt<EyeShape>("round", "동그란 사슴눈"), opt<EyeShape>("fox", "올라간 여우눈"), opt<EyeShape>("puppy", "처진 강아지눈"), opt<EyeShape>("sharp", "날카로운 무쌍")],
   mark: [opt<FaceMark>("none", "없음"), opt<FaceMark>("mole", "눈밑 점"), opt<FaceMark>("freckles", "주근깨")],
+  // make-up VrmPerson paints on the face; each list is the profile's choices after "없음 / 원래 눈"
+  iris: [opt("#4a3226", "다크 브라운"), opt("#8a6038", "헤이즐"), opt("#8a929e", "그레이"), opt("#4f86d0", "블루"), opt("#5aa070", "그린"), opt("#9070d0", "바이올렛"), opt("#c84858", "레드"), opt("#d0a040", "골드")],
+  blush: [opt("#f59a86", "피치"), opt("#f283a4", "핑크"), opt("#ee7a68", "코랄"), opt("#d26c8c", "로즈")],
+  shadow: [opt("#a06a4c", "브라운"), opt("#e0849e", "핑크"), opt("#e8945a", "오렌지"), opt("#9474c4", "퍼플"), opt("#4a3e48", "스모키")],
   lip: [opt("#e05a6e", "로즈"), opt("#d8485e", "체리"), opt("#e8766e", "코랄"), opt("#c94a62", "말린 장미"), opt("#ef8a84", "피치"), opt("#d4607a", "핑크"), opt("#c27a6e", "내추럴")],
 } as const;
 
-type WardrobeKey = "hairFrom" | "outfitFrom" | "shoesFrom" | "hairDye" | "outfitDye";
+type WardrobeKey = "hairFrom" | "outfitFrom" | "shoesFrom" | "hairDye" | "outfitDye" | "iris" | "blush" | "shadow";
 
 export interface CharacterPreset {
   id: string;
@@ -199,28 +211,30 @@ const preset = (id: string, name: string, concept: string, look: CharacterPreset
  * they're stored in profiles).
  */
 export const CHARACTER_PRESETS: readonly CharacterPreset[] = [
-  preset("haerin", "하린", "청순 흑발 비주얼", { gender: "f", skin: "#fbe4d5", hair: "#16110f", hairStyle: "straight", coat: "#ece4d6", shirt: "#ffffff", glasses: false, lip: "#e05a6e", build: "slim", face: "oval", eyes: "round", mark: "none", model: "three-vrm-girl" }),
-  preset("yuna", "유나", "다크 브라운 걸크러시", { gender: "f", skin: "#f6d9c4", hair: "#4a3022", hairStyle: "hush", coat: "#1c1c22", shirt: "#1f1f24", glasses: false, lip: "#d8485e", build: "standard", face: "vline", eyes: "fox", mark: "mole", model: "pixiv-sample" }),
-  preset("sia", "시아", "핑크 헤어 막내", { gender: "f", skin: "#f9ddca", hair: "#b8707e", hairStyle: "pony", coat: "#e7b7c4", shirt: "#fdf1f4", glasses: false, lip: "#ef8a84", build: "petite", face: "round", eyes: "puppy", mark: "freckles", model: "pixiv-sample" }),
-  preset("chaewon", "채원", "애쉬 블론드 센터", { gender: "f", skin: "#fbe4d5", hair: "#d7b48c", hairStyle: "straight", coat: "#2b3a5c", shirt: "#e8eef8", glasses: false, lip: "#d4607a", build: "slim", face: "vline", eyes: "round", mark: "mole", model: "three-vrm-girl" }),
-  preset("minji", "민지", "밀크티 브라운 리더", { gender: "f", skin: "#f2cfb5", hair: "#7a5640", hairStyle: "hush", coat: "#b9a6d6", shirt: "#ffffff", glasses: false, lip: "#e8766e", build: "standard", face: "oval", eyes: "puppy", mark: "none", model: "pixiv-sample" }),
-  preset("seoa", "서아", "흑발 댄서", { gender: "f", skin: "#ecc6a8", hair: "#2a1c16", hairStyle: "pony", coat: "#7a2238", shirt: "#f5f0e6", glasses: false, lip: "#c94a62", build: "broad", face: "square", eyes: "sharp", mark: "none", model: "three-vrm-girl" }),
-  preset("doyoon", "도윤", "흑발 비주얼", { gender: "m", skin: "#f6d9c4", hair: "#121010", hairStyle: "comma", coat: "#1c1c22", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "slim", face: "vline", eyes: "fox", mark: "none", model: "seed-san" }),
-  preset("jun", "준", "플래티넘 실버 헤어", { gender: "m", skin: "#fbe4d5", hair: "#d9d6de", hairStyle: "curtain", coat: "#ece4d6", shirt: "#1f1f24", glasses: false, lip: "#c27a6e", build: "standard", face: "oval", eyes: "sharp", mark: "mole", model: "seed-san" }),
-  preset("taeo", "태오", "다크 브라운 메인보컬", { gender: "m", skin: "#f2cfb5", hair: "#3a2a22", hairStyle: "dandy", coat: "#2b3a5c", shirt: "#e8eef8", glasses: false, lip: "#c27a6e", build: "broad", face: "square", eyes: "puppy", mark: "none", model: "seed-san" }),
-  preset("hyun", "현", "차분한 브레인", { gender: "m", skin: "#f4d6c0", hair: "#1e1714", hairStyle: "comma", coat: "#c9b28f", shirt: "#ffffff", glasses: true, lip: "#c27a6e", build: "standard", face: "round", eyes: "round", mark: "none", model: "seed-san" }),
-  preset("riku", "리쿠", "블루블랙 헤어", { gender: "m", skin: "#f9ddca", hair: "#2a3148", hairStyle: "curtain", coat: "#8fb6d9", shirt: "#eeeae2", glasses: false, lip: "#c27a6e", build: "broad", face: "vline", eyes: "sharp", mark: "none", model: "seed-san" }),
-  preset("ian", "이안", "애쉬 브라운 막내", { gender: "m", skin: "#ecc6a8", hair: "#5a4c48", hairStyle: "dandy", coat: "#9fc8b4", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "petite", face: "round", eyes: "puppy", mark: "freckles", model: "seed-san" }),
+  // each concept names what the table actually shows (VRoid hair/outfit, 눈매, lens, make-up);
+  // presets sharing a model must differ in 눈매 and make-up so they don't read as one face
+  preset("haerin", "하린", "흑발 생머리 · 사슴눈 · 핑크 볼터치", { gender: "f", skin: "#fbe4d5", hair: "#16110f", hairStyle: "straight", coat: "#ece4d6", shirt: "#ffffff", glasses: false, lip: "#e05a6e", build: "slim", face: "oval", eyes: "round", mark: "none", model: "three-vrm-girl", iris: "#4a3226", blush: "#f283a4" }),
+  preset("yuna", "유나", "다크 브라운 · 여우눈 · 스모키 메이크업", { gender: "f", skin: "#f6d9c4", hair: "#4a3022", hairStyle: "hush", coat: "#1c1c22", shirt: "#1f1f24", glasses: false, lip: "#d8485e", build: "standard", face: "vline", eyes: "fox", mark: "mole", model: "pixiv-sample", iris: "#8a929e", shadow: "#4a3e48" }),
+  preset("sia", "시아", "핑크 헤어 · 강아지눈 · 주근깨", { gender: "f", skin: "#f9ddca", hair: "#b8707e", hairStyle: "pony", coat: "#e7b7c4", shirt: "#fdf1f4", glasses: false, lip: "#ef8a84", build: "petite", face: "round", eyes: "puppy", mark: "freckles", model: "pixiv-sample", iris: "#9070d0", blush: "#f59a86" }),
+  preset("chaewon", "채원", "애쉬 블론드 · 무쌍 · 블루 렌즈", { gender: "f", skin: "#fbe4d5", hair: "#d7b48c", hairStyle: "straight", coat: "#2b3a5c", shirt: "#e8eef8", glasses: false, lip: "#d4607a", build: "slim", face: "vline", eyes: "sharp", mark: "mole", model: "three-vrm-girl", iris: "#4f86d0" }),
+  preset("minji", "민지", "밀크티 브라운 · 오렌지 섀도", { gender: "f", skin: "#f2cfb5", hair: "#7a5640", hairStyle: "hush", coat: "#b9a6d6", shirt: "#ffffff", glasses: false, lip: "#e8766e", build: "standard", face: "oval", eyes: "round", mark: "none", model: "pixiv-sample", iris: "#8a6038", blush: "#ee7a68", shadow: "#e8945a" }),
+  preset("seoa", "서아", "흑발 · 레드 렌즈 · 블랙 고스 코트", { gender: "f", skin: "#ecc6a8", hair: "#2a1c16", hairStyle: "pony", coat: "#7a2238", shirt: "#f5f0e6", glasses: false, lip: "#c94a62", build: "broad", face: "square", eyes: "fox", mark: "none", model: "three-vrm-girl", outfitFrom: "vroid-d-darkness", shoesFrom: "vroid-d-darkness", iris: "#c84858", shadow: "#9474c4" }),
+  preset("doyoon", "도윤", "흑발 · 올라간 눈매 · 그레이 렌즈", { gender: "m", skin: "#f6d9c4", hair: "#121010", hairStyle: "comma", coat: "#1c1c22", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "slim", face: "vline", eyes: "fox", mark: "none", model: "seed-san", iris: "#8a929e" }),
+  preset("jun", "준", "플래티넘 실버 · 나른한 눈 · 레드 렌즈", { gender: "m", skin: "#fbe4d5", hair: "#d9d6de", hairStyle: "curtain", coat: "#ece4d6", shirt: "#1f1f24", glasses: false, lip: "#c27a6e", build: "standard", face: "oval", eyes: "sharp", mark: "mole", model: "seed-san", iris: "#c84858" }),
+  preset("taeo", "태오", "다크 브라운 · 순한 팔자 눈썹 · 골드 눈", { gender: "m", skin: "#f2cfb5", hair: "#3a2a22", hairStyle: "dandy", coat: "#2b3a5c", shirt: "#e8eef8", glasses: false, lip: "#c27a6e", build: "broad", face: "square", eyes: "puppy", mark: "none", model: "seed-san" }),
+  preset("hyun", "현", "흑발 교복 · 그레이 렌즈", { gender: "m", skin: "#f4d6c0", hair: "#1e1714", hairStyle: "comma", coat: "#c9b28f", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "standard", face: "round", eyes: "round", mark: "none", model: "vroid-fumiriya", hairFrom: "vroid-hair-m", iris: "#8a929e" }),
+  preset("riku", "리쿠", "블루블랙 · 큰 눈동자 · 블루 렌즈", { gender: "m", skin: "#f9ddca", hair: "#2a3148", hairStyle: "curtain", coat: "#8fb6d9", shirt: "#eeeae2", glasses: false, lip: "#c27a6e", build: "broad", face: "round", eyes: "round", mark: "none", model: "seed-san", iris: "#4f86d0" }),
+  preset("ian", "이안", "주황 투블럭 후드 · 그린 렌즈 · 주근깨", { gender: "m", skin: "#ecc6a8", hair: "#5a4c48", hairStyle: "dandy", coat: "#9fc8b4", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "petite", face: "vline", eyes: "puppy", mark: "freckles", model: "vroid-hair-m", hairFrom: "vroid-fumiriya", iris: "#5aa070" }),
   // the classic VRoid cast: their own hand-painted hair and outfit colours (no dye)
-  preset("danbi", "단비", "남색 단발 교복", { gender: "f", skin: "#fbe4d5", hair: "#16110f", hairStyle: "straight", coat: "#2b3a5c", shirt: "#ffffff", glasses: false, lip: "#e05a6e", build: "petite", face: "oval", eyes: "sharp", mark: "none", model: "vroid-d" }),
-  preset("sua", "수아", "남색 생머리 교복", { gender: "f", skin: "#fbe4d5", hair: "#16110f", hairStyle: "straight", coat: "#2b3a5c", shirt: "#ffffff", glasses: false, lip: "#d4607a", build: "slim", face: "oval", eyes: "fox", mark: "mole", model: "vroid-shino" }),
-  preset("bomi", "보미", "밤색 단발 꼬마", { gender: "f", skin: "#f9ddca", hair: "#5e3c2c", hairStyle: "straight", coat: "#ece4d6", shirt: "#ffffff", glasses: false, lip: "#ef8a84", build: "petite", face: "round", eyes: "round", mark: "freckles", model: "vroid-e" }),
-  preset("ella", "엘라", "민트·핑크 공주", { gender: "f", skin: "#fbe4d5", hair: "#d7b48c", hairStyle: "pony", coat: "#e7b7c4", shirt: "#fdf1f4", glasses: false, lip: "#e8766e", build: "slim", face: "round", eyes: "puppy", mark: "none", model: "vroid-g" }),
-  preset("nabi", "나비", "고양이 귀 트윈테일", { gender: "f", skin: "#f6d9c4", hair: "#16110f", hairStyle: "pony", coat: "#ece4d6", shirt: "#ffffff", glasses: false, lip: "#d8485e", build: "petite", face: "vline", eyes: "fox", mark: "none", model: "vroid-hair-f" }),
-  preset("vita", "비타", "은발 사이버", { gender: "f", skin: "#fbe4d5", hair: "#d9d6de", hairStyle: "hush", coat: "#8fb6d9", shirt: "#1f1f24", glasses: false, lip: "#c94a62", build: "standard", face: "square", eyes: "round", mark: "none", model: "vroid-f" }),
-  preset("ria", "리아", "은발 다크 엘프", { gender: "f", skin: "#fbe4d5", hair: "#d9d6de", hairStyle: "straight", coat: "#1c1c22", shirt: "#1f1f24", glasses: false, lip: "#c94a62", build: "slim", face: "square", eyes: "fox", mark: "mole", model: "vroid-d-darkness" }),
-  preset("geonu", "건우", "흑발 후드 소년", { gender: "m", skin: "#f6d9c4", hair: "#121010", hairStyle: "comma", coat: "#ece4d6", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "slim", face: "oval", eyes: "round", mark: "none", model: "vroid-hair-m" }),
-  preset("haechan", "해찬", "주황 머리 교복", { gender: "m", skin: "#f9ddca", hair: "#6b4a3a", hairStyle: "dandy", coat: "#2b3a5c", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "standard", face: "vline", eyes: "puppy", mark: "freckles", model: "vroid-fumiriya" }),
+  preset("danbi", "단비", "남색 단발 교복 · 그린 렌즈", { gender: "f", skin: "#fbe4d5", hair: "#16110f", hairStyle: "straight", coat: "#2b3a5c", shirt: "#ffffff", glasses: false, lip: "#d4607a", build: "petite", face: "oval", eyes: "puppy", mark: "none", model: "vroid-d", iris: "#5aa070", blush: "#f283a4" }),
+  preset("sua", "수아", "남색 생머리 교복 · 여우눈 · 눈밑 점", { gender: "f", skin: "#fbe4d5", hair: "#16110f", hairStyle: "straight", coat: "#2b3a5c", shirt: "#ffffff", glasses: false, lip: "#c94a62", build: "slim", face: "oval", eyes: "fox", mark: "mole", model: "vroid-shino", iris: "#8a929e", shadow: "#a06a4c" }),
+  preset("bomi", "보미", "밤색 단발 원피스 · 주근깨 · 피치 볼터치", { gender: "f", skin: "#f9ddca", hair: "#5e3c2c", hairStyle: "straight", coat: "#ece4d6", shirt: "#ffffff", glasses: false, lip: "#ef8a84", build: "petite", face: "round", eyes: "round", mark: "freckles", model: "vroid-e", blush: "#f59a86" }),
+  preset("ella", "엘라", "민트·핑크 포니 · 핑크 섀도", { gender: "f", skin: "#fbe4d5", hair: "#d7b48c", hairStyle: "pony", coat: "#e7b7c4", shirt: "#fdf1f4", glasses: false, lip: "#e8766e", build: "slim", face: "vline", eyes: "puppy", mark: "none", model: "vroid-g", iris: "#9070d0", blush: "#f283a4", shadow: "#e0849e" }),
+  preset("nabi", "나비", "고양이 귀 트윈테일 · 골드 렌즈", { gender: "f", skin: "#f6d9c4", hair: "#16110f", hairStyle: "pony", coat: "#ece4d6", shirt: "#ffffff", glasses: false, lip: "#d8485e", build: "petite", face: "vline", eyes: "fox", mark: "none", model: "vroid-hair-f", iris: "#d0a040", shadow: "#e8945a" }),
+  preset("vita", "비타", "은발 사이버 수트 · 블루 렌즈", { gender: "f", skin: "#fbe4d5", hair: "#d9d6de", hairStyle: "hush", coat: "#8fb6d9", shirt: "#1f1f24", glasses: false, lip: "#d4607a", build: "standard", face: "square", eyes: "sharp", mark: "none", model: "vroid-f", iris: "#4f86d0", shadow: "#9474c4" }),
+  preset("ria", "리아", "은발 다크 엘프 · 레드 렌즈 · 스모키", { gender: "f", skin: "#fbe4d5", hair: "#d9d6de", hairStyle: "straight", coat: "#1c1c22", shirt: "#1f1f24", glasses: false, lip: "#c94a62", build: "slim", face: "square", eyes: "fox", mark: "mole", model: "vroid-d-darkness", iris: "#c84858", shadow: "#4a3e48" }),
+  preset("geonu", "건우", "흑발 후드 · 무쌍 · 블루 렌즈", { gender: "m", skin: "#f6d9c4", hair: "#121010", hairStyle: "comma", coat: "#ece4d6", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "slim", face: "oval", eyes: "sharp", mark: "none", model: "vroid-hair-m", iris: "#4f86d0" }),
+  preset("haechan", "해찬", "주황 투블럭 교복 · 골드 렌즈 · 눈밑 점", { gender: "m", skin: "#f9ddca", hair: "#6b4a3a", hairStyle: "dandy", coat: "#2b3a5c", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "standard", face: "square", eyes: "fox", mark: "mole", model: "vroid-fumiriya", iris: "#d0a040" }),
 ];
 
 const STYLES_F: HairStyle[] = ["straight", "hush", "pony"];
@@ -288,6 +302,10 @@ export function sanitizeAvatar(raw: unknown): AvatarProfile {
   if (isModel(r.model)) out.model = r.model;
   for (const k of ["hairFrom", "outfitFrom", "shoesFrom"] as const) if (isModel(r[k]) && VRM_WARDROBE[r[k] as VrmModel]) out[k] = r[k] as VrmModel;
   for (const k of ["hairDye", "outfitDye"] as const) if (typeof r[k] === "boolean") out[k] = r[k] as boolean;
+  for (const k of ["iris", "blush", "shadow"] as const) {
+    const v = r[k];
+    if (typeof v === "string" && HEX.test(v)) out[k] = v.toLowerCase();
+  }
   if (typeof r.presetId === "string" && CHARACTER_PRESETS.some((c) => c.id === r.presetId)) out.presetId = r.presetId;
   return out;
 }

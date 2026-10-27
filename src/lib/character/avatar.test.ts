@@ -115,3 +115,18 @@ describe("VRoid wardrobe", () => {
   });
 });
 
+
+describe("make-up", () => {
+  it("sanitize keeps hex lens / blusher / eyeshadow colours only", () => {
+    expect(sanitizeAvatar({ iris: "#4F86D0", blush: "pink", shadow: "#9474c4" })).toEqual({ iris: "#4f86d0", shadow: "#9474c4" });
+  });
+
+  it("presets on one model never share 눈매 + make-up, so they don't read as one face", async () => {
+    const { CHARACTER_PRESETS } = await import("./avatar");
+    const sig = CHARACTER_PRESETS.map((c) => [c.look.model, c.look.eyes, c.look.iris ?? "", c.look.shadow ?? "", c.look.blush ?? ""].join("|"));
+    expect(new Set(sig).size).toBe(sig.length);
+    // and each one on a shared model has its own 눈매
+    const eyes = CHARACTER_PRESETS.map((c) => `${c.look.model}|${c.look.eyes}`);
+    expect(new Set(eyes).size).toBe(eyes.length);
+  });
+});

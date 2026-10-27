@@ -33,8 +33,8 @@ export interface Portrait {
   url: string;
 }
 
-/** Bump when the rig that draws portraits changes, so saved portraits get re-shot (2 = VRoid). */
-const PORTRAIT_RIG = 2;
+/** Bump when the rig that draws portraits changes, so saved portraits get re-shot (2 = VRoid, 3 = make-up). */
+const PORTRAIT_RIG = 3;
 
 /** Stable identity of a look for portrait caching (field order and presetId don't matter). */
 export function portraitKey(look: AvatarProfile): string {

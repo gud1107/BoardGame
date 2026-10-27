@@ -10,6 +10,7 @@ import { blinking, FACES, Hat, holdPose, holdsInMood, STRONG_MOODS, TABLE_POSES,
 import { createMotion, HANDS, stepMotion, type MotionState } from "./motion";
 import { PERSONA_STYLE, personaGaze } from "./persona";
 import { armJointQuat, fingerCurl, toVrm0, upperArmQuat } from "./vrmPose";
+import { acquirePaintedFace, acquireSeedEyes, faceMorphs, greyIris, holdMorphs, isBrow, isFaceSkin, isIris, liftMorphs, PAINTABLE, releasePaintedFace, shapeFace, type FaceMorph } from "./vrmMakeup";
 
 /**
  * A seated VRM avatar (VRoid style) behind the same props as `SeatedPerson`,
@@ -24,6 +25,7 @@ import { armJointQuat, fingerCurl, toVrm0, upperArmQuat } from "./vrmPose";
  * - Look → model: the profile's `model`, else a per-gender default cast (DEFAULT_CAST);
  *   classic VRoid models can borrow each other's hair / outfit / shoes (`graft`), and
  *   hair / outfit / skin colours are tinted from the PersonLook.
+ * - Make-up (vrmMakeup.ts): painted face, lenses, resting 눈매 morphs, eye size, head width.
  *
  * Models live in public/models/vrm (licences in CREDITS.md).
  * Local frame: +z faces the table, origin = the chair's floor point.
@@ -280,7 +282,10 @@ function release(vrm: VRM) {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
     if (!mesh.userData.grafted) mesh.geometry.dispose();
-    for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) m.dispose();
+    for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+      releasePaintedFace((m.userData as { paintId?: string }).paintId);
+      m.dispose();
+    }
   });
 }
 
@@ -291,7 +296,8 @@ const WHITE = new THREE.Color("#ffffff");
 /**
  * Hair / top / skin colours from the look (multiplied over the textures); greyed out when
  * eliminated. Dyed hair swaps in a grey-lifted texture so any colour reads (two models'
- * hair is painted near-black); undyed hair and tops keep their painted colours.
+ * hair is painted near-black); undyed hair and tops keep their painted colours. Brows
+ * follow dyed hair, lenses tint a grey copy of the iris, and the face skin gets its make-up.
  */
 function tint(vrm: VRM, key: ModelKey, look: PersonLook, out: boolean) {
   const M = MODELS[key];
@@ -300,22 +306,35 @@ function tint(vrm: VRM, key: ModelKey, look: PersonLook, out: boolean) {
   for (const m of materialsOf(vrm.scene) as (Tintable & { map?: THREE.Texture | null; shadeMultiplyTexture?: THREE.Texture | null })[]) {
     if (!m.color) continue;
     const n = m.name.toLowerCase();
-    const ud = m.userData as { base?: THREE.Color; shade?: THREE.Color; map?: THREE.Texture | null; shadeTex?: THREE.Texture | null };
+    const ud = m.userData as { base?: THREE.Color; shade?: THREE.Color; map?: THREE.Texture | null; shadeTex?: THREE.Texture | null; paintId?: string };
     ud.base ??= m.color.clone();
     if (m.shadeColorFactor) ud.shade ??= m.shadeColorFactor.clone();
     const hair = n.includes("hair");
-    if (hair) {
-      if (!("map" in ud)) {
-        ud.map = m.map ?? null;
-        ud.shadeTex = m.shadeMultiplyTexture ?? null;
-      }
-      m.map = dyeHair && ud.map ? lifted(ud.map) : (ud.map ?? null);
-      if ("shadeMultiplyTexture" in m) m.shadeMultiplyTexture = dyeHair && ud.shadeTex ? lifted(ud.shadeTex) : (ud.shadeTex ?? null);
+    const iris = isIris(m.name);
+    const seedEyes = key === "seed-san" && n === "eye";
+    const face = PAINTABLE(key) && isFaceSkin(m.name);
+    if ((hair || iris || face || seedEyes) && !("map" in ud)) {
+      ud.map = m.map ?? null;
+      ud.shadeTex = m.shadeMultiplyTexture ?? null;
+    }
+    const swap = (to: (t: THREE.Texture) => THREE.Texture, on: boolean) => {
+      m.map = on && ud.map ? to(ud.map) : (ud.map ?? null);
+      // MToon's shade texture is usually the same image as the base map
+      if ("shadeMultiplyTexture" in m) m.shadeMultiplyTexture = on && ud.shadeTex ? (ud.shadeTex === ud.map ? m.map : to(ud.shadeTex)) : (ud.shadeTex ?? null);
+    };
+    if (hair) swap(lifted, dyeHair);
+    if (iris) swap(greyIris, !!look.iris);
+    if ((face || seedEyes) && ud.map) {
+      const prev = ud.paintId;
+      const got = face ? acquirePaintedFace(ud.map, look) : look.iris ? acquireSeedEyes(ud.map, look.iris) : null;
+      ud.paintId = got?.id;
+      swap(() => got?.tex ?? ud.map!, !!got);
+      releasePaintedFace(prev);
     }
     // borrowed parts keep their donor's material names, so match both spellings
     const skin = M.skin.some((k) => (k.length > 4 ? n.includes(k) : n === k)) || CLASSIC.skin.some((k) => n.includes(k));
     const top = M.tops.some((k) => n.includes(k)) || CLASSIC.tops.some((k) => n.includes(k));
-    const hex = hair ? (dyeHair ? look.hair : null) : top ? (dyeTop ? look.coat : null) : skin ? look.skin : null;
+    const hex = hair || isBrow(m.name) ? (dyeHair ? look.hair : null) : iris ? (look.iris ?? null) : top ? (dyeTop ? look.coat : null) : skin ? look.skin : null;
     const c = hex ? new THREE.Color(hex) : ud.base.clone();
     if (skin) c.lerp(WHITE, 0.55);
     if (out) c.lerp(GREY, 0.55);
@@ -537,6 +556,14 @@ export default function VrmPerson(props: VrmPersonProps) {
   useEffect(() => {
     if (vrm) tint(vrm, key, look, !!props.out);
   }, [vrm, key, look, props.out]);
+  const morphs = useRef<FaceMorph[]>([]);
+  const { eyes, face } = look;
+  useEffect(() => {
+    if (!vrm) return;
+    liftMorphs(morphs.current);
+    morphs.current = faceMorphs(vrm, key, { eyes });
+    shapeFace(vrm, { eyes, face });
+  }, [vrm, key, eyes, face]);
   const { onReady } = props;
   useEffect(() => {
     if (vrm) onReady?.();
@@ -654,7 +681,9 @@ export default function VrmPerson(props: VrmPersonProps) {
     // devices) — they cost more than the rest of the rig, and the eye can't tell
     vrm.humanoid.update();
     vrm.lookAt?.update(dt);
+    liftMorphs(morphs.current);
     vrm.expressionManager?.update();
+    if (em) holdMorphs(morphs.current, Math.max(em.getValue("blink") ?? 0, em.getValue("happy") ?? 0, em.getValue("surprised") ?? 0, em.getValue("sad") ?? 0, em.getValue("angry") ?? 0));
     vrm.nodeConstraintManager?.update();
     if (!props.lowDetail) {
       springDt.current += dt;

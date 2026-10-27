@@ -36,6 +36,9 @@ function toProfile(l: PersonLook): AvatarProfile {
     shoesFrom: l.shoesFrom,
     hairDye: l.hairDye,
     outfitDye: l.outfitDye,
+    iris: l.iris,
+    blush: l.blush,
+    shadow: l.shadow,
   };
 }
 
@@ -52,8 +55,8 @@ const SLOT_ROWS: [WardrobeSlot, string, "hairFrom" | "outfitFrom" | "shoesFrom"]
 /**
  * 3D character picker (profile → 캐릭터 선택): pick one of the listed
  * characters (`CHARACTER_PRESETS` — the same one as anyone else is fine), or
- * fine-tune under "직접 꾸미기": the VRoid body (`model`) and the colours tinted
- * onto it — the only parts the 3D tables' VRM characters show. Every tap saves immediately
+ * fine-tune under "직접 꾸미기": the VRoid body (`model`), the colours tinted
+ * onto it, and the make-up / 눈매 that tell two players on one body apart (vrmMakeup.ts). Every tap saves immediately
  * (`useMyCharacter`), and the other players see it at the 3D tables via the
  * room's presence (`roomCharacters.ts`). Options come from `AVATAR_OPTIONS`,
  * so adding a colour or cut there shows up here automatically.
@@ -181,6 +184,64 @@ export default function CharacterPicker() {
           <Swatch key={o.id} color={o.id} label={o.label} selected={look.skin === o.id} onClick={() => update({ skin: o.id })} />
         ))}
       </Row>
+
+      <span className="mt-1 text-xs font-bold text-white/80 light:text-slate-700">💄 얼굴 · 메이크업 — 같은 캐릭터도 다른 사람처럼</span>
+      <Row label="눈매">
+        {AVATAR_OPTIONS.eyes.map((o) => (
+          <Chip key={o.id} selected={look.eyes === o.id} onClick={() => update({ eyes: o.id })}>
+            {o.label}
+          </Chip>
+        ))}
+      </Row>
+      <Row label="얼굴형">
+        {AVATAR_OPTIONS.face.map((o) => (
+          <Chip key={o.id} selected={look.face === o.id} onClick={() => update({ face: o.id })}>
+            {o.label}
+          </Chip>
+        ))}
+      </Row>
+      <Row label="렌즈 (눈동자 색)">
+        <Chip selected={!look.iris} onClick={() => update({ iris: undefined })}>
+          원래 눈
+        </Chip>
+        {AVATAR_OPTIONS.iris.map((o) => (
+          <Swatch key={o.id} color={o.id} label={o.label} selected={look.iris === o.id} onClick={() => update({ iris: o.id })} />
+        ))}
+      </Row>
+      {model === "seed-san" ? (
+        <p className="text-[11px] text-white/45 light:text-slate-500">이 캐릭터는 얼굴 그림 방식이 달라서 아이섀도·블러셔·립·점은 안 보여요 (눈매·얼굴형·렌즈는 적용돼요).</p>
+      ) : (
+        <>
+          <Row label="아이섀도">
+            <Chip selected={!look.shadow} onClick={() => update({ shadow: undefined })}>
+              없음
+            </Chip>
+            {AVATAR_OPTIONS.shadow.map((o) => (
+              <Swatch key={o.id} color={o.id} label={o.label} selected={look.shadow === o.id} onClick={() => update({ shadow: o.id })} />
+            ))}
+          </Row>
+          <Row label="립 컬러">
+            {AVATAR_OPTIONS.lip.map((o) => (
+              <Swatch key={o.id} color={o.id} label={o.label} selected={look.lip === o.id} onClick={() => update({ lip: o.id })} />
+            ))}
+          </Row>
+          <Row label="블러셔">
+            <Chip selected={!look.blush} onClick={() => update({ blush: undefined })}>
+              없음
+            </Chip>
+            {AVATAR_OPTIONS.blush.map((o) => (
+              <Swatch key={o.id} color={o.id} label={o.label} selected={look.blush === o.id} onClick={() => update({ blush: o.id })} />
+            ))}
+          </Row>
+          <Row label="포인트">
+            {AVATAR_OPTIONS.mark.map((o) => (
+              <Chip key={o.id} selected={look.mark === o.id} onClick={() => update({ mark: o.id })}>
+                {o.label}
+              </Chip>
+            ))}
+          </Row>
+        </>
+      )}
         </div>
       </details>
 
