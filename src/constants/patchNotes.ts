@@ -64,6 +64,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.105.1",
+    releaseDate: "2026-10-27",
+    title: "🖼 프로필 이미지 업로드 제거",
+    changes: [
+      { game: "common", type: "IMPROVE", desc: "🖼 프로필 사진은 이제 내 3D 캐릭터 얼굴만 — 이미지 업로드는 없어졌어요. 예전에 올린 사진은 프로필에서 삭제할 수 있어요" },
+    ],
+  },
+  {
     version: "v1.106.0",
     releaseDate: "2026-10-27",
     title: "📡 텔레파시 3D — 테이블 한 화면에 다",

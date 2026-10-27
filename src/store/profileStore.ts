@@ -1,14 +1,14 @@
 import { create } from "zustand";
 import { getAuthSupabase } from "@/lib/supabase/authClient";
 
-const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2MB
-const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
-
 interface ProfileState {
   hydrated: boolean;
   /** null when signed out — profile avatars are a logged-in-only feature (guests always show DEFAULT_AVATAR). */
   userId: string | null;
-  /** null means "no custom avatar set" — callers render `DEFAULT_AVATAR` for that case. */
+  /**
+   * A photo uploaded before image upload was removed (2026-10-27) — no longer shown in the
+   * profile, but still mirrored to the public ranking until the player deletes it (`resetAvatar`).
+   */
   avatarUrl: string | null;
   /** Self-chosen name shown on the public leaderboard (`user_profiles.public_name`); null = shown as 게이머_xxxxxx. */
   publicName: string | null;
@@ -19,7 +19,7 @@ interface ProfileState {
 
   /** Idempotent — safe to call from every consumer's mount effect, same contract as `useSubscriptionStore.init`. */
   init: () => Promise<void>;
-  uploadAvatar: (file: File) => Promise<void>;
+  /** Deletes a leftover uploaded photo (Storage file + ranking mirror). */
   resetAvatar: () => Promise<void>;
   /** Blank/null clears it. Resolves true on success. */
   setPublicName: (name: string | null) => Promise<boolean>;
@@ -84,42 +84,6 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     });
   },
 
-  uploadAvatar: async (file) => {
-    const supabase = getAuthSupabase();
-    const { userId } = get();
-    if (!supabase || !userId) {
-      set({ error: "로그인 후 이용할 수 있어요." });
-      return;
-    }
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      set({ error: "PNG, JPG, WEBP, GIF 이미지만 업로드할 수 있어요." });
-      return;
-    }
-    if (file.size > MAX_AVATAR_BYTES) {
-      set({ error: "이미지 용량은 2MB를 넘을 수 없어요." });
-      return;
-    }
-
-    set({ uploading: true, error: null });
-    try {
-      const ext = file.name.split(".").pop()?.toLowerCase() || "png";
-      const path = `${userId}/avatar-${Date.now()}.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from("avatars")
-        .upload(path, file, { upsert: false, contentType: file.type });
-      if (uploadError) throw uploadError;
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("avatars").getPublicUrl(path);
-
-      await persistAvatarUrl(publicUrl);
-      set({ avatarUrl: publicUrl, uploading: false });
-    } catch (err) {
-      set({ uploading: false, error: err instanceof Error ? err.message : "업로드에 실패했어요." });
-    }
-  },
-
   resetAvatar: async () => {
     if (!get().userId) return;
     set({ uploading: true, error: null });
@@ -127,7 +91,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       await persistAvatarUrl(null);
       set({ avatarUrl: null, uploading: false });
     } catch (err) {
-      set({ uploading: false, error: err instanceof Error ? err.message : "초기화에 실패했어요." });
+      set({ uploading: false, error: err instanceof Error ? err.message : "사진 삭제에 실패했어요." });
     }
   },
 

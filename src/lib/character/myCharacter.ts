@@ -22,10 +22,6 @@ import { AVATAR_VERSION, sanitizeAvatar, type AvatarProfile } from "./avatar";
 
 const STORAGE_KEY = "bg_my_character_v1";
 const PORTRAIT_KEY = "bg_my_character_portrait_v1";
-const PHOTO_MODE_KEY = "bg_profile_photo_mode_v1";
-
-/** Which picture the profile shows when both exist: the 3D character's portrait or an uploaded image. */
-export type PhotoMode = "character" | "upload";
 
 export interface Portrait {
   /** `portraitKey` of the look it was rendered from — a stale portrait is never shown. */
@@ -107,30 +103,25 @@ interface MyCharacterState {
   /** null = no choice made → each table gives this seat its default K-pop look. */
   character: AvatarProfile | null;
   portrait: Portrait | null;
-  photoMode: PhotoMode;
   /** Idempotent; call from any consumer's mount effect. */
   init: () => Promise<void>;
   set: (look: AvatarProfile) => void;
   clear: () => void;
   setPortrait: (p: Portrait) => void;
-  setPhotoMode: (m: PhotoMode) => void;
 }
 
 export const useMyCharacter = create<MyCharacterState>((set, get) => ({
   hydrated: false,
   character: null,
   portrait: null,
-  photoMode: "character",
 
   init: async () => {
     if (get().hydrated) return;
     const p = readJson<Portrait>(PORTRAIT_KEY);
-    const mode = readJson<PhotoMode>(PHOTO_MODE_KEY);
     set({
       hydrated: true,
       character: readLocal(),
       portrait: p && typeof p.key === "string" && typeof p.url === "string" && p.url.startsWith("data:image/") ? p : null,
-      photoMode: mode === "upload" ? "upload" : "character",
     });
     const supabase = getAuthSupabase();
     if (!supabase) return;
@@ -152,9 +143,7 @@ export const useMyCharacter = create<MyCharacterState>((set, get) => ({
   set: (look) => {
     const clean = sanitizeAvatar(look);
     writeLocal(clean);
-    writeJson(PHOTO_MODE_KEY, "character");
-    // picking a character makes it the profile picture again
-    set({ hydrated: true, character: clean, photoMode: "character" });
+    set({ hydrated: true, character: clean });
     void writeAccount(clean);
   },
 
@@ -167,10 +156,5 @@ export const useMyCharacter = create<MyCharacterState>((set, get) => ({
   setPortrait: (p) => {
     writeJson(PORTRAIT_KEY, p);
     set({ portrait: p });
-  },
-
-  setPhotoMode: (m) => {
-    writeJson(PHOTO_MODE_KEY, m);
-    set({ photoMode: m });
   },
 }));

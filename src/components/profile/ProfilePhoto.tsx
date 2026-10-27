@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { portraitKey, useMyCharacter } from "@/lib/character/myCharacter";
-import { useProfileStore } from "@/store/profileStore";
 import { getAuthSupabase } from "@/lib/supabase/authClient";
 import { publishPortrait, shrinkPortrait } from "@/lib/stats/gameChampions";
 
@@ -14,21 +13,16 @@ const ownKey = (key: string) => `me-face:${key}`;
 
 /**
  * The picture the profile shows (header, profile modal, /account): the chosen
- * 3D character's portrait, unless the player switched to an uploaded image
- * (`photoMode: "upload"`). Falls back to whichever exists; null → Avatar's default.
+ * 3D character's portrait; null → Avatar's default.
  */
 export function useProfilePhoto(): string | null {
-  const uploaded = useProfileStore((s) => s.avatarUrl);
   const character = useMyCharacter((s) => s.character);
   const portrait = useMyCharacter((s) => s.portrait);
-  const mode = useMyCharacter((s) => s.photoMode);
   const init = useMyCharacter((s) => s.init);
   useEffect(() => {
     void init();
   }, [init]);
-  const own = character && portrait && portrait.key === portraitKey(character) ? portrait.url : null;
-  if (mode === "upload" && uploaded) return uploaded;
-  return own ?? uploaded;
+  return character && portrait && portrait.key === portraitKey(character) ? portrait.url : null;
 }
 
 /**
@@ -59,13 +53,11 @@ export function OwnPortraitKeeper() {
 /**
  * Keeps the signed-in player's public portrait (shown next to their name on
  * the per-game boards) in step with the profile picture: the character
- * portrait while that is the picture, cleared otherwise — an uploaded photo
- * already reaches the boards as `public_avatar_url`. Mount once (SiteHeader).
+ * portrait, cleared when there is none. Mount once (SiteHeader).
  */
 export function PublicPortraitPublisher() {
   const character = useMyCharacter((s) => s.character);
   const portrait = useMyCharacter((s) => s.portrait);
-  const mode = useMyCharacter((s) => s.photoMode);
   const hydrated = useMyCharacter((s) => s.hydrated);
   const [authTick, setAuthTick] = useState(0);
   useEffect(() => {
@@ -80,10 +72,10 @@ export function PublicPortraitPublisher() {
     if (!hydrated) return;
     const fresh = character && portrait && portrait.key === portraitKey(character) ? portrait : null;
     // a character still waiting for its portrait: wait for OwnPortraitKeeper
-    if (mode === "character" && character && !fresh) return;
+    if (character && !fresh) return;
     let cancelled = false;
     void (async () => {
-      if (mode === "character" && fresh) {
+      if (fresh) {
         const small = await shrinkPortrait(fresh.url);
         if (!cancelled && small) await publishPortrait(fresh.key, small);
       } else {
@@ -93,6 +85,6 @@ export function PublicPortraitPublisher() {
     return () => {
       cancelled = true;
     };
-  }, [hydrated, character, portrait, mode, authTick]);
+  }, [hydrated, character, portrait, authTick]);
   return null;
 }
