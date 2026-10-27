@@ -200,19 +200,21 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
   const canSubmit = state.phase === "selling" && !state.sale?.revealed && mySubmission === undefined;
 
   // Pieces shared by the 2D board and the 3D frame's hand strip.
+  // The 3D hand strip is always dark, so it skips the light-theme overrides.
+  const stepperLight = is3D ? "" : "light:border-slate-300 light:text-slate-700 light:hover:border-slate-400";
   const bidControls = (
     <div className="flex flex-col items-center gap-2">
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setBidAmount((n) => Math.max(minBid, n - BID_INCREMENT))}
-                        className="h-8 w-8 rounded-full border border-white/15 light:border-slate-300 text-white/80 light:text-slate-700 hover:border-white/30 light:hover:border-slate-400"
+                        className={`h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30 ${stepperLight}`}
                       >
                         −
                       </button>
-                      <span className="w-24 shrink-0 text-center text-lg font-bold whitespace-nowrap text-white light:text-slate-900">{formatDollars(bidAmount)}</span>
+                      <span className={`w-24 shrink-0 text-center text-lg font-bold whitespace-nowrap text-white ${is3D ? "" : "light:text-slate-900"}`}>{formatDollars(bidAmount)}</span>
                       <button
                         onClick={() => setBidAmount((n) => Math.min(maxBid, n + BID_INCREMENT))}
-                        className="h-8 w-8 rounded-full border border-white/15 light:border-slate-300 text-white/80 light:text-slate-700 hover:border-white/30 light:hover:border-slate-400"
+                        className={`h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30 ${stepperLight}`}
                       >
                         +
                       </button>

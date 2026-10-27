@@ -465,7 +465,9 @@ export default function GridPokerBoard({
       ))}
     </div>
   );
-  const lineButtons = (
+  // A function, not a value: the line list reads every cell, so it may only
+  // be built once the board is full (submitting phase).
+  const renderLineButtons = () => (
     <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
       {/* Default-sorted strongest hand first (linesByHandStrengthDesc,
           engine.ts) — matches the rulebook's high-to-low ordering
@@ -568,7 +570,7 @@ export default function GridPokerBoard({
                     {mySubmission !== null ? "제출 완료 · 다른 플레이어를 기다리는 중..." : "제출할 라인을 하나 고르세요"}
                   </p>
                   {submittingActive && <CountdownBar timeLeft={submittingTimeLeft} total={submittingSeconds} />}
-                  {lineButtons}
+                  {renderLineButtons()}
                 </>
               ) : (
                 <>
@@ -665,7 +667,7 @@ export default function GridPokerBoard({
             {mySubmission !== null ? "제출 완료 · 다른 플레이어를 기다리는 중..." : "제출할 라인을 하나 고르세요"}
           </p>
           {submittingActive && <CountdownBar timeLeft={submittingTimeLeft} total={submittingSeconds} />}
-          {lineButtons}
+          {renderLineButtons()}
         </div>
       )}
 
