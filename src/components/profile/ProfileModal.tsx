@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import Overlay from "@/components/Overlay";
 import Avatar from "@/components/common/Avatar";
 import { PUBLIC_NAME_RULE, useProfileStore } from "@/store/profileStore";
 import { useMyCharacter } from "@/lib/character/myCharacter";
-import CharacterPicker from "./CharacterPicker";
+import CharacterStudio from "./CharacterStudio";
 import { useProfilePhoto } from "./ProfilePhoto";
 
 /**
@@ -23,8 +22,7 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
   const hasCharacter = useMyCharacter((s) => !!s.character);
 
   return (
-    <Overlay title="🙂 프로필" onClose={onClose}>
-      <div className="flex flex-col items-center gap-4">
+    <CharacterStudio title="🙂 프로필" onClose={onClose}>
         <PublicNameEditor />
         <div className="w-full border-t border-white/10 light:border-slate-200" />
         <Avatar src={photo} size={112} className="border-2" />
@@ -49,12 +47,8 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
         )}
 
         <div className="w-full border-t border-white/10 light:border-slate-200" />
-        <div className="flex w-full flex-col gap-2">
-          <span className="text-xs font-semibold text-white/70 light:text-slate-600">🧑‍🎤 3D 게임 캐릭터</span>
-          <CharacterPicker />
-        </div>
-      </div>
-    </Overlay>
+        <span className="self-start text-xs font-semibold text-white/70 light:text-slate-600">🧑‍🎤 3D 게임 캐릭터</span>
+    </CharacterStudio>
   );
 }
 

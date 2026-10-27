@@ -53,15 +53,11 @@ const SLOT_ROWS: [WardrobeSlot, string, "hairFrom" | "outfitFrom" | "shoesFrom"]
 ];
 
 /**
- * 3D character picker (profile → 캐릭터 선택): pick one of the listed
- * characters (`CHARACTER_PRESETS` — the same one as anyone else is fine), or
- * fine-tune under "직접 꾸미기": the VRoid body (`model`), the colours tinted
- * onto it, and the make-up / 눈매 that tell two players on one body apart (vrmMakeup.ts). Every tap saves immediately
- * (`useMyCharacter`), and the other players see it at the 3D tables via the
- * room's presence (`roomCharacters.ts`). Options come from `AVATAR_OPTIONS`,
- * so adding a colour or cut there shows up here automatically.
+ * The look being edited and the actions on it — shared by the list (`CharacterPicker`)
+ * and the 직접 꾸미기 panel (`CharacterCustomizer`), which the profile shows side by side
+ * on PC and one at a time on phones. Both write the same store, so they never disagree.
  */
-export default function CharacterPicker() {
+function useCharacterEdit() {
   const character = useMyCharacter((s) => s.character);
   const init = useMyCharacter((s) => s.init);
   const save = useMyCharacter((s) => s.set);
@@ -74,8 +70,6 @@ export default function CharacterPicker() {
   const look: PersonLook = { ...resolved, model: resolved.model ?? DEFAULT_MODEL };
   // a manual tweak means it's no longer exactly that preset
   const update = (patch: AvatarProfile) => save({ ...toProfile(look), ...patch });
-  const [thumbs, setThumbs] = useState<Record<string, string>>({});
-  const onShot = useCallback((id: string, url: string) => setThumbs((t) => (t[id] === url ? t : { ...t, [id]: url })), []);
   const model = look.model ?? DEFAULT_MODEL;
   const setModel = (m: VrmModel) => {
     if (m === model) return;
@@ -84,20 +78,50 @@ export default function CharacterPicker() {
     // borrowed parts that don't fit the new body are dropped by resolveLook, and dyeing resets
     update({ model: m, gender: g, hairDye: undefined, outfitDye: undefined, ...(g !== look.gender ? { hair: (g === "f" ? AVATAR_OPTIONS.hairF : AVATAR_OPTIONS.hairM)[0].id } : {}) });
   };
-  const wardrobe = wardrobeFor(model);
-  const hairDye = look.hairDye ?? DYED_BY_DEFAULT.has(model);
-  const outfitDye = look.outfitDye ?? DYED_BY_DEFAULT.has(model);
-  const hairs = look.gender === "f" ? AVATAR_OPTIONS.hairF : AVATAR_OPTIONS.hairM;
+  return { character, save, clear, look, update, model, setModel };
+}
+
+function Preview({ look }: { look: PersonLook }) {
+  return (
+    <div className="h-48 w-full shrink-0 overflow-hidden rounded-xl bg-gradient-to-b from-[#3a3550] to-[#22202e]">
+      <CharacterPreview3D look={look} />
+    </div>
+  );
+}
+
+/**
+ * 3D character picker (profile → 캐릭터 선택): pick one of the listed
+ * characters (`CHARACTER_PRESETS` — the same one as anyone else is fine), or
+ * open 직접 꾸미기 (`CharacterCustomizer`). Every tap saves immediately
+ * (`useMyCharacter`), and the other players see it at the 3D tables via the
+ * room's presence (`roomCharacters.ts`).
+ *
+ * `showPreview` is off while the customizer beside it carries the 3D preview (one canvas, not two).
+ */
+export default function CharacterPicker({ showPreview = true, customizing = false, onCustomize }: { showPreview?: boolean; customizing?: boolean; onCustomize: () => void }) {
+  const { character, save, clear, look } = useCharacterEdit();
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const onShot = useCallback((id: string, url: string) => setThumbs((t) => (t[id] === url ? t : { ...t, [id]: url })), []);
 
   return (
     <div className="flex w-full flex-col gap-3">
-      <div className="h-48 w-full overflow-hidden rounded-xl bg-gradient-to-b from-[#3a3550] to-[#22202e]">
-        <CharacterPreview3D look={look} />
-      </div>
+      {showPreview && <Preview look={look} />}
       <p className="text-center text-[11px] text-white/45 light:text-slate-500">
         {character ? "3D 게임 테이블에서 다른 참가자에게 이 캐릭터로 보여요." : "아직 고르지 않았어요 — 지금은 자리마다 기본 캐릭터가 나와요."}
       </p>
 
+      <button
+        type="button"
+        aria-pressed={customizing}
+        onClick={onCustomize}
+        className={`min-h-11 rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${
+          customizing
+            ? "border-rose-400 bg-rose-500/20 text-white light:text-slate-900"
+            : "border-white/15 text-white/80 hover:border-white/30 light:border-slate-300 light:text-slate-700 light:hover:border-slate-400"
+        }`}
+      >
+        ✏️ 직접 꾸미기 — 얼굴·메이크업·헤어·옷
+      </button>
       <Row label="캐릭터 목록 · 다른 사람과 같은 캐릭터도 고를 수 있어요">
         <div className="grid w-full grid-cols-3 gap-2 sm:grid-cols-4">
           {CHARACTER_PRESETS.map((c) => {
@@ -134,9 +158,46 @@ export default function CharacterPicker() {
       </Row>
       <CharacterThumbs3D items={PRESET_THUMBS} onShot={onShot} />
 
-      <details className="group rounded-xl border border-white/10 p-2 light:border-slate-200">
-        <summary className="cursor-pointer select-none text-xs font-semibold text-white/70 light:text-slate-600">✏️ 직접 꾸미기</summary>
-        <div className="mt-2 flex flex-col gap-3">
+      <button
+        type="button"
+        onClick={clear}
+        disabled={!character}
+        className="self-center text-xs text-white/45 underline hover:text-white/75 disabled:no-underline disabled:opacity-40 light:text-slate-500 light:hover:text-slate-700"
+      >
+        기본 캐릭터로 되돌리기 (자리마다 자동)
+      </button>
+    </div>
+  );
+}
+
+/**
+ * 직접 꾸미기: the VRoid body (`model`), borrowed hair/outfit/shoes, the colours tinted
+ * onto it, and the make-up / 눈매 that tell two players on one body apart (vrmMakeup.ts).
+ * Options come from `AVATAR_OPTIONS`, so adding a colour or cut there shows up here.
+ * The 3D preview stays pinned at the top while the options scroll under it.
+ */
+export function CharacterCustomizer({ onDone, doneLabel }: { onDone: () => void; doneLabel: string }) {
+  const { look, update, model, setModel } = useCharacterEdit();
+  const wardrobe = wardrobeFor(model);
+  const hairDye = look.hairDye ?? DYED_BY_DEFAULT.has(model);
+  const outfitDye = look.outfitDye ?? DYED_BY_DEFAULT.has(model);
+  const hairs = look.gender === "f" ? AVATAR_OPTIONS.hairF : AVATAR_OPTIONS.hairM;
+
+  return (
+    <div className="flex w-full flex-col gap-3">
+      <div className="sticky top-0 z-10 -mx-1 flex flex-col gap-2 bg-[#151022] px-1 pb-2 light:bg-white">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-bold text-white light:text-slate-900">✏️ 직접 꾸미기</span>
+          <button
+            type="button"
+            onClick={onDone}
+            className="min-h-9 rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/80 transition hover:border-white/30 light:border-slate-300 light:text-slate-700 light:hover:border-slate-400"
+          >
+            {doneLabel}
+          </button>
+        </div>
+        <Preview look={look} />
+      </div>
 
       <Row label="캐릭터 (얼굴·몸)">
         {AVATAR_OPTIONS.model.map((o) => (
@@ -242,17 +303,6 @@ export default function CharacterPicker() {
           </Row>
         </>
       )}
-        </div>
-      </details>
-
-      <button
-        type="button"
-        onClick={clear}
-        disabled={!character}
-        className="self-center text-xs text-white/45 underline hover:text-white/75 disabled:no-underline disabled:opacity-40 light:text-slate-500 light:hover:text-slate-700"
-      >
-        기본 캐릭터로 되돌리기 (자리마다 자동)
-      </button>
     </div>
   );
 }

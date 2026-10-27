@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import Overlay from "@/components/Overlay";
 import { portraitKey, useMyCharacter } from "@/lib/character/myCharacter";
-import CharacterPicker from "./CharacterPicker";
+import CharacterStudio from "./CharacterStudio";
 
 /** Opens the 3D character picker — next to every online game's room nickname field, so guests can pick too. */
 export default function CharacterButton() {
@@ -27,9 +26,7 @@ export default function CharacterButton() {
         {face ? "내 3D 캐릭터 바꾸기" : "내 3D 캐릭터 고르기"}
       </button>
       {open && (
-        <Overlay title="🧑‍🎤 내 3D 캐릭터" onClose={() => setOpen(false)}>
-          <CharacterPicker />
-        </Overlay>
+<CharacterStudio title="🧑‍🎤 내 3D 캐릭터" onClose={() => setOpen(false)} />
       )}
     </>
   );

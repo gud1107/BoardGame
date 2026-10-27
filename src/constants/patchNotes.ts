@@ -64,6 +64,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.110.0",
+    releaseDate: "2026-10-28",
+    title: "✏️ 캐릭터 꾸미기를 바로 옆에서",
+    changes: [
+      { game: "common", type: "IMPROVE", desc: "✏️ '직접 꾸미기'가 목록 맨 아래가 아니라 버튼 하나로 — PC는 오른쪽 패널에 미리보기와 함께, 모바일은 꾸미기 화면으로 바로 열려요" },
+    ],
+  },
+  {
     version: "v1.109.0",
     releaseDate: "2026-10-28",
     title: "🃏 3D 테이블 한 화면에 — 카드게임 6종",

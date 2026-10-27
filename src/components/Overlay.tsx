@@ -26,7 +26,8 @@ export default function Overlay({
   title: string;
   onClose: () => void;
   children: ReactNode;
-  wide?: boolean;
+  /** true: sm:max-w-2xl; "xl": sm:max-w-2xl growing to lg:max-w-5xl (two-panel layouts). */
+  wide?: boolean | "xl";
 }) {
   const { dragY, dragging, handlers } = useSwipeToDismiss(onClose);
 
@@ -44,7 +45,7 @@ export default function Overlay({
         onClick={(e) => e.stopPropagation()}
         style={{ transform: `translateY(${dragY}px)`, transition: dragging ? "none" : "transform 200ms ease-out" }}
         className={`flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-[#151022] shadow-2xl sm:rounded-2xl light:border-slate-200 light:bg-white ${
-          wide ? "sm:max-w-2xl" : "sm:max-w-md"
+          wide === "xl" ? "sm:max-w-2xl lg:max-w-5xl" : wide ? "sm:max-w-2xl" : "sm:max-w-md"
         }`}
       >
         {/* Drag zone: handle + header only, so a swipe started over scrollable

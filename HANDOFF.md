@@ -39,6 +39,14 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## ✏️ 직접 꾸미기 — PC 우측 패널 / 모바일 전환 화면 — 2026-10-28 (커밋/푸시, 배포는 웹훅 자동)
+
+"꾸미기는 스크롤을 내려야 해서 불편, PC는 버튼 누르면 우측 영역에, 모바일도 가능하면" → 새 [CharacterStudio.tsx](./src/components/profile/CharacterStudio.tsx)가 프로필 모달(ProfileModal)과 방 입장 "내 3D 캐릭터"(CharacterButton) 둘 다 담당.
+
+- CharacterPicker를 목록(`CharacterPicker`) + 꾸미기(`CharacterCustomizer`, 상단에 미리보기 sticky)로 분리, 공통 상태는 `useCharacterEdit` 훅. 목록 위 "✏️ 직접 꾸미기" 버튼(예전 `<details>` 접기 대체).
+- ≥1024px: Overlay `wide="xl"`(lg:max-w-5xl) 2단 — 왼쪽 프로필+목록(미리보기는 숨김, 캔버스 1개 유지), 오른쪽 꾸미기 패널 sticky + 자체 스크롤. 그 미만: 꾸미기가 목록을 대체, "← 캐릭터 목록"으로 복귀. 새 훅 `useMediaQuery`.
+- 확인: 헤드리스로 1366px·375px 캡처 각 1장(우측 패널/전환 화면, 가로 넘침 0). eslint/tsc 0. 실제 prod 화면 캡처는 안 함.
+
 ## 🏆 공개 랭킹에 내가 고른 캐릭터 얼굴 — 2026-10-27 (커밋/푸시, SQL은 10-28 사용자 실행 완료)
 
 - **10-28 갱신**: 사용자가 합친 SQL(player_stats → game_champions)을 prod에서 실행. 첫 시도는 game_champions 부분만 돌아 `p.public_portrait does not exist` → game_champions.sql도 컬럼을 직접 추가하게 고침(c7fcc44). 재실행 후 anon 프로브: `public_game_board` 응답 OK, `public_portrait` 컬럼 존재, `set_my_public_portrait`는 anon 거부(42501 = 설치됨). 패치노트 v1.108.0(랭킹 얼굴 + 이번 달 1위 칩) 추가.
