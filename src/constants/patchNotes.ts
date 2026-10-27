@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.111.0",
+    releaseDate: "2026-10-28",
+    title: "🤲 3D 캐릭터 손 — 카드를 진짜로 쥐어요",
+    changes: [
+      { game: "common", type: "IMPROVE", desc: "🤲 3D 테이블 캐릭터가 손패를 두 손으로 실제로 쥐어요 — 손가락은 카드 뒤를 감싸고, 빈손일 땐 무릎 위에 손을 얹어요" },
+      { game: "common", type: "IMPROVE", desc: "✋ 손가락이 한 덩어리로 굽던 걸 사람 손처럼 — 새끼손가락 쪽으로 갈수록 더 굽고, 엄지도 마디마다 자연스럽게" },
+    ],
+  },
+  {
     version: "v1.110.0",
     releaseDate: "2026-10-28",
     title: "✏️ 캐릭터 꾸미기를 바로 옆에서",

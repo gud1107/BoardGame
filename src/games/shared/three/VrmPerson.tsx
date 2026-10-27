@@ -9,7 +9,8 @@ import { DYED_BY_DEFAULT, VRM_WARDROBE, type VrmModel, type WardrobeSlot } from 
 import { blinking, FACES, Hat, holdPose, holdsInMood, STRONG_MOODS, TABLE_POSES, type PersonLook, type PersonMood, type SeatedPersonProps } from "./SeatedPerson";
 import { createMotion, HANDS, stepMotion, type MotionState } from "./motion";
 import { PERSONA_STYLE, personaGaze } from "./persona";
-import { armJointQuat, fingerCurl, toVrm0, upperArmQuat } from "./vrmPose";
+import { armJointQuat, toVrm0, upperArmQuat } from "./vrmPose";
+import { fingerAngles, GRIP_CURL, handRigs, reach, thumbAngles, type Grip } from "./vrmHands";
 import { acquirePaintedFace, acquireSeedEyes, faceMorphs, greyIris, holdMorphs, isBrow, isFaceSkin, isIris, liftMorphs, PAINTABLE, releasePaintedFace, shapeFace, type FaceMorph } from "./vrmMakeup";
 
 /**
@@ -343,28 +344,27 @@ function tint(vrm: VRM, key: ModelKey, look: PersonLook, out: boolean) {
   }
 }
 
-const FINGERS = ["Index", "Middle", "Ring", "Little"] as const;
 /** Per-frame scratch (useFrame runs for every seat, every frame — allocating here means GC hitches). */
 const fQ = new THREE.Quaternion();
 const fE = new THREE.Euler();
-const JOINTS = ["Proximal", "Intermediate", "Distal"] as const;
 /** Bone names per side, built once (template strings in the frame loop are garbage too). */
 const SIDE = {
-  l: {
-    upper: "leftUpperArm",
-    lower: "leftLowerArm",
-    hand: "leftHand",
-    thumb: "leftThumbProximal",
-    fingers: FINGERS.flatMap((f) => JOINTS.map((j) => [`left${f}${j}` as VRMHumanBoneName, j] as const)),
-  },
-  r: {
-    upper: "rightUpperArm",
-    lower: "rightLowerArm",
-    hand: "rightHand",
-    thumb: "rightThumbProximal",
-    fingers: FINGERS.flatMap((f) => JOINTS.map((j) => [`right${f}${j}` as VRMHumanBoneName, j] as const)),
-  },
+  l: { upper: "leftUpperArm", lower: "leftLowerArm", hand: "leftHand" },
+  r: { upper: "rightUpperArm", lower: "rightLowerArm", hand: "rightHand" },
 } as const;
+/** Finger/thumb angles per side for a curl, quantised to 1/50 so the frame loop reuses them. */
+const handCache = new Map<string, readonly (readonly [VRMHumanBoneName, number, number])[]>();
+function handShape(side: "l" | "r", curl: number) {
+  const k = Math.round(Math.max(0, Math.min(1, curl)) * 50);
+  const id = side + k;
+  let v = handCache.get(id);
+  if (!v) handCache.set(id, (v = [...fingerAngles(side, k / 50), ...thumbAngles(side, k / 50)]));
+  return v;
+}
+/** Where a held hand of cards sits in the seat frame — close enough to the chest for adult arms to grip. */
+const HOLD_AT = [0, 1.0, 0.3] as const;
+/** Calm moods whose empty hands rest on the lap (the rest keep their gesture poses). */
+const LAP_MOODS = new Set<PersonMood>(["rest", "sad", "slump", "nervous", "smug"]);
 const LEGS = [
   ["leftUpperLeg", "leftLowerLeg", -0.06],
   ["rightUpperLeg", "rightLowerLeg", 0.06],
@@ -584,6 +584,9 @@ export default function VrmPerson(props: VrmPersonProps) {
   }, [vrm]);
 
   const heldRef = useRef<THREE.Group>(null);
+  const seatRef = useRef<THREE.Group>(null);
+  /** IK blend per arm (0 = gesture channels, 1 = grip). */
+  const ikW = useRef<[number, number]>([0, 0]);
   const springDt = useRef(0);
   const cur = useRef<{ m: MotionState; look: [number, number] } | null>(null);
   useFrame(({ clock }, dt) => {
@@ -652,16 +655,28 @@ export default function VrmPerson(props: VrmPersonProps) {
 
     // arms: resting tables tuck the long arms in; gestures and held cards keep the shared angles
     const tuck = !holding && (mood === "rest" || mood === "think" || mood === "write" || mood === "nervous" || mood === "smug" || mood === "sad") ? 1 : 0;
-    const arm = (s: "l" | "r", o: number, elbow: number, wx: number, wz: number, curl: number, yawAdd: number) => {
+    // calm moods: both hands on the held cards, or on the lap; gestures keep their channel poses
+    const grip: Grip | null = holding && holdsInMood(mood) ? "cards" : !holding && LAP_MOODS.has(mood) ? "lap" : null;
+    const wk = 1 - Math.exp(-dt * 9);
+    const arm = (s: "l" | "r", i: 0 | 1, o: number, elbow: number, wx: number, wz: number, curl: number, yawAdd: number) => {
       const b = SIDE[s];
       set(b.upper, upperArmQuat(s, p[o] + TUCK.shoulder * tuck, p[o + 1] + yawAdd, p[o + 2], fQ));
       set(b.lower, armJointQuat(s, elbow + TUCK.elbow * tuck, 0, fQ));
       set(b.hand, armJointQuat(s, wx, wz, fQ));
-      for (const [name, j] of b.fingers) eul(name, 0, 0, fingerCurl(s, curl, j));
-      eul(b.thumb, 0, (s === "l" ? 1 : -1) * curl * 0.5, 0);
+      ikW.current[i] += ((grip ? 1 : 0) - ikW.current[i]) * wk;
+      const w = ikW.current[i];
+      const handCurl = grip ? curl + (GRIP_CURL[grip] - curl) * w : curl;
+      for (const [name, y, z] of handShape(s, handCurl)) eul(name, 0, y, z);
     };
-    arm("l", 6, p[9], p[14], p[15], p[18], 0);
-    arm("r", 10, p[13], p[16], p[17], p[19], mood === "point" ? c.look[0] * 0.9 : 0);
+    arm("l", 0, 6, p[9], p[14], p[15], p[18], 0);
+    arm("r", 1, 10, p[13], p[16], p[17], p[19], mood === "point" ? c.look[0] * 0.9 : 0);
+
+    const chains = chainsOf(vrm);
+    if (chains && seatRef.current && (ikW.current[0] > 0.001 || ikW.current[1] > 0.001)) {
+      refresh(chains.torso);
+      const pivot = grip === "lap" || (!grip && !holding) ? ([0, fit.seatY, 0] as const) : HOLD_AT;
+      for (const rig of handRigs(vrm)) reach(rig, grip ?? (holding ? "cards" : "lap"), ikW.current[rig.side === "l" ? 0 : 1], seatRef.current.matrixWorld, pivot);
+    }
 
     resolveArmCollisions(vrm, fit.scale);
 
@@ -710,14 +725,14 @@ export default function VrmPerson(props: VrmPersonProps) {
     );
   const head = vrm.humanoid.getNormalizedBoneNode("head");
   return (
-    <group position={position} rotation-y={facing}>
+    <group ref={seatRef} position={position} rotation-y={facing}>
       <Chair kind={props.chair} color={props.chairColor} h={fit.seatY} />
       <group position={[0, fit.lift, -0.05]} scale={fit.scale}>
         <primitive object={vrm.scene} />
       </group>
       {/* a held hand of cards, gripped in front of the chest (as SeatedPerson's hold point) */}
       {props.held && (
-        <group ref={heldRef} position={[0, 1.07, 0.46]} rotation-y={Math.PI} scale={0.85}>
+        <group ref={heldRef} position={HOLD_AT as unknown as [number, number, number]} rotation-y={Math.PI} scale={0.85}>
           {props.held}
         </group>
       )}

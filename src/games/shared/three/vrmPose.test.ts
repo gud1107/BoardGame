@@ -34,3 +34,18 @@ describe("vrmPose", () => {
     expect(Math.abs(got.dot(expected))).toBeCloseTo(1, 6);
   });
 });
+
+describe("vrmHands finger shapes", () => {
+  it("fingers cascade (little curls most), fan at the knuckle, and mirror between hands", async () => {
+    const { fingerAngles, thumbAngles } = await import("./vrmHands");
+    const l = fingerAngles("l", 0.5);
+    const r = fingerAngles("r", 0.5);
+    const z = (list: typeof l, name: string) => list.find(([n]) => n === name)![2];
+    expect(Math.abs(z(l, "leftLittleIntermediate"))).toBeGreaterThan(Math.abs(z(l, "leftIndexIntermediate")));
+    expect(z(r, "rightMiddleProximal")).toBeCloseTo(-z(l, "leftMiddleProximal"), 6);
+    expect(Math.sign(l.find(([n]) => n === "leftIndexProximal")![1])).toBe(-Math.sign(l.find(([n]) => n === "leftLittleProximal")![1]));
+    // an "open" hand still has a little curl; the thumb bends at all three joints
+    expect(Math.abs(z(fingerAngles("l", 0), "leftIndexProximal"))).toBeGreaterThan(0);
+    expect(thumbAngles("l", 0.5).every(([, y]) => y > 0)).toBe(true);
+  });
+});
