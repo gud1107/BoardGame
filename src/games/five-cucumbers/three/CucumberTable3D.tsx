@@ -63,13 +63,13 @@ function Cucumbers({ count, threshold }: { count: number; threshold: number }) {
   );
 }
 
-const TRICK_CARD_W = 0.28;
-const TRICK_CARD_H = 0.4;
+const TRICK_CARD_W = 0.34;
+const TRICK_CARD_H = 0.48;
 
 /**
  * The trick, laid out for the viewer: one left-to-right row in play order,
- * every card upright from my seat (not turned toward whoever played it), a
- * little toward my side of the centre so the sign above doesn't cover it.
+ * every card upright from my seat (not turned toward whoever played it),
+ * centred so my own 🥒 tag (between me and the centre) doesn't cover it.
  */
 function Trick({ plays, winnerSeat }: { plays: CucumberTable3DProps["plays"]; winnerSeat: number | null }) {
   const geo = useTableGeo();
@@ -83,7 +83,7 @@ function Trick({ plays, winnerSeat }: { plays: CucumberTable3DProps["plays"]; wi
         const slot = right
           .clone()
           .multiplyScalar((i - (plays.length - 1) / 2) * gap)
-          .addScaledVector(toward, 0.18)
+          .addScaledVector(toward, -0.04)
           .setY(0.004 + i * 0.004);
         const from = geo.spotOf(p.seat, 0.4).sub(new THREE.Vector3(slot.x, geo.tableY, slot.z));
         const win = p.seat === winnerSeat;
