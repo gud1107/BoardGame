@@ -525,8 +525,8 @@ export default function GridPokerBoard({
       {is3D && (
         // Table on top, my 5×5 board (the input) in the bottom strip of the
         // same frame — a shorter canvas, since the board needs the room.
-        <div className="relative z-10 h-[680px] w-full overflow-hidden rounded-2xl border border-black/50 sm:h-[760px] lg:h-[800px]" style={{ background: "#0b0f0c" }}>
-          <div className="absolute inset-x-0 top-0 bottom-[390px] sm:bottom-[440px]">
+        <div className="relative z-10 h-[720px] w-full overflow-hidden rounded-2xl border border-black/50 sm:h-[800px] lg:h-[840px]" style={{ background: "#0b0f0c" }}>
+          <div className="absolute inset-x-0 top-0 bottom-[432px] sm:bottom-[484px]">
             <GridPokerTable3D
               playerCount={state.playerCount}
               viewerSeat={viewerSeat}
@@ -560,7 +560,7 @@ export default function GridPokerBoard({
             </span>
           </div>
           <section
-            className="absolute inset-x-0 bottom-0 flex h-[390px] flex-col overflow-y-auto px-3 pt-5 pb-3 sm:h-[440px]"
+            className="absolute inset-x-0 bottom-0 flex h-[432px] flex-col overflow-y-auto px-3 pt-5 pb-3 sm:h-[484px]"
             style={{ background: "linear-gradient(180deg,rgba(11,15,12,0) 0%,rgba(11,15,12,0.9) 6%,rgba(11,15,12,0.98) 100%)" }}
           >
             <div className="mt-auto flex flex-col items-center gap-2">
