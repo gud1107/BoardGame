@@ -86,6 +86,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     changes: [
       { game: "five-cucumbers", type: "IMPROVE", desc: "🃏 3D 화면에서 내 손패가 테이블 아래쪽에 바로 펼쳐져요 — 스크롤 없이 상대·트릭을 보면서 카드를 내요" },
       { game: "five-cucumbers", type: "IMPROVE", desc: "📋 3D 테이블과 겹치던 트릭 칸·점수판은 정리 — 점수표는 '펼치기'로 언제든 볼 수 있어요" },
+      { game: "five-cucumbers", type: "IMPROVE", desc: "👀 낸 카드는 누가 냈든 내 자리에서 똑바로, 낸 순서대로 한 줄로 — 숫자가 한눈에 읽혀요" },
     ],
   },
   {

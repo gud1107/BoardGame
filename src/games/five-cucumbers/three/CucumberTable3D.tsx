@@ -63,19 +63,35 @@ function Cucumbers({ count, threshold }: { count: number; threshold: number }) {
   );
 }
 
+const TRICK_CARD_W = 0.28;
+const TRICK_CARD_H = 0.4;
+
+/**
+ * The trick, laid out for the viewer: one left-to-right row in play order,
+ * every card upright from my seat (not turned toward whoever played it), a
+ * little toward my side of the centre so the sign above doesn't cover it.
+ */
 function Trick({ plays, winnerSeat }: { plays: CucumberTable3DProps["plays"]; winnerSeat: number | null }) {
   const geo = useTableGeo();
+  const facing = geo.angleOf(geo.viewerSeat);
+  const right = new THREE.Vector3(Math.cos(facing), 0, -Math.sin(facing));
+  const toward = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
+  const gap = Math.min(TRICK_CARD_W + 0.04, (geo.tableR * 1.5) / Math.max(1, plays.length - 1));
   return (
     <group>
       {plays.map((p, i) => {
-        const from = geo.spotOf(p.seat, 0.4).sub(new THREE.Vector3(0, geo.tableY, 0));
-        const a = (i / Math.max(1, plays.length)) * Math.PI * 2;
+        const slot = right
+          .clone()
+          .multiplyScalar((i - (plays.length - 1) / 2) * gap)
+          .addScaledVector(toward, 0.18)
+          .setY(0.004 + i * 0.004);
+        const from = geo.spotOf(p.seat, 0.4).sub(new THREE.Vector3(slot.x, geo.tableY, slot.z));
         const win = p.seat === winnerSeat;
         return (
-          <group key={p.id} position={[Math.sin(a) * 0.28 * Math.min(1, plays.length / 3), 0.004 + i * 0.004, Math.cos(a) * 0.22 * Math.min(1, plays.length / 3)]}>
+          <group key={p.id} position={slot.toArray()}>
             <FlyIn from={from} dur={0.45} arc={0.45}>
-              <group rotation-y={geo.angleOf(p.seat)}>
-                <FlatCard face={face(p.value)} back={back()} w={0.24} h={0.34} glow={win ? "#fde68a" : null} />
+              <group rotation-y={facing}>
+                <FlatCard face={face(p.value)} back={back()} w={TRICK_CARD_W} h={TRICK_CARD_H} glow={win ? "#fde68a" : null} />
               </group>
             </FlyIn>
             {i === plays.length - 1 && <ImpactRing color="#86efac" size={0.7} />}
