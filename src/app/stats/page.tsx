@@ -208,8 +208,9 @@ function GuestWarning() {
         지금 전적은 <b>이 브라우저에만</b> 저장돼 있어요. 브라우저 기록·사이트 데이터 삭제, 시크릿 모드, 저장공간 자동 정리,
         다른 기기나 브라우저로 바꾸는 순간 <b>복구할 수 없이 사라집니다.</b> 공개 랭킹에도 오르지 않아요.
       </p>
-      <p className="mt-1.5 text-sm text-amber-100/90 light:text-amber-900">
-        로그인하면 지금까지 쌓은 기록이 그대로 계정에 합쳐져 안전하게 보관됩니다.
+      <p className="mt-1.5 text-sm leading-relaxed text-amber-100/90 light:text-amber-900">
+        <b>다른 브라우저(또는 다른 기기)에서 로그인하면 이 브라우저의 기록은 넘어가지 않고 사라집니다.</b> 지금 쓰는{" "}
+        <b>이 브라우저에서 로그인</b>해야 지금까지 쌓은 기록이 계정에 합쳐져 안전하게 보관돼요.
       </p>
       <Link
         href="/login?next=/stats"

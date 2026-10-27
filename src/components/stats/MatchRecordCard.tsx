@@ -127,7 +127,8 @@ export default function MatchRecordCard({ record, onClose }: { record: MatchReco
 
       {hydrated && !userId && (
         <p className="mt-2 rounded-lg border border-amber-400/50 bg-amber-400/10 px-2.5 py-1.5 text-[11px] leading-relaxed text-amber-200 light:text-amber-800">
-          ⚠️ 로그인하지 않은 기록은 이 브라우저에만 있어 언제든 사라질 수 있어요.{" "}
+          ⚠️ 로그인하지 않은 기록은 이 브라우저에만 있어 언제든 사라질 수 있어요. 다른 브라우저에서 로그인하면 이 기록은
+          넘어가지 않아요 — <b>이 브라우저에서</b> 로그인해야 계정에 합쳐집니다.{" "}
           <Link href="/login?next=/stats" className="font-bold underline">
             로그인하고 지키기
           </Link>

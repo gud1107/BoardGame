@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Avatar from "@/components/common/Avatar";
 import Overlay from "@/components/Overlay";
+import { useSubscriptionStore } from "@/store/subscriptionStore";
 import { champions, fetchGameBoard, type BoardPeriod, type GameBoardRow } from "@/lib/stats/gameChampions";
 
 const PERIOD_LABEL: Record<BoardPeriod, string> = { month: "이번 달", all: "전체" };
@@ -94,6 +95,8 @@ function GameBoardModal({
   }, [gameId]);
 
   const rows = period === "month" ? month : all;
+  const userId = useSubscriptionStore((s) => s.userId);
+  const authHydrated = useSubscriptionStore((s) => s.hydrated);
 
   return (
     <Overlay title={`🏆 ${gameName} 랭킹`} onClose={onClose}>
@@ -156,6 +159,25 @@ function GameBoardModal({
             </li>
           ))}
         </ol>
+      )}
+
+      {authHydrated && !userId && (
+        <div
+          role="alert"
+          className="mt-4 rounded-xl border-2 border-amber-400/70 bg-amber-400/15 p-3 text-xs leading-relaxed text-amber-100 light:border-amber-500 light:bg-amber-50 light:text-amber-900"
+        >
+          <p className="font-bold">⚠️ 로그인하지 않으면 랭킹에 오르지 않고, 기록은 언제 사라질지 몰라요</p>
+          <p className="mt-1">
+            비로그인 기록은 이 브라우저에만 저장돼요. <b>다른 브라우저에서 로그인하면 이 브라우저의 기록은 넘어가지 않고 사라집니다.</b>{" "}
+            이 브라우저에서 로그인해야 지금까지의 기록이 계정에 합쳐져요.
+          </p>
+          <Link
+            href={`/login?next=/games/${gameId}`}
+            className="mt-2 inline-block rounded-lg bg-amber-400 px-3 py-1.5 font-bold text-zinc-900 hover:bg-amber-300"
+          >
+            이 브라우저에서 로그인하기
+          </Link>
+        </div>
       )}
 
       <p className="mt-4 text-[11px] leading-relaxed text-white/40 light:text-slate-500">
