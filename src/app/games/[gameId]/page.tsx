@@ -17,6 +17,7 @@ import BugReportFloatingButton from "@/components/bugReport/BugReportFloatingBut
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import { recordMatchStat } from "@/lib/stats/playerStats";
 import MatchRecordCard, { type MatchRecord } from "@/components/stats/MatchRecordCard";
+import GameChampionChip from "@/components/stats/GameChampionChip";
 
 type Stage = "select" | "playing" | "record" | "done";
 /** Frozen once per page load right after the subscription store hydrates — see the entitlement gate below. */
@@ -350,7 +351,7 @@ export default function GamePlayPage() {
   return (
     <div className={`mx-auto ${pageMaxWidth} px-4 py-8 sm:px-6`}>
       <div className="mb-6 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="relative flex h-14 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white/5 light:bg-slate-100">
             <GameThumbnail
               game={game}
@@ -359,7 +360,7 @@ export default function GamePlayPage() {
               imageSizes="44px"
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-xl font-bold text-white light:text-slate-900">{game.name}</h1>
             <p className="text-xs text-white/45 light:text-slate-500">
               {game.players.min === game.players.max
@@ -367,6 +368,8 @@ export default function GamePlayPage() {
                 : `${game.players.min}~${game.players.max}인`}{" "}
               · {game.playTime.minMinutes}~{game.playTime.maxMinutes}분
             </p>
+            {/* 1인 게임은 항상 1위라 랭킹에서 빠짐(/stats와 같은 기준) */}
+            {game.players.max > 1 && <GameChampionChip gameId={game.id} gameName={game.name} />}
           </div>
         </div>
         {/* 인게임 유틸리티 영역의 원터치 테마 토글 — 모든 게임이 이 한 곳(공용

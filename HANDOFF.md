@@ -39,6 +39,14 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 👑 게임별 "이번 달 1위" 칩 + 캐릭터 초상화 랭킹 — 2026-10-27 (커밋/푸시, **SQL 실행 필요**)
+
+"캐릭터 이미지와 함께 '이 게임은 내가 이번 달 1위' / 전체 랭킹" 요청. 공통 게임 페이지(`src/app/games/[gameId]/page.tsx`) 제목 아래에 `GameChampionChip` — 이번 달(KST) 그 게임 1위의 캐릭터 초상화 + 닉네임, 내가 1위면 금색 "👑 이 게임은 내가 이번 달 1위!". 누르면 `Overlay` 모달 **이번 달 / 전체** 탭(상위 10 + 내 줄, 초상화·승·판·승률). 1인 게임(`players.max === 1`)은 제외.
+
+- **SQL `supabase/game_champions.sql`(사용자 실행 필요, player_stats.sql 다음에)**: `user_profiles.public_portrait`(≤30k자 data URL, webp/png/jpeg만) + `set_my_public_portrait()`(authenticated만) + `public_game_board(game, 'month'|'all', limit)`(anon 가능). 이번 달은 `player_match_log.recorded_at`(서버 시각) 기준 KST 월, 전체는 `player_game_stats`. 정렬은 /stats 기본과 같음(승 수 → 승률, 봇 판 포함). 실행 전에는 RPC가 PGRST202 → 칩이 아예 안 보임.
+- **초상화 공개**: `PublicPortraitPublisher`(ProfilePhoto.tsx, SiteHeader에 마운트) — 로그인 상태에서 프로필 사진이 3D 캐릭터면 그 초상화를 72px webp로 줄여 올리고, 업로드 사진 모드/캐릭터 없음이면 지움(업로드 사진은 원래 `public_avatar_url`로 나감). 계정+초상화 키당 기기에서 한 번만 전송(localStorage `bg_public_portrait_sent_v1`).
+- 확인: eslint 0, tsc는 기존 `proceduralSuites.test.ts` 오류 2개 외 0, vitest `gameChampions.test.ts` 2/2. SQL은 로컬 embedded-postgres로 실행 — 이번 달/전체 순위 차이, 잘못된 이미지·anon 쓰기 거부, 재실행 확인. **브라우저 화면 확인은 안 함**(운영에 SQL이 없어 칩이 렌더되지 않음). 패치노트는 SQL 실행 후 실제로 보일 때 추가할 것.
+
 ## 🏁 코요테 마지막 승부 5초+ 유지 + 📜 이전 판정 기록 — 2026-10-26 (커밋/푸시, 배포는 웹훅 자동)
 
 "마지막 승부의 결과가 5초 이상 보이게 + 이전 결과를 볼 수 있는 기능" 요청. 원래는 마지막 판정에서 엔진이 곧장 `gameOver`가 되어 보드가 즉시 순위 화면으로 바뀌었다(테이블·판정 패널을 아예 못 봄).

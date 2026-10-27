@@ -10,7 +10,7 @@ import SoundToggleButton from "@/components/audio/SoundToggleButton";
 import PatchNoteButton from "@/components/patchNotes/PatchNoteButton";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import Avatar from "@/components/common/Avatar";
-import { OwnPortraitKeeper, useProfilePhoto } from "@/components/profile/ProfilePhoto";
+import { OwnPortraitKeeper, PublicPortraitPublisher, useProfilePhoto } from "@/components/profile/ProfilePhoto";
 import ProfileModal from "@/components/profile/ProfileModal";
 import { useIsSiteAdmin } from "@/lib/admin/useIsSiteAdmin";
 
@@ -105,6 +105,7 @@ export default function SiteHeader() {
             </button>
           )}
           <OwnPortraitKeeper />
+          <PublicPortraitPublisher />
           {configured && (
             <Link
               href={userId ? "/account" : "/login"}
