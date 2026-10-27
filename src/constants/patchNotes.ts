@@ -64,6 +64,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.104.1",
+    releaseDate: "2026-10-27",
+    title: "🔉 3D 캐릭터 목소리는 중요한 순간에만",
+    changes: [
+      { game: "common", type: "IMPROVE", desc: "🔉 봇 캐릭터가 매 턴 말하던 걸 줄였어요 — 승리·충격·패배·탈락 순간에만 목소리, 나머지 반응은 말풍선으로만 보여요" },
+    ],
+  },
+  {
     version: "v1.104.0",
     releaseDate: "2026-10-27",
     title: "🧍 옛 캐릭터 완전 제거",

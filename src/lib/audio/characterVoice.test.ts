@@ -65,20 +65,25 @@ describe("voice profile", () => {
 });
 
 describe("VoiceGate", () => {
+  it("speaks only big moments; routine moods stay caption-only", () => {
+    const g = new VoiceGate();
+    for (const m of ["smug", "nervous", "shrug", "clap", "raise", "point", "laugh"] as const) expect(g.allow(1, m, 100, false)).toBe("skip");
+    expect(g.allow(1, "cheer", 100, false)).toBe("speak");
+  });
+
   it("one seat can't chatter: per-seat gap", () => {
     const g = new VoiceGate();
-    expect(g.allow(1, "laugh", 0, false)).toBe("speak");
+    expect(g.allow(1, "sad", 0, false)).toBe("speak");
     expect(g.allow(1, "cheer", VOICE_GAP.perSeat - 0.1, false)).toBe("skip");
     expect(g.allow(1, "cheer", VOICE_GAP.perSeat + 0.1, false)).toBe("speak");
   });
 
-  it("a table reacting at once yields one voice; only urgent moods cut in", () => {
+  it("the table keeps a long quiet between voices; only urgent moods come sooner", () => {
     const g = new VoiceGate();
-    expect(g.allow(1, "clap", 0, false)).toBe("speak");
-    expect(g.allow(2, "clap", 0.1, true)).toBe("skip");
-    expect(g.allow(3, "laugh", 0.3, false)).toBe("skip");
-    // even a shock lets the current line be heard for a moment before cutting in
-    expect(g.allow(4, "shock", 0.4, true)).toBe("skip");
-    expect(g.allow(5, "shock", 0.6, true)).toBe("cut");
+    expect(g.allow(1, "sad", 0, false)).toBe("speak");
+    expect(g.allow(2, "slump", VOICE_GAP.global - 0.1, false)).toBe("skip");
+    expect(g.allow(3, "shock", VOICE_GAP.urgent - 0.1, true)).toBe("skip");
+    expect(g.allow(4, "shock", VOICE_GAP.urgent + 0.1, true)).toBe("cut");
+    expect(g.allow(5, "sad", VOICE_GAP.urgent + VOICE_GAP.global + 0.2, false)).toBe("speak");
   });
 });

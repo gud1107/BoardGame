@@ -165,11 +165,21 @@ export function spokenPhrases(line: string): SpokenPhrase[] {
   return out;
 }
 
+/**
+ * Only the big moments are spoken aloud: a win, a shock, a loss, being knocked out. Routine
+ * moods (smug after submitting, nervous while waiting, a shrug on a pass …) come up nearly
+ * every turn, so they stay caption-only — a voice each turn quickly turns into noise.
+ */
+const SPOKEN = new Set<VoicedMood>(["cheer", "shock", "sad", "slump"]);
+
 /** Strong reactions may cut in over a line already playing; the rest wait their turn (are skipped). */
 const URGENT = new Set<VoicedMood>(["shock", "cheer"]);
 
-/** perSeat/global: seconds between lines; urgent: even a shock waits this long into the current line before cutting it. */
-export const VOICE_GAP = { perSeat: 2.5, global: 0.9, urgent: 0.5 };
+/**
+ * perSeat/global: seconds between lines; urgent: a shock/cheer may speak this soon after the
+ * last line (cutting it if still playing). Several turns pass between voices, so one stands out.
+ */
+export const VOICE_GAP = { perSeat: 30, global: 14, urgent: 6 };
 
 /**
  * Rate limiter: who may speak at `now` (seconds). One voice at a time keeps a table of eight
@@ -180,6 +190,7 @@ export class VoiceGate {
   private lastAny = -Infinity;
 
   allow(seat: number, mood: VoicedMood, now: number, busy: boolean): "speak" | "cut" | "skip" {
+    if (!SPOKEN.has(mood)) return "skip";
     if (now - (this.lastSeat.get(seat) ?? -Infinity) < VOICE_GAP.perSeat) return "skip";
     const urgent = URGENT.has(mood);
     const since = now - this.lastAny;
@@ -221,7 +232,7 @@ export function nextEmotionLine(seat: number, mood: PersonMood, persona: Persona
   return voiceLine(persona, mood, seat, n);
 }
 
-/** Say `text` in this seat's voice, if sound is on and the gate lets it through. Safe to call anywhere. */
+/** Say `text` in this seat's voice, if sound is on, the mood is a big moment and the gate lets it through. Safe to call anywhere. */
 export function speakEmotion(o: { seat: number; mood: PersonMood; persona: Persona; gender: "f" | "m"; text: string }) {
   if (!isVoiced(o.mood)) return;
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
