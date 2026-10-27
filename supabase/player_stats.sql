@@ -86,10 +86,38 @@ create table if not exists public.user_profiles (
 -- What the public leaderboard shows. Deliberately separate from
 -- user_profiles.nickname/avatar_url, which social logins fill from the
 -- provider (often a real name / face photo): nothing appears publicly until
--- the player picks a ranking name themselves (set_my_public_name) or uploads
--- a site avatar (/api/profile/avatar mirrors it into public_avatar_url).
+-- the player picks a ranking name themselves (set_my_public_name) or a 3D
+-- character in their profile (public_portrait, a small data-URL image of that
+-- fictional character, published by their browser). public_avatar_url is a
+-- photo uploaded before image upload was removed (2026-10-27); it shows only
+-- for players without a character portrait, until they delete it.
 alter table public.user_profiles add column if not exists public_name varchar(12);
 alter table public.user_profiles add column if not exists public_avatar_url text;
+alter table public.user_profiles add column if not exists public_portrait text;
+
+-- Set (or clear, with null) the caller's public character portrait.
+create or replace function set_my_public_portrait(p_url text)
+returns void as $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then
+    raise exception 'not authenticated';
+  end if;
+  if p_url is not null and (
+       char_length(p_url) > 30000
+       or p_url !~ '^data:image/(webp|png|jpeg);base64,[A-Za-z0-9+/=]+$') then
+    raise exception 'invalid portrait';
+  end if;
+
+  insert into public.user_profiles (id, nickname, public_portrait)
+  values (v_uid, '게이머_' || substring(v_uid::text from 1 for 6), p_url)
+  on conflict (id) do update set public_portrait = excluded.public_portrait, updated_at = now();
+end;
+$$ language plpgsql security definer set search_path = public;
+
+revoke all on function set_my_public_portrait(text) from public, anon;
+grant execute on function set_my_public_portrait(text) to authenticated;
 create unique index if not exists user_profiles_public_name_unique
   on public.user_profiles (lower(public_name)) where public_name is not null;
 
@@ -373,7 +401,7 @@ create or replace function public_leaderboard(
   )
   select r.rnk,
          coalesce(p.public_name, '게이머_' || substring(r.user_id::text from 1 for 6))::text,
-         p.public_avatar_url,
+         coalesce(p.public_portrait, p.public_avatar_url),
          r.played, r.wins, r.losses, r.win_rate, r.best_rank, r.details,
          (r.user_id = auth.uid())
   from ranked r
@@ -448,7 +476,7 @@ create or replace function public_metric_leaderboard(
   )
   select r.rnk,
          coalesce(p.public_name, '게이머_' || substring(r.user_id::text from 1 for 6))::text,
-         p.public_avatar_url,
+         coalesce(p.public_portrait, p.public_avatar_url),
          r.value, r.num, r.den, r.played,
          (r.user_id = auth.uid())
   from ranked r
@@ -525,7 +553,7 @@ create or replace function public_bot_level_board(
          coalesce(a.players, 0), coalesce(a.played, 0), coalesce(a.wins, 0),
          case when t.user_id is null then null
               else coalesce(p.public_name, '게이머_' || substring(t.user_id::text from 1 for 6)) end::text,
-         p.public_avatar_url, t.played, t.win_rate,
+         coalesce(p.public_portrait, p.public_avatar_url), t.played, t.win_rate,
          m.played, m.wins, m.rnk, coalesce(a.ranked_players, 0)
   from generate_series(-1, 10) as b(level)
   left join agg a on a.level = b.level

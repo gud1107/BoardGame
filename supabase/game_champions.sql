@@ -5,38 +5,13 @@
 -- Client side: src/lib/stats/gameChampions.ts,
 -- src/components/stats/GameChampionChip.tsx.
 --
--- - public_portrait is a small data-URL image of the player's own 3D
---   character (fictional, self-chosen), published by the player's browser
---   only while their profile picture is that character. Like public_name it
---   is opt-in by action, never filled from the social-login provider.
+-- - Boards show public_portrait (the player's own 3D character, see
+--   player_stats.sql), else a photo uploaded before upload was removed.
 -- - The month board aggregates player_match_log by recorded_at (server
 --   time), not the client-supplied played_at, in KST months.
 
-alter table public.user_profiles add column if not exists public_portrait text;
-
--- Set (or clear, with null) the caller's public character portrait.
-create or replace function set_my_public_portrait(p_url text)
-returns void as $$
-declare
-  v_uid uuid := auth.uid();
-begin
-  if v_uid is null then
-    raise exception 'not authenticated';
-  end if;
-  if p_url is not null and (
-       char_length(p_url) > 30000
-       or p_url !~ '^data:image/(webp|png|jpeg);base64,[A-Za-z0-9+/=]+$') then
-    raise exception 'invalid portrait';
-  end if;
-
-  insert into public.user_profiles (id, nickname, public_portrait)
-  values (v_uid, '게이머_' || substring(v_uid::text from 1 for 6), p_url)
-  on conflict (id) do update set public_portrait = excluded.public_portrait, updated_at = now();
-end;
-$$ language plpgsql security definer set search_path = public;
-
-revoke all on function set_my_public_portrait(text) from public, anon;
-grant execute on function set_my_public_portrait(text) to authenticated;
+-- public_portrait + set_my_public_portrait live in player_stats.sql (the
+-- /stats ranking shows the portrait too), which this file runs after.
 
 -- One game's board. p_period 'month' = this KST month, anything else = all
 -- time. Most wins first (then win rate), matches with bots included — the

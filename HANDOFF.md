@@ -39,6 +39,14 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 🏆 공개 랭킹에 내가 고른 캐릭터 얼굴 — 2026-10-27 (커밋/푸시, **SQL 실행 필요**)
+
+"공개 랭킹은 내가 프로필에서 고른 게 나오게" → /stats 공개 랭킹 3개 RPC(`public_leaderboard`·`public_metric_leaderboard`·`public_bot_level_board`)가 `public_avatar_url`(업로드 사진)만 내보내고 있었음. 이제 `coalesce(public_portrait, public_avatar_url)` — 캐릭터 초상화 우선, 없으면 예전 업로드 사진.
+
+- `public_portrait` 컬럼 + `set_my_public_portrait`를 game_champions.sql에서 **player_stats.sql로 옮김**(랭킹이 쓰니까). game_champions.sql은 player_stats.sql 뒤에 실행(기존 안내 그대로).
+- **prod 상태(10-27 anon 프로브)**: `public_portrait` 컬럼 없음, `set_my_public_portrait`/`public_game_board` PGRST202 → **사용자가 Supabase SQL Editor에서 `supabase/player_stats.sql` → `supabase/game_champions.sql` 순서로 실행해야** 보임. 실행 후 각자 브라우저(`PublicPortraitPublisher`)가 다음 접속 때 초상화를 올림(실패한 시도는 스탬프 안 남겨 재시도).
+- 확인: 로컬 embedded-postgres로 player_stats.sql 2회 + game_champions.sql 실행 → 랭킹·게임 보드에 초상화 data URL 나옴. 클라이언트 코드 변경 없음. 패치노트는 prod에 보일 때 추가.
+
 ## 🖼 프로필 이미지 업로드 제거 — 2026-10-27 (커밋/푸시, 배포는 웹훅 자동)
 
 "이미지 업로드는 필요 없다, 기능 삭제" → 프로필 사진 = 3D 캐릭터 초상화만.
