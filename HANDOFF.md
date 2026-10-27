@@ -39,6 +39,14 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 🧍 옛 만화풍 캐릭터 완전 제거 — 2026-10-27 (커밋/푸시)
+
+"이전 캐릭터가 프로필·게임 접속 시 같이 보인다" → 원인: `VrmPerson`이 VRM을 받는 동안(실패 시엔 계속) 옛 만화풍 `SeatedPerson` 몸을 대신 그렸음. 이제 그 사이엔 **빈 의자 + 들고 있는 카드 + 이름표(children)만** 보이고(`PLACEHOLDER_SEAT_Y = 0.5`, 의자는 `Chair` 함수로 분리), 프로필 미리보기(`CharacterPreview3D`)는 "캐릭터 불러오는 중…" 문구.
+
+- **코드 삭제**: `SeatedPerson.tsx`의 만화 몸·머리카락·얼굴 그리기 코드(~650줄) 삭제 — 파일엔 공용 어휘(PersonMood·POSES/TABLE_POSES·FACES·blinking·Hat·holdPose·SeatedPersonProps·STRONG_MOODS)만 남음. 아무도 안 쓰던 `RealisticPerson.tsx`·`glamFace.ts`·`kpopEyes.ts` 삭제. `TableScene`은 항상 `VrmPerson`(`personStyle`은 카메라·좌석 배치 옵션으로만 남김, 현재 미사용).
+- **남은 것**: 블러프 룰렛(`src/games/bluffRoulette/Character.tsx`)은 리볼버 연출이 붙은 게임 전용 만화 캐릭터라 이번엔 그대로 둠. `avatar.ts`의 hairStyle/face/eyes/build/mark 필드도 저장 호환 때문에 유지(VRM엔 반영 안 됨).
+- 확인: tsc(기존 proceduralSuites 오류 외) 0, eslint 0, vitest shared/three + character 38/38. 화면 캡처는 안 함.
+
 ## ⚠️ 비로그인 기록 "언제 사라질지 모름 / 다른 브라우저에서 로그인하면 사라짐" 명시 — 2026-10-27 (커밋/푸시)
 
 /stats `GuestWarning`, 게임 끝 `MatchRecordCard` 경고, 새 랭킹 모달(`GameChampionChip`, 비로그인일 때 금색 경고 + "이 브라우저에서 로그인하기")에 같은 내용을 명시. 사실 관계: 비로그인 기록(IndexedDB `statPending` userId null)은 **그 브라우저에서 로그인할 때만** 계정으로 합쳐지고, 다른 브라우저에서 로그인하면 넘어가지 않음. 랭킹 모달 경고는 game_champions.sql 실행 전엔 칩이 숨겨져 안 보임. eslint 0, 화면 확인 안 함.

@@ -7,7 +7,6 @@ import FirstPersonCamera from "./FirstPersonCamera";
 import type { HatKind, PersonLook, PersonMood } from "./SeatedPerson";
 import { resolveLook, type AvatarProfile } from "@/lib/character/avatar";
 import { useRoomCharacter } from "@/lib/character/roomCharacters";
-import RealisticPerson from "./RealisticPerson";
 import VrmPerson, { VRM_NAME_Y } from "./VrmPerson";
 import ScreenSprite from "./ScreenSprite";
 import SpeechBubble from "./SpeechBubble";
@@ -118,7 +117,7 @@ export interface TableTheme {
   hats: HatKind[];
   /** Where the name tags sit on the head-local y axis. */
   nameY?: number;
-  /** "realistic" = adult proportions, modelled faces and hands (RealisticPerson); default cartoon rig. */
+  /** "realistic" = eye-level camera and closer seats; the players are VRoid models either way (unused since 2026-10-27). */
   personStyle?: "cartoon" | "realistic";
   /** Render polish: image-based light strength (0 = off) and bloom strength (0 = off). */
   fx?: { env?: number; bloom?: number };
@@ -343,7 +342,7 @@ function SeatView({ s, geo, theme, lowDetail, ringColor, quietMoods }: { s: Tabl
   const labelBase = nameY - (s.sub ? 0.29 : 0.11);
   const frontSpot = geo.spotOf(s.seat, isViewer ? 0.45 : 0.38);
   const chair = s.chair ?? theme.chair;
-  const Person = theme.personStyle === "realistic" ? RealisticPerson : VrmPerson;
+  const Person = VrmPerson;
   // the game turning this person's mood emotional is their cue to say something, in their own
   // voice and words (characterVoice.ts); never on first mount, never for my own seat
   // the same line shows as a short caption bubble, so it reaches players with the sound off too

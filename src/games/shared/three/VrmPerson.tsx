@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils, type VRM, type VRMHumanBoneName } from "@pixiv/three-vrm";
 import { DYED_BY_DEFAULT, VRM_WARDROBE, type VrmModel, type WardrobeSlot } from "@/lib/character/avatar";
-import SeatedPerson, { blinking, FACES, Hat, holdPose, holdsInMood, STRONG_MOODS, TABLE_POSES, type PersonLook, type PersonMood, type SeatedPersonProps } from "./SeatedPerson";
+import { blinking, FACES, Hat, holdPose, holdsInMood, STRONG_MOODS, TABLE_POSES, type PersonLook, type PersonMood, type SeatedPersonProps } from "./SeatedPerson";
 import { createMotion, HANDS, stepMotion, type MotionState } from "./motion";
 import { PERSONA_STYLE, personaGaze } from "./persona";
 import { armJointQuat, fingerCurl, toVrm0, upperArmQuat } from "./vrmPose";
@@ -18,7 +18,7 @@ import { armJointQuat, fingerCurl, toVrm0, upperArmQuat } from "./vrmPose";
  * springs (mapped onto the humanoid bones in vrmPose.ts), faces from the same
  * FACES table (mapped onto VRM preset expressions).
  *
- * - The cartoon rig stands in while the model downloads, and for good if it fails.
+ * - While the model downloads (or if it fails) the seat shows an empty chair, cards and name tag only.
  * - Every seat parses its own copy (bones/expressions are per instance), but
  *   textures are shared per model so a full table uploads each image once.
  * - Look → model: the profile's `model`, else a per-gender default cast (DEFAULT_CAST);
@@ -526,7 +526,7 @@ export default function VrmPerson(props: VrmPersonProps) {
         if (alive) setVrm(v);
         else release(v);
       },
-      (err) => console.warn("VRM load failed — keeping the cartoon rig", err),
+      (err) => console.warn("VRM load failed — leaving the seat empty", err),
     );
     return () => {
       alive = false;
@@ -666,34 +666,23 @@ export default function VrmPerson(props: VrmPersonProps) {
     vrm.materials?.forEach((m) => (m as { update?: (d: number) => void }).update?.(dt));
   });
 
-  if (!vrm || !fit) return <SeatedPerson {...props} />;
+  // still downloading (or failed): an empty chair with the seat's cards and name tag — never a stand-in body
+  if (!vrm || !fit)
+    return (
+      <group position={position} rotation-y={facing}>
+        <Chair kind={props.chair} color={props.chairColor} h={PLACEHOLDER_SEAT_Y} />
+        {props.held && (
+          <group position={[0, 1.07, 0.46]} rotation-y={Math.PI} scale={0.85}>
+            {props.held}
+          </group>
+        )}
+        {props.children}
+      </group>
+    );
   const head = vrm.humanoid.getNormalizedBoneNode("head");
-  const chairH = fit.seatY;
-  const wood = <meshStandardMaterial color={props.chairColor ?? "#6b4423"} roughness={0.7} />;
   return (
     <group position={position} rotation-y={facing}>
-      {props.chair !== "none" && (
-        <group>
-          <mesh position={[0, chairH - 0.03, -0.05]} castShadow receiveShadow>
-            <boxGeometry args={[0.5, 0.05, 0.48]} />
-            {wood}
-          </mesh>
-          {props.chair !== "stool" && (
-            <mesh position={[0, chairH + 0.38, -0.28]} castShadow>
-              <boxGeometry args={[0.48, 0.72, 0.05]} />
-              {wood}
-            </mesh>
-          )}
-          {[-0.21, 0.21].flatMap((x) =>
-            [-0.25, 0.17].map((z) => (
-              <mesh key={`${x}${z}`} position={[x, (chairH - 0.05) / 2, z]}>
-                <boxGeometry args={[0.04, chairH - 0.05, 0.04]} />
-                {wood}
-              </mesh>
-            )),
-          )}
-        </group>
-      )}
+      <Chair kind={props.chair} color={props.chairColor} h={fit.seatY} />
       <group position={[0, fit.lift, -0.05]} scale={fit.scale}>
         <primitive object={vrm.scene} />
       </group>
@@ -715,6 +704,36 @@ export default function VrmPerson(props: VrmPersonProps) {
           head,
         )}
       {props.children}
+    </group>
+  );
+}
+
+/** Seat height of a fitted VRoid (knee × scale) — where the empty chair sits before the model arrives. */
+const PLACEHOLDER_SEAT_Y = 0.5;
+
+function Chair({ kind, color, h }: { kind?: "wood" | "stool" | "none"; color?: string; h: number }) {
+  if (kind === "none") return null;
+  const wood = <meshStandardMaterial color={color ?? "#6b4423"} roughness={0.7} />;
+  return (
+    <group>
+      <mesh position={[0, h - 0.03, -0.05]} castShadow receiveShadow>
+        <boxGeometry args={[0.5, 0.05, 0.48]} />
+        {wood}
+      </mesh>
+      {kind !== "stool" && (
+        <mesh position={[0, h + 0.38, -0.28]} castShadow>
+          <boxGeometry args={[0.48, 0.72, 0.05]} />
+          {wood}
+        </mesh>
+      )}
+      {[-0.21, 0.21].flatMap((x) =>
+        [-0.25, 0.17].map((z) => (
+          <mesh key={`${x}${z}`} position={[x, (h - 0.05) / 2, z]}>
+            <boxGeometry args={[0.04, h - 0.05, 0.04]} />
+            {wood}
+          </mesh>
+        )),
+      )}
     </group>
   );
 }

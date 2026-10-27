@@ -1,6 +1,6 @@
 /**
- * Procedural body language for the seated table rigs (SeatedPerson /
- * RealisticPerson) — pure math, no three.js, so it is unit-tested directly.
+ * Procedural body language for the seated table characters (VrmPerson)
+ * — pure math, no three.js, so it is unit-tested directly.
  *
  * Three layers, summed into one target per joint channel and then chased by a
  * damped spring (so every change of mood eases in with a little follow-through

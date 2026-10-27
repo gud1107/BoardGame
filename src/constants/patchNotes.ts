@@ -64,6 +64,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.104.0",
+    releaseDate: "2026-10-27",
+    title: "🧍 옛 캐릭터 완전 제거",
+    changes: [
+      { game: "common", type: "FIX", desc: "🧍 3D 테이블·프로필에서 캐릭터를 불러오는 동안 잠깐 보이던 옛 캐릭터가 더는 안 나와요 — 그동안은 빈 의자와 이름표만 보여요" },
+    ],
+  },
+  {
     version: "v1.103.0",
     releaseDate: "2026-10-27",
     title: "🥒 오이 다섯 개 3D — 내 손패를 테이블 위에",

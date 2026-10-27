@@ -1,5 +1,5 @@
 /**
- * Player look data for the 3D table rigs (SeatedPerson / RealisticPerson) —
+ * Player look data for the 3D table characters (VrmPerson) —
  * deliberately free of three.js / React so a profile editor, the lobby, or
  * server-side storage can import it without pulling the 3D chunk.
  *
