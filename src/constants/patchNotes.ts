@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.106.0",
+    releaseDate: "2026-10-27",
+    title: "📡 텔레파시 3D — 테이블 한 화면에 다",
+    changes: [
+      { game: "telepathy", type: "IMPROVE", desc: "📡 3D 화면에서 '꾹 눌러서 내기' 카드·⚡ 번뜩임·🖐 다시 맞추기가 테이블 아래쪽에 바로 — 스크롤 없이 상대 ✋를 보면서 내요" },
+      { game: "telepathy", type: "IMPROVE", desc: "🪄 준비·실수·레벨 통과 안내는 3D 테이블 위에 떠요 — 아래에 겹쳐 있던 2D 더미·버린 카드 칸은 정리, 긴 설명은 '도움말 펼치기'로" },
+    ],
+  },
+  {
     version: "v1.105.0",
     releaseDate: "2026-10-27",
     title: "💄 캐릭터 메이크업 — 같은 얼굴도 다른 사람처럼",

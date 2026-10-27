@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
+import { Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { getTelepathyBgm, MISTAKE_MOOD } from "./telepathyBgm";
@@ -122,7 +122,7 @@ const REWARD_TEXT = { star: "⚡ 번뜩임 +1", life: "❤️ 하트 +1", win: "
  * Level road (1..maxLevel) with the reward icon on each reward level, plus a
  * line spelling out what clearing the current level earns.
  */
-function RewardTrack({ state, scoreShown, bestScore }: { state: MindState; scoreShown: number; bestScore: number }) {
+function RewardTrack({ state, scoreShown, bestScore, compact = false }: { state: MindState; scoreShown: number; bestScore: number; compact?: boolean }) {
   const levels = Array.from({ length: state.maxLevel }, (_, i) => i + 1);
   const cur = state.level;
   const curCleared = state.phase === "break";
@@ -179,7 +179,7 @@ function RewardTrack({ state, scoreShown, bestScore }: { state: MindState; score
           );
         })}
       </div>
-      {!curCleared && (
+      {!curCleared && !compact && (
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
           <span className="font-semibold text-white light:text-slate-800">
             🎁 레벨 {cur} 통과 보상:{" "}
@@ -290,6 +290,8 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
 
   const [rulebook, setRulebook] = useState<null | "all" | "star">(null);
   const board3d = useBoardView("telepathy-view");
+  const is3D = board3d.view === "3d";
+  const [helpOpen, setHelpOpen] = useState(false);
   const [lowDetail] = useState(preferLowDetail);
   const [historyAt, setHistoryAt] = useState<number | null>(null);
   // 🤖 자동 내기: when nobody else holds a card nothing can be a mistake, so
@@ -513,6 +515,408 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
   const ring = 2 * Math.PI * 54;
   const ringFrac = (flowElapsed % 10_000) / 10_000;
 
+  // Stage pieces — the 2D board stacks them in the centre stage; the 3D view
+  // lays them over the table so everything stays inside one frame.
+  const syncStage = (
+    <>
+    {state.phase === "sync" && (
+      <div className="flex flex-col items-center gap-3 text-center">
+        {countdownNumber !== null && countdownNumber > 0 ? (
+          <span key={countdownNumber} className="tlp-pop text-7xl font-black text-white light:text-indigo-700">
+            {countdownNumber}
+          </span>
+        ) : (
+          <>
+            <p className="text-sm font-semibold text-indigo-100 light:text-indigo-700">
+              {state.level > 0 && state.pile.length === 0 && state.levelStartedAt === null ? `레벨 ${state.level} — 1인당 ${state.level}장` : "다시 마음을 맞춰요"}
+            </p>
+            {state.syncReason && state.syncReason.kind !== "level" && (
+              <p className="max-w-xs rounded-lg border border-sky-300/40 bg-sky-400/10 px-3 py-1.5 text-xs font-semibold text-sky-100 light:border-sky-300 light:bg-sky-50 light:text-sky-800">
+                {state.syncReason.kind === "resync"
+                  ? `🖐 ${state.syncReason.seat === mySeat ? "내가" : `${names[state.syncReason.seat]}님이`} 다시 맞추기를 요청했어요 — 카드·하트·⚡는 그대로예요`
+                  : state.syncReason.kind === "mistake"
+                    ? "💔 실수 뒤에는 다 같이 마음을 다시 맞추고 이어가요"
+                    : state.syncReason.kind === "star"
+                      ? "⚡ 번뜩임으로 공개된 카드를 보고 다시 맞춰요"
+                      : `📡 ${state.syncReason.seats.map((s) => names[s]).join(", ")}님 연결을 기다리는 중이에요`}
+              </p>
+            )}
+            <p className="max-w-xs text-xs text-white/60 light:text-slate-500">모두가 🖐를 켜면 3초 뒤 시작해요. 숫자는 말하지 않기!</p>
+          </>
+        )}
+        <button
+          type="button"
+          onClick={() => {
+            sound.unlock();
+            onAction({ type: "hold", seat: mySeat, on: !myHolding });
+          }}
+          disabled={state.away[mySeat]}
+          className={`flex h-24 w-24 flex-col items-center justify-center rounded-full border-2 text-3xl transition ${
+            myHolding
+              ? "border-emerald-300 bg-emerald-500/30 shadow-[0_0_30px_rgba(52,211,153,0.5)]"
+              : "border-white/30 bg-white/10 hover:border-white/60 light:border-indigo-300 light:bg-white"
+          }`}
+        >
+          🖐
+          <span className="text-[11px] font-semibold text-white/80 light:text-slate-700">{myHolding ? "준비 완료" : "준비"}</span>
+        </button>
+        <p className="text-xs text-white/50 light:text-slate-500">
+          {holdsCount} / {state.playerCount}명 준비
+        </p>
+      </div>
+    )}
+    </>
+  );
+  const flowStage = (
+    <>
+    {(state.phase === "playing" || state.phase === "starVote" || state.phase === "resume") && (
+      <>
+        <div className="flex w-full items-center justify-between gap-2 text-[11px] text-white/60 light:text-slate-500">
+          <span>
+            이번 레벨 <b className="tabular-nums text-white light:text-slate-900">{levelOut}</b> / {levelTotal}장 나옴
+          </span>
+          <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
+            <span className="block h-full rounded-full bg-gradient-to-r from-indigo-400 to-fuchsia-400 transition-all duration-500" style={{ width: `${levelTotal > 0 ? (levelOut / levelTotal) * 100 : 0}%` }} />
+          </span>
+        </div>
+        <div className="flex min-h-9 flex-wrap items-center justify-center gap-1.5">
+          {onlyOther >= 0 && reachingOthers.length === 0 && (
+            <span className="rounded-full border border-emerald-300/60 bg-emerald-400/15 px-3 py-1 text-xs font-bold text-emerald-100 light:text-emerald-800">
+              ⏩ {names[onlyOther]}님만 카드가 남았어요 — 바로 내도 안전!
+            </span>
+          )}
+          {reachingOthers.map((seat) => (
+            <span key={seat} className="tlp-banner flex items-center gap-1 rounded-full border-2 border-yellow-300 bg-yellow-400/25 px-3 py-1 text-sm font-black text-yellow-100 shadow-[0_0_24px_rgba(250,204,21,0.55)] light:bg-yellow-100 light:text-amber-800">
+              <span className="tlp-hand">✋</span> {names[seat]} 내려는 중!
+            </span>
+          ))}
+        </div>
+        <div className="relative flex h-40 w-40 items-center justify-center">
+          {lastPlay && state.phase === "playing" && (
+            <div key={`burst-${state.pile.length}`} className="pointer-events-none absolute inset-0" aria-hidden>
+              <span className="tlp-shock absolute inset-6 rounded-full border-4" style={{ borderColor: seatColor(lastPlay.seat) }} />
+              <span className="tlp-shock absolute inset-10 rounded-full border-2 border-white" style={{ animationDelay: "0.12s" }} />
+              {Array.from({ length: 14 }, (_, i) => {
+                const a = (i / 14) * Math.PI * 2 + (state.pile.length % 3) * 0.4;
+                const d = 70 + (i % 3) * 18;
+                return (
+                  <span
+                    key={i}
+                    className="tlp-spark absolute left-1/2 top-1/2 h-2 w-2 rounded-full"
+                    style={{ background: i % 2 ? "#fde68a" : seatColor(lastPlay.seat), boxShadow: `0 0 8px ${seatColor(lastPlay.seat)}`, ["--dx" as string]: `${Math.cos(a) * d}px`, ["--dy" as string]: `${Math.sin(a) * d}px` }}
+                  />
+                );
+              })}
+              <span className="tlp-tag absolute left-1/2 -bottom-2 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-black text-slate-900 shadow-lg" style={{ background: seatColor(lastPlay.seat) }}>
+                {names[lastPlay.seat]} ▶ {lastPlay.card}
+              </span>
+            </div>
+          )}
+          <svg className="absolute inset-0 -rotate-90" viewBox="0 0 120 120" aria-hidden>
+            <circle cx="60" cy="60" r="54" fill="none" stroke="currentColor" strokeWidth="5" className="text-white/10 light:text-indigo-100" />
+            <circle
+              cx="60"
+              cy="60"
+              r="54"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="5"
+              strokeLinecap="round"
+              strokeDasharray={ring}
+              strokeDashoffset={ring * (1 - ringFrac)}
+              className="text-indigo-300 light:text-indigo-500"
+            />
+          </svg>
+          <div
+            key={`pile-${state.pile.length}`}
+            className="tlp-land relative flex h-24 w-[4.5rem] flex-col items-center justify-center rounded-xl border-2 border-white/80 bg-gradient-to-br from-slate-50 to-indigo-100 shadow-xl"
+            style={lastPlay ? { boxShadow: `0 0 28px ${seatColor(lastPlay.seat)}, 0 10px 25px rgba(0,0,0,.4)` } : undefined}
+          >
+            {top > 0 ? (
+              <>
+                <span className="text-3xl font-black tabular-nums text-indigo-900">{top}</span>
+                <span className="text-[9px]" style={{ color: seatColor(state.pile[state.pile.length - 1].seat) }}>
+                  {names[state.pile[state.pile.length - 1].seat]}
+                </span>
+              </>
+            ) : (
+              <span className="text-xs text-indigo-400">비어 있음</span>
+            )}
+          </div>
+        </div>
+        <p className="text-sm font-semibold tabular-nums text-indigo-100 light:text-indigo-700">
+          ⏱ {(flowElapsed / 1000).toFixed(1)}초{state.pausedAt !== null && <span className="ml-1 text-xs text-amber-300 light:text-amber-600">(멈춤)</span>}
+        </p>
+        {recent.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setHistoryAt(state.log.length - 1)}
+            className="flex flex-wrap items-center justify-center gap-1.5 rounded-full px-2 py-0.5 text-xs text-white/50 transition hover:bg-white/10 light:text-slate-500"
+          >
+            이전:
+            {recent.map((p, i) => (
+              <span key={i} className="rounded border px-1.5 tabular-nums" style={{ borderColor: seatColor(p.seat) }} title={names[p.seat]}>
+                {p.card}
+              </span>
+            ))}
+            <span className="font-semibold text-indigo-200 light:text-indigo-600">📜 전체 보기</span>
+          </button>
+        )}
+        {state.phase === "resume" && <p className="text-xs text-amber-200 light:text-amber-700">⚡ 취소 — 곧 이어서 진행해요</p>}
+      </>
+    )}
+    </>
+  );
+  const eventStage = (
+    <>
+    {state.phase === "mistake" && state.lastMistake && (
+      <MistakeExplainer mistake={state.lastMistake} names={names} mySeat={mySeat} lives={state.lives} practice={state.practice} />
+    )}
+    {state.phase === "starReveal" && state.lastStar && (
+      <div className="flex flex-col items-center gap-3 text-center">
+        <span className="tlp-pop text-5xl">⚡</span>
+        <p className="text-sm font-bold text-amber-200 light:text-amber-700">번뜩임! 모두 가장 낮은 카드를 공개했어요</p>
+        <RevealChips revealed={state.lastStar.revealed} names={names} tone="amber" />
+        <p className="max-w-xs text-xs text-white/60 light:text-slate-500">이 카드들은 버려졌어요 (하트는 그대로). 공개된 숫자로 서로 남은 카드가 어느 쯤인지 짐작해 보세요.</p>
+      </div>
+    )}
+    {state.phase === "break" && (
+      <div className="flex w-full flex-col items-center gap-3 text-center">
+        <span className="tlp-pop text-4xl">✨</span>
+        <p className="text-lg font-black text-white light:text-slate-900">레벨 {state.level} 통과!</p>
+        {!state.practice && levelLog && (
+          <p className="tlp-pop rounded-full border border-yellow-300/50 bg-yellow-400/10 px-3 py-1 text-sm font-bold text-yellow-100 light:border-amber-300 light:bg-amber-50 light:text-amber-800">
+            +{(state.level * 100 + (levelLog.mistakes === 0 ? 50 : 0)).toLocaleString()}점
+            {levelLog.mistakes === 0 && <span className="ml-1 text-xs font-semibold text-emerald-300 light:text-emerald-600">(실수 없이 +50 포함)</span>}
+            <span className="ml-1.5 text-xs font-semibold text-white/60 light:text-slate-500">→ 총 <span className="tabular-nums">{scoreShown.toLocaleString()}</span>점</span>
+          </p>
+        )}
+        {state.practice && levelLog && levelLog.mistakes === 0 && <p className="text-xs font-semibold text-emerald-300 light:text-emerald-600">실수 없이 통과!</p>}
+        {state.lastReward ? (
+          <div
+            className={`tlp-pop flex items-center gap-3 rounded-2xl border-2 px-4 py-2.5 text-left ${
+              state.lastReward.kind === "life" ? "border-rose-300/70 bg-rose-500/15 light:bg-rose-50" : "border-amber-300/70 bg-amber-400/15 light:bg-amber-50"
+            } ${state.lastReward.granted ? "" : "opacity-60"}`}
+          >
+            <span className="text-4xl">{state.lastReward.kind === "life" ? "❤️" : "⚡"}</span>
+            <div>
+              <p className="text-xs font-semibold text-white/60 light:text-slate-500">{state.lastReward.granted ? "🎁 보상 획득!" : "🎁 보상 — 이미 최대라 받지 못했어요"}</p>
+              <p className="text-lg font-black text-white light:text-slate-900">{state.lastReward.kind === "life" ? "하트 +1" : "번뜩임 +1"}</p>
+              <p className="text-[11px] text-white/60 light:text-slate-500">
+                지금 {state.lastReward.kind === "life" ? `하트 ${state.lives}개` : `번뜩임 ${state.stars}개`}
+                {state.lastReward.kind === "star" && " · 막혔을 때 모두 가장 낮은 카드 1장씩 공개"}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <p className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/70 light:bg-slate-100 light:text-slate-600">
+            이번 레벨은 보상 없음
+            {(() => {
+              const next = Array.from({ length: state.maxLevel }, (_, i) => i + 1).find((lv) => lv > state.level && REWARDS[lv] && lv < state.maxLevel);
+              return next ? ` · 다음 보상: 레벨 ${next} ${REWARDS[next] === "life" ? "❤️" : "⚡"}` : "";
+            })()}
+          </p>
+        )}
+        {levelLog && <Timeline log={levelLog} names={names} />}
+        <button
+          type="button"
+          onClick={() => onAction({ type: "ready", seat: mySeat })}
+          disabled={state.readies[mySeat]}
+          className="rounded-full bg-indigo-500 px-5 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:opacity-50"
+        >
+          {state.readies[mySeat] ? "다른 사람 기다리는 중…" : `다음 레벨 준비 (${state.level + 1}레벨 · ${state.level + 1}장)`}
+        </button>
+        {breakLeft !== null && <p className="text-[11px] text-white/40 light:text-slate-400">{breakLeft}초 뒤 자동으로 시작</p>}
+      </div>
+    )}
+    </>
+  );
+  const voteOverlay = (
+    <>
+    {state.phase === "starVote" && vote && (
+      <div className="absolute inset-0 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm light:bg-white/80">
+        <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-2xl border border-amber-300/40 bg-slate-900 p-4 text-center light:border-amber-300 light:bg-white">
+          <p className="text-sm font-bold text-amber-200 light:text-amber-700">⚡ {names[vote.proposer]}님이 번뜩임을 제안했어요</p>
+          <div className="w-full rounded-lg bg-amber-400/10 px-3 py-2 text-left text-xs leading-relaxed text-white/80 light:bg-amber-50 light:text-slate-700">
+            전원 찬성하면 <b>모두 가장 낮은 카드 1장씩</b> 공개하고 버려요. 실수가 아니라서 <b>하트는 안 잃고</b>, ⚡ 1개를 써요.
+            {myHand[0] !== undefined && (
+              <span className="mt-1 block">
+                내 카드 <b className="tabular-nums text-amber-200 light:text-amber-700">{myHand[0]}</b>가 버려져요.
+              </span>
+            )}
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
+            <div className="h-full bg-amber-300" style={{ width: `${Math.max(0, Math.min(100, ((vote.deadline - hostNow) / 8000) * 100))}%` }} />
+          </div>
+          <div className="flex w-full flex-col gap-0.5 text-left text-[11px]">
+            {vote.yes.map((v, seat) => (
+              <span key={seat} className="flex items-center justify-between gap-2 text-white/70 light:text-slate-600">
+                <span className="truncate">{names[seat]}</span>
+                <span className={v === true ? "shrink-0 text-emerald-300 light:text-emerald-600" : "shrink-0 text-white/40 light:text-slate-400"}>{v === true ? "✅ 찬성" : "⏳ 고민 중"}</span>
+              </span>
+            ))}
+          </div>
+          {myVote === null ? (
+            <div className="flex gap-2">
+              <button type="button" onClick={() => onAction({ type: "starVote", seat: mySeat, yes: false })} className="rounded-full border border-white/20 px-4 py-1.5 text-sm text-white/80 light:border-slate-300 light:text-slate-700">
+                반대
+              </button>
+              <button type="button" onClick={() => onAction({ type: "starVote", seat: mySeat, yes: true })} className="rounded-full bg-amber-400 px-4 py-1.5 text-sm font-semibold text-slate-900">
+                찬성
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs text-white/60 light:text-slate-500">다른 사람 기다리는 중…</p>
+          )}
+        </div>
+      </div>
+    )}
+    </>
+  );
+  const safeBanner = (
+    <>
+    {safeNow && (
+      <div className="tlp-banner flex w-full max-w-sm flex-col items-center rounded-xl border-2 border-emerald-300 bg-emerald-400/20 px-3 py-2 text-center light:bg-emerald-100">
+        <p className="text-base font-black text-emerald-100 light:text-emerald-800">{autoSafe ? "🤖 남은 카드는 나만! 자동으로 내는 중…" : "✅ 남은 카드는 나만! 바로 내세요"}</p>
+        <p className="text-[11px] text-emerald-100/80 light:text-emerald-700">
+          다른 사람 손에 카드가 없어서 {myHand.length > 1 ? `${myHand.length}장 모두 차례로` : "지금 내도"} 실수가 될 수 없어요
+        </p>
+      </div>
+    )}
+    </>
+  );
+  const handChips = (
+    <div className="flex flex-wrap justify-center gap-1.5">
+      {visibleHand.length === 0 ? (
+        <p className="text-xs text-white/50 light:text-slate-500">{sentCard !== null ? "보내는 중…" : "손에 카드가 없어요 — 다른 사람을 기다려요"}</p>
+      ) : (
+        visibleHand.map((c, i) => (
+          <span
+            key={c}
+            className={`rounded-md border px-2 py-0.5 text-sm font-bold tabular-nums ${
+              i === 0 ? "border-indigo-300 bg-indigo-500/20 text-white light:text-indigo-800" : "border-white/15 text-white/60 light:border-slate-300 light:text-slate-500"
+            }`}
+          >
+            {c}
+          </span>
+        ))
+      )}
+    </div>
+  );
+  const holdButton = (compact: boolean) => (
+    <button
+      type="button"
+      onPointerDown={(e) => {
+        e.preventDefault();
+        (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+        startHold();
+      }}
+      onPointerUp={() => endHold(true)}
+      onPointerCancel={() => endHold(false)}
+      onContextMenu={(e) => e.preventDefault()}
+      disabled={!canPlay && hold === null}
+      aria-label={nextCard !== undefined ? `${nextCard} 카드를 꾹 눌러서 내기` : "낼 카드 없음"}
+      className={`relative flex ${compact ? "h-[7.75rem] w-24" : "h-36 w-28"} touch-none select-none flex-col items-center justify-center rounded-2xl border-2 bg-gradient-to-br shadow-2xl transition active:scale-95 disabled:opacity-40 ${
+        safeNow ? "tlp-reach border-emerald-300 from-emerald-50 to-emerald-200" : "border-white/80 from-slate-50 to-indigo-100"
+      }`}
+      style={{ WebkitTouchCallout: "none" }}
+    >
+      {holdProgress > 0 && (
+        <span
+          className="pointer-events-none absolute -inset-1.5 rounded-[1.1rem]"
+          style={{ background: `conic-gradient(#facc15 ${holdProgress * 360}deg, transparent 0)`, mask: "radial-gradient(farthest-side, transparent calc(100% - 5px), #000 0)", WebkitMask: "radial-gradient(farthest-side, transparent calc(100% - 5px), #000 0)" }}
+        />
+      )}
+      <span className="text-4xl font-black tabular-nums text-indigo-900">{nextCard ?? "—"}</span>
+      <span className="mt-1 text-[10px] font-semibold text-indigo-500">{locked ? "잠깐! 곧 다시" : "꾹 눌러서 내기"}</span>
+    </button>
+  );
+  const autoSwitch = (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={autoSafe}
+      onClick={toggleAutoSafe}
+      className={`flex w-full max-w-md items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left transition ${
+        autoSafe ? "border-emerald-300/60 bg-emerald-400/10 light:bg-emerald-50" : "border-white/15 bg-white/[0.03] hover:border-white/30 light:border-slate-200 light:bg-white"
+      }`}
+    >
+      <span className="min-w-0">
+        <span className="block text-xs font-bold text-white light:text-slate-800">🤖 나만 남으면 자동으로 내기</span>
+        <span className="block text-[11px] text-white/50 light:text-slate-500">다른 사람 카드가 다 떨어지면 내 카드를 {AUTO_SAFE_DELAY_MS / 1000}초 간격으로 알아서 내요 (실수 걱정 없음)</span>
+      </span>
+      <span className={`relative h-6 w-11 shrink-0 rounded-full transition ${autoSafe ? "bg-emerald-500" : "bg-white/20 light:bg-slate-300"}`}>
+        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${autoSafe ? "left-[22px]" : "left-0.5"}`} />
+      </span>
+      <span className={`w-7 shrink-0 text-right text-[11px] font-black ${autoSafe ? "text-emerald-300 light:text-emerald-700" : "text-white/40 light:text-slate-400"}`}>{autoSafe ? "ON" : "OFF"}</span>
+    </button>
+  );
+  const holdHint = (
+    <p className="text-[11px] text-white/40 light:text-slate-400">
+      0.6초 누르면 나가요 · 누르는 동안 다른 사람에게 ✋가 보여요 · 스페이스바도 돼요
+      {cancels.count > 0 && ` · 취소 ${Math.min(cancels.count, FREE_CANCELS)}/${FREE_CANCELS}`}
+    </p>
+  );
+  const starPanel = (
+    <div className="flex w-full max-w-md flex-col gap-2 rounded-xl border-2 border-amber-300/40 bg-amber-400/[0.08] p-3 text-left light:border-amber-300 light:bg-amber-50">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-bold text-amber-200 light:text-amber-800">
+          ⚡ 번뜩임 <span className="tabular-nums">{state.practice ? "∞" : `${state.stars}개`}</span>
+        </p>
+        <button type="button" onClick={() => setRulebook("star")} className="text-[11px] font-semibold text-amber-200/80 underline-offset-2 hover:underline light:text-amber-700">
+          ⓘ 자세히
+        </button>
+      </div>
+      <p className="text-xs leading-relaxed text-white/80 light:text-slate-700">
+        막혔을 때 쓰는 <b>팀 능력</b>: <b>모두가 가장 낮은 카드 1장씩</b> 공개하고 버려요. <b className="text-emerald-300 light:text-emerald-700">실수 아님 · 하트 안 잃음</b> · 전원 찬성해야 발동
+      </p>
+      {nextCard !== undefined && (
+        <p className="flex flex-wrap items-center gap-1 text-[11px] text-white/60 light:text-slate-500">
+          지금 쓰면 내 카드
+          <span className="rounded border border-dashed border-amber-300/70 px-1.5 font-bold tabular-nums text-amber-100 light:text-amber-800">{nextCard}</span>
+          가 공개되고 버려져요
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={() => onAction({ type: "starPropose", seat: mySeat })}
+        disabled={!canStar}
+        className="rounded-lg bg-amber-400 py-2 text-sm font-bold text-slate-900 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-amber-400/25 disabled:text-white/50 light:disabled:text-slate-500"
+      >
+        {canStar
+          ? "⚡ 번뜩임 쓰기 (모두에게 투표 요청)"
+          : state.stars <= 0
+            ? "⚡ 번뜩임이 없어요"
+            : starCooldown > 0 && state.phase === "playing"
+              ? `⚡ ${Math.ceil(starCooldown / 1000)}초 뒤 다시 제안 가능`
+              : "⚡ 카드를 내는 중에만 쓸 수 있어요"}
+      </button>
+      {state.stars <= 0 && !state.practice && <p className="text-[11px] text-white/50 light:text-slate-500">2·5·8레벨을 통과하면 1개씩 받아요</p>}
+    </div>
+  );
+  const resyncPanel = (
+    <div className="flex w-full max-w-md flex-col gap-2 rounded-xl border-2 border-sky-300/40 bg-sky-400/[0.07] p-3 text-left light:border-sky-300 light:bg-sky-50">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-bold text-sky-200 light:text-sky-800">🖐 다시 맞추기</p>
+        <span className="rounded-full bg-sky-400/15 px-2 py-0.5 text-[11px] font-semibold text-sky-100 light:text-sky-800">
+          이번 레벨 남은 횟수 {resyncLeft} / {RESYNC_PER_LEVEL}
+        </span>
+      </div>
+      <p className="text-xs leading-relaxed text-white/80 light:text-slate-700">
+        흐름이 꼬였다 싶을 때 <b>카드 내기를 잠깐 멈추고</b>, 모두 🖐 준비부터 다시 해요.{" "}
+        <b className="text-emerald-300 light:text-emerald-700">카드·하트·⚡는 그대로</b>, 흐름 시계만 0초로 돌아가요.
+      </p>
+      <button
+        type="button"
+        onClick={() => onAction({ type: "resync", seat: mySeat })}
+        disabled={state.phase !== "playing" || resyncLeft <= 0}
+        className="rounded-lg border border-sky-300/60 py-2 text-sm font-bold text-sky-100 transition hover:bg-sky-400/15 disabled:cursor-not-allowed disabled:opacity-40 light:text-sky-800"
+      >
+        {resyncLeft <= 0 ? "🖐 이번 레벨엔 다 썼어요" : state.phase !== "playing" ? "🖐 카드를 내는 중에만 쓸 수 있어요" : "🖐 다시 맞추기 요청"}
+      </button>
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-3">
       <style>{`
@@ -585,10 +989,14 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
         </div>
       </div>
 
-      {state.phase !== "won" && state.phase !== "lost" && <RewardTrack state={state} scoreShown={scoreShown} bestScore={bestScore} />}
+      {state.phase !== "won" && state.phase !== "lost" && <RewardTrack state={state} scoreShown={scoreShown} bestScore={bestScore} compact={is3D} />}
 
-      {board3d.view === "3d" && (
-        <Frame3D hint="손패는 장수만 — 말없이 타이밍을 맞춰요 · 드래그로 둘러보기">
+      {is3D && (
+        // Table on top, my hand laid over the bottom edge of the same frame
+        // (as 5 오이) — the 2D centre stage's messages float over the table
+        // instead of stacking below it, so the press card never needs a scroll.
+        <div className="relative z-10 h-[556px] w-full overflow-hidden rounded-2xl border border-black/50 sm:h-[616px] lg:h-[656px]" style={{ background: "#0a0f24" }}>
+          <div className="absolute inset-x-0 top-0 bottom-[196px] sm:bottom-[204px]">
           <TelepathyTable3D
             playerCount={state.playerCount}
             viewerSeat={mySeat}
@@ -613,7 +1021,117 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
             overview={state.phase === "won" || state.phase === "lost"}
             lowDetail={lowDetail}
           />
-        </Frame3D>
+            <span className="pointer-events-none absolute top-2 left-1/2 max-w-[92%] -translate-x-1/2 truncate rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-white/75">
+              손패는 장수만 — 말없이 타이밍을 맞춰요 · 드래그로 둘러보기
+            </span>
+            {flowRunning && (
+              <div className="pointer-events-none absolute top-10 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-slate-950/70 px-3 py-1 text-[11px] whitespace-nowrap text-white/75">
+                <span>
+                  이번 레벨 <b className="tabular-nums text-white">{levelOut}</b> / {levelTotal}장
+                </span>
+                <span className="h-1.5 w-14 overflow-hidden rounded-full bg-white/15 sm:w-24">
+                  <span className="block h-full rounded-full bg-gradient-to-r from-indigo-400 to-fuchsia-400 transition-all duration-500" style={{ width: `${levelTotal > 0 ? (levelOut / levelTotal) * 100 : 0}%` }} />
+                </span>
+                <span className="tabular-nums">
+                  ⏱ {(flowElapsed / 1000).toFixed(1)}초{state.pausedAt !== null && <span className="ml-1 text-amber-300">(멈춤)</span>}
+                </span>
+              </div>
+            )}
+            {flowRunning && (
+              <div className="pointer-events-none absolute inset-x-2 bottom-2 flex items-end justify-between gap-2">
+                <div className="flex min-w-0 flex-wrap gap-1">
+                  {starDiscards.map((d) => (
+                    <span key={`s-${d.card}`} className="rounded-md border border-dashed border-amber-300/80 bg-black/40 px-1.5 text-[11px] font-bold tabular-nums text-amber-100" title={`⚡ 번뜩임으로 나옴 · ${names[d.seat]}`}>
+                      ⚡{d.card}
+                    </span>
+                  ))}
+                  {mistakeDiscards.map((d) => (
+                    <span key={`m-${d.card}`} className="rounded-md border border-rose-300/60 bg-black/40 px-1.5 text-[11px] font-bold tabular-nums text-rose-100 line-through" title={`💔 실수로 버려짐 · ${names[d.seat]}`}>
+                      {d.card}
+                    </span>
+                  ))}
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  {onlyOther >= 0 && reachingOthers.length === 0 && (
+                    <span className="rounded-full border border-emerald-300/60 bg-emerald-950/70 px-2.5 py-0.5 text-[11px] font-bold text-emerald-100">⏩ {names[onlyOther]}님만 남았어요 — 바로 내도 안전!</span>
+                  )}
+                  {reachingOthers.map((seat) => (
+                    <span key={seat} className="tlp-banner flex items-center gap-1 rounded-full border-2 border-yellow-300 bg-yellow-950/70 px-2.5 py-0.5 text-xs font-black text-yellow-100 shadow-[0_0_20px_rgba(250,204,21,0.55)]">
+                      <span className="tlp-hand">✋</span> {names[seat]} 내려는 중!
+                    </span>
+                  ))}
+                  {state.phase === "resume" && <span className="rounded-full bg-black/60 px-2.5 py-0.5 text-[11px] text-amber-200">⚡ 취소 — 곧 이어서 진행해요</span>}
+                </div>
+              </div>
+            )}
+            {state.phase === "sync" && (
+              <div className="absolute inset-0 flex overflow-y-auto bg-slate-950/45 p-3">
+                <div className="m-auto flex w-full max-w-sm flex-col items-center rounded-2xl border border-indigo-300/30 bg-slate-900/85 p-3 shadow-2xl backdrop-blur-sm light:border-indigo-200 light:bg-white/90">
+                  {syncStage}
+                </div>
+              </div>
+            )}
+          </div>
+          <section
+            className="absolute inset-x-0 bottom-0 flex h-[196px] flex-col gap-1.5 px-3 pt-6 pb-3 sm:h-[204px]"
+            style={{ background: "linear-gradient(180deg,rgba(10,15,36,0) 0%,rgba(10,15,36,0.9) 16%,rgba(10,15,36,0.98) 100%)" }}
+          >
+            <div className="flex items-center justify-between gap-2 text-[11px] font-semibold">
+              <span className={`truncate ${safeNow ? "tlp-banner text-emerald-200" : "text-indigo-200"}`}>
+                {safeNow ? (autoSafe ? "🤖 나만 남았어요 — 자동으로 내는 중…" : "✅ 남은 카드는 나만! 바로 내세요") : `🃏 내 손패 (${visibleHand.length}장)`}
+              </span>
+              <button type="button" role="switch" aria-checked={autoSafe} onClick={toggleAutoSafe} className="flex min-h-8 shrink-0 items-center gap-1.5 text-white/60" title="나만 남으면 자동으로 내기">
+                🤖 자동
+                <span className={`relative h-[18px] w-8 rounded-full transition ${autoSafe ? "bg-emerald-500" : "bg-white/20"}`}>
+                  <span className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white shadow transition-all ${autoSafe ? "left-4" : "left-0.5"}`} />
+                </span>
+              </button>
+            </div>
+            <div className="flex min-h-0 flex-1 items-center justify-center gap-3">
+              <div className="flex w-[5.75rem] shrink-0 flex-col gap-1.5 sm:w-36">
+                <button
+                  type="button"
+                  onClick={() => onAction({ type: "starPropose", seat: mySeat })}
+                  disabled={!canStar}
+                  title={canStar ? "모두가 가장 낮은 카드 1장씩 공개하고 버려요 (전원 찬성 필요)" : starCooldown > 0 && state.phase === "playing" ? `${Math.ceil(starCooldown / 1000)}초 뒤 다시 제안 가능` : "카드를 내는 중에만 쓸 수 있어요"}
+                  className="min-h-11 rounded-xl border-2 border-amber-300/50 bg-amber-400/15 px-1 text-xs font-black text-amber-100 transition hover:bg-amber-400/25 disabled:opacity-40"
+                >
+                  ⚡ 번뜩임 {state.practice ? "∞" : state.stars}
+                  {starCooldown > 0 && state.phase === "playing" && <span className="ml-0.5 text-[10px] font-semibold">({Math.ceil(starCooldown / 1000)}s)</span>}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onAction({ type: "resync", seat: mySeat })}
+                  disabled={state.phase !== "playing" || resyncLeft <= 0}
+                  title="카드 내기를 잠깐 멈추고 모두 🖐 준비부터 다시 해요 (카드·하트·⚡ 그대로)"
+                  className="min-h-11 rounded-xl border-2 border-sky-300/50 bg-sky-400/10 px-1 text-xs font-black text-sky-100 transition hover:bg-sky-400/20 disabled:opacity-40"
+                >
+                  🖐 다시 맞추기 {resyncLeft}
+                </button>
+              </div>
+              {holdButton(true)}
+              <div className="flex w-[5.75rem] shrink-0 flex-col items-start gap-1 sm:w-36">
+                <span className="text-[10px] text-white/50">{sentCard !== null ? "보내는 중…" : visibleHand.length === 0 ? "손에 카드가 없어요" : "다음 카드"}</span>
+                <div className="flex flex-wrap gap-1">
+                  {visibleHand.slice(1, 7).map((c) => (
+                    <span key={c} className="rounded-md border border-white/20 px-1.5 text-sm font-bold tabular-nums text-white/70">
+                      {c}
+                    </span>
+                  ))}
+                  {visibleHand.length > 7 && <span className="text-[11px] text-white/50">+{visibleHand.length - 7}</span>}
+                </div>
+              </div>
+            </div>
+          </section>
+          {(state.phase === "mistake" || state.phase === "starReveal" || state.phase === "break") && (
+            <div className="absolute inset-0 z-20 flex overflow-y-auto bg-slate-950/60 p-3 light:bg-white/50">
+              <div className="m-auto flex w-full max-w-md flex-col items-center rounded-2xl border border-indigo-300/30 bg-slate-900/90 p-4 shadow-2xl backdrop-blur-sm light:border-indigo-200 light:bg-white/95">
+                {eventStage}
+              </div>
+            </div>
+          )}
+          <div className="contents [&>*]:z-20">{voteOverlay}</div>
+        </div>
       )}
 
       {/* Seats */}
@@ -668,257 +1186,17 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
       )}
 
       {/* Center stage */}
-      <div className="relative flex min-h-[18rem] flex-col items-center justify-center gap-3 overflow-hidden rounded-3xl border border-indigo-400/20 bg-[radial-gradient(circle_at_50%_40%,rgba(99,102,241,0.25),rgba(15,23,42,0.6)_70%)] p-4 light:border-indigo-200 light:bg-[radial-gradient(circle_at_50%_40%,rgba(199,210,254,0.9),rgba(248,250,252,1)_70%)]">
-        {state.phase === "sync" && (
-          <div className="flex flex-col items-center gap-3 text-center">
-            {countdownNumber !== null && countdownNumber > 0 ? (
-              <span key={countdownNumber} className="tlp-pop text-7xl font-black text-white light:text-indigo-700">
-                {countdownNumber}
-              </span>
-            ) : (
-              <>
-                <p className="text-sm font-semibold text-indigo-100 light:text-indigo-700">
-                  {state.level > 0 && state.pile.length === 0 && state.levelStartedAt === null ? `레벨 ${state.level} — 1인당 ${state.level}장` : "다시 마음을 맞춰요"}
-                </p>
-                {state.syncReason && state.syncReason.kind !== "level" && (
-                  <p className="max-w-xs rounded-lg border border-sky-300/40 bg-sky-400/10 px-3 py-1.5 text-xs font-semibold text-sky-100 light:border-sky-300 light:bg-sky-50 light:text-sky-800">
-                    {state.syncReason.kind === "resync"
-                      ? `🖐 ${state.syncReason.seat === mySeat ? "내가" : `${names[state.syncReason.seat]}님이`} 다시 맞추기를 요청했어요 — 카드·하트·⚡는 그대로예요`
-                      : state.syncReason.kind === "mistake"
-                        ? "💔 실수 뒤에는 다 같이 마음을 다시 맞추고 이어가요"
-                        : state.syncReason.kind === "star"
-                          ? "⚡ 번뜩임으로 공개된 카드를 보고 다시 맞춰요"
-                          : `📡 ${state.syncReason.seats.map((s) => names[s]).join(", ")}님 연결을 기다리는 중이에요`}
-                  </p>
-                )}
-                <p className="max-w-xs text-xs text-white/60 light:text-slate-500">모두가 🖐를 켜면 3초 뒤 시작해요. 숫자는 말하지 않기!</p>
-              </>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                sound.unlock();
-                onAction({ type: "hold", seat: mySeat, on: !myHolding });
-              }}
-              disabled={state.away[mySeat]}
-              className={`flex h-24 w-24 flex-col items-center justify-center rounded-full border-2 text-3xl transition ${
-                myHolding
-                  ? "border-emerald-300 bg-emerald-500/30 shadow-[0_0_30px_rgba(52,211,153,0.5)]"
-                  : "border-white/30 bg-white/10 hover:border-white/60 light:border-indigo-300 light:bg-white"
-              }`}
-            >
-              🖐
-              <span className="text-[11px] font-semibold text-white/80 light:text-slate-700">{myHolding ? "준비 완료" : "준비"}</span>
-            </button>
-            <p className="text-xs text-white/50 light:text-slate-500">
-              {holdsCount} / {state.playerCount}명 준비
-            </p>
-          </div>
-        )}
-
-        {(state.phase === "playing" || state.phase === "starVote" || state.phase === "resume") && (
-          <>
-            <div className="flex w-full items-center justify-between gap-2 text-[11px] text-white/60 light:text-slate-500">
-              <span>
-                이번 레벨 <b className="tabular-nums text-white light:text-slate-900">{levelOut}</b> / {levelTotal}장 나옴
-              </span>
-              <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
-                <span className="block h-full rounded-full bg-gradient-to-r from-indigo-400 to-fuchsia-400 transition-all duration-500" style={{ width: `${levelTotal > 0 ? (levelOut / levelTotal) * 100 : 0}%` }} />
-              </span>
-            </div>
-            <div className="flex min-h-9 flex-wrap items-center justify-center gap-1.5">
-              {onlyOther >= 0 && reachingOthers.length === 0 && (
-                <span className="rounded-full border border-emerald-300/60 bg-emerald-400/15 px-3 py-1 text-xs font-bold text-emerald-100 light:text-emerald-800">
-                  ⏩ {names[onlyOther]}님만 카드가 남았어요 — 바로 내도 안전!
-                </span>
-              )}
-              {reachingOthers.map((seat) => (
-                <span key={seat} className="tlp-banner flex items-center gap-1 rounded-full border-2 border-yellow-300 bg-yellow-400/25 px-3 py-1 text-sm font-black text-yellow-100 shadow-[0_0_24px_rgba(250,204,21,0.55)] light:bg-yellow-100 light:text-amber-800">
-                  <span className="tlp-hand">✋</span> {names[seat]} 내려는 중!
-                </span>
-              ))}
-            </div>
-            <div className="relative flex h-40 w-40 items-center justify-center">
-              {lastPlay && state.phase === "playing" && (
-                <div key={`burst-${state.pile.length}`} className="pointer-events-none absolute inset-0" aria-hidden>
-                  <span className="tlp-shock absolute inset-6 rounded-full border-4" style={{ borderColor: seatColor(lastPlay.seat) }} />
-                  <span className="tlp-shock absolute inset-10 rounded-full border-2 border-white" style={{ animationDelay: "0.12s" }} />
-                  {Array.from({ length: 14 }, (_, i) => {
-                    const a = (i / 14) * Math.PI * 2 + (state.pile.length % 3) * 0.4;
-                    const d = 70 + (i % 3) * 18;
-                    return (
-                      <span
-                        key={i}
-                        className="tlp-spark absolute left-1/2 top-1/2 h-2 w-2 rounded-full"
-                        style={{ background: i % 2 ? "#fde68a" : seatColor(lastPlay.seat), boxShadow: `0 0 8px ${seatColor(lastPlay.seat)}`, ["--dx" as string]: `${Math.cos(a) * d}px`, ["--dy" as string]: `${Math.sin(a) * d}px` }}
-                      />
-                    );
-                  })}
-                  <span className="tlp-tag absolute left-1/2 -bottom-2 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-black text-slate-900 shadow-lg" style={{ background: seatColor(lastPlay.seat) }}>
-                    {names[lastPlay.seat]} ▶ {lastPlay.card}
-                  </span>
-                </div>
-              )}
-              <svg className="absolute inset-0 -rotate-90" viewBox="0 0 120 120" aria-hidden>
-                <circle cx="60" cy="60" r="54" fill="none" stroke="currentColor" strokeWidth="5" className="text-white/10 light:text-indigo-100" />
-                <circle
-                  cx="60"
-                  cy="60"
-                  r="54"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="5"
-                  strokeLinecap="round"
-                  strokeDasharray={ring}
-                  strokeDashoffset={ring * (1 - ringFrac)}
-                  className="text-indigo-300 light:text-indigo-500"
-                />
-              </svg>
-              <div
-                key={`pile-${state.pile.length}`}
-                className="tlp-land relative flex h-24 w-[4.5rem] flex-col items-center justify-center rounded-xl border-2 border-white/80 bg-gradient-to-br from-slate-50 to-indigo-100 shadow-xl"
-                style={lastPlay ? { boxShadow: `0 0 28px ${seatColor(lastPlay.seat)}, 0 10px 25px rgba(0,0,0,.4)` } : undefined}
-              >
-                {top > 0 ? (
-                  <>
-                    <span className="text-3xl font-black tabular-nums text-indigo-900">{top}</span>
-                    <span className="text-[9px]" style={{ color: seatColor(state.pile[state.pile.length - 1].seat) }}>
-                      {names[state.pile[state.pile.length - 1].seat]}
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-xs text-indigo-400">비어 있음</span>
-                )}
-              </div>
-            </div>
-            <p className="text-sm font-semibold tabular-nums text-indigo-100 light:text-indigo-700">
-              ⏱ {(flowElapsed / 1000).toFixed(1)}초{state.pausedAt !== null && <span className="ml-1 text-xs text-amber-300 light:text-amber-600">(멈춤)</span>}
-            </p>
-            {recent.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setHistoryAt(state.log.length - 1)}
-                className="flex flex-wrap items-center justify-center gap-1.5 rounded-full px-2 py-0.5 text-xs text-white/50 transition hover:bg-white/10 light:text-slate-500"
-              >
-                이전:
-                {recent.map((p, i) => (
-                  <span key={i} className="rounded border px-1.5 tabular-nums" style={{ borderColor: seatColor(p.seat) }} title={names[p.seat]}>
-                    {p.card}
-                  </span>
-                ))}
-                <span className="font-semibold text-indigo-200 light:text-indigo-600">📜 전체 보기</span>
-              </button>
-            )}
-            {state.phase === "resume" && <p className="text-xs text-amber-200 light:text-amber-700">⚡ 취소 — 곧 이어서 진행해요</p>}
-          </>
-        )}
-
-        {state.phase === "mistake" && state.lastMistake && (
-          <MistakeExplainer mistake={state.lastMistake} names={names} mySeat={mySeat} lives={state.lives} practice={state.practice} />
-        )}
-
-        {state.phase === "starReveal" && state.lastStar && (
-          <div className="flex flex-col items-center gap-3 text-center">
-            <span className="tlp-pop text-5xl">⚡</span>
-            <p className="text-sm font-bold text-amber-200 light:text-amber-700">번뜩임! 모두 가장 낮은 카드를 공개했어요</p>
-            <RevealChips revealed={state.lastStar.revealed} names={names} tone="amber" />
-            <p className="max-w-xs text-xs text-white/60 light:text-slate-500">이 카드들은 버려졌어요 (하트는 그대로). 공개된 숫자로 서로 남은 카드가 어느 쯤인지 짐작해 보세요.</p>
-          </div>
-        )}
-
-        {state.phase === "break" && (
-          <div className="flex w-full flex-col items-center gap-3 text-center">
-            <span className="tlp-pop text-4xl">✨</span>
-            <p className="text-lg font-black text-white light:text-slate-900">레벨 {state.level} 통과!</p>
-            {!state.practice && levelLog && (
-              <p className="tlp-pop rounded-full border border-yellow-300/50 bg-yellow-400/10 px-3 py-1 text-sm font-bold text-yellow-100 light:border-amber-300 light:bg-amber-50 light:text-amber-800">
-                +{(state.level * 100 + (levelLog.mistakes === 0 ? 50 : 0)).toLocaleString()}점
-                {levelLog.mistakes === 0 && <span className="ml-1 text-xs font-semibold text-emerald-300 light:text-emerald-600">(실수 없이 +50 포함)</span>}
-                <span className="ml-1.5 text-xs font-semibold text-white/60 light:text-slate-500">→ 총 <span className="tabular-nums">{scoreShown.toLocaleString()}</span>점</span>
-              </p>
-            )}
-            {state.practice && levelLog && levelLog.mistakes === 0 && <p className="text-xs font-semibold text-emerald-300 light:text-emerald-600">실수 없이 통과!</p>}
-            {state.lastReward ? (
-              <div
-                className={`tlp-pop flex items-center gap-3 rounded-2xl border-2 px-4 py-2.5 text-left ${
-                  state.lastReward.kind === "life" ? "border-rose-300/70 bg-rose-500/15 light:bg-rose-50" : "border-amber-300/70 bg-amber-400/15 light:bg-amber-50"
-                } ${state.lastReward.granted ? "" : "opacity-60"}`}
-              >
-                <span className="text-4xl">{state.lastReward.kind === "life" ? "❤️" : "⚡"}</span>
-                <div>
-                  <p className="text-xs font-semibold text-white/60 light:text-slate-500">{state.lastReward.granted ? "🎁 보상 획득!" : "🎁 보상 — 이미 최대라 받지 못했어요"}</p>
-                  <p className="text-lg font-black text-white light:text-slate-900">{state.lastReward.kind === "life" ? "하트 +1" : "번뜩임 +1"}</p>
-                  <p className="text-[11px] text-white/60 light:text-slate-500">
-                    지금 {state.lastReward.kind === "life" ? `하트 ${state.lives}개` : `번뜩임 ${state.stars}개`}
-                    {state.lastReward.kind === "star" && " · 막혔을 때 모두 가장 낮은 카드 1장씩 공개"}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <p className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/70 light:bg-slate-100 light:text-slate-600">
-                이번 레벨은 보상 없음
-                {(() => {
-                  const next = Array.from({ length: state.maxLevel }, (_, i) => i + 1).find((lv) => lv > state.level && REWARDS[lv] && lv < state.maxLevel);
-                  return next ? ` · 다음 보상: 레벨 ${next} ${REWARDS[next] === "life" ? "❤️" : "⚡"}` : "";
-                })()}
-              </p>
-            )}
-            {levelLog && <Timeline log={levelLog} names={names} />}
-            <button
-              type="button"
-              onClick={() => onAction({ type: "ready", seat: mySeat })}
-              disabled={state.readies[mySeat]}
-              className="rounded-full bg-indigo-500 px-5 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:opacity-50"
-            >
-              {state.readies[mySeat] ? "다른 사람 기다리는 중…" : `다음 레벨 준비 (${state.level + 1}레벨 · ${state.level + 1}장)`}
-            </button>
-            {breakLeft !== null && <p className="text-[11px] text-white/40 light:text-slate-400">{breakLeft}초 뒤 자동으로 시작</p>}
-          </div>
-        )}
-
-        {/* ⚡ vote overlay */}
-        {state.phase === "starVote" && vote && (
-          <div className="absolute inset-0 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm light:bg-white/80">
-            <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-2xl border border-amber-300/40 bg-slate-900 p-4 text-center light:border-amber-300 light:bg-white">
-              <p className="text-sm font-bold text-amber-200 light:text-amber-700">⚡ {names[vote.proposer]}님이 번뜩임을 제안했어요</p>
-              <div className="w-full rounded-lg bg-amber-400/10 px-3 py-2 text-left text-xs leading-relaxed text-white/80 light:bg-amber-50 light:text-slate-700">
-                전원 찬성하면 <b>모두 가장 낮은 카드 1장씩</b> 공개하고 버려요. 실수가 아니라서 <b>하트는 안 잃고</b>, ⚡ 1개를 써요.
-                {myHand[0] !== undefined && (
-                  <span className="mt-1 block">
-                    내 카드 <b className="tabular-nums text-amber-200 light:text-amber-700">{myHand[0]}</b>가 버려져요.
-                  </span>
-                )}
-              </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
-                <div className="h-full bg-amber-300" style={{ width: `${Math.max(0, Math.min(100, ((vote.deadline - hostNow) / 8000) * 100))}%` }} />
-              </div>
-              <div className="flex w-full flex-col gap-0.5 text-left text-[11px]">
-                {vote.yes.map((v, seat) => (
-                  <span key={seat} className="flex items-center justify-between gap-2 text-white/70 light:text-slate-600">
-                    <span className="truncate">{names[seat]}</span>
-                    <span className={v === true ? "shrink-0 text-emerald-300 light:text-emerald-600" : "shrink-0 text-white/40 light:text-slate-400"}>{v === true ? "✅ 찬성" : "⏳ 고민 중"}</span>
-                  </span>
-                ))}
-              </div>
-              {myVote === null ? (
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => onAction({ type: "starVote", seat: mySeat, yes: false })} className="rounded-full border border-white/20 px-4 py-1.5 text-sm text-white/80 light:border-slate-300 light:text-slate-700">
-                    반대
-                  </button>
-                  <button type="button" onClick={() => onAction({ type: "starVote", seat: mySeat, yes: true })} className="rounded-full bg-amber-400 px-4 py-1.5 text-sm font-semibold text-slate-900">
-                    찬성
-                  </button>
-                </div>
-              ) : (
-                <p className="text-xs text-white/60 light:text-slate-500">다른 사람 기다리는 중…</p>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+      {!is3D && (
+        <div className="relative flex min-h-[18rem] flex-col items-center justify-center gap-3 overflow-hidden rounded-3xl border border-indigo-400/20 bg-[radial-gradient(circle_at_50%_40%,rgba(99,102,241,0.25),rgba(15,23,42,0.6)_70%)] p-4 light:border-indigo-200 light:bg-[radial-gradient(circle_at_50%_40%,rgba(199,210,254,0.9),rgba(248,250,252,1)_70%)]">
+          {syncStage}
+          {flowStage}
+          {eventStage}
+          {voteOverlay}
+        </div>
+      )}
 
       {/* Cards that left hands without reaching the pile (this level) */}
-      {(starDiscards.length > 0 || mistakeDiscards.length > 0) && state.phase !== "break" && (
+      {!is3D && (starDiscards.length > 0 || mistakeDiscards.length > 0) && state.phase !== "break" && (
         <div className="grid gap-2 sm:grid-cols-2">
           {starDiscards.length > 0 && (
             <div className="rounded-xl border-2 border-dashed border-amber-300/60 bg-amber-400/[0.08] p-2.5 light:border-amber-300 light:bg-amber-50">
@@ -958,142 +1236,45 @@ export default function TelepathyBoard({ state, mySeat, names, botSeats, hostOff
       )}
 
       {/* My hand */}
-      <div
-        className={`flex flex-col items-center gap-3 rounded-2xl border p-4 transition ${
-          safeNow ? "border-emerald-300/70 bg-emerald-500/10 shadow-[0_0_30px_rgba(52,211,153,0.25)] light:bg-emerald-50" : "border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white"
-        }`}
-      >
-        {safeNow && (
-          <div className="tlp-banner flex w-full max-w-sm flex-col items-center rounded-xl border-2 border-emerald-300 bg-emerald-400/20 px-3 py-2 text-center light:bg-emerald-100">
-            <p className="text-base font-black text-emerald-100 light:text-emerald-800">{autoSafe ? "🤖 남은 카드는 나만! 자동으로 내는 중…" : "✅ 남은 카드는 나만! 바로 내세요"}</p>
-            <p className="text-[11px] text-emerald-100/80 light:text-emerald-700">
-              다른 사람 손에 카드가 없어서 {myHand.length > 1 ? `${myHand.length}장 모두 차례로` : "지금 내도"} 실수가 될 수 없어요
-            </p>
-          </div>
-        )}
-        <div className="flex flex-wrap justify-center gap-1.5">
-          {visibleHand.length === 0 ? (
-            <p className="text-xs text-white/50 light:text-slate-500">{sentCard !== null ? "보내는 중…" : "손에 카드가 없어요 — 다른 사람을 기다려요"}</p>
-          ) : (
-            visibleHand.map((c, i) => (
-              <span
-                key={c}
-                className={`rounded-md border px-2 py-0.5 text-sm font-bold tabular-nums ${
-                  i === 0 ? "border-indigo-300 bg-indigo-500/20 text-white light:text-indigo-800" : "border-white/15 text-white/60 light:border-slate-300 light:text-slate-500"
-                }`}
-              >
-                {c}
-              </span>
-            ))
-          )}
-        </div>
-
-        <button
-          type="button"
-          onPointerDown={(e) => {
-            e.preventDefault();
-            (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-            startHold();
-          }}
-          onPointerUp={() => endHold(true)}
-          onPointerCancel={() => endHold(false)}
-          onContextMenu={(e) => e.preventDefault()}
-          disabled={!canPlay && hold === null}
-          aria-label={nextCard !== undefined ? `${nextCard} 카드를 꾹 눌러서 내기` : "낼 카드 없음"}
-          className={`relative flex h-36 w-28 touch-none select-none flex-col items-center justify-center rounded-2xl border-2 bg-gradient-to-br shadow-2xl transition active:scale-95 disabled:opacity-40 ${
-            safeNow ? "tlp-reach border-emerald-300 from-emerald-50 to-emerald-200" : "border-white/80 from-slate-50 to-indigo-100"
-          }`}
-          style={{ WebkitTouchCallout: "none" }}
-        >
-          {holdProgress > 0 && (
-            <span
-              className="pointer-events-none absolute -inset-1.5 rounded-[1.1rem]"
-              style={{ background: `conic-gradient(#facc15 ${holdProgress * 360}deg, transparent 0)`, mask: "radial-gradient(farthest-side, transparent calc(100% - 5px), #000 0)", WebkitMask: "radial-gradient(farthest-side, transparent calc(100% - 5px), #000 0)" }}
-            />
-          )}
-          <span className="text-4xl font-black tabular-nums text-indigo-900">{nextCard ?? "—"}</span>
-          <span className="mt-1 text-[10px] font-semibold text-indigo-500">{locked ? "잠깐! 곧 다시" : "꾹 눌러서 내기"}</span>
-        </button>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={autoSafe}
-          onClick={toggleAutoSafe}
-          className={`flex w-full max-w-md items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left transition ${
-            autoSafe ? "border-emerald-300/60 bg-emerald-400/10 light:bg-emerald-50" : "border-white/15 bg-white/[0.03] hover:border-white/30 light:border-slate-200 light:bg-white"
+      {!is3D && (
+        <div
+          className={`flex flex-col items-center gap-3 rounded-2xl border p-4 transition ${
+            safeNow ? "border-emerald-300/70 bg-emerald-500/10 shadow-[0_0_30px_rgba(52,211,153,0.25)] light:bg-emerald-50" : "border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white"
           }`}
         >
-          <span className="min-w-0">
-            <span className="block text-xs font-bold text-white light:text-slate-800">🤖 나만 남으면 자동으로 내기</span>
-            <span className="block text-[11px] text-white/50 light:text-slate-500">다른 사람 카드가 다 떨어지면 내 카드를 {AUTO_SAFE_DELAY_MS / 1000}초 간격으로 알아서 내요 (실수 걱정 없음)</span>
-          </span>
-          <span className={`relative h-6 w-11 shrink-0 rounded-full transition ${autoSafe ? "bg-emerald-500" : "bg-white/20 light:bg-slate-300"}`}>
-            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${autoSafe ? "left-[22px]" : "left-0.5"}`} />
-          </span>
-          <span className={`w-7 shrink-0 text-right text-[11px] font-black ${autoSafe ? "text-emerald-300 light:text-emerald-700" : "text-white/40 light:text-slate-400"}`}>{autoSafe ? "ON" : "OFF"}</span>
-        </button>
-        <p className="text-[11px] text-white/40 light:text-slate-400">
-          0.6초 누르면 나가요 · 누르는 동안 다른 사람에게 ✋가 보여요 · 스페이스바도 돼요
-          {cancels.count > 0 && ` · 취소 ${Math.min(cancels.count, FREE_CANCELS)}/${FREE_CANCELS}`}
-        </p>
+          {safeBanner}
+          {handChips}
 
-        <div className="flex w-full max-w-md flex-col gap-2 rounded-xl border-2 border-amber-300/40 bg-amber-400/[0.08] p-3 text-left light:border-amber-300 light:bg-amber-50">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-bold text-amber-200 light:text-amber-800">
-              ⚡ 번뜩임 <span className="tabular-nums">{state.practice ? "∞" : `${state.stars}개`}</span>
-            </p>
-            <button type="button" onClick={() => setRulebook("star")} className="text-[11px] font-semibold text-amber-200/80 underline-offset-2 hover:underline light:text-amber-700">
-              ⓘ 자세히
-            </button>
-          </div>
-          <p className="text-xs leading-relaxed text-white/80 light:text-slate-700">
-            막혔을 때 쓰는 <b>팀 능력</b>: <b>모두가 가장 낮은 카드 1장씩</b> 공개하고 버려요. <b className="text-emerald-300 light:text-emerald-700">실수 아님 · 하트 안 잃음</b> · 전원 찬성해야 발동
-          </p>
-          {nextCard !== undefined && (
-            <p className="flex flex-wrap items-center gap-1 text-[11px] text-white/60 light:text-slate-500">
-              지금 쓰면 내 카드
-              <span className="rounded border border-dashed border-amber-300/70 px-1.5 font-bold tabular-nums text-amber-100 light:text-amber-800">{nextCard}</span>
-              가 공개되고 버려져요
-            </p>
+          {holdButton(false)}
+          {autoSwitch}
+          {holdHint}
+
+          {starPanel}
+
+          {resyncPanel}
+        </div>
+      )}
+      {is3D && (
+        <>
+          <button
+            type="button"
+            onClick={() => setHelpOpen((o) => !o)}
+            aria-expanded={helpOpen}
+            className="flex min-h-11 items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 text-left text-xs font-semibold text-white/75 transition hover:bg-white/[0.06] light:border-slate-200 light:bg-white light:text-slate-600"
+          >
+            <span>{helpOpen ? "도움말 접기" : "❔ 도움말 펼치기 (⚡ 번뜩임 · 🖐 다시 맞추기 · 🤖 자동 내기)"}</span>
+            <span aria-hidden>{helpOpen ? "▴" : "▾"}</span>
+          </button>
+          {helpOpen && (
+            <div className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 light:border-slate-200 light:bg-white">
+              {autoSwitch}
+              {holdHint}
+              {starPanel}
+              {resyncPanel}
+            </div>
           )}
-          <button
-            type="button"
-            onClick={() => onAction({ type: "starPropose", seat: mySeat })}
-            disabled={!canStar}
-            className="rounded-lg bg-amber-400 py-2 text-sm font-bold text-slate-900 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-amber-400/25 disabled:text-white/50 light:disabled:text-slate-500"
-          >
-            {canStar
-              ? "⚡ 번뜩임 쓰기 (모두에게 투표 요청)"
-              : state.stars <= 0
-                ? "⚡ 번뜩임이 없어요"
-                : starCooldown > 0 && state.phase === "playing"
-                  ? `⚡ ${Math.ceil(starCooldown / 1000)}초 뒤 다시 제안 가능`
-                  : "⚡ 카드를 내는 중에만 쓸 수 있어요"}
-          </button>
-          {state.stars <= 0 && !state.practice && <p className="text-[11px] text-white/50 light:text-slate-500">2·5·8레벨을 통과하면 1개씩 받아요</p>}
-        </div>
-
-        <div className="flex w-full max-w-md flex-col gap-2 rounded-xl border-2 border-sky-300/40 bg-sky-400/[0.07] p-3 text-left light:border-sky-300 light:bg-sky-50">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-bold text-sky-200 light:text-sky-800">🖐 다시 맞추기</p>
-            <span className="rounded-full bg-sky-400/15 px-2 py-0.5 text-[11px] font-semibold text-sky-100 light:text-sky-800">
-              이번 레벨 남은 횟수 {resyncLeft} / {RESYNC_PER_LEVEL}
-            </span>
-          </div>
-          <p className="text-xs leading-relaxed text-white/80 light:text-slate-700">
-            흐름이 꼬였다 싶을 때 <b>카드 내기를 잠깐 멈추고</b>, 모두 🖐 준비부터 다시 해요.{" "}
-            <b className="text-emerald-300 light:text-emerald-700">카드·하트·⚡는 그대로</b>, 흐름 시계만 0초로 돌아가요.
-          </p>
-          <button
-            type="button"
-            onClick={() => onAction({ type: "resync", seat: mySeat })}
-            disabled={state.phase !== "playing" || resyncLeft <= 0}
-            className="rounded-lg border border-sky-300/60 py-2 text-sm font-bold text-sky-100 transition hover:bg-sky-400/15 disabled:cursor-not-allowed disabled:opacity-40 light:text-sky-800"
-          >
-            {resyncLeft <= 0 ? "🖐 이번 레벨엔 다 썼어요" : state.phase !== "playing" ? "🖐 카드를 내는 중에만 쓸 수 있어요" : "🖐 다시 맞추기 요청"}
-          </button>
-        </div>
-      </div>
+        </>
+      )}
       {rulebook && <RulebookModal focus={rulebook === "star" ? "star" : undefined} onClose={() => setRulebook(null)} />}
       {historyAt !== null && <HistoryModal state={state} names={names} initialIndex={historyAt} onClose={() => setHistoryAt(null)} />}
     </div>
