@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Overlay from "@/components/Overlay";
-import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
+import { Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import Avatar from "@/components/common/Avatar";
 import RulebookModal from "./RulebookModal";
 import DealerReveal from "./DealerReveal";
@@ -242,6 +242,9 @@ export default function GridPokerBoard({
   const [viewedSeat, setViewedSeat] = useState<SeatIndex | null>(null);
   const board3d = useBoardView("grid-poker-view");
   const [lowDetail] = useState(preferLowDetail);
+  const is3D = board3d.view === "3d";
+  // 3D folds the 2D opponent boards behind a toggle (the table already shows them).
+  const [opponentsOpen, setOpponentsOpen] = useState(false);
   const viewer = state.players[viewerSeat];
   const opponents = state.players.filter((p) => p.seat !== viewerSeat);
 
@@ -454,6 +457,52 @@ export default function GridPokerBoard({
     );
   }
 
+  // Pieces shared by the 2D board and the 3D frame's bottom strip.
+  const myBoardGrid = (
+    <div className="grid grid-cols-5 gap-1.5 rounded-2xl border border-white/10 bg-black/20 p-2.5 sm:gap-2 sm:p-3 light:border-slate-200 light:bg-slate-50">
+      {viewer.board.map((card, i) => (
+        <Cell key={i} card={card} glow={glowByCell.get(i) ?? null} onClick={myTurnToPlace && card === null ? () => placeAt(i) : undefined} />
+      ))}
+    </div>
+  );
+  const lineButtons = (
+    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+      {/* Default-sorted strongest hand first (linesByHandStrengthDesc,
+          engine.ts) — matches the rulebook's high-to-low ordering
+          (RulebookModal.tsx's HAND_EXAMPLES) so the best line to submit
+          always leads the list without any extra sort toggle. */}
+      {linesByHandStrengthDesc(viewer).map(({ lineIndex, hand }) => {
+        const used = viewer.usedLines[lineIndex];
+        const cards = LINES[lineIndex].map((c) => viewer.board[c]!);
+        return (
+          <button
+            key={lineIndex}
+            onClick={() => submitLine(lineIndex)}
+            disabled={used || mySubmission !== null}
+            className={`flex flex-col items-center gap-1 rounded-xl border p-2 transition ${
+              used
+                ? "border-white/5 bg-white/[0.02] opacity-40 light:border-slate-200 light:bg-slate-50"
+                : mySubmission === lineIndex
+                  ? "border-amber-400/60 bg-amber-400/10 light:border-amber-500/50 light:bg-amber-50"
+                  : "border-white/10 bg-white/5 hover:border-emerald-400/50 hover:bg-emerald-400/10 light:border-slate-200 light:bg-white light:hover:border-emerald-500/50 light:hover:bg-emerald-50"
+            }`}
+          >
+            <span className="text-[10px] text-white/50 light:text-slate-500">{LINE_LABELS[lineIndex]}</span>
+            <div className="flex gap-0.5">
+              {cards.map((c) => (
+                <CardChip key={c.id} card={c} size="sm" />
+              ))}
+            </div>
+            <span className="text-[10px] font-semibold text-emerald-300 light:text-emerald-600">
+              {formatHandLabel(hand)}
+              <span className="ml-1 font-normal text-white/40 light:text-slate-400">({hand.category + 1}/9)</span>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className={`${TABLE_PANEL} flex flex-col gap-4 p-3 sm:p-4`}>
       <div className="relative z-10 flex items-center justify-between text-xs text-white/60 light:text-slate-500">
@@ -471,37 +520,85 @@ export default function GridPokerBoard({
         </div>
       </div>
 
-      {board3d.view === "3d" && (
-        <Frame3D hint="모두의 5×5 판이 공개돼요 · 드래그로 둘러보기">
-          <GridPokerTable3D
-            playerCount={state.playerCount}
-            viewerSeat={viewerSeat}
-            seats={state.players.map((p) => ({
-              seat: p.seat,
-              name: names[p.seat] ?? `${p.seat + 1}번`,
-              board: p.board,
-              lastPlaced: p.lastPlacedCell,
-              placed: state.placedThisRound[p.seat],
-              submitted: state.submissions[p.seat] !== null,
-              score: p.score,
-              away: !connectedSeats.has(p.seat),
-            }))}
-            phase={state.phase}
-            currentCard={state.phase === "placing" ? state.currentCard : null}
-            winnerSeat={state.phase === "round-result" ? (state.lastRoundResult?.winnerSeat ?? null) : null}
-            sign={
-              state.phase === "placing"
-                ? `공통 카드 배치 · ${filledCells}/${BOARD_SIZE}칸`
-                : state.phase === "submitting"
-                  ? `제출 라운드 ${Math.min(state.roundNumber, state.totalScoringRounds)}/${state.totalScoringRounds}
-라인을 몰래 고르는 중`
-                  : `${state.lastRoundResult?.roundNumber ?? state.roundNumber}라운드 결과`
-            }
-            threshold={state.winThreshold}
-            overview={state.phase === "round-result"}
-            lowDetail={lowDetail}
-          />
-        </Frame3D>
+      {is3D && (
+        // Table on top, my 5×5 board (the input) in the bottom strip of the
+        // same frame — a shorter canvas, since the board needs the room.
+        <div className="relative z-10 h-[680px] w-full overflow-hidden rounded-2xl border border-black/50 sm:h-[760px] lg:h-[800px]" style={{ background: "#0b0f0c" }}>
+          <div className="absolute inset-x-0 top-0 bottom-[390px] sm:bottom-[440px]">
+            <GridPokerTable3D
+              playerCount={state.playerCount}
+              viewerSeat={viewerSeat}
+              seats={state.players.map((p) => ({
+                seat: p.seat,
+                name: names[p.seat] ?? `${p.seat + 1}번`,
+                board: p.board,
+                lastPlaced: p.lastPlacedCell,
+                placed: state.placedThisRound[p.seat],
+                submitted: state.submissions[p.seat] !== null,
+                score: p.score,
+                away: !connectedSeats.has(p.seat),
+              }))}
+              phase={state.phase}
+              currentCard={state.phase === "placing" ? state.currentCard : null}
+              winnerSeat={state.phase === "round-result" ? (state.lastRoundResult?.winnerSeat ?? null) : null}
+              sign={
+                state.phase === "placing"
+                  ? `공통 카드 배치 · ${filledCells}/${BOARD_SIZE}칸`
+                  : state.phase === "submitting"
+                    ? `제출 라운드 ${Math.min(state.roundNumber, state.totalScoringRounds)}/${state.totalScoringRounds}
+  라인을 몰래 고르는 중`
+                    : `${state.lastRoundResult?.roundNumber ?? state.roundNumber}라운드 결과`
+              }
+              threshold={state.winThreshold}
+              overview={state.phase === "round-result"}
+              lowDetail={lowDetail}
+            />
+            <span className="pointer-events-none absolute top-2 left-1/2 max-w-[92%] -translate-x-1/2 truncate rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-white/75">
+              모두의 5×5 판이 공개돼요 · 드래그로 둘러보기
+            </span>
+          </div>
+          <section
+            className="absolute inset-x-0 bottom-0 flex h-[390px] flex-col overflow-y-auto px-3 pt-5 pb-3 sm:h-[440px]"
+            style={{ background: "linear-gradient(180deg,rgba(11,15,12,0) 0%,rgba(11,15,12,0.9) 6%,rgba(11,15,12,0.98) 100%)" }}
+          >
+            <div className="mt-auto flex flex-col items-center gap-2">
+              {state.phase === "submitting" ? (
+                <>
+                  <p className="text-center text-xs font-semibold text-white/75">
+                    {mySubmission !== null ? "제출 완료 · 다른 플레이어를 기다리는 중..." : "제출할 라인을 하나 고르세요"}
+                  </p>
+                  {submittingActive && <CountdownBar timeLeft={submittingTimeLeft} total={submittingSeconds} />}
+                  {lineButtons}
+                </>
+              ) : (
+                <>
+                  <div className="flex w-full items-center justify-between gap-2 text-[11px] font-semibold text-white/75">
+                    <span className="flex items-center gap-1.5">
+                      {state.phase === "placing" && state.currentCard ? (
+                        <>
+                          이번 카드 <CardChip card={state.currentCard} size="sm" />
+                        </>
+                      ) : (
+                        "내 보드판"
+                      )}
+                    </span>
+                    <span className={myTurnToPlace ? "text-amber-200" : "text-white/50"}>
+                      {state.phase !== "placing"
+                        ? ""
+                        : !state.currentCard
+                          ? "다음 카드를 뽑는 중..."
+                          : myTurnToPlace
+                            ? "🫵 빈 칸을 눌러 배치하세요"
+                            : "배치 완료 · 기다리는 중..."}
+                    </span>
+                  </div>
+                  {state.phase === "placing" && myTurnToPlace && timeLimited && <CountdownBar timeLeft={placingTimeLeft} total={placingSeconds} />}
+                  {myBoardGrid}
+                </>
+              )}
+            </div>
+          </section>
+        </div>
       )}
 
       {/* Always-visible leaderboard strip — ranked, not seat order, so an
@@ -529,7 +626,7 @@ export default function GridPokerBoard({
         ))}
       </div>
 
-      {state.phase === "placing" && (
+      {!is3D && state.phase === "placing" && (
         <div className="relative z-10 flex flex-col items-center gap-2">
           <DealerReveal
             card={state.currentCard}
@@ -546,14 +643,12 @@ export default function GridPokerBoard({
         </div>
       )}
 
+      {!is3D && (
       <div className="relative z-10 flex flex-col items-center gap-1.5">
         <p className="text-xs text-white/50 light:text-slate-500">내 보드판</p>
-        <div className="grid grid-cols-5 gap-1.5 rounded-2xl border border-white/10 bg-black/20 p-2.5 sm:gap-2 sm:p-3 light:border-slate-200 light:bg-slate-50">
-          {viewer.board.map((card, i) => (
-            <Cell key={i} card={card} glow={glowByCell.get(i) ?? null} onClick={myTurnToPlace && card === null ? () => placeAt(i) : undefined} />
-          ))}
-        </div>
+        {myBoardGrid}
       </div>
+      )}
 
       {lineEvents.map((event, i) => (
         <HandRankFloatingBadge
@@ -564,47 +659,13 @@ export default function GridPokerBoard({
         />
       ))}
 
-      {state.phase === "submitting" && (
+      {!is3D && state.phase === "submitting" && (
         <div className="relative z-10 flex flex-col items-center gap-2">
           <p className="text-center text-xs text-white/50 light:text-slate-500">
             {mySubmission !== null ? "제출 완료 · 다른 플레이어를 기다리는 중..." : "제출할 라인을 하나 고르세요"}
           </p>
           {submittingActive && <CountdownBar timeLeft={submittingTimeLeft} total={submittingSeconds} />}
-          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-            {/* Default-sorted strongest hand first (linesByHandStrengthDesc,
-                engine.ts) — matches the rulebook's high-to-low ordering
-                (RulebookModal.tsx's HAND_EXAMPLES) so the best line to submit
-                always leads the list without any extra sort toggle. */}
-            {linesByHandStrengthDesc(viewer).map(({ lineIndex, hand }) => {
-              const used = viewer.usedLines[lineIndex];
-              const cards = LINES[lineIndex].map((c) => viewer.board[c]!);
-              return (
-                <button
-                  key={lineIndex}
-                  onClick={() => submitLine(lineIndex)}
-                  disabled={used || mySubmission !== null}
-                  className={`flex flex-col items-center gap-1 rounded-xl border p-2 transition ${
-                    used
-                      ? "border-white/5 bg-white/[0.02] opacity-40 light:border-slate-200 light:bg-slate-50"
-                      : mySubmission === lineIndex
-                        ? "border-amber-400/60 bg-amber-400/10 light:border-amber-500/50 light:bg-amber-50"
-                        : "border-white/10 bg-white/5 hover:border-emerald-400/50 hover:bg-emerald-400/10 light:border-slate-200 light:bg-white light:hover:border-emerald-500/50 light:hover:bg-emerald-50"
-                  }`}
-                >
-                  <span className="text-[10px] text-white/50 light:text-slate-500">{LINE_LABELS[lineIndex]}</span>
-                  <div className="flex gap-0.5">
-                    {cards.map((c) => (
-                      <CardChip key={c.id} card={c} size="sm" />
-                    ))}
-                  </div>
-                  <span className="text-[10px] font-semibold text-emerald-300 light:text-emerald-600">
-                    {formatHandLabel(hand)}
-                    <span className="ml-1 font-normal text-white/40 light:text-slate-400">({hand.category + 1}/9)</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          {lineButtons}
         </div>
       )}
 
@@ -643,7 +704,18 @@ export default function GridPokerBoard({
         </div>
       )}
 
-      {opponents.length > 0 && (
+      {is3D && opponents.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setOpponentsOpen((o) => !o)}
+          aria-expanded={opponentsOpen}
+          className="relative z-10 flex min-h-11 items-center justify-between rounded-xl border border-white/10 bg-black/20 px-4 text-xs font-semibold text-white/75 transition hover:bg-black/30 light:border-slate-200 light:bg-white/70 light:text-slate-600"
+        >
+          <span>📋 상대 보드판 {opponentsOpen ? "접기" : `펼치기 (${opponents.length}명)`}</span>
+          <span aria-hidden>{opponentsOpen ? "▴" : "▾"}</span>
+        </button>
+      )}
+      {opponents.length > 0 && (!is3D || opponentsOpen) && (
         <div className="relative z-10 flex flex-col gap-1.5">
           <p className="text-xs text-white/50 light:text-slate-500">상대 보드판 (처음 배치한 칸 + 공개된 라인 + 이번 카드 배치 위치만 보임)</p>
 

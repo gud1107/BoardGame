@@ -78,10 +78,26 @@ export interface DalmutiBoardProps {
   onGameEnd: () => void;
 }
 
+/** Calls `onDone` once after the pass bubble's lifetime — the 3D stand-in for `PassBubble`. */
+function BubbleTimer({ onDone }: { onDone: () => void }) {
+  const onDoneRef = useRef(onDone);
+  useEffect(() => {
+    onDoneRef.current = onDone;
+  });
+  useEffect(() => {
+    const t = setTimeout(() => onDoneRef.current(), 1000);
+    return () => clearTimeout(t);
+  }, []);
+  return null;
+}
+
 export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: DalmutiBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const { view: boardView, setView: setBoardView, canToggle } = useBoardView("dalmuti-view");
   const [lowDetail] = useState(preferLowDetail);
+  const is3D = boardView === "3d";
+  // 3D folds the 2D scoreboard behind a toggle (the table already shows the seats).
+  const [scoreOpen, setScoreOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   // Card-exchange VFX (2026-08-25 후속 세션) added this game's first sound —
@@ -672,38 +688,6 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
             ? `${state.trick.rankValue === 13 ? "조커" : `${state.trick.rankValue}번`} × ${state.trick.count}장
 ${names[lastPlay3D.seat]}`
             : `새 트릭 — ${names[state.activeSeat]}님 선`;
-  const table3D =
-    boardView === "3d" ? (
-      <div className="relative h-[340px] w-full overflow-hidden rounded-2xl border border-black/50 sm:h-[440px]">
-        <DalmutiTable3D
-          playerCount={state.playerCount}
-          viewerSeat={viewerSeat}
-          seats={seatOrder.map((seat, position) => {
-            const p = state.players.find((pl) => pl.seat === seat)!;
-            return {
-              seat,
-              name: names[seat] ?? `${seat + 1}번`,
-              title: rankTitle(position, state.playerCount),
-              rankPos: position,
-              handCount: p.hand.length,
-              finishedOrder: p.finishedAtOrder,
-              passing: passBubbles.some((b) => b.seat === seat),
-              away: !connectedSeats.has(seat),
-            };
-          })}
-          plays={state.phase === "trick" ? state.trick.plays : []}
-          activeSeat={state.phase === "trick" ? state.activeSeat : null}
-          sign={sign3D}
-          revolution={revolutionBanner}
-          deciding={deciding3D}
-          overview={false}
-          lowDetail={lowDetail}
-        />
-        <span className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-purple-100/80">
-          드래그로 둘러보기 · 내 손패는 아래에서 골라요
-        </span>
-      </div>
-    ) : null;
 
   const cardIsClickable = (state.phase === "trick" && isMyTrickTurn) || (state.phase === "taxReturn" && isMyTaxTurn);
   const cardIsHighlighted = (card: Card) => {
@@ -712,6 +696,74 @@ ${names[lastPlay3D.seat]}`
     if (state.phase === "taxReturn") return isMyTaxTurn && !!myTribute && selected.size < myTribute.givenCardIds.length;
     return false;
   };
+
+  // Pieces shared by the 2D hand section and the 3D frame's hand strip.
+  const renderHandCard = (c: Card) => {
+    const clickable = cardIsClickable;
+    const highlighted = cardIsHighlighted(c);
+    const receivedTier = receivedCards.get(c.id);
+    const button = (
+      <FxButton
+        key={c.id}
+        variant="card"
+        disabled={!clickable || (!highlighted && !selected.has(c.id))}
+        onClick={() => toggleCard(c)}
+        className={`transition ${clickable && (highlighted || selected.has(c.id)) ? "cursor-pointer hover:-translate-y-1" : "cursor-not-allowed opacity-40"} ${
+          selected.has(c.id) ? "-translate-y-2" : ""
+        }`}
+      >
+        <CardFace card={c} highlight={highlighted} />
+      </FxButton>
+    );
+    // Stacks with (doesn't replace) the "legal to play" gold ring
+    // above — task brief follow-up confirmed via AskUserQuestion.
+    if (!receivedTier) return button;
+    return (
+      <ReceivedCardGlow key={c.id} tier={receivedTier} onDone={() => clearReceivedCard(c.id)}>
+        {button}
+      </ReceivedCardGlow>
+    );
+
+  };
+  const handActions = (
+    <>
+      {state.phase === "trick" && isMyTrickTurn && (
+        <div className="mt-3 flex flex-col items-center">
+          {autoPass.anyEnabled && <AutoPassBadge onDisable={autoPass.disableAll} />}
+          <div className="flex justify-center gap-2">
+          <FxButton
+            variant="slate"
+            onClick={passTurn}
+            disabled={state.trick.count === 0}
+            className="rounded-full border border-white/20 px-5 py-2 text-xs font-semibold text-white/80 transition hover:border-white/40 disabled:cursor-not-allowed disabled:opacity-30 light:border-slate-300 light:bg-white/80 light:text-slate-700 light:shadow-sm light:hover:border-slate-400"
+          >
+            🙅 패스
+          </FxButton>
+          <FxButton
+            variant="gold"
+            onClick={submitPlay}
+            disabled={!canSubmitPlay}
+            className="rounded-full bg-amber-500 px-5 py-2 text-xs font-bold text-black transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            🃏 카드 내기 ({selected.size}장)
+          </FxButton>
+          </div>
+        </div>
+      )}
+      {state.phase === "taxReturn" && isMyTaxTurn && (
+        <div className="mt-3 flex justify-center">
+          <FxButton
+            variant="gold"
+            onClick={submitReturnTax}
+            disabled={!canReturnTax}
+            className="rounded-full bg-amber-500 px-5 py-2 text-xs font-bold text-black transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            💰 {selected.size}/{myTribute?.givenCardIds.length ?? 0}장 돌려주기
+          </FxButton>
+        </div>
+      )}
+    </>
+  );
 
   return (
     <div
@@ -751,7 +803,77 @@ ${names[lastPlay3D.seat]}`
         </div>
       </div>
 
-      {table3D}
+      {is3D && (
+        // Table on top, my hand + pass / play laid over the bottom edge of
+        // the same frame (as 5 오이) — no scroll down to "내 손패는 아래에서".
+        <div className="relative h-[596px] w-full overflow-hidden rounded-2xl border border-black/50 sm:h-[676px] lg:h-[716px]" style={{ background: "#0c0816" }}>
+          <div className="absolute inset-x-0 top-0 bottom-[236px] sm:bottom-[244px]">
+            <DalmutiTable3D
+              playerCount={state.playerCount}
+              viewerSeat={viewerSeat}
+              seats={seatOrder.map((seat, position) => {
+                const p = state.players.find((pl) => pl.seat === seat)!;
+                return {
+                  seat,
+                  name: names[seat] ?? `${seat + 1}번`,
+                  title: rankTitle(position, state.playerCount),
+                  rankPos: position,
+                  handCount: p.hand.length,
+                  finishedOrder: p.finishedAtOrder,
+                  passing: passBubbles.some((b) => b.seat === seat),
+                  away: !connectedSeats.has(seat),
+                };
+              })}
+              plays={state.phase === "trick" ? state.trick.plays : []}
+              activeSeat={state.phase === "trick" ? state.activeSeat : null}
+              sign={sign3D}
+              revolution={revolutionBanner}
+              deciding={deciding3D}
+              overview={false}
+              lowDetail={lowDetail}
+            />
+            <span className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-purple-100/80">
+              드래그로 둘러보기
+            </span>
+          </div>
+          <section
+            className="absolute inset-x-0 bottom-0 flex h-[236px] flex-col justify-end gap-2 px-3 pt-6 pb-3 sm:h-[244px]"
+            style={{ background: "linear-gradient(180deg,rgba(12,8,22,0) 0%,rgba(12,8,22,0.9) 14%,rgba(12,8,22,0.98) 100%)" }}
+          >
+            <div className="flex items-center justify-between gap-2 text-[11px] font-semibold">
+              <span className={`truncate ${isMyTrickTurn || isMyTaxTurn ? "text-amber-200" : "text-white/60"}`}>
+                {state.phase === "trick"
+                  ? isMyTrickTurn
+                    ? state.trick.count === 0
+                      ? "🫵 내가 리드 — 원하는 계급·장수로"
+                      : `🫵 ${state.trick.count}장 · ${state.trick.rankValue}보다 작은 숫자만`
+                    : `${names[state.activeSeat]}님 차례…`
+                  : state.phase === "taxReturn" && isMyTaxTurn
+                    ? "💰 돌려줄 카드를 고르세요"
+                    : "카드를 주고받는 중…"}
+              </span>
+              <span className="shrink-0 text-purple-200/90">🃏 {me.hand.length}장</span>
+            </div>
+            {me.hand.length === 0 ? (
+              <p className="py-6 text-center text-xs text-white/40">손패가 없습니다.</p>
+            ) : (
+              // Squeeze row: each slot shrinks (down to a sliver) before the row
+              // overflows, and the card inside spills right under its neighbour —
+              // same-rank cards sit together, so the left-edge rank stays readable.
+              <div className="flex w-full justify-center pt-2">
+                {[...me.hand]
+                  .sort((a, b) => a.rank - b.rank)
+                  .map((c) => (
+                    <div key={c.id} className="min-w-[18px] shrink basis-16 last:shrink-0">
+                      {renderHandCard(c)}
+                    </div>
+                  ))}
+              </div>
+            )}
+            {handActions}
+          </section>
+        </div>
+      )}
 
       {/* Revolution option */}
       {state.phase === "revolutionOption" && state.pendingRevolution && (
@@ -864,6 +986,7 @@ ${names[lastPlay3D.seat]}`
               {names[trickFlash.winnerSeat]}님이 {trickFlash.rankValue === 13 ? "조커" : `${trickFlash.rankValue}번`} {trickFlash.count}장으로 트릭을 가져가 다음 리드가 됩니다.
             </div>
           )}
+          {!is3D && (
           <p className={`text-center text-xs font-medium ${isMyTrickTurn ? "text-amber-200" : "text-white/50"}`}>
             {isMyTrickTurn
               ? state.trick.count === 0
@@ -871,6 +994,7 @@ ${names[lastPlay3D.seat]}`
                 : `🫵 당신 차례입니다! 같은 장수(${state.trick.count}장)이면서 더 높은 계급(숫자 < ${state.trick.rankValue})만 낼 수 있어요.`
               : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
           </p>
+          )}
           {boardView === "2d" && (
           <section className="flex flex-wrap items-start justify-center gap-2.5 rounded-2xl border border-white/10 bg-black/25 p-3 light:border-slate-200 light:bg-slate-50">
             {state.trick.plays.length === 0 ? (
@@ -908,7 +1032,20 @@ ${names[lastPlay3D.seat]}`
         </>
       )}
 
+      {is3D && (
+        <button
+          type="button"
+          onClick={() => setScoreOpen((o) => !o)}
+          aria-expanded={scoreOpen}
+          className="flex min-h-11 items-center justify-between rounded-xl border border-white/10 bg-black/20 px-4 text-xs font-semibold text-white/75 transition hover:bg-black/30"
+        >
+          <span>📋 계급·남은 손패 {scoreOpen ? "접기" : `펼치기 (${state.playerCount}명)`}</span>
+          <span aria-hidden>{scoreOpen ? "▴" : "▾"}</span>
+        </button>
+      )}
+
       {/* Scoreboard */}
+      {(!is3D || scoreOpen) && (
       <section className="flex flex-col gap-1.5">
         {seatOrder.map((seat, position) => {
           const p = state.players.find((pl) => pl.seat === seat)!;
@@ -943,8 +1080,10 @@ ${names[lastPlay3D.seat]}`
           );
         })}
       </section>
+      )}
 
       {/* My hand */}
+      {!is3D && (
       <section
         className="rounded-2xl border border-purple-300/20 p-2.5 sm:p-3 light:border-slate-200 light:shadow-sm"
         // TODO(theme): hardcoded dark gradient background — not trivial to branch via a CSS class variant, left dark in light mode for now.
@@ -957,70 +1096,12 @@ ${names[lastPlay3D.seat]}`
           <div className="flex flex-wrap gap-2">
             {[...me.hand]
               .sort((a, b) => a.rank - b.rank)
-              .map((c) => {
-                const clickable = cardIsClickable;
-                const highlighted = cardIsHighlighted(c);
-                const receivedTier = receivedCards.get(c.id);
-                const button = (
-                  <FxButton
-                    key={c.id}
-                    variant="card"
-                    disabled={!clickable || (!highlighted && !selected.has(c.id))}
-                    onClick={() => toggleCard(c)}
-                    className={`transition ${clickable && (highlighted || selected.has(c.id)) ? "cursor-pointer hover:-translate-y-1" : "cursor-not-allowed opacity-40"} ${
-                      selected.has(c.id) ? "-translate-y-2" : ""
-                    }`}
-                  >
-                    <CardFace card={c} highlight={highlighted} />
-                  </FxButton>
-                );
-                // Stacks with (doesn't replace) the "legal to play" gold ring
-                // above — task brief follow-up confirmed via AskUserQuestion.
-                if (!receivedTier) return button;
-                return (
-                  <ReceivedCardGlow key={c.id} tier={receivedTier} onDone={() => clearReceivedCard(c.id)}>
-                    {button}
-                  </ReceivedCardGlow>
-                );
-              })}
+              .map(renderHandCard)}
           </div>
         )}
-        {state.phase === "trick" && isMyTrickTurn && (
-          <div className="mt-3 flex flex-col items-center">
-            {autoPass.anyEnabled && <AutoPassBadge onDisable={autoPass.disableAll} />}
-            <div className="flex justify-center gap-2">
-            <FxButton
-              variant="slate"
-              onClick={passTurn}
-              disabled={state.trick.count === 0}
-              className="rounded-full border border-white/20 px-5 py-2 text-xs font-semibold text-white/80 transition hover:border-white/40 disabled:cursor-not-allowed disabled:opacity-30 light:border-slate-300 light:bg-white/80 light:text-slate-700 light:shadow-sm light:hover:border-slate-400"
-            >
-              🙅 패스
-            </FxButton>
-            <FxButton
-              variant="gold"
-              onClick={submitPlay}
-              disabled={!canSubmitPlay}
-              className="rounded-full bg-amber-500 px-5 py-2 text-xs font-bold text-black transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              🃏 카드 내기 ({selected.size}장)
-            </FxButton>
-            </div>
-          </div>
-        )}
-        {state.phase === "taxReturn" && isMyTaxTurn && (
-          <div className="mt-3 flex justify-center">
-            <FxButton
-              variant="gold"
-              onClick={submitReturnTax}
-              disabled={!canReturnTax}
-              className="rounded-full bg-amber-500 px-5 py-2 text-xs font-bold text-black transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              💰 {selected.size}/{myTribute?.givenCardIds.length ?? 0}장 돌려주기
-            </FxButton>
-          </div>
-        )}
+        {handActions}
       </section>
+      )}
 
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
 
@@ -1044,9 +1125,15 @@ ${names[lastPlay3D.seat]}`
 
       {/* 패스 말풍선 — 본인 포함 모든 좌석의 패스에 표시(음성 재생 여부와는
           별개 조건, task brief "누가 패스했는지 시각·청각적으로 동시 인지"). */}
-      {passBubbles.map((event) => (
-        <PassBubble key={event.id} event={event} getSeatEl={(seat) => seatRowRefs.current.get(seat) ?? null} onDone={() => clearPassBubble(event.id)} />
-      ))}
+      {passBubbles.map((event) =>
+        is3D && !scoreOpen ? (
+          // No 2D seat row to float over — the 3D table shows the pass; keep the
+          // event alive for the same 1s so the table's `passing` cue still plays.
+          <BubbleTimer key={event.id} onDone={() => clearPassBubble(event.id)} />
+        ) : (
+          <PassBubble key={event.id} event={event} getSeatEl={(seat) => seatRowRefs.current.get(seat) ?? null} onDone={() => clearPassBubble(event.id)} />
+        ),
+      )}
 
       {/* Large tax-exchange recap popup — one at a time, additive on top of
           the flight FX above (AskUserQuestion, 2026-09-01). */}

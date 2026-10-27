@@ -64,6 +64,19 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.109.0",
+    releaseDate: "2026-10-28",
+    title: "🃏 3D 테이블 한 화면에 — 카드게임 6종",
+    changes: [
+      { game: "no-thanks", type: "IMPROVE", desc: "🃏 3D 화면에서 내 카드·칩과 노 땡스/가져오기 버튼이 테이블 아래쪽에 바로 — 겹치던 2D 경매 칸은 정리, 플레이어 줄은 '펼치기'로" },
+      { game: "for-sale", type: "IMPROVE", desc: "🃏 3D 화면에서 내 현금·부동산과 입찰/포기·판매 카드 고르기가 테이블 아래쪽에 바로 — 입찰 현황은 '펼치기'로" },
+      { game: "hanamikoji", type: "IMPROVE", desc: "🃏 3D 화면에서 내 손패와 행동 4개·확정 버튼이 테이블 아래 한 줄에 — 선물·경쟁 고르기는 테이블 위에 떠요" },
+      { game: "love-wins-all", type: "IMPROVE", desc: "🃏 3D 화면에서 내 카드와 베팅·선언 버튼이 테이블 프레임 안에 — 겹치던 상대 카드 줄은 정리" },
+      { game: "grid-poker", type: "IMPROVE", desc: "🃏 3D 화면에서 이번 카드와 내 5×5 판·라인 제출이 테이블 프레임 안에 — 상대 보드판은 '펼치기'로" },
+      { game: "dalmuti", type: "IMPROVE", desc: "🃏 3D 화면에서 내 손패와 패스/카드 내기가 테이블 아래쪽에 바로 — 계급표는 '펼치기'로" },
+    ],
+  },
+  {
     version: "v1.108.0",
     releaseDate: "2026-10-28",
     title: "🏆 랭킹에 내 캐릭터 얼굴 + 게임별 이번 달 1위",

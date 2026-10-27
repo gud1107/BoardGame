@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import Avatar from "@/components/common/Avatar";
-import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
+import { Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import CombinationBadge from "./CombinationBadge";
 import {
@@ -345,6 +345,7 @@ export default function LoveWinsAllBoard({ state, viewerSeat, names, opponentCon
   const opponentSeat = otherSeat(viewerSeat);
   const board3d = useBoardView("love-wins-all-view");
   const [lowDetail] = useState(preferLowDetail);
+  const is3D = board3d.view === "3d";
   const { timeLeft } = useCountdown(REVEAL_SECONDS, `${state.round}:${state.lastRoundResult?.roundNumber ?? 0}`, state.phase === "showdown" || state.phase === "gameOver");
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const callout = useActionCallout(state);
@@ -354,6 +355,36 @@ export default function LoveWinsAllBoard({ state, viewerSeat, names, opponentCon
   const iHaveDeclared = state.declaredHand[viewerSeat] !== undefined;
   const opponentDeclared = state.declaredHand[opponentSeat];
   const opponentRevealedIdx = state.revealedIndex[opponentSeat];
+
+  // Pieces shared by the 2D board and the 3D frame's bottom strip.
+  const myCards = (
+    <div className="flex flex-col items-center gap-1.5">
+      <CombinationBadge hand={state.hands[viewerSeat]} community={state.community} variant={state.variant} />
+      <span className="text-[10px] tracking-wide text-white/40 light:text-slate-500 uppercase">내 카드</span>
+      <div className="flex gap-2">
+        {state.hands[viewerSeat].map((suit, i) => (
+          <Card key={i} suit={suit} size="lg" dim={state.revealedIndex[viewerSeat] !== undefined && state.revealedIndex[viewerSeat] !== i} />
+        ))}
+      </div>
+    </div>
+  );
+  const actionControls = (
+    <>
+      {isBetting &&
+        (myTurn ? (
+          <BettingControls state={state} viewerSeat={viewerSeat} onAction={onAction} />
+        ) : (
+          <p className="text-center text-sm text-white/50 light:text-slate-500">⏳ {names[opponentSeat]}님의 베팅을 기다리는 중...</p>
+        ))}
+
+      {state.phase === "declare" &&
+        (iHaveDeclared ? (
+          <p className="text-center text-sm text-white/50 light:text-slate-500">🔒 선언 완료 — 상대방을 기다리는 중...</p>
+        ) : (
+          <DeclareControls state={state} viewerSeat={viewerSeat} onAction={onAction} />
+        ))}
+    </>
+  );
 
   return (
     <div
@@ -420,40 +451,57 @@ export default function LoveWinsAllBoard({ state, viewerSeat, names, opponentCon
         />
       </div>
 
-      {board3d.view === "3d" && (
-        <Frame3D hint="상대 카드는 선언한 1장만 보여요 · 드래그로 둘러보기">
-          <LoveWinsTable3D
-            viewerSeat={viewerSeat === "p1" ? 0 : 1}
-            seats={(["p1", "p2"] as const).map((seat, i) => {
-              const res = state.phase === "showdown" || state.phase === "gameOver" ? state.lastRoundResult : null;
-              const hand = res?.hands?.[seat] ?? state.hands[seat];
-              const revealed = state.revealedIndex[seat];
-              const declared = res?.declaredHand[seat] ?? state.declaredHand[seat];
-              return {
-                seat: i,
-                name: names[seat],
-                chips: state.chips[seat],
-                cards: hand.map((suit, k) => (seat === viewerSeat || res?.hands || revealed === k ? suit : null)),
-                declared: declared ? HAND_CATEGORY_LABEL[declared] : null,
-                bet: state.betsThisStreet[seat],
-                away: seat !== viewerSeat && !opponentConnected,
-              };
-            })}
-            phase={state.phase}
-            acting={state.actingSeat === null ? null : state.actingSeat === "p1" ? 0 : 1}
-            pot={state.pot}
-            community={state.community}
-            winner={state.lastRoundResult?.winnerSeat ? (state.lastRoundResult.winnerSeat === "p1" ? 0 : 1) : null}
-            folder={state.lastRoundResult?.folderSeat ? (state.lastRoundResult.folderSeat === "p1" ? 0 : 1) : null}
-            round={state.round}
-            overview={state.phase === "showdown"}
-            lowDetail={lowDetail}
-          />
-        </Frame3D>
+      {is3D && (
+        // Table on top, my cards + bet / declare controls in the bottom strip
+        // of the same frame (as 5 오이) — no 2D opponent row or hand below.
+        <div className="relative h-[620px] w-full overflow-hidden rounded-2xl border border-black/50 sm:h-[680px] lg:h-[720px]" style={{ background: "#0d0309" }}>
+          <div className="absolute inset-x-0 top-0 bottom-[300px] sm:bottom-[320px]">
+            <LoveWinsTable3D
+              viewerSeat={viewerSeat === "p1" ? 0 : 1}
+              seats={(["p1", "p2"] as const).map((seat, i) => {
+                const res = state.phase === "showdown" || state.phase === "gameOver" ? state.lastRoundResult : null;
+                const hand = res?.hands?.[seat] ?? state.hands[seat];
+                const revealed = state.revealedIndex[seat];
+                const declared = res?.declaredHand[seat] ?? state.declaredHand[seat];
+                return {
+                  seat: i,
+                  name: names[seat],
+                  chips: state.chips[seat],
+                  cards: hand.map((suit, k) => (seat === viewerSeat || res?.hands || revealed === k ? suit : null)),
+                  declared: declared ? HAND_CATEGORY_LABEL[declared] : null,
+                  bet: state.betsThisStreet[seat],
+                  away: seat !== viewerSeat && !opponentConnected,
+                };
+              })}
+              phase={state.phase}
+              acting={state.actingSeat === null ? null : state.actingSeat === "p1" ? 0 : 1}
+              pot={state.pot}
+              community={state.community}
+              winner={state.lastRoundResult?.winnerSeat ? (state.lastRoundResult.winnerSeat === "p1" ? 0 : 1) : null}
+              folder={state.lastRoundResult?.folderSeat ? (state.lastRoundResult.folderSeat === "p1" ? 0 : 1) : null}
+              round={state.round}
+              overview={state.phase === "showdown"}
+              lowDetail={lowDetail}
+            />
+            <span className="pointer-events-none absolute top-2 left-1/2 max-w-[92%] -translate-x-1/2 truncate rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-white/75">
+              {opponentDeclared ? `${names[opponentSeat]}: “${HAND_CATEGORY_LABEL[opponentDeclared]}” 선언` : "상대 카드는 선언한 1장만 보여요 · 드래그로 둘러보기"}
+            </span>
+          </div>
+          <section
+            className="absolute inset-x-0 bottom-0 flex h-[300px] flex-col overflow-y-auto px-3 pt-6 pb-3 sm:h-[320px]"
+            style={{ background: "linear-gradient(180deg,rgba(13,3,9,0) 0%,rgba(13,3,9,0.9) 10%,rgba(13,3,9,0.98) 100%)" }}
+          >
+            {/* mt-auto (not justify-end) so a tall raise panel still scrolls from its top */}
+            <div className="mt-auto flex flex-col gap-2">
+              {!(state.phase === "declare" && !iHaveDeclared) && myCards}
+              {actionControls}
+            </div>
+          </section>
+        </div>
       )}
 
       {/* Opponent's hand — face-down until their §4 reveal, then that one slot flips to its true suit. Never shows the other two slots' true suits before showdown, matching the online trust model's UI-side info hiding. */}
-      {isBetting || state.phase === "declare" ? (
+      {!is3D && (isBetting || state.phase === "declare") ? (
         <div className="flex flex-col items-center gap-1.5">
           <span className="text-[10px] tracking-wide text-white/40 light:text-slate-500 uppercase">{names[opponentSeat]}의 카드</span>
           <div className="flex items-center gap-2">
@@ -465,29 +513,9 @@ export default function LoveWinsAllBoard({ state, viewerSeat, names, opponentCon
         </div>
       ) : null}
 
-      <div className="flex flex-col items-center gap-1.5">
-        <CombinationBadge hand={state.hands[viewerSeat]} community={state.community} variant={state.variant} />
-        <span className="text-[10px] tracking-wide text-white/40 light:text-slate-500 uppercase">내 카드</span>
-        <div className="flex gap-2">
-          {state.hands[viewerSeat].map((suit, i) => (
-            <Card key={i} suit={suit} size="lg" dim={state.revealedIndex[viewerSeat] !== undefined && state.revealedIndex[viewerSeat] !== i} />
-          ))}
-        </div>
-      </div>
+      {!is3D && myCards}
 
-      {isBetting &&
-        (myTurn ? (
-          <BettingControls state={state} viewerSeat={viewerSeat} onAction={onAction} />
-        ) : (
-          <p className="text-center text-sm text-white/50 light:text-slate-500">⏳ {names[opponentSeat]}님의 베팅을 기다리는 중...</p>
-        ))}
-
-      {state.phase === "declare" &&
-        (iHaveDeclared ? (
-          <p className="text-center text-sm text-white/50 light:text-slate-500">🔒 선언 완료 — 상대방을 기다리는 중...</p>
-        ) : (
-          <DeclareControls state={state} viewerSeat={viewerSeat} onAction={onAction} />
-        ))}
+      {!is3D && actionControls}
 
       {(state.phase === "showdown" || state.phase === "gameOver") && state.lastRoundResult && (
         <RevealOverlay

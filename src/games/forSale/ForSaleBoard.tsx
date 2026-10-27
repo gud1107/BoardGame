@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
+import { Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import { useCallback, useRef, useState } from "react";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
@@ -51,6 +51,9 @@ export interface ForSaleBoardProps {
 export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: ForSaleBoardProps) {
   const board3d = useBoardView("for-sale-view");
   const [lowDetail] = useState(preferLowDetail);
+  const is3D = board3d.view === "3d";
+  // 3D folds the 2D bid list behind a toggle (the table already shows it).
+  const [bidsOpen, setBidsOpen] = useState(false);
   const [rulebookOpen, setRulebookOpen] = useState(false);
 
   // Same "diff consecutive lockstep snapshots on render" pattern every other
@@ -70,16 +73,21 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
     const newWin = detectAuctionWinEvent(trackedState, state);
     const newReveal = detectSaleRevealEvent(trackedState, state);
     setTrackedState(state);
-    if (newPass) {
+    // The DOM card/coin flights need the 2D auction rows; in 3D the table animates instead.
+    if (newPass && !is3D) {
       setPassEvents((prev) => [...prev, { ...newPass, id: (prev.at(-1)?.id ?? 0) + 1 }]);
     }
-    if (newBid) {
+    if (newBid && !is3D) {
       setBidEvents((prev) => [...prev, { ...newBid, id: (prev.at(-1)?.id ?? 0) + 1 }]);
     }
     if (newWin && state.lastAuctionResult) {
       setWinToast({ winnerName: names[state.lastAuctionResult.winnerSeat], card: state.lastAuctionResult.winnerCard, paid: state.lastAuctionResult.winnerPaid });
     }
     if (newReveal) setFlipRound((n) => n + 1);
+  }
+  if (is3D && (passEvents.length > 0 || bidEvents.length > 0)) {
+    setPassEvents([]);
+    setBidEvents([]);
   }
   const handlePassDone = useCallback((id: number) => {
     setPassEvents((prev) => prev.filter((e) => e.id !== id));
@@ -191,6 +199,88 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
   const mySubmission = state.sale?.submissions[viewerSeat];
   const canSubmit = state.phase === "selling" && !state.sale?.revealed && mySubmission === undefined;
 
+  // Pieces shared by the 2D board and the 3D frame's hand strip.
+  const bidControls = (
+    <div className="flex flex-col items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setBidAmount((n) => Math.max(minBid, n - BID_INCREMENT))}
+                        className="h-8 w-8 rounded-full border border-white/15 light:border-slate-300 text-white/80 light:text-slate-700 hover:border-white/30 light:hover:border-slate-400"
+                      >
+                        −
+                      </button>
+                      <span className="w-24 shrink-0 text-center text-lg font-bold whitespace-nowrap text-white light:text-slate-900">{formatDollars(bidAmount)}</span>
+                      <button
+                        onClick={() => setBidAmount((n) => Math.min(maxBid, n + BID_INCREMENT))}
+                        className="h-8 w-8 rounded-full border border-white/15 light:border-slate-300 text-white/80 light:text-slate-700 hover:border-white/30 light:hover:border-slate-400"
+                      >
+                        +
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        disabled={!canBid}
+                        onClick={() => onAction({ type: "bid", seat: viewerSeat, amount: bidAmount })}
+                        className="rounded-full bg-sky-500 px-5 py-2 text-xs font-bold text-black transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-30"
+                      >
+                        💰 입찰하기
+                      </button>
+                      <button
+                        disabled={!canPass}
+                        onClick={() => onAction({ type: "pass", seat: viewerSeat })}
+                        className="rounded-full bg-rose-600 px-5 py-2 text-xs font-bold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-30"
+                      >
+                        🙅 포기 (환불 {formatDollars(Math.floor((state.auction?.bidsBySeat[viewerSeat] ?? 0) / 2000) * 1000)})
+                      </button>
+                    </div>
+                  </div>
+  );
+  const saleResult = state.sale?.revealed && state.lastSaleResult && (
+    <div className="mt-1 flex flex-col items-center gap-1.5 text-xs text-white/70 light:text-slate-600">
+                    <p className="font-semibold text-emerald-200 light:text-emerald-700">정산 결과</p>
+                    {[...state.lastSaleResult!.assignments]
+                      .sort((a, b) => b.property - a.property)
+                      .map((a) => {
+                        const isMine = a.seat === viewerSeat;
+                        return isMine ? (
+                          <p
+                            key={a.seat}
+                            style={{ animation: "forsale-check-earn-pop 0.5s ease-out" }}
+                            className="flex items-center gap-1.5 rounded-full border border-emerald-300/50 bg-emerald-400/15 px-3 py-1 text-sm font-bold text-emerald-200 light:border-emerald-400 light:bg-emerald-50 light:text-emerald-700"
+                          >
+                            🎉 {a.property}번 부동산 판매 → <span className="text-base text-emerald-300 light:text-emerald-600">+{formatDollars(a.check)}</span>
+                          </p>
+                        ) : (
+                          <p key={a.seat} className="text-white/60 light:text-slate-500">
+                            {names[a.seat]}: {a.property}번 부동산 → {formatDollars(a.check)}
+                          </p>
+                        );
+                      })}
+                    <button
+                      onClick={() => onAction({ type: "continueSale" })}
+                      className="mt-1 rounded-full bg-emerald-500 px-6 py-2 text-xs font-bold text-black transition hover:bg-emerald-400"
+                    >
+                      ▶️ 다음 라운드
+                    </button>
+                  </div>
+  );
+  const submitCards = (
+    <div className="flex flex-wrap gap-2">
+      {[...me.properties]
+        .sort((a, b) => a - b)
+        .map((c) => (
+          <button
+            key={c}
+            disabled={!canSubmit}
+            onClick={() => onAction({ type: "submitCard", seat: viewerSeat, property: c })}
+            className={`transition ${canSubmit ? "cursor-pointer hover:-translate-y-1" : "cursor-not-allowed opacity-40"}`}
+          >
+            <PropertyCard value={c} />
+          </button>
+        ))}
+    </div>
+  );
+
   return (
     <div
       onPointerDownCapture={() => getForSaleSound().unlock()}
@@ -221,45 +311,98 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
         </div>
       </div>
 
-      {board3d.view === "3d" && (state.phase === "buying" || state.phase === "selling") && (
-        <Frame3D hint="남의 현금·부동산 값은 비공개 🔒 · 드래그로 둘러보기">
-          <ForSaleTable3D
-            playerCount={state.playerCount}
-            viewerSeat={viewerSeat}
-            names={names}
-            seats={state.players.map((p) => {
-              const passed = state.auction?.passesThisRound.find((x) => x.seat === p.seat);
-              const won = state.sale?.revealed ? state.lastSaleResult?.assignments.find((a) => a.seat === p.seat) : undefined;
-              return {
-                seat: p.seat,
-                name: names[p.seat] ?? `${p.seat + 1}번`,
-                cash: p.seat === viewerSeat ? p.cash : null,
-                propertyCount: p.properties.length,
-                checkCount: p.checks.length,
-                claimed: passed ? passed.card : null,
-                stillBidding: state.auction?.activeSeats.includes(p.seat) ?? false,
-                submitted: state.sale?.submissions[p.seat] !== undefined,
-                submittedValue: saleView.find((v) => v.seat === p.seat)?.property ?? null,
-                wonCheck: won ? won.check : null,
-                away: !connectedSeats.has(p.seat),
-              };
-            })}
-            phase={state.phase}
-            activeSeat={state.auction?.activeSeat ?? null}
-            openCards={state.auction?.openCards ?? []}
-            currentBid={state.auction?.currentBid ?? 0}
-            highBidder={state.auction?.highBidderSeat ?? null}
-            openChecks={state.sale?.openChecks ?? []}
-            revealed={state.sale?.revealed ?? false}
-            deckCount={state.phase === "buying" ? state.propertyDeck.length : state.checkDeck.length}
-            lowDetail={lowDetail}
-          />
-        </Frame3D>
+      {is3D && (state.phase === "buying" || state.phase === "selling") && (
+        // Table on top, my cards + bid / submit controls laid over the bottom
+        // edge of the same frame (as 5 오이) — no 2D auction rows below.
+        <div className="relative z-10 h-[576px] w-full overflow-hidden rounded-2xl border border-black/50 sm:h-[636px] lg:h-[676px]" style={{ background: "#06131a" }}>
+          <div className="absolute inset-x-0 top-0 bottom-[236px] sm:bottom-[244px]">
+            <ForSaleTable3D
+              playerCount={state.playerCount}
+              viewerSeat={viewerSeat}
+              names={names}
+              seats={state.players.map((p) => {
+                const passed = state.auction?.passesThisRound.find((x) => x.seat === p.seat);
+                const won = state.sale?.revealed ? state.lastSaleResult?.assignments.find((a) => a.seat === p.seat) : undefined;
+                return {
+                  seat: p.seat,
+                  name: names[p.seat] ?? `${p.seat + 1}번`,
+                  cash: p.seat === viewerSeat ? p.cash : null,
+                  propertyCount: p.properties.length,
+                  checkCount: p.checks.length,
+                  claimed: passed ? passed.card : null,
+                  stillBidding: state.auction?.activeSeats.includes(p.seat) ?? false,
+                  submitted: state.sale?.submissions[p.seat] !== undefined,
+                  submittedValue: saleView.find((v) => v.seat === p.seat)?.property ?? null,
+                  wonCheck: won ? won.check : null,
+                  away: !connectedSeats.has(p.seat),
+                };
+              })}
+              phase={state.phase}
+              activeSeat={state.auction?.activeSeat ?? null}
+              openCards={state.auction?.openCards ?? []}
+              currentBid={state.auction?.currentBid ?? 0}
+              highBidder={state.auction?.highBidderSeat ?? null}
+              openChecks={state.sale?.openChecks ?? []}
+              revealed={state.sale?.revealed ?? false}
+              deckCount={state.phase === "buying" ? state.propertyDeck.length : state.checkDeck.length}
+              lowDetail={lowDetail}
+            />
+            <span className="pointer-events-none absolute top-2 left-1/2 max-w-[92%] -translate-x-1/2 truncate rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-white/75">
+              남의 현금·부동산 값은 비공개 🔒 · 드래그로 둘러보기
+            </span>
+            {state.phase === "buying" && state.auction && (
+              <span className="pointer-events-none absolute top-10 left-1/2 max-w-[94%] -translate-x-1/2 truncate rounded-full bg-black/65 px-3 py-1 text-[11px] font-semibold whitespace-nowrap text-white/85">
+                현재 입찰가 <b className="text-sky-300">{formatDollars(state.auction.currentBid)}</b>
+                {state.auction.highBidderSeat !== null && ` · 👑 ${names[state.auction.highBidderSeat]}`}
+              </span>
+            )}
+            {state.phase === "selling" && state.sale && (
+              <span className="pointer-events-none absolute top-10 left-1/2 -translate-x-1/2 rounded-full bg-black/65 px-3 py-1 text-[11px] font-semibold whitespace-nowrap text-white/85">
+                제출 {Object.keys(state.sale.submissions).length} / {state.playerCount}명
+              </span>
+            )}
+            {state.phase === "selling" && saleResult && (
+              <div className="absolute inset-x-2 bottom-2 max-h-[70%] overflow-y-auto rounded-2xl border border-emerald-300/40 bg-slate-950/85 p-2 backdrop-blur-sm">{saleResult}</div>
+            )}
+          </div>
+          <section
+            className="absolute inset-x-0 bottom-0 flex h-[236px] flex-col justify-end gap-2 px-3 pt-6 pb-3 sm:h-[244px]"
+            style={{ background: "linear-gradient(180deg,rgba(6,19,26,0) 0%,rgba(6,19,26,0.9) 14%,rgba(6,19,26,0.98) 100%)" }}
+          >
+            {state.phase === "buying" && state.auction && (
+              <>
+                <div className="flex items-center justify-between gap-2 text-[11px] font-semibold">
+                  <span className={isMyBidTurn ? "text-amber-200" : "text-white/60"}>{isMyBidTurn ? "🫵 내 차례!" : `${names[state.auction.activeSeat]}님 차례…`}</span>
+                  <span className="text-amber-200">💵 내 현금 {formatDollars(me.cash)}</span>
+                </div>
+                <div className="flex min-h-16 items-center gap-1.5 overflow-x-auto">
+                  {me.properties.length === 0 ? (
+                    <span className="text-[11px] text-white/40">🏠 아직 낙찰받은 부동산이 없어요</span>
+                  ) : (
+                    [...me.properties].sort((a, b) => a - b).map((c) => <PropertyCard key={c} value={c} size="sm" />)
+                  )}
+                </div>
+                {isMyBidTurn ? bidControls : <p className="py-3 text-center text-xs text-white/45">다른 사람이 입찰하는 중…</p>}
+              </>
+            )}
+            {state.phase === "selling" && state.sale && (
+              <>
+                <div className="flex items-center justify-between gap-2 text-[11px] font-semibold">
+                  <span className="text-emerald-200">🏠 1장을 뒷면으로 제출하세요</span>
+                  <span className="text-emerald-300">🧾 누적 {formatDollars(me.checks.reduce((sum, c) => sum + c, 0))}</span>
+                </div>
+                <div className="flex justify-center overflow-x-auto pb-1 [&>div]:flex-nowrap">{submitCards}</div>
+                {mySubmission !== undefined && !state.sale.revealed && <p className="text-center text-xs text-emerald-300">✅ 제출 완료 — 다른 플레이어를 기다리는 중...</p>}
+              </>
+            )}
+          </section>
+        </div>
       )}
 
       {/* Phase 1 — auction */}
       {state.phase === "buying" && state.auction && (
         <>
+          {!is3D && (
           <section ref={auctionRowRef} className="flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-black/25 light:border-slate-200 light:bg-white/80 p-3">
             <h3 className="text-[11px] font-semibold tracking-wide text-sky-200/80 light:text-sky-700 uppercase">🏘️ 이번 라운드 매물</h3>
             <div className="flex flex-wrap justify-center gap-2">
@@ -287,43 +430,23 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
             <p className="text-xs text-white/50 light:text-slate-500">
               {isMyBidTurn ? "🫵 당신 차례입니다!" : `${names[state.auction.activeSeat]}님의 차례를 기다리는 중...`}
             </p>
-            {isMyBidTurn && (
-              <div className="flex flex-col items-center gap-2">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setBidAmount((n) => Math.max(minBid, n - BID_INCREMENT))}
-                    className="h-8 w-8 rounded-full border border-white/15 light:border-slate-300 text-white/80 light:text-slate-700 hover:border-white/30 light:hover:border-slate-400"
-                  >
-                    −
-                  </button>
-                  <span className="w-24 shrink-0 text-center text-lg font-bold whitespace-nowrap text-white light:text-slate-900">{formatDollars(bidAmount)}</span>
-                  <button
-                    onClick={() => setBidAmount((n) => Math.min(maxBid, n + BID_INCREMENT))}
-                    className="h-8 w-8 rounded-full border border-white/15 light:border-slate-300 text-white/80 light:text-slate-700 hover:border-white/30 light:hover:border-slate-400"
-                  >
-                    +
-                  </button>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    disabled={!canBid}
-                    onClick={() => onAction({ type: "bid", seat: viewerSeat, amount: bidAmount })}
-                    className="rounded-full bg-sky-500 px-5 py-2 text-xs font-bold text-black transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-30"
-                  >
-                    💰 입찰하기
-                  </button>
-                  <button
-                    disabled={!canPass}
-                    onClick={() => onAction({ type: "pass", seat: viewerSeat })}
-                    className="rounded-full bg-rose-600 px-5 py-2 text-xs font-bold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-30"
-                  >
-                    🙅 포기 (환불 {formatDollars(Math.floor((state.auction.bidsBySeat[viewerSeat] ?? 0) / 2000) * 1000)})
-                  </button>
-                </div>
-              </div>
-            )}
+            {isMyBidTurn && bidControls}
           </section>
+          )}
 
+          {is3D && (
+            <button
+              type="button"
+              onClick={() => setBidsOpen((o) => !o)}
+              aria-expanded={bidsOpen}
+              className="flex min-h-11 items-center justify-between rounded-xl border border-white/10 bg-black/20 px-4 text-xs font-semibold text-white/75 transition hover:bg-black/30"
+            >
+              <span>📋 입찰 현황 {bidsOpen ? "접기" : `펼치기 (${state.playerCount}명)`}</span>
+              <span aria-hidden>{bidsOpen ? "▴" : "▾"}</span>
+            </button>
+          )}
+
+          {(!is3D || bidsOpen) && (
           <section className="flex flex-col gap-1.5">
             {Array.from({ length: state.playerCount }, (_, s) => s).map((seat) => {
               const p = state.players.find((pl) => pl.seat === seat)!;
@@ -373,7 +496,9 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
               );
             })}
           </section>
+          )}
 
+          {!is3D && (
           <section
             className="rounded-2xl border border-sky-300/20 light:border-sky-300 light:shadow-sm p-2.5 sm:p-3"
             // Hardcoded dark inline gradient — intentionally left as-is per theme-system guidance.
@@ -392,12 +517,14 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
               </div>
             )}
           </section>
+          )}
         </>
       )}
 
       {/* Phase 2 — selling */}
       {state.phase === "selling" && state.sale && (
         <>
+          {!is3D && (
           <section className="flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-black/25 light:border-slate-200 light:bg-white/80 p-3">
             <h3 className="text-[11px] font-semibold tracking-wide text-emerald-200/80 light:text-emerald-700 uppercase">🧾 이번 라운드 수표</h3>
             <div className="flex flex-wrap justify-center gap-2">
@@ -423,36 +550,9 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
               })}
             </div>
 
-            {state.sale.revealed && state.lastSaleResult && (
-              <div className="mt-1 flex flex-col items-center gap-1.5 text-xs text-white/70 light:text-slate-600">
-                <p className="font-semibold text-emerald-200 light:text-emerald-700">정산 결과</p>
-                {[...state.lastSaleResult.assignments]
-                  .sort((a, b) => b.property - a.property)
-                  .map((a) => {
-                    const isMine = a.seat === viewerSeat;
-                    return isMine ? (
-                      <p
-                        key={a.seat}
-                        style={{ animation: "forsale-check-earn-pop 0.5s ease-out" }}
-                        className="flex items-center gap-1.5 rounded-full border border-emerald-300/50 bg-emerald-400/15 px-3 py-1 text-sm font-bold text-emerald-200 light:border-emerald-400 light:bg-emerald-50 light:text-emerald-700"
-                      >
-                        🎉 {a.property}번 부동산 판매 → <span className="text-base text-emerald-300 light:text-emerald-600">+{formatDollars(a.check)}</span>
-                      </p>
-                    ) : (
-                      <p key={a.seat} className="text-white/60 light:text-slate-500">
-                        {names[a.seat]}: {a.property}번 부동산 → {formatDollars(a.check)}
-                      </p>
-                    );
-                  })}
-                <button
-                  onClick={() => onAction({ type: "continueSale" })}
-                  className="mt-1 rounded-full bg-emerald-500 px-6 py-2 text-xs font-bold text-black transition hover:bg-emerald-400"
-                >
-                  ▶️ 다음 라운드
-                </button>
-              </div>
-            )}
+            {saleResult}
           </section>
+          )}
 
           <section
             className="rounded-2xl border border-emerald-300/20 light:border-emerald-300 light:shadow-sm p-2.5 sm:p-3"
@@ -476,6 +576,7 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
             )}
           </section>
 
+          {!is3D && (
           <section
             className="rounded-2xl border border-emerald-300/20 light:border-emerald-300 light:shadow-sm p-2.5 sm:p-3"
             // Hardcoded dark inline gradient — intentionally left as-is per theme-system guidance.
@@ -487,23 +588,11 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
             {me.properties.length === 0 ? (
               <p className="text-xs text-white/30 light:text-slate-400">제출할 부동산이 없습니다.</p>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {[...me.properties]
-                  .sort((a, b) => a - b)
-                  .map((c) => (
-                    <button
-                      key={c}
-                      disabled={!canSubmit}
-                      onClick={() => onAction({ type: "submitCard", seat: viewerSeat, property: c })}
-                      className={`transition ${canSubmit ? "cursor-pointer hover:-translate-y-1" : "cursor-not-allowed opacity-40"}`}
-                    >
-                      <PropertyCard value={c} />
-                    </button>
-                  ))}
-              </div>
+              submitCards
             )}
             {mySubmission !== undefined && !state.sale.revealed && <p className="mt-2 text-center text-xs text-emerald-300 light:text-emerald-600">✅ 제출 완료 — 다른 플레이어를 기다리는 중...</p>}
           </section>
+          )}
         </>
       )}
 

@@ -3,7 +3,7 @@
 import { type CSSProperties, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Tooltip from "@/components/Tooltip";
-import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
+import { Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { getHanamikojiSound, hanamikojiSoundCues } from "./hanamikojiSound";
@@ -280,6 +280,9 @@ export default function HanamikojiBoard({
   const opponentRole = other(viewerRole);
   const board3d = useBoardView("hanamikoji-view");
   const [lowDetail] = useState(preferLowDetail);
+  const is3D = board3d.view === "3d";
+  // 3D folds the 2D geisha board behind a toggle (the table already shows it).
+  const [geishaOpen, setGeishaOpen] = useState(false);
   const myTurn = state.activePlayer === viewerRole;
   // Gion Teahouse sound suite (hanamikojiSound.ts) — state-diff cues heard by both players.
   useSoundCues(state, getHanamikojiSound, hanamikojiSoundCues);
@@ -431,6 +434,155 @@ export default function HanamikojiBoard({
   const responder = state.pendingOffer ? other(state.pendingOffer.offeredBy) : null;
   const iAmResponder = state.phase === "awaiting-response" && responder === viewerRole;
 
+  // Pieces shared by the 2D board and the 3D frame's hand strip.
+  const offer = state.phase === "awaiting-response" ? state.pendingOffer : null;
+  const offerBlock =
+    offer && responder ? (
+      iAmResponder ? (
+        <div className="rounded-2xl border border-white/10 bg-black/30 p-4 light:border-slate-200 light:bg-slate-50">
+          <p className="mb-3 text-sm text-white/70 light:text-slate-600">
+            {names[offer.offeredBy]}님이 제시한{" "}
+            {offer.kind === "gift" ? "카드 중 1장" : "세트 중 1개"}를 선택하세요.
+          </p>
+          {offer.kind === "gift" ? (
+            <div className="flex justify-center gap-3">
+              {offer.cards.map((card) => (
+                <button key={card.id} onClick={() => onAction({ type: "gift-response", cardId: card.id })}>
+                  <CardChip card={card} />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="flex justify-center gap-6">
+              {offer.sets.map((set, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => onAction({ type: "compete-response", index: idx as 0 | 1 })}
+                  className="flex gap-2 rounded-xl border border-white/10 p-2 transition hover:border-rose-400 hover:bg-white/5 light:border-slate-200 light:hover:bg-slate-100"
+                >
+                  {set.map((card) => (
+                    <CardChip key={card.id} card={card} />
+                  ))}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-white/10 bg-black/30 p-4 light:border-slate-200 light:bg-slate-50">
+          <p className="mb-3 text-sm text-white/70 light:text-slate-600">
+            {names[responder]}님이 선택 중입니다... 내가 제시한{" "}
+            {offer.kind === "gift" ? "카드" : "묶음"}이에요.
+          </p>
+          {offer.kind === "gift" ? (
+            <div className="flex justify-center gap-3">
+              {offer.cards.map((card) => (
+                <CardChip key={card.id} card={card} />
+              ))}
+            </div>
+          ) : (
+            <div className="flex justify-center gap-6">
+              {offer.sets.map((set, idx) => (
+                <div key={idx} className="flex gap-2 rounded-xl border border-white/10 p-2 light:border-slate-200">
+                  {set.map((card) => (
+                    <CardChip key={card.id} card={card} />
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )
+    ) : null;
+  const statusBox = (
+    <div className="rounded-2xl border border-white/10 bg-black/30 p-4 light:border-slate-200 light:bg-slate-50">
+      <p className="mb-2 text-sm text-white/70 light:text-slate-600">{myTurn ? "내 차례예요" : `${names[state.activePlayer]}님의 차례입니다...`}</p>
+
+      {!myTurn ? (
+        <p className="text-xs text-white/40 light:text-slate-400">상대방이 카드를 뽑고 행동을 고르는 중이에요.</p>
+      ) : state.phase === "awaiting-draw" ? (
+        <button
+          onClick={() => onAction({ type: "draw" })}
+          className="w-full rounded-xl bg-rose-500 py-3 font-medium text-white transition hover:bg-rose-400"
+        >
+          카드 뽑기
+        </button>
+      ) : selectedAction ? (
+        <p className="text-xs text-white/50 light:text-slate-500">
+          {ACTION_LABEL[selectedAction].desc}
+          {selectedAction === "compete" ? (
+            <>
+              {" · "}
+              <span className={competeGroupA.length === 2 ? "text-rose-300 light:text-rose-600" : "text-white/50 light:text-slate-500"}>
+                묶음 A {competeGroupA.length}/2
+              </span>
+              {" · "}
+              <span className={competeGroupB.length === 2 ? "text-sky-300 light:text-sky-600" : "text-white/50 light:text-slate-500"}>
+                묶음 B {competeGroupB.length}/2
+              </span>
+            </>
+          ) : (
+            <>
+              {" · "}
+              {selectedCardIds.length}/{ACTION_LABEL[selectedAction].count} 선택됨
+            </>
+          )}
+        </p>
+      ) : (
+        <p className="text-xs text-white/40 light:text-slate-400">위에서 행동을 선택하세요.</p>
+      )}
+    </div>
+
+  );
+  const renderHandFan = (compact: boolean) => (
+    <div className="flex justify-center pt-2">
+      {myHand.map((card, i) => {
+        const interactive = myTurn && state.phase === "awaiting-action" && Boolean(selectedAction);
+        const competeBadge: "A" | "B" | undefined = competeGroupA.includes(card.id)
+          ? "A"
+          : competeGroupB.includes(card.id)
+            ? "B"
+            : undefined;
+        const isSelected = selectedAction === "compete" ? Boolean(competeBadge) : selectedCardIds.includes(card.id);
+        return (
+          <div key={card.id} style={fanStyle(i, myHand.length, compact ? 18 : 24)}>
+            <button
+              disabled={!interactive}
+              onClick={() => (selectedAction === "compete" ? toggleCompeteCard(card.id) : toggleCard(card.id))}
+              className={`relative block rounded-xl transition ${
+                isSelected
+                  ? "-translate-y-3 ring-2 ring-amber-300 ring-offset-2 ring-offset-transparent"
+                  : interactive
+                    ? "hover:-translate-y-1.5"
+                    : ""
+              } ${!interactive ? "opacity-90" : ""}`}
+            >
+              <CardChip card={card} badge={competeBadge} size={compact ? "sm" : "md"} />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+  const confirmBlock = (
+    <>
+      <button
+        disabled={confirmDisabled}
+        onClick={confirmAction}
+        className="mt-3 w-full rounded-xl bg-emerald-500 py-3 font-medium text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 light:disabled:bg-slate-200 light:disabled:text-slate-400"
+      >
+        {selectedAction === "compete" ? "2장씩 나눠 제시하기" : "확정"}
+      </button>
+      {confirmDisabled && (
+        <p className="mt-1.5 text-center text-[11px] text-white/40 light:text-slate-400">
+          {selectedAction === "compete"
+            ? "카드 4장을 눌러 2장씩 A·B 묶음을 채우면 제출할 수 있어요."
+            : `카드를 ${selectedAction ? ACTION_LABEL[selectedAction].count : 0}장 선택하면 제출할 수 있어요.`}
+        </p>
+      )}
+    </>
+  );
+
   return (
     <div onPointerDownCapture={() => getHanamikojiSound().unlock()} className={`${TABLE_PANEL} flex flex-col gap-4 p-3 sm:p-4`}>
       <TableTexture />
@@ -448,44 +600,103 @@ export default function HanamikojiBoard({
 
         {connectionBanner}
 
-        {board3d.view === "3d" && (
-          <Frame3D hint="상대 손패·숨긴 카드는 뒷면 · 드래그로 둘러보기">
-            <HanamikojiTable3D
-              viewerSeat={viewerRole === "p1" ? 0 : 1}
-              names={[names.p1, names.p2]}
-              away={[viewerRole !== "p1" && !opponentConnected, viewerRole !== "p2" && !opponentConnected]}
-              geishas={GEISHAS.map((g) => ({ ...g, emoji: GEISHA_EMOJI[g.id] ?? "🌸", color: GEISHA_3D_COLOR[g.id] ?? "#9d174d" }))}
-              won={Object.fromEntries(
-                GEISHAS.map((g) => [
-                  g.id,
-                  [state.players.p1.wonCards.filter((c) => c.geishaId === g.id).length, state.players.p2.wonCards.filter((c) => c.geishaId === g.id).length] as [number, number],
-                ]),
+        {is3D && (
+          // Table on top, my hand + action buttons laid over the bottom edge
+          // of the same frame (as 5 오이) — offers float over the table.
+          <div className="relative h-[576px] w-full overflow-hidden rounded-2xl border border-black/50 sm:h-[636px] lg:h-[676px]" style={{ background: "#1a0b12" }}>
+            <div className="absolute inset-x-0 top-0 bottom-[256px] sm:bottom-[264px]">
+              <HanamikojiTable3D
+                viewerSeat={viewerRole === "p1" ? 0 : 1}
+                names={[names.p1, names.p2]}
+                away={[viewerRole !== "p1" && !opponentConnected, viewerRole !== "p2" && !opponentConnected]}
+                geishas={GEISHAS.map((g) => ({ ...g, emoji: GEISHA_EMOJI[g.id] ?? "🌸", color: GEISHA_3D_COLOR[g.id] ?? "#9d174d" }))}
+                won={Object.fromEntries(
+                  GEISHAS.map((g) => [
+                    g.id,
+                    [state.players.p1.wonCards.filter((c) => c.geishaId === g.id).length, state.players.p2.wonCards.filter((c) => c.geishaId === g.id).length] as [number, number],
+                  ]),
+                )}
+                ownership={Object.fromEntries(GEISHAS.map((g) => [g.id, state.geishaOwnership[g.id] === null ? null : state.geishaOwnership[g.id] === "p1" ? 0 : 1]))}
+                handCounts={[state.players.p1.hand.length, state.players.p2.hand.length]}
+                actionsUsed={[state.players.p1.actionsUsed, state.players.p2.actionsUsed]}
+                hasSecret={[state.players.p1.secretCard !== null, state.players.p2.secretCard !== null]}
+                discardCount={[state.players.p1.discarded.length, state.players.p2.discarded.length]}
+                activeSeat={state.phase === "awaiting-action" || state.phase === "awaiting-draw" ? (state.activePlayer === "p1" ? 0 : 1) : null}
+                offer={
+                  state.pendingOffer
+                    ? {
+                        kind: state.pendingOffer.kind,
+                        by: state.pendingOffer.offeredBy === "p1" ? 0 : 1,
+                        cards: state.pendingOffer.kind === "gift" ? [state.pendingOffer.cards.map((c) => c.geishaId)] : state.pendingOffer.sets.map((set) => set.map((c) => c.geishaId)),
+                      }
+                    : null
+                }
+                round={state.roundNumber}
+                overview={false}
+                lowDetail={lowDetail}
+              />
+              <span className="pointer-events-none absolute top-2 left-1/2 max-w-[92%] -translate-x-1/2 truncate rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-white/75">
+                상대 손패 {opponentHandCount}장 · 숨긴 카드는 뒷면 · 드래그로 둘러보기
+              </span>
+              {offerBlock && <div className="absolute inset-x-2 bottom-2 max-h-[88%] overflow-y-auto">{offerBlock}</div>}
+            </div>
+            <section
+              className="absolute inset-x-0 bottom-0 flex h-[256px] flex-col justify-end gap-2 px-3 pt-6 pb-3 sm:h-[264px]"
+              style={{ background: "linear-gradient(180deg,rgba(26,11,18,0) 0%,rgba(26,11,18,0.9) 14%,rgba(26,11,18,0.98) 100%)" }}
+            >
+              <p className="truncate text-[11px] font-semibold text-rose-100/85">
+                {!myTurn
+                  ? `${names[state.activePlayer]}님 차례…`
+                  : state.phase === "awaiting-draw"
+                    ? "🫵 내 차례 — 카드를 뽑으세요"
+                    : !selectedAction
+                      ? "🫵 내 차례 — 아래에서 행동을 고르세요"
+                      : selectedAction === "compete"
+                        ? `⚔️ 경쟁 · 묶음 A ${competeGroupA.length}/2 · 묶음 B ${competeGroupB.length}/2`
+                        : `${ACTION_ICON[selectedAction]} ${ACTION_LABEL[selectedAction].label} · ${selectedCardIds.length}/${ACTION_LABEL[selectedAction].count} 선택됨`}
+              </p>
+              <div className="flex justify-center overflow-x-auto pt-3">{renderHandFan(true)}</div>
+              {myTurn && state.phase === "awaiting-draw" ? (
+                <button onClick={() => onAction({ type: "draw" })} className="min-h-11 w-full rounded-xl bg-rose-500 text-sm font-medium text-white transition hover:bg-rose-400">
+                  카드 뽑기
+                </button>
+              ) : myTurn && state.phase === "awaiting-action" ? (
+                <div className="flex gap-1.5">
+                  {ACTION_TYPES.map((a) => (
+                    <button
+                      key={a}
+                      type="button"
+                      disabled={!available.includes(a)}
+                      onClick={() => selectAction(a)}
+                      title={ACTION_LABEL[a].desc}
+                      className={`flex min-h-11 w-14 shrink-0 flex-col items-center justify-center rounded-xl border text-[10px] font-bold transition disabled:opacity-25 ${
+                        selectedAction === a ? "border-amber-300 bg-amber-400/25 text-amber-100" : "border-white/20 bg-white/5 text-white/80 hover:bg-white/10"
+                      }`}
+                    >
+                      <span className="text-sm leading-none">{ACTION_ICON[a]}</span>
+                      {ACTION_LABEL[a].label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={!selectedAction || confirmDisabled}
+                    onClick={confirmAction}
+                    className="min-h-11 flex-1 rounded-xl bg-emerald-500 text-xs font-bold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+                  >
+                    {selectedAction === "compete" ? "나눠 제시" : "확정"}
+                  </button>
+                </div>
+              ) : (
+                <p className="py-3 text-center text-xs text-white/45">{state.phase === "awaiting-response" ? "제시한 카드를 고르는 중…" : "상대방이 카드를 뽑고 행동을 고르는 중이에요."}</p>
               )}
-              ownership={Object.fromEntries(GEISHAS.map((g) => [g.id, state.geishaOwnership[g.id] === null ? null : state.geishaOwnership[g.id] === "p1" ? 0 : 1]))}
-              handCounts={[state.players.p1.hand.length, state.players.p2.hand.length]}
-              actionsUsed={[state.players.p1.actionsUsed, state.players.p2.actionsUsed]}
-              hasSecret={[state.players.p1.secretCard !== null, state.players.p2.secretCard !== null]}
-              discardCount={[state.players.p1.discarded.length, state.players.p2.discarded.length]}
-              activeSeat={state.phase === "awaiting-action" || state.phase === "awaiting-draw" ? (state.activePlayer === "p1" ? 0 : 1) : null}
-              offer={
-                state.pendingOffer
-                  ? {
-                      kind: state.pendingOffer.kind,
-                      by: state.pendingOffer.offeredBy === "p1" ? 0 : 1,
-                      cards: state.pendingOffer.kind === "gift" ? [state.pendingOffer.cards.map((c) => c.geishaId)] : state.pendingOffer.sets.map((set) => set.map((c) => c.geishaId)),
-                    }
-                  : null
-              }
-              round={state.roundNumber}
-              overview={false}
-              lowDetail={lowDetail}
-            />
-          </Frame3D>
+            </section>
+          </div>
         )}
 
         {/* Opponent's side of the table: count-only face-down hand + which
             actions they've already spent this round, both up top since
             that's "across the table" from the viewer. */}
+        {!is3D && (
         <div>
           <p className="mb-1 text-center text-xs text-white/50 light:text-slate-500">
             {names[opponentRole]} (상대) · {opponentHandCount}장
@@ -516,12 +727,25 @@ export default function HanamikojiBoard({
           </div>
         </div>
 
-        <GeishaBoard state={state} names={names} />
+        )}
+
+        {is3D && (
+          <button
+            type="button"
+            onClick={() => setGeishaOpen((o) => !o)}
+            aria-expanded={geishaOpen}
+            className="flex min-h-11 items-center justify-between rounded-xl border border-white/10 bg-black/20 px-4 text-xs font-semibold text-white/75 transition hover:bg-black/30 light:border-slate-200 light:bg-white/70 light:text-slate-600"
+          >
+            <span>📋 게이샤 호감 현황 {geishaOpen ? "접기" : "펼치기"}</span>
+            <span aria-hidden>{geishaOpen ? "▴" : "▾"}</span>
+          </button>
+        )}
+        {(!is3D || geishaOpen) && <GeishaBoard state={state} names={names} />}
 
         {/* My action tiles: the four action markers, always shown, greyed
             out once spent for the round. Selecting one is the only way to
             start choosing cards below. */}
-        {myTurn && state.phase === "awaiting-action" && (
+        {!is3D && myTurn && state.phase === "awaiting-action" && (
           <div className="flex justify-center gap-3 pt-6 sm:gap-4">
             {ACTION_TYPES.map((a) => (
               <ActionTile
@@ -535,152 +759,16 @@ export default function HanamikojiBoard({
           </div>
         )}
 
-        {state.phase === "awaiting-response" && state.pendingOffer && responder ? (
-          iAmResponder ? (
-            <div className="rounded-2xl border border-white/10 bg-black/30 p-4 light:border-slate-200 light:bg-slate-50">
-              <p className="mb-3 text-sm text-white/70 light:text-slate-600">
-                {names[state.pendingOffer.offeredBy]}님이 제시한{" "}
-                {state.pendingOffer.kind === "gift" ? "카드 중 1장" : "세트 중 1개"}를 선택하세요.
-              </p>
-              {state.pendingOffer.kind === "gift" ? (
-                <div className="flex justify-center gap-3">
-                  {state.pendingOffer.cards.map((card) => (
-                    <button key={card.id} onClick={() => onAction({ type: "gift-response", cardId: card.id })}>
-                      <CardChip card={card} />
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex justify-center gap-6">
-                  {state.pendingOffer.sets.map((set, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => onAction({ type: "compete-response", index: idx as 0 | 1 })}
-                      className="flex gap-2 rounded-xl border border-white/10 p-2 transition hover:border-rose-400 hover:bg-white/5 light:border-slate-200 light:hover:bg-slate-100"
-                    >
-                      {set.map((card) => (
-                        <CardChip key={card.id} card={card} />
-                      ))}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-white/10 bg-black/30 p-4 light:border-slate-200 light:bg-slate-50">
-              <p className="mb-3 text-sm text-white/70 light:text-slate-600">
-                {names[responder]}님이 선택 중입니다... 내가 제시한{" "}
-                {state.pendingOffer.kind === "gift" ? "카드" : "묶음"}이에요.
-              </p>
-              {state.pendingOffer.kind === "gift" ? (
-                <div className="flex justify-center gap-3">
-                  {state.pendingOffer.cards.map((card) => (
-                    <CardChip key={card.id} card={card} />
-                  ))}
-                </div>
-              ) : (
-                <div className="flex justify-center gap-6">
-                  {state.pendingOffer.sets.map((set, idx) => (
-                    <div key={idx} className="flex gap-2 rounded-xl border border-white/10 p-2 light:border-slate-200">
-                      {set.map((card) => (
-                        <CardChip key={card.id} card={card} />
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        ) : (
-          <div className="rounded-2xl border border-white/10 bg-black/30 p-4 light:border-slate-200 light:bg-slate-50">
-            <p className="mb-2 text-sm text-white/70 light:text-slate-600">{myTurn ? "내 차례예요" : `${names[state.activePlayer]}님의 차례입니다...`}</p>
-
-            {!myTurn ? (
-              <p className="text-xs text-white/40 light:text-slate-400">상대방이 카드를 뽑고 행동을 고르는 중이에요.</p>
-            ) : state.phase === "awaiting-draw" ? (
-              <button
-                onClick={() => onAction({ type: "draw" })}
-                className="w-full rounded-xl bg-rose-500 py-3 font-medium text-white transition hover:bg-rose-400"
-              >
-                카드 뽑기
-              </button>
-            ) : selectedAction ? (
-              <p className="text-xs text-white/50 light:text-slate-500">
-                {ACTION_LABEL[selectedAction].desc}
-                {selectedAction === "compete" ? (
-                  <>
-                    {" · "}
-                    <span className={competeGroupA.length === 2 ? "text-rose-300 light:text-rose-600" : "text-white/50 light:text-slate-500"}>
-                      묶음 A {competeGroupA.length}/2
-                    </span>
-                    {" · "}
-                    <span className={competeGroupB.length === 2 ? "text-sky-300 light:text-sky-600" : "text-white/50 light:text-slate-500"}>
-                      묶음 B {competeGroupB.length}/2
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    {" · "}
-                    {selectedCardIds.length}/{ACTION_LABEL[selectedAction].count} 선택됨
-                  </>
-                )}
-              </p>
-            ) : (
-              <p className="text-xs text-white/40 light:text-slate-400">위에서 행동을 선택하세요.</p>
-            )}
-          </div>
-        )}
+        {!is3D && (offerBlock ?? statusBox)}
 
         {/* My hand: always visible, face-up, fanned, selectable during my action phase. */}
+        {!is3D && (
         <div>
           <p className="mb-1 text-center text-xs text-white/50 light:text-slate-500">내 카드</p>
-          <div className="flex justify-center pt-2">
-            {myHand.map((card, i) => {
-              const interactive = myTurn && state.phase === "awaiting-action" && Boolean(selectedAction);
-              const competeBadge: "A" | "B" | undefined = competeGroupA.includes(card.id)
-                ? "A"
-                : competeGroupB.includes(card.id)
-                  ? "B"
-                  : undefined;
-              const isSelected = selectedAction === "compete" ? Boolean(competeBadge) : selectedCardIds.includes(card.id);
-              return (
-                <div key={card.id} style={fanStyle(i, myHand.length, 24)}>
-                  <button
-                    disabled={!interactive}
-                    onClick={() => (selectedAction === "compete" ? toggleCompeteCard(card.id) : toggleCard(card.id))}
-                    className={`relative block rounded-xl transition ${
-                      isSelected
-                        ? "-translate-y-3 ring-2 ring-amber-300 ring-offset-2 ring-offset-transparent"
-                        : interactive
-                          ? "hover:-translate-y-1.5"
-                          : ""
-                    } ${!interactive ? "opacity-90" : ""}`}
-                  >
-                    <CardChip card={card} badge={competeBadge} />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-          {myTurn && state.phase === "awaiting-action" && selectedAction && (
-            <>
-              <button
-                disabled={confirmDisabled}
-                onClick={confirmAction}
-                className="mt-3 w-full rounded-xl bg-emerald-500 py-3 font-medium text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 light:disabled:bg-slate-200 light:disabled:text-slate-400"
-              >
-                {selectedAction === "compete" ? "2장씩 나눠 제시하기" : "확정"}
-              </button>
-              {confirmDisabled && (
-                <p className="mt-1.5 text-center text-[11px] text-white/40 light:text-slate-400">
-                  {selectedAction === "compete"
-                    ? "카드 4장을 눌러 2장씩 A·B 묶음을 채우면 제출할 수 있어요."
-                    : `카드를 ${ACTION_LABEL[selectedAction].count}장 선택하면 제출할 수 있어요.`}
-                </p>
-              )}
-            </>
-          )}
+          {renderHandFan(false)}
+          {myTurn && state.phase === "awaiting-action" && selectedAction && confirmBlock}
         </div>
+        )}
       </div>
 
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
+import { Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import Avatar from "@/components/common/Avatar";
 import { detectAuctionEvent, FlyingToken, type AnimEvent } from "./AuctionEffects";
 import RulebookModal from "./RulebookModal";
@@ -144,6 +144,9 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const board3d = useBoardView("no-thanks-view");
   const [lowDetail] = useState(preferLowDetail);
+  const is3D = board3d.view === "3d";
+  // 3D folds the 2D player strip behind a toggle (the table already shows it).
+  const [stripOpen, setStripOpen] = useState(false);
   // Polite Refusal Swing sound suite (noThanksSound.ts) — state-diff cues heard by every client.
   useSoundCues(state, getNoThanksSound, noThanksSoundCues);
   useSuiteBgm(getNoThanksSound, state.phase === "playing", state.deck.length <= 5 ? 1 : 0);
@@ -218,10 +221,13 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
     const detected = detectAuctionEvent(trackedState, state);
     setTrackedState(state);
     if (detected) {
-      setEffects((prev) => [...prev, { ...detected, id: (prev.at(-1)?.id ?? 0) + 1 }]);
+      // The DOM coin/card flights need the 2D auction box; in 3D the table's
+      // own lastEvent animation plays instead.
+      if (!is3D) setEffects((prev) => [...prev, { ...detected, id: (prev.at(-1)?.id ?? 0) + 1 }]);
       setLastEvent3D((prev) => ({ id: (prev?.id ?? 0) + 1, kind: detected.kind, seat: detected.seat }));
     }
   }
+  if (is3D && effects.length > 0) setEffects([]);
   const handleEffectDone = useCallback((id: number) => {
     setEffects((prev) => prev.filter((e) => e.id !== id));
   }, []);
@@ -371,35 +377,79 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
         </div>
       </div>
 
-      {board3d.view === "3d" && (
-        <Frame3D hint={publicMode ? "드래그로 둘러보기" : "🔒 남의 칩은 주머니 속 · 드래그로 둘러보기"}>
-          <NoThanksTable3D
-            playerCount={state.playerCount}
-            viewerSeat={viewerSeat}
-            seats={seatOrder.map((seat) => {
-              const p = state.players[seat];
-              return {
-                seat,
-                name: names[seat] ?? `${seat + 1}번`,
-                chips: seat === viewerSeat || publicMode || revealOpponentChips ? p.chips : null,
-                cards: p.cards,
-                penaltyCards: computeGroups(p.cards).map((g) => g.penaltyCard),
-                score: null,
-                away: !connectedSeats.has(seat),
-              };
-            })}
-            activeSeat={state.activeSeat}
-            currentCard={state.currentCard}
-            chipsOnCard={state.chipsOnCard}
-            deckCount={state.deck.length}
-            lastEvent={lastEvent3D}
-            overview={false}
-            lowDetail={lowDetail}
-          />
-        </Frame3D>
+      {is3D && (
+        // Table on top, my cards + the two auction buttons laid over the
+        // bottom edge of the same frame (as 5 오이) — no 2D auction box below.
+        <div className="relative z-10 h-[556px] w-full overflow-hidden rounded-2xl border border-black/50 sm:h-[616px] lg:h-[656px]" style={{ background: "#07150d" }}>
+          <div className="absolute inset-x-0 top-0 bottom-[196px] sm:bottom-[204px]">
+            <NoThanksTable3D
+              playerCount={state.playerCount}
+              viewerSeat={viewerSeat}
+              seats={seatOrder.map((seat) => {
+                const p = state.players[seat];
+                return {
+                  seat,
+                  name: names[seat] ?? `${seat + 1}번`,
+                  chips: seat === viewerSeat || publicMode || revealOpponentChips ? p.chips : null,
+                  cards: p.cards,
+                  penaltyCards: computeGroups(p.cards).map((g) => g.penaltyCard),
+                  score: null,
+                  away: !connectedSeats.has(seat),
+                };
+              })}
+              activeSeat={state.activeSeat}
+              currentCard={state.currentCard}
+              chipsOnCard={state.chipsOnCard}
+              deckCount={state.deck.length}
+              lastEvent={lastEvent3D}
+              overview={false}
+              lowDetail={lowDetail}
+            />
+            <span className="pointer-events-none absolute top-2 left-1/2 max-w-[92%] -translate-x-1/2 truncate rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-white/75">
+              {publicMode ? "드래그로 둘러보기" : "🔒 남의 칩은 주머니 속 · 드래그로 둘러보기"}
+            </span>
+            <span className="pointer-events-none absolute top-10 left-1/2 -translate-x-1/2 rounded-full bg-black/65 px-3 py-1 text-[11px] font-semibold whitespace-nowrap text-white/85">
+              현재 카드 <b className="text-white">{state.currentCard}</b> · 🪙 쌓인 칩 {state.chipsOnCard} · 남은 {cardsRemaining}장
+            </span>
+          </div>
+          <section
+            className="absolute inset-x-0 bottom-0 flex h-[196px] flex-col justify-end gap-2 px-3 pt-6 pb-3 sm:h-[204px]"
+            style={{ background: "linear-gradient(180deg,rgba(7,21,13,0) 0%,rgba(7,21,13,0.9) 16%,rgba(7,21,13,0.98) 100%)" }}
+          >
+            <div className="flex items-center justify-between gap-2 text-[11px] font-semibold">
+              <span className={isMyTurn ? "text-amber-200" : "text-white/60"}>{isMyTurn ? "🫵 내 차례!" : `${names[state.activeSeat]}님 차례…`}</span>
+              <span className="text-amber-200">🪙 내 칩 {me.chips}</span>
+            </div>
+            <div className="flex min-h-8 gap-1 overflow-x-auto">
+              {me.cards.length === 0 ? (
+                <span className="text-[11px] text-white/40">아직 가져온 카드 없음</span>
+              ) : (
+                computeGroups(me.cards).map((g) => <CardGroupBadge key={g.cards[0]} group={g} />)
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button
+                disabled={!canPass}
+                onClick={() => onAction({ type: "pass", seat: viewerSeat })}
+                className="min-h-11 flex-1 rounded-xl bg-amber-600 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+              >
+                🙅 노 땡스! (칩 1개)
+              </button>
+              <button
+                disabled={!isMyTurn}
+                onClick={() => onAction({ type: "take", seat: viewerSeat })}
+                className="min-h-11 flex-1 rounded-xl bg-emerald-600 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+              >
+                ✅ 가져오기{state.chipsOnCard > 0 ? ` (+🪙${state.chipsOnCard})` : ""}
+              </button>
+            </div>
+            {isMyTurn && me.chips === 0 && <p className="text-center text-[11px] text-amber-300/90">칩이 없어서 무조건 가져와야 해요!</p>}
+          </section>
+        </div>
       )}
 
       {/* Central auction area */}
+      {!is3D && (
       <div className="relative z-10 flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-6 light:border-slate-200 light:bg-white/70">
         <p className={`text-xs font-medium ${isMyTurn ? "text-amber-200 light:text-amber-700" : "text-white/50 light:text-slate-500"}`}>
           {isMyTurn ? "🫵 당신 차례입니다!" : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
@@ -453,8 +503,22 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
           <p className="text-[11px] text-amber-300/80 light:text-amber-700">칩이 없어서 무조건 가져와야 해요!</p>
         )}
       </div>
+      )}
+
+      {is3D && (
+        <button
+          type="button"
+          onClick={() => setStripOpen((o) => !o)}
+          aria-expanded={stripOpen}
+          className="relative z-10 flex min-h-11 items-center justify-between rounded-xl border border-white/10 bg-black/20 px-4 text-xs font-semibold text-white/75 transition hover:bg-black/30 light:border-slate-200 light:bg-white/70 light:text-slate-600"
+        >
+          <span>📋 플레이어별 카드·칩 {stripOpen ? "접기" : `펼치기 (${state.playerCount}명)`}</span>
+          <span aria-hidden>{stripOpen ? "▴" : "▾"}</span>
+        </button>
+      )}
 
       {/* Player strip */}
+      {(!is3D || stripOpen) && (
       <div className="relative z-10 flex flex-col gap-2">
         {seatOrder.map((seat) => {
           const player = state.players[seat];
@@ -495,6 +559,7 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
           );
         })}
       </div>
+      )}
 
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
 
