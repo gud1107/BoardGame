@@ -342,6 +342,10 @@ describe("AI bots (ARCHITECTURE.md §7)", () => {
     expect(templateNamesIn("개구리")).toEqual(["개구리"]);
     expect(templateNamesIn("하울의 움직이는 성")).toEqual(["성"]);
     expect(templateNamesIn("나비 차가운 해바라기")).toEqual([]);
+    // Glued-on adjectives still find the noun; anything else (번개) doesn't.
+    expect(templateNamesIn("흰개와 아기새")).toEqual(["강아지", "새"]);
+    expect(templateNamesIn("들개들이")).toEqual(["강아지"]);
+    expect(templateNamesIn("번개")).toEqual(["번개"]);
   });
 
   it("every doodle's outlines stay closed, so its fills never leak onto the paper", () => {
@@ -374,6 +378,23 @@ describe("AI bots (ARCHITECTURE.md §7)", () => {
     expect(right / total).toBeGreaterThanOrEqual(0.95);
     expect(guessFromDrawing(botDrawingFor("번개장터", seededRng(5), 8).understood, seededRng(1))).toBe("번개와 가게");
     expect(guessFromDrawing(botDrawingFor("우산 쓴 고양이", seededRng(6), 8).understood, seededRng(1))).toBe("우산과 고양이");
+  });
+
+  it("reads black pen sketches by shape — never the all-black soccer ball, never confidently wrong", () => {
+    const sketch = (d: Drawing): Drawing => ({ v: 1, ops: d.ops.filter((o) => o.k !== "f").map((o) => (o.k === "x" ? o : ({ ...o, c: 1 } as DrawOp))) });
+    let right = 0;
+    for (const name of TEMPLATE_NAMES) {
+      for (const seed of [1, 2]) {
+        const seen = recognizeDrawing(sketch(botDrawingFor(name, seededRng(seed), 6).understood));
+        if (seen) expect(seen, name).toEqual([name]);
+        if (seen) right++;
+      }
+    }
+    expect(right / (TEMPLATE_NAMES.length * 2)).toBeGreaterThanOrEqual(0.9);
+    // A lone circle could be many things: the bot hedges instead of naming ink colors (사람/로봇/자동차).
+    const circle: Drawing = { v: 1, ops: [shapeOp("e", 1, 1, { x: 160, y: 80 }, { x: 320, y: 240 })] };
+    expect(guessFromDrawing(circle, seededRng(1))).toMatch(/같은|인가\?|^[가-힣]+$/);
+    expect(["사람", "로봇", "자동차"]).not.toContain(guessFromDrawing(circle, seededRng(1)));
   });
 
   it("Lv.1 and Lv.10 diverge under the same rng", () => {

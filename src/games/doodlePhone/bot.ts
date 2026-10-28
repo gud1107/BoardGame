@@ -139,7 +139,7 @@ const TEMPLATES: readonly Template[] = [
     keywords: ["강아지", "개", "멍멍", "댕댕"],
     draw: (p) => {
       p.circle(50, 55, 27, C.black, 2).fill(50, 60, C.tan);
-      p.ellipse(22, 55, 8, 20, C.black, 2).fill(22, 55, C.brown).ellipse(78, 55, 8, 20, C.black, 2).fill(78, 55, C.brown);
+      p.ellipse(22, 55, 8, 20, C.black, 2).fill(19, 55, C.brown).ellipse(78, 55, 8, 20, C.black, 2).fill(81, 55, C.brown); // fill the part of the ear outside the head
       p.dot(41, 50, C.black, 3).dot(59, 50, C.black, 3).ellipse(50, 64, 6, 4, C.black, 2).fill(50, 64, C.black);
       p.line(pts(44, 72, 50, 76, 56, 72), C.black, 1);
     },
@@ -160,7 +160,8 @@ const TEMPLATES: readonly Template[] = [
     draw: (p) => {
       p.line(pts(44, 92, 44, 58, 56, 58, 56, 92, 44, 92), C.black, 2).fill(50, 80, C.brown);
       p.circle(50, 38, 28, C.black, 2).fill(50, 38, C.green);
-      p.dot(40, 32, C.red, 5).dot(60, 40, C.red, 5).dot(48, 50, C.red, 5);
+      // Dark-rimmed apples: plain red on green vanishes for red-green color-blind players.
+      for (const [x, y] of [[40, 32], [60, 40], [48, 50]]) p.circle(x, y, 6, C.darkRed, 2).fill(x, y, C.red);
     },
   },
   {
@@ -506,7 +507,8 @@ const TEMPLATES: readonly Template[] = [
     keywords: ["수박", "과일"],
     draw: (p) => {
       p.ellipse(50, 30, 44, 44, C.forest, 4, 0, Math.PI).line(pts(6, 30, 94, 30), C.forest, 2);
-      p.ellipse(50, 30, 36, 36, C.forest, 2, 0, Math.PI).fill(50, 70, C.green).fill(50, 46, C.red);
+      // A pale band between rind and flesh — red and green alone look the same to red-green color-blind players.
+      p.ellipse(50, 30, 36, 36, C.cream, 4, 0, Math.PI).fill(50, 70, C.green).fill(50, 46, C.red);
       for (const [x, y] of [[34, 40], [50, 44], [66, 40], [42, 54], [58, 54]]) p.dot(x, y, C.black, 3);
     },
   },
@@ -585,6 +587,13 @@ const TEMPLATES: readonly Template[] = [
 /** Endings that can ride on a noun inside one word ("개가", "집에서", "개들이"). */
 const PARTICLES = ["에서", "에게", "한테", "하고", "이랑", "처럼", "까지", "부터", "이", "가", "을", "를", "은", "는", "의", "와", "과", "랑", "에", "도", "만", "들"];
 
+/**
+ * Prefixes people glue onto a one-letter noun without a space ("흰개",
+ * "아기새", "큰집"). A closed list on purpose: "번개" must stay a 번개, so
+ * only these count as "a 개 with an adjective".
+ */
+const MODIFIERS = ["흰", "하얀", "검은", "까만", "빨간", "파란", "노란", "큰", "작은", "아기", "새끼", "꼬마", "애완", "들", "귀여운", "예쁜"];
+
 /** The word plus what's left after peeling particles off its end ("개들이" → 개들이, 개들, 개). */
 function stemsOf(word: string): string[] {
   const stems = [word];
@@ -601,7 +610,8 @@ function stemsOf(word: string): string[] {
 /**
  * Templates named in `text`, in the order they appear (at most two).
  * A one-letter keyword ("개", "차", "해") must be the whole word give or take
- * particles — otherwise "번개장터" reads as 개 and the bot draws a dog. Longer
+ * particles, or follow one of MODIFIERS ("흰개") — otherwise "번개장터" reads
+ * as 개 and the bot draws a dog. Longer
  * keywords may sit inside a compound ("생일케이크"), but one inside a longer
  * match doesn't count ("눈사람" isn't also a 사람).
  */
@@ -617,7 +627,8 @@ function templatesIn(text: string): Template[] {
     for (const t of TEMPLATES) {
       for (const k of t.keywords) {
         if (k.length === 1) {
-          if (stems.includes(k)) hits.push({ t, at: start, end: start + 1 });
+          const stem = stems.find((st) => st === k || MODIFIERS.some((mod) => st === mod + k));
+          if (stem) hits.push({ t, at: start + stem.length - 1, end: start + stem.length });
           continue;
         }
         for (let i = word.indexOf(k); i >= 0; i = word.indexOf(k, i + 1)) hits.push({ t, at: start + i, end: start + i + k.length });
@@ -1107,6 +1118,17 @@ const SHAPE_N = 10;
 const PATCH_N = 5;
 /** Below this similarity the bot doesn't trust its eyes and falls back to the ink colors. Tuned on wobbly bot drawings (see the tests). */
 const RECOGNIZE_MIN = 0.62;
+/**
+ * Pictures with less colored ink than this (black/gray pen only) are matched
+ * by shape alone against outline versions of the templates — compared by
+ * color, every black line drawing looked like the mostly-black soccer ball.
+ */
+const LINE_ART_MAX_COLOR = 0.2;
+const RECOGNIZE_LINE_MIN = 0.7;
+/** Line art must also beat the runner-up by this much — outlines of round faces (dog/monkey/bear) look alike, and a wrong guess said confidently is worse than none. */
+const LINE_ART_MARGIN = 0.04;
+/** Line art the bot isn't sure about still gets a hedged guess ("강아지…인가?") above this similarity, instead of naming ink colors. */
+const HUNCH_MIN = 0.55;
 /** An empty column run at least this wide (in raster cells) can separate two objects. */
 const MIN_GAP_CELLS = 3;
 
@@ -1115,6 +1137,40 @@ interface Look {
   readonly patches: Float64Array;
   readonly colors: Float64Array;
   readonly aspect: number;
+  /** Share of the ink in real colors (not black/gray). */
+  readonly colorful: number;
+  /** Inked cells of a finer MASK_N×MASK_N normalized grid, and each cell's distance to the nearest ink — for chamfer matching of line art. */
+  readonly inked: readonly number[];
+  readonly dist: Float64Array;
+}
+
+const MASK_N = 24;
+
+/** Two-pass chamfer distance transform (in cells) to the nearest inked cell. */
+function distanceField(mask: Uint8Array): Float64Array {
+  const d = new Float64Array(MASK_N * MASK_N).map((_, i) => (mask[i] ? 0 : Infinity));
+  const relax = (i: number, j: number, cost: number) => {
+    if (d[j] + cost < d[i]) d[i] = d[j] + cost;
+  };
+  for (let y = 0; y < MASK_N; y++) {
+    for (let x = 0; x < MASK_N; x++) {
+      const i = y * MASK_N + x;
+      if (x > 0) relax(i, i - 1, 1);
+      if (y > 0) relax(i, i - MASK_N, 1);
+      if (x > 0 && y > 0) relax(i, i - MASK_N - 1, Math.SQRT2);
+      if (x < MASK_N - 1 && y > 0) relax(i, i - MASK_N + 1, Math.SQRT2);
+    }
+  }
+  for (let y = MASK_N - 1; y >= 0; y--) {
+    for (let x = MASK_N - 1; x >= 0; x--) {
+      const i = y * MASK_N + x;
+      if (x < MASK_N - 1) relax(i, i + 1, 1);
+      if (y < MASK_N - 1) relax(i, i + MASK_N, 1);
+      if (x < MASK_N - 1 && y < MASK_N - 1) relax(i, i + MASK_N + 1, Math.SQRT2);
+      if (x > 0 && y < MASK_N - 1) relax(i, i + MASK_N - 1, Math.SQRT2);
+    }
+  }
+  return d;
 }
 
 /** Features of the ink in columns [x0, x1): silhouette and color layout in its own bounding square, plus overall colors. */
@@ -1137,6 +1193,9 @@ function lookAt(raster: Raster, x0: number, x1: number): Look | null {
   const raw = new Float64Array(SHAPE_N * SHAPE_N);
   const patches = new Float64Array(PATCH_N * PATCH_N * FAMILIES);
   const colors = new Float64Array(FAMILIES);
+  let colorful = 0;
+  let ink = 0;
+  const mask = new Uint8Array(MASK_N * MASK_N);
   for (let y = minY; y <= maxY; y++) {
     for (let x = minX; x <= maxX; x++) {
       const fam = FAMILY[raster[y * RASTER_W + x]] ?? 1;
@@ -1146,6 +1205,9 @@ function lookAt(raster: Raster, x0: number, x1: number): Look | null {
       raw[Math.floor(v * SHAPE_N) * SHAPE_N + Math.floor(u * SHAPE_N)] += 1;
       patches[(Math.floor(v * PATCH_N) * PATCH_N + Math.floor(u * PATCH_N)) * FAMILIES + fam] += 1;
       colors[fam] += fam === 1 ? 0.4 : 1; // black outlines are in almost every drawing — they say little
+      if (fam > 2) colorful++;
+      mask[Math.min(MASK_N - 1, Math.floor(v * MASK_N)) * MASK_N + Math.min(MASK_N - 1, Math.floor(u * MASK_N))] = 1;
+      ink++;
     }
   }
   // A light blur so a stroke one cell off still lines up.
@@ -1160,7 +1222,8 @@ function lookAt(raster: Raster, x0: number, x1: number): Look | null {
       shape[y * SHAPE_N + x] = sum;
     }
   }
-  return { shape, patches, colors, aspect: w / h };
+  const inked = [...mask.keys()].filter((i) => mask[i] === 1);
+  return { shape, patches, colors, aspect: w / h, colorful: colorful / ink, inked, dist: distanceField(mask) };
 }
 
 function cosine(a: Float64Array, b: Float64Array): number {
@@ -1173,29 +1236,77 @@ function cosine(a: Float64Array, b: Float64Array): number {
   return na === 0 || nb === 0 ? 0 : dot / Math.sqrt(na * nb);
 }
 
+/** Mean distance (cells) from `a`'s ink to the nearest ink of `b`. */
+function chamfer(a: Look, b: Look): number {
+  let sum = 0;
+  for (const i of a.inked) sum += b.dist[i];
+  return a.inked.length === 0 ? Infinity : sum / a.inked.length;
+}
+
+/**
+ * Shape-only similarity for line art: do my lines sit on the template's lines
+ * (chamfer, forgiving a cell or two of hand wobble), and is most of the
+ * template there (weighted less — people leave details out).
+ */
+function lineSimilarity(a: Look, b: Look): number {
+  const near = 1 - (0.65 * chamfer(a, b) + 0.35 * chamfer(b, a)) / 4;
+  return 0.5 * near + 0.5 * cosine(a.shape, b.shape) - 0.15 * Math.abs(Math.log(a.aspect / b.aspect));
+}
+
 function similarity(a: Look, b: Look): number {
   return 0.35 * cosine(a.shape, b.shape) + 0.35 * cosine(a.patches, b.patches) + 0.3 * cosine(a.colors, b.colors) - 0.15 * Math.abs(Math.log(a.aspect / b.aspect));
 }
 
-let referenceLooks: { name: string; look: Look }[] | null = null;
+interface Reference {
+  readonly name: string;
+  /** Drawn cleanly, as the bot draws it. */
+  readonly look: Look;
+  /** The same doodle as a person might sketch it: black outlines, no fills. */
+  readonly line: Look;
+}
 
-/** How each template looks drawn cleanly — computed once. */
-function references(): { name: string; look: Look }[] {
+let referenceLooks: Reference[] | null = null;
+
+function asLineArt(drawing: Drawing): Drawing {
+  return { v: 1, ops: drawing.ops.filter((op) => op.k !== "f").map((op) => (op.k === "x" ? op : ({ ...op, c: C.black, ...(isShapeOp(op) ? { f: undefined } : {}) } as DrawOp))) };
+}
+
+/** How each template looks drawn cleanly (and as bare outlines) — computed once. */
+function references(): Reference[] {
   referenceLooks ??= TEMPLATES.flatMap((t) => {
-    const look = lookAt(rasterize(drawTemplates([t], () => 0.5, 10, [{ x: 130, y: 50, size: 220 }])), 0, RASTER_W);
-    return look ? [{ name: t.name, look }] : [];
+    const clean = drawTemplates([t], () => 0.5, 10, [{ x: 130, y: 50, size: 220 }]);
+    const look = lookAt(rasterize(clean), 0, RASTER_W);
+    const line = lookAt(rasterize(asLineArt(clean)), 0, RASTER_W);
+    return look && line ? [{ name: t.name, look, line }] : [];
   });
   return referenceLooks;
 }
 
-function bestMatch(look: Look | null): { name: string; score: number } {
-  let best = { name: "", score: -Infinity };
-  if (!look) return best;
-  for (const ref of references()) {
-    const score = similarity(look, ref.look);
-    if (score > best.score) best = { name: ref.name, score };
-  }
-  return best;
+/**
+ * The closest template and how sure the bot is: `confidence` ≥ 0 means sure
+ * enough to say it. Colored pictures are compared by shape and color; black
+ * or gray pictures by shape only (against the outline and the clean version —
+ * a gray robot is filled, a pen sketch isn't), and only when one template
+ * clearly stands out.
+ */
+interface Match {
+  readonly name: string;
+  readonly confidence: number;
+  readonly lineArt: boolean;
+  readonly score: number;
+  readonly runnerUp: { readonly name: string; readonly score: number } | null;
+}
+
+function bestMatch(look: Look | null): Match {
+  if (!look) return { name: "", confidence: -Infinity, lineArt: false, score: -Infinity, runnerUp: null };
+  const lineArt = look.colorful < LINE_ART_MAX_COLOR;
+  const scored = references()
+    .map((ref) => ({ name: ref.name, score: lineArt ? Math.max(lineSimilarity(look, ref.line), lineSimilarity(look, ref.look)) : similarity(look, ref.look) }))
+    .sort((a, b) => b.score - a.score);
+  const [best, second] = scored;
+  const base = { name: best.name, lineArt, score: best.score, runnerUp: second ?? null };
+  if (!lineArt) return { ...base, confidence: best.score - RECOGNIZE_MIN };
+  return { ...base, confidence: Math.min(best.score - RECOGNIZE_LINE_MIN, best.score - (second?.score ?? -Infinity) - LINE_ART_MARGIN) };
 }
 
 /** Column to cut the picture at when it holds two objects side by side (a clear empty band with real ink on both sides), else null. */
@@ -1234,17 +1345,30 @@ export function recognizeDrawing(drawing: Drawing): string[] | null {
   if (cut !== null) {
     const left = bestMatch(lookAt(raster, 0, cut));
     const right = bestMatch(lookAt(raster, cut, RASTER_W));
-    const sure = [left, right].filter((m) => m.score >= RECOGNIZE_MIN);
-    if (sure.length === 2 && (left.score + right.score) / 2 >= whole.score - 0.05) return left.name === right.name ? [left.name] : [left.name, right.name];
-    if (whole.score < RECOGNIZE_MIN && sure.length === 1) return [sure[0].name];
+    const sure = [left, right].filter((m) => m.confidence >= 0);
+    if (sure.length === 2 && (left.confidence + right.confidence) / 2 >= whole.confidence - 0.05) return left.name === right.name ? [left.name] : [left.name, right.name];
+    if (whole.confidence < 0 && sure.length === 1) return [sure[0].name];
   }
-  return whole.score >= RECOGNIZE_MIN ? [whole.name] : null;
+  return whole.confidence >= 0 ? [whole.name] : null;
+}
+
+/**
+ * A pen sketch the bot can't call for sure: it says what it half-sees, like a
+ * person would — "강아지 같은 원숭이" when two look alike, "강아지…인가?"
+ * otherwise. Null when it doesn't even half-see anything, or the picture is
+ * colored (the ink colors are a better hint then).
+ */
+function hunchFor(drawing: Drawing): string | null {
+  const m = bestMatch(lookAt(rasterize(drawing, isSceneryOp), 0, RASTER_W));
+  if (!m.lineArt || m.score < HUNCH_MIN) return null;
+  if (m.runnerUp && m.score - m.runnerUp.score < LINE_ART_MARGIN) return `${m.name} 같은 ${m.runnerUp.name}`;
+  return `${m.name}…인가?`;
 }
 
 export function guessFromDrawing(drawing: Drawing, rng: () => number): string {
   if (isBlankDrawing(drawing)) return BLANK_GUESSES[Math.floor(rng() * BLANK_GUESSES.length)];
   const seen = recognizeDrawing(drawing);
-  return seen ? joinWords(seen) : guessFromInk(drawing, rng);
+  return seen ? joinWords(seen) : (hunchFor(drawing) ?? guessFromInk(drawing, rng));
 }
 
 /** One canned answer list per ICEBREAKER_QUESTIONS entry (same order). */
@@ -1365,3 +1489,5 @@ export function nextBotActor(state: DoodlePhoneState, botSeats: ReadonlySet<Seat
   }
   return null;
 }
+
+

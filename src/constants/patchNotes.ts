@@ -64,6 +64,17 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.114.2",
+    releaseDate: "2026-10-29",
+    title: "✏️ 갈틱폰 AI가 펜 스케치도 알아봐요",
+    changes: [
+      { game: "doodle-phone", type: "FIX", desc: "✏️ 검은 펜으로 윤곽만 그린 그림을 AI가 전부 '공'이라고 하던 문제 — 이제 모양만으로 비교하고, 헷갈리면 '강아지 같은 원숭이'처럼 말해요" },
+      { game: "doodle-phone", type: "IMPROVE", desc: "🐶 '흰개'·'아기새'처럼 붙여 쓴 말도 AI가 알아들어요 (번개장터는 여전히 번개 + 가게)" },
+      { game: "doodle-phone", type: "IMPROVE", desc: "🎨 색약 배려: AI 그림의 사과에 테두리, 수박 껍질과 속 사이에 밝은 띠 — 빨강·초록이 같아 보여도 구분돼요" },
+      { game: "doodle-phone", type: "FIX", desc: "🐕 AI가 그린 강아지의 오른쪽 귀가 칠해지지 않던 문제" },
+    ],
+  },
+  {
     version: "v1.114.1",
     releaseDate: "2026-10-29",
     title: "🤖 갈틱폰 AI가 더 똑똑해졌어요",
