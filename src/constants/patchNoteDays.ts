@@ -18,7 +18,7 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
  */
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
   "2026-10-29": {
-    "doodle-phone": "🤖 AI: '번개장터' 강아지 오류, 그림 45개, 모양 보고 맞히기·펜 스케치 인식, 색약 배려",
+    "doodle-phone": "🤖 AI가 주제를 지어내고, 그림 45개·펜 스케치도 알아봐요, 말투, 색약 배려, 🧪 AI 시험장",
   },
   "2026-10-28": {
     common: "🏆 랭킹에 캐릭터 얼굴·👑 1위 칩, ✏️ 꾸미기·💾 저장, 🏷️ 게임 닉네임·👥 같은 이름 구분, 🤲 카드 쥐는 손",

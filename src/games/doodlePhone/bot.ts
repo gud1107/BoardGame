@@ -22,6 +22,8 @@
  *   onion → `nextAnimationFrame`: the subject walks/hops
  *   on from where the last frame left it and one piece of background is added per frame;
  *   base → keep the picture and add a small doodle of its own.
+ * - Opening prompts: usually invented on the spot (promptGen.ts — "케이크를
+ *   훔친 원숭이"), sometimes a stock line; the nouns are always drawable.
  * - Icebreaker: a canned answer per question.
  * - Theme packs: on turn 1 the bot picks one of the album's offered keywords
  *   (and doodles it, if it knows a template for any word in it).
@@ -47,6 +49,7 @@ import {
 } from "./engine";
 import { translateOp, unionBounds, type Bounds } from "./editing";
 import { ICEBREAKER_QUESTIONS, drawingReferenceFor, icebreakerQuestion, inspirationWord, openingChoices } from "./modes";
+import { generatePrompt, josa } from "./promptGen";
 import { BOT_OPENING_PROMPTS, FALLBACK_PROMPTS } from "./prompts";
 import { RASTER_W, rasterize, type Raster } from "./raster";
 
@@ -126,7 +129,7 @@ const pts = (...xy: number[]): Point[] => Array.from({ length: xy.length / 2 }, 
 const TEMPLATES: readonly Template[] = [
   {
     name: "고양이",
-    keywords: ["고양이", "냥", "야옹"],
+    keywords: ["고양이", "냥", "야옹", "사자", "호랑이", "표범", "여우", "치타"],
     draw: (p) => {
       p.circle(50, 58, 28, C.black, 2).fill(50, 62, C.orange);
       p.line(pts(27, 42, 30, 14, 45, 32), C.black, 2).line(pts(55, 32, 70, 14, 73, 42), C.black, 2);
@@ -136,7 +139,7 @@ const TEMPLATES: readonly Template[] = [
   },
   {
     name: "강아지",
-    keywords: ["강아지", "개", "멍멍", "댕댕"],
+    keywords: ["강아지", "개", "멍멍", "댕댕", "늑대", "강쥐", "멍뭉이", "퍼피"],
     draw: (p) => {
       p.circle(50, 55, 27, C.black, 2).fill(50, 60, C.tan);
       p.ellipse(22, 55, 8, 20, C.black, 2).fill(19, 55, C.brown).ellipse(78, 55, 8, 20, C.black, 2).fill(81, 55, C.brown); // fill the part of the ear outside the head
@@ -235,7 +238,7 @@ const TEMPLATES: readonly Template[] = [
   },
   {
     name: "물고기",
-    keywords: ["물고기", "생선", "바다", "고래", "상어"],
+    keywords: ["물고기", "생선", "바다", "고래", "상어", "붕어", "연어", "참치", "니모"],
     draw: (p) => {
       p.ellipse(44, 50, 30, 18, C.navy, 2).fill(44, 50, C.blue);
       p.line(pts(72, 50, 92, 34, 92, 66, 72, 50), C.navy, 2).fill(86, 50, C.cyan);
@@ -369,7 +372,7 @@ const TEMPLATES: readonly Template[] = [
   },
   {
     name: "새",
-    keywords: ["새", "참새", "비둘기", "까치", "독수리", "앵무새", "병아리", "닭"],
+    keywords: ["새", "참새", "비둘기", "까치", "독수리", "앵무새", "병아리", "닭", "오리", "백조", "갈매기", "부엉이", "올빼미", "치킨"],
     draw: (p) => {
       p.ellipse(46, 60, 28, 20, C.black, 2).fill(42, 64, C.amber);
       p.circle(70, 36, 14, C.black, 2).fill(70, 34, C.amber);
@@ -390,7 +393,7 @@ const TEMPLATES: readonly Template[] = [
   },
   {
     name: "곰",
-    keywords: ["곰", "곰돌이", "판다", "테디"],
+    keywords: ["곰", "곰돌이", "판다", "테디", "너구리"],
     draw: (p) => {
       p.circle(26, 30, 11, C.black, 2).fill(26, 30, C.brown).circle(74, 30, 11, C.black, 2).fill(74, 30, C.brown);
       p.circle(50, 56, 29, C.black, 2).fill(50, 46, C.brown);
@@ -573,7 +576,7 @@ const TEMPLATES: readonly Template[] = [
   },
   {
     name: "소",
-    keywords: ["소", "젖소", "황소", "외양간", "목장"],
+    keywords: ["소", "젖소", "황소", "외양간", "목장", "코뿔소", "하마"],
     draw: (p) => {
       p.line(pts(30, 26, 22, 10), C.tan, 4).line(pts(70, 26, 78, 10), C.tan, 4);
       p.ellipse(50, 50, 26, 30, C.black, 2).fill(50, 40, C.lightGray);
@@ -589,10 +592,17 @@ const PARTICLES = ["에서", "에게", "한테", "하고", "이랑", "처럼", "
 
 /**
  * Prefixes people glue onto a one-letter noun without a space ("흰개",
- * "아기새", "큰집"). A closed list on purpose: "번개" must stay a 번개, so
- * only these count as "a 개 with an adjective".
+ * "아기새", "검정개"). "번개" must stay a 번개, so a prefix counts only if
+ * it's listed here or is an adjective form of 2+ syllables ending in ㄴ
+ * ("착한개", "커다란배" — but not the one-syllable 번/안 of 번개/안개).
  */
-const MODIFIERS = ["흰", "하얀", "검은", "까만", "빨간", "파란", "노란", "큰", "작은", "아기", "새끼", "꼬마", "애완", "들", "귀여운", "예쁜"];
+const MODIFIERS = ["흰", "큰", "들", "아기", "새끼", "꼬마", "애완", "검정", "하양", "노랑", "빨강", "파랑", "초록", "분홍", "보라", "회색", "갈색", "주황", "황금", "금색", "은색", "대왕", "미니", "거대", "왕"];
+
+function isAdjectivePrefix(prefix: string): boolean {
+  if (MODIFIERS.includes(prefix)) return true;
+  const code = prefix.charCodeAt(prefix.length - 1) - 0xac00;
+  return prefix.length >= 2 && code >= 0 && code <= 11171 && code % 28 === 4; // final ㄴ
+}
 
 /** The word plus what's left after peeling particles off its end ("개들이" → 개들이, 개들, 개). */
 function stemsOf(word: string): string[] {
@@ -608,10 +618,11 @@ function stemsOf(word: string): string[] {
 }
 
 /**
- * Templates named in `text`, in the order they appear (at most two).
+ * Templates named in `text`, in the order they appear (at most two — the
+ * last two, where the subject is).
  * A one-letter keyword ("개", "차", "해") must be the whole word give or take
- * particles, or follow one of MODIFIERS ("흰개") — otherwise "번개장터" reads
- * as 개 and the bot draws a dog. Longer
+ * particles, or follow an adjective (MODIFIERS, "흰개") — otherwise "번개장터"
+ * reads as 개 and the bot draws a dog. Longer
  * keywords may sit inside a compound ("생일케이크"), but one inside a longer
  * match doesn't count ("눈사람" isn't also a 사람).
  */
@@ -627,7 +638,7 @@ function templatesIn(text: string): Template[] {
     for (const t of TEMPLATES) {
       for (const k of t.keywords) {
         if (k.length === 1) {
-          const stem = stems.find((st) => st === k || MODIFIERS.some((mod) => st === mod + k));
+          const stem = stems.find((st) => st === k || (st.length > 1 && st.endsWith(k) && isAdjectivePrefix(st.slice(0, -1))));
           if (stem) hits.push({ t, at: start + stem.length - 1, end: start + stem.length });
           continue;
         }
@@ -638,7 +649,8 @@ function templatesIn(text: string): Template[] {
   const kept = hits.filter((h) => !hits.some((o) => o.at <= h.at && o.end >= h.end && o.end - o.at > h.end - h.at));
   const found: Template[] = [];
   for (const h of kept.sort((a, b) => a.at - b.at)) if (!found.includes(h.t)) found.push(h.t);
-  return found.slice(0, 2);
+  // Korean puts the subject last ("우주에서 피자 배달하는 펭귄") — with three or more, keep the last two.
+  return found.length > 2 ? found.slice(-2) : found;
 }
 
 /** Which doodles a prompt asks for, by template name — exported for tests. */
@@ -1334,41 +1346,96 @@ function splitColumn(raster: Raster): number | null {
   return best?.cut ?? null;
 }
 
+
+interface Reading {
+  readonly whole: Match;
+  /** Left and right halves, when the picture splits into two objects. */
+  readonly sides: readonly [Match, Match] | null;
+}
+
+function readDrawing(drawing: Drawing): Reading {
+  const raster = rasterize(drawing, isSceneryOp);
+  const cut = splitColumn(raster);
+  return {
+    whole: bestMatch(lookAt(raster, 0, RASTER_W)),
+    sides: cut === null ? null : [bestMatch(lookAt(raster, 0, cut)), bestMatch(lookAt(raster, cut, RASTER_W))],
+  };
+}
+
 /**
  * What the bot thinks it's looking at: one or two template names (left to
- * right), or null when nothing is a confident match.
+ * right), or null when nothing is a confident match. A picture that splits
+ * into two objects is read side by side — the whole of it only counts when
+ * it's a much better match (one doodle with detached bits): otherwise two
+ * sketches side by side looked like one wide watermelon.
  */
 export function recognizeDrawing(drawing: Drawing): string[] | null {
-  const raster = rasterize(drawing, isSceneryOp);
-  const whole = bestMatch(lookAt(raster, 0, RASTER_W));
-  const cut = splitColumn(raster);
-  if (cut !== null) {
-    const left = bestMatch(lookAt(raster, 0, cut));
-    const right = bestMatch(lookAt(raster, cut, RASTER_W));
-    const sure = [left, right].filter((m) => m.confidence >= 0);
-    if (sure.length === 2 && (left.confidence + right.confidence) / 2 >= whole.confidence - 0.05) return left.name === right.name ? [left.name] : [left.name, right.name];
-    if (whole.confidence < 0 && sure.length === 1) return [sure[0].name];
-  }
-  return whole.confidence >= 0 ? [whole.name] : null;
+  return namesFrom(readDrawing(drawing));
 }
+
+function namesFrom({ whole, sides }: Reading): string[] | null {
+  if (!sides) return whole.confidence >= 0 ? [whole.name] : null;
+  const [left, right] = sides;
+  if (whole.confidence >= 0 && whole.confidence > Math.max(left.confidence, right.confidence) + 0.05) return [whole.name];
+  if (left.confidence >= 0 && right.confidence >= 0) return left.name === right.name ? [left.name] : [left.name, right.name];
+  const sure = sides.filter((m) => m.confidence >= 0);
+  return sure.length === 1 ? [sure[0].name] : null;
+}
+
+/** Runner-up this close counts as a genuine toss-up between two things. */
+const TOSS_UP_MARGIN = 0.015;
+
+/**
+ * How a bot sounds when it isn't sure — one per seat, so three bots in a room
+ * don't all mumble "…인가?". Each line takes the best guess `a` (and, for a
+ * toss-up, the runner-up `b`); the nouns stay in, so the next artist can
+ * still draw them.
+ */
+const VOICES: readonly { readonly hunch: readonly ((a: string) => string)[]; readonly tossUp: (a: string, b: string) => string }[] = [
+  // bold
+  { hunch: [(a) => `${a}!`, (a) => `누가 봐도 ${a}`, (a) => `${a} 확정`], tossUp: (a, b) => `${josa(a, "과", "와")} ${b} 합체` },
+  // playful
+  { hunch: [(a) => `${a} 맞죠?`, (a) => `혹시 ${a}?`, (a) => `${a}인 척하는 무언가`], tossUp: (a, b) => `${a} 같은 ${b}` },
+  // careful
+  { hunch: [(a) => `${a}…인가?`, (a) => `아마도 ${a}`, (a) => `${a} (아마)`], tossUp: (a, b) => `${a}? 아니 ${b}?` },
+];
 
 /**
  * A pen sketch the bot can't call for sure: it says what it half-sees, like a
- * person would — "강아지 같은 원숭이" when two look alike, "강아지…인가?"
- * otherwise. Null when it doesn't even half-see anything, or the picture is
- * colored (the ink colors are a better hint then).
+ * person would, in its seat's voice — "강아지 같은 원숭이" for a toss-up,
+ * "누가 봐도 강아지" / "강아지…인가?" otherwise. Null when it doesn't even
+ * half-see anything, or the picture is colored (the ink colors are a better
+ * hint then).
  */
-function hunchFor(drawing: Drawing): string | null {
-  const m = bestMatch(lookAt(rasterize(drawing, isSceneryOp), 0, RASTER_W));
+function hunchFor(reading: Reading, rng: () => number, voice: number): string | null {
+  // For a two-part picture, the half the bot half-recognises best.
+  const m = reading.sides ? [...reading.sides].sort((a, b) => b.confidence - a.confidence)[0] : reading.whole;
   if (!m.lineArt || m.score < HUNCH_MIN) return null;
-  if (m.runnerUp && m.score - m.runnerUp.score < LINE_ART_MARGIN) return `${m.name} 같은 ${m.runnerUp.name}`;
-  return `${m.name}…인가?`;
+  const v = VOICES[((voice % VOICES.length) + VOICES.length) % VOICES.length];
+  if (m.runnerUp && m.score - m.runnerUp.score < TOSS_UP_MARGIN) return v.tossUp(m.name, m.runnerUp.name);
+  return v.hunch[Math.floor(rng() * v.hunch.length)](m.name);
 }
 
-export function guessFromDrawing(drawing: Drawing, rng: () => number): string {
-  if (isBlankDrawing(drawing)) return BLANK_GUESSES[Math.floor(rng() * BLANK_GUESSES.length)];
-  const seen = recognizeDrawing(drawing);
-  return seen ? joinWords(seen) : (hunchFor(drawing) ?? guessFromInk(drawing, rng));
+/** What the bot answered and why: `sure` it recognised `names`, a `hunch` (hedged), a guess from the `ink` colors, or a `blank` page. */
+export interface GuessExplained {
+  readonly text: string;
+  readonly kind: "sure" | "hunch" | "ink" | "blank";
+  readonly names: readonly string[];
+}
+
+/** `voice` picks how the bot hedges (its seat, so each bot sounds like itself). */
+export function explainGuess(drawing: Drawing, rng: () => number, voice = 0): GuessExplained {
+  if (isBlankDrawing(drawing)) return { text: BLANK_GUESSES[Math.floor(rng() * BLANK_GUESSES.length)], kind: "blank", names: [] };
+  const reading = readDrawing(drawing);
+  const seen = namesFrom(reading);
+  if (seen) return { text: joinWords(seen), kind: "sure", names: seen };
+  const hunch = hunchFor(reading, rng, voice);
+  if (hunch) return { text: hunch, kind: "hunch", names: templateNamesIn(hunch) };
+  return { text: guessFromInk(drawing, rng), kind: "ink", names: [] };
+}
+
+export function guessFromDrawing(drawing: Drawing, rng: () => number, voice = 0): string {
+  return explainGuess(drawing, rng, voice).text;
 }
 
 /** One canned answer list per ICEBREAKER_QUESTIONS entry (same order). */
@@ -1399,6 +1466,9 @@ function randomPhrase(rng: () => number): string {
 // Bot contract
 // ---------------------------------------------------------------------------
 
+/** How often a bot invents its own opening (promptGen.ts) instead of a stock one — sharper bots are more inventive. */
+const INVENT_CHANCE = { novice: 0.4, core: 0.7, expert: 0.9 } as const;
+
 interface Candidate {
   action: EngineAction;
   score: number;
@@ -1426,10 +1496,12 @@ function candidates(state: DoodlePhoneState, seat: SeatIndex, level: BotLevel, r
           ? icebreakerAnswer(icebreakerQuestion(state.seed, album), rng)
           : themed.length > 0
             ? themed[Math.floor(rng() * themed.length)]
-            : BOT_OPENING_PROMPTS[Math.floor(rng() * BOT_OPENING_PROMPTS.length)];
+            : rng() < INVENT_CHANCE[botTier(level)]
+              ? generatePrompt(rng)
+              : BOT_OPENING_PROMPTS[Math.floor(rng() * BOT_OPENING_PROMPTS.length)];
       return [random, text(opening, 1)];
     }
-    const guess = prompt.kind === "drawing" ? guessFromDrawing(prompt.drawing, rng) : prompt.text;
+    const guess = prompt.kind === "drawing" ? guessFromDrawing(prompt.drawing, rng, seat) : prompt.text;
     return [random, text(isValidText(guess) ? guess : randomPhrase(rng), 1)];
   }
 
@@ -1489,5 +1561,6 @@ export function nextBotActor(state: DoodlePhoneState, botSeats: ReadonlySet<Seat
   }
   return null;
 }
+
 
 

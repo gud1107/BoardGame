@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { seededRng, shuffle } from "@/lib/rng";
-import { SCENERY_ALPHA, SCENE_PIECE_COUNT, addToDrawing, chooseBotAction, isSceneryOp, nextAnimationFrame, sceneChoicesFor, scenePieceFor, getValidMoves, guessFromDrawing, botDrawingFor, inkByColor, nextBotActor, recognizeDrawing, redrawDrawing, templateNamesIn, TEMPLATE_NAMES } from "./bot";
+import { SCENERY_ALPHA, SCENE_PIECE_COUNT, addToDrawing, chooseBotAction, isSceneryOp, nextAnimationFrame, sceneChoicesFor, scenePieceFor, getValidMoves, guessFromDrawing, botDrawingFor, inkByColor, nextBotActor, explainGuess, recognizeDrawing, redrawDrawing, templateNamesIn, TEMPLATE_NAMES } from "./bot";
 import { RASTER_CELL, RASTER_W, rasterize } from "./raster";
+import { PROMPT_PATTERN_COUNT, generatePrompt, josa } from "./promptGen";
 import {
   EMPTY_DRAWING,
   MAX_DRAWING_CHARS,
@@ -44,7 +45,7 @@ import {
   type DoodlePhoneState,
   type EngineAction,
 } from "./engine";
-import { FALLBACK_PROMPTS } from "./prompts";
+import { BOT_OPENING_PROMPTS, FALLBACK_PROMPTS } from "./prompts";
 import { ChunkAssembler, splitIntoChunks } from "./syncChunks";
 import { readClipboard, resetClipboardMemory, writeClipboard } from "./clipboard";
 import { STAMPS, STAMP_SIZES, stampOps } from "./stamps";
@@ -346,6 +347,10 @@ describe("AI bots (ARCHITECTURE.md §7)", () => {
     expect(templateNamesIn("흰개와 아기새")).toEqual(["강아지", "새"]);
     expect(templateNamesIn("들개들이")).toEqual(["강아지"]);
     expect(templateNamesIn("번개")).toEqual(["번개"]);
+    expect(templateNamesIn("검정개와 착한새")).toEqual(["강아지", "새"]);
+    expect(templateNamesIn("안개 낀 무지개")).toEqual(["무지개"]);
+    // Three or more: the subject (last) and the one before it.
+    expect(templateNamesIn("우주에서 피자 배달하는 펭귄")).toEqual(["피자", "펭귄"]);
   });
 
   it("every doodle's outlines stay closed, so its fills never leak onto the paper", () => {
@@ -395,6 +400,43 @@ describe("AI bots (ARCHITECTURE.md §7)", () => {
     const circle: Drawing = { v: 1, ops: [shapeOp("e", 1, 1, { x: 160, y: 80 }, { x: 320, y: 240 })] };
     expect(guessFromDrawing(circle, seededRng(1))).toMatch(/같은|인가\?|^[가-힣]+$/);
     expect(["사람", "로봇", "자동차"]).not.toContain(guessFromDrawing(circle, seededRng(1)));
+  });
+
+  it("invents drawable, short, grammatical opening prompts", () => {
+    expect(josa("곰", "을", "를")).toBe("곰을");
+    expect(josa("고양이", "을", "를")).toBe("고양이를");
+    const rng = seededRng(42);
+    const seen = new Set<string>();
+    for (let i = 0; i < 1000; i++) {
+      const p = generatePrompt(rng);
+      seen.add(p);
+      expect(isValidText(p), p).toBe(true);
+      expect(templateNamesIn(p).length, p).toBeGreaterThan(0);
+      expect(p, p).not.toMatch(/을\(를\)|이\(가\)|  /);
+    }
+    expect(seen.size).toBeGreaterThan(500);
+    expect(PROMPT_PATTERN_COUNT).toBeGreaterThanOrEqual(8);
+    // A sharp bot usually invents its own opening rather than a stock line.
+    const openings = Array.from({ length: 40 }, (_, i) => chooseBotAction(startGame(4, 100 + i), 0, 10, seededRng(i)));
+    const invented = openings.filter((a) => a?.type === "SUBMIT_TEXT" && !BOT_OPENING_PROMPTS.includes(a.text)).length;
+    expect(invented).toBeGreaterThan(25);
+  });
+
+  it("reads two side-by-side sketches per side, not as one wide doodle", () => {
+    const sketch = (d: Drawing): Drawing => ({ v: 1, ops: d.ops.filter((o) => o.k !== "f").map((o) => (o.k === "x" ? o : ({ ...o, c: 1 } as DrawOp))) });
+    for (let seed = 1; seed <= 6; seed++) {
+      const seen = explainGuess(sketch(botDrawingFor("토끼와 고양이", seededRng(seed), 10).understood), seededRng(1));
+      if (seen.kind === "sure") expect(seen.names.every((n) => n === "토끼" || n === "고양이"), seen.text).toBe(true);
+    }
+  });
+
+  it("each bot hedges in its own voice", () => {
+    // Find a pen sketch the bot isn't sure about, then ask three seats.
+    const sketches = TEMPLATE_NAMES.flatMap((name) => [1, 2, 3].map((seed) => redrawDrawing({ v: 1, ops: botDrawingFor(name, seededRng(seed), 10).understood.ops.filter((o) => o.k !== "f").map((o) => (o.k === "x" ? o : ({ ...o, c: 1 } as DrawOp))) }, seededRng(seed), 1)));
+    const unsure = sketches.find((d) => explainGuess(d, seededRng(1)).kind === "hunch");
+    expect(unsure).toBeDefined();
+    const voices = new Set([0, 1, 2].map((seat) => guessFromDrawing(unsure!, seededRng(3), seat)));
+    expect(voices.size).toBeGreaterThan(1);
   });
 
   it("Lv.1 and Lv.10 diverge under the same rng", () => {

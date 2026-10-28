@@ -64,6 +64,18 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.115.0",
+    releaseDate: "2026-10-29",
+    title: "💡 갈틱폰 AI가 새 주제를 지어내요",
+    changes: [
+      { game: "doodle-phone", type: "FEAT", desc: "💡 AI가 첫 주제를 직접 지어내요 — '우주에서 라면 끓이는 펭귄', '케이크를 훔친 원숭이' 같은 상황극 (레벨이 높을수록 자주)" },
+      { game: "doodle-phone", type: "IMPROVE", desc: "🗣️ 헷갈릴 때 AI마다 말투가 달라요 — '누가 봐도 강아지!', '강아지 맞죠?', '아마도 강아지' / 반반이면 '강아지와 곰 합체'" },
+      { game: "doodle-phone", type: "FIX", desc: "🍉 사람이 두 개를 나란히 그리면 AI가 통째로 '수박'이라고 하던 문제 — 왼쪽·오른쪽을 따로 봐요" },
+      { game: "doodle-phone", type: "IMPROVE", desc: "🐕 '검정개'·'착한새'처럼 붙여 쓴 말, 사자·늑대·오리 같은 비슷한 동물도 AI가 알아들어요" },
+      { game: "doodle-phone", type: "FEAT", desc: "🧪 /doodle-lab — 친구들과 단어 10개를 그려서 AI가 얼마나 맞히는지(자신 있게 틀린 비율) 직접 시험해 볼 수 있어요" },
+    ],
+  },
+  {
     version: "v1.114.2",
     releaseDate: "2026-10-29",
     title: "✏️ 갈틱폰 AI가 펜 스케치도 알아봐요",
