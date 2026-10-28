@@ -78,16 +78,29 @@ export function useCameraView(storageKey: string): { camera: CameraView; setCame
   return { camera, setCamera };
 }
 
-/** The header's "🪑 테이블 시점 / 🎥 1인칭" pill. */
+/** The header's two-way camera switch — 🎥 1인칭 | 🪑 테이블, the current one lit. */
 export function CameraToggle({ cam }: { cam: ReturnType<typeof useCameraView> }) {
+  const opts: [CameraView, string, string][] = [
+    ["fpv", "🎥 1인칭", "내 캐릭터의 눈으로 보고, 손에 든 카드를 눌러 내요"],
+    ["table", "🪑 테이블", "내 자리 뒤·위에서 테이블 전체를 보고, 손패는 아래 칸에서 내요"],
+  ];
   return (
-    <button
-      type="button"
-      onClick={() => cam.setCamera(cam.camera === "fpv" ? "table" : "fpv")}
-      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:bg-white/80 light:text-slate-600"
-    >
-      {cam.camera === "fpv" ? "🪑 테이블 시점" : "🎥 1인칭"}
-    </button>
+    <div role="group" aria-label="3D 시점" className="flex overflow-hidden rounded-full border border-white/15 light:border-slate-300">
+      {opts.map(([v, label, title]) => (
+        <button
+          key={v}
+          type="button"
+          title={title}
+          aria-pressed={cam.camera === v}
+          onClick={() => cam.setCamera(v)}
+          className={`px-2.5 py-1 text-[11px] transition ${
+            cam.camera === v ? "bg-white/15 font-semibold text-white light:bg-slate-800 light:text-white" : "text-white/55 hover:text-white light:bg-white/80 light:text-slate-600"
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
   );
 }
 

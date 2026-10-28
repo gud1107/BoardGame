@@ -257,6 +257,7 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
   const is3D = board3d.view === "3d";
   // 🎥 first person (default): my own body holds my hand inside the scene and the
   // canvas fills the frame; 🪑 table view keeps the DOM hand overlay below it
+  // (my character still sits in my chair there, seen over my own shoulder)
   const cam = useCameraView("five-cucumbers-camera");
   const fpv = is3D && cam.camera === "fpv";
   const [lowDetail] = useState(preferLowDetail);
@@ -645,6 +646,7 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
                     }
                   : null
               }
+              showMe
             />
             {!fpv && (
               <span className="pointer-events-none absolute top-2 left-1/2 max-w-[92%] -translate-x-1/2 truncate rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-white/75">
@@ -678,7 +680,9 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
             style={{ background: "linear-gradient(180deg,rgba(8,17,8,0) 0%,rgba(8,17,8,0.86) 32%,rgba(8,17,8,0.97) 100%)" }}
           >
             <h3 className="mb-0.5 flex items-center justify-between px-1 text-[11px] font-semibold text-emerald-200/90">
-              <span>🃏 내 손패 ({me.hand.length}장)</span>
+              <span>
+                🃏 내 손패 ({me.hand.length}장) · <span className="text-lime-200">🥒 내 오이 {me.cucumbers}/{state.eliminationThreshold}</span>
+              </span>
               {isMyTurn && <span className="text-amber-200">밝은 카드만 낼 수 있어요</span>}
             </h3>
             <div className="pointer-events-auto">{handFan}</div>

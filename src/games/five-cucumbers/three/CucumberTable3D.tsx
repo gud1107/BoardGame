@@ -6,7 +6,8 @@ import * as THREE from "three";
 import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
 import { HeldFan, FlatCard, FlyIn, ImpactRing, PopIn, TableSign } from "@/games/shared/three/tablePieces";
 import { OutdoorPlaza } from "@/games/shared/three/environments";
-import { paintedTexture, simpleBackTexture, simpleCardTexture, type BubbleStyle } from "@/games/shared/three/tableKit";
+import ScreenSprite from "@/games/shared/three/ScreenSprite";
+import { labelTexture, paintedTexture, simpleBackTexture, simpleCardTexture, type BubbleStyle } from "@/games/shared/three/tableKit";
 import type { PersonMood } from "@/games/shared/three/SeatedPerson";
 
 /**
@@ -47,6 +48,8 @@ export interface CucumberTable3DProps {
     /** eyes down at my hand (my turn) or up at the table */
     lookDown: boolean;
   } | null;
+  /** 🪑 table view: still sit me in my chair (seen from behind), holding my fan's backs */
+  showMe?: boolean;
 }
 
 const SEAT_COLORS = ["#4ade80", "#fbbf24", "#38bdf8", "#f472b6", "#a78bfa", "#fb923c"];
@@ -200,13 +203,16 @@ const TRICK_CARD_TILT = 0.75;
  * The trick, laid out for the viewer: one left-to-right row in play order,
  * every card upright from my seat (not turned toward whoever played it),
  * pushed past the centre so my own 🥒 tag (floating over my edge) doesn't cover it.
+ * A small name chip in the player's seat colour sits just below each card (who played it).
  */
-function Trick({ plays, winnerSeat }: { plays: CucumberTable3DProps["plays"]; winnerSeat: number | null }) {
+function Trick({ plays, winnerSeat, nameOf, chip }: { plays: CucumberTable3DProps["plays"]; winnerSeat: number | null; nameOf: (seat: number) => string; chip: number }) {
   const geo = useTableGeo();
   const facing = geo.angleOf(geo.viewerSeat);
   const right = new THREE.Vector3(Math.cos(facing), 0, -Math.sin(facing));
   const toward = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
   const gap = Math.min(TRICK_CARD_W + 0.04, (geo.tableR * 1.4) / Math.max(1, plays.length - 1));
+  // a full 6-card trick packs the cards tighter: neighbouring chips must not overlap
+  const chipW = plays.length > 1 ? Math.min(chip, gap - 0.03) : chip;
   return (
     <group>
       {plays.map((p, i) => {
@@ -227,6 +233,8 @@ function Trick({ plays, winnerSeat }: { plays: CucumberTable3DProps["plays"]; wi
                     <FlatCard face={face(p.value)} back={back()} w={TRICK_CARD_W} h={TRICK_CARD_H} glow={win ? "#fde68a" : null} />
                   </group>
                 </group>
+                {/* who played it: a small screen-facing chip just past the card's near edge */}
+                <ScreenSprite position={[0, 0.06, TRICK_CARD_H / 2 + 0.06 + chip * 0.18]} scale={[chipW, chipW / 4]} map={labelTexture(nameOf(p.seat), SEAT_COLORS[p.seat % SEAT_COLORS.length])} />
               </group>
             </FlyIn>
             {i === plays.length - 1 && <ImpactRing color="#86efac" size={1.1} />}
@@ -260,6 +268,9 @@ const WIN: BubbleStyle = { bg: "rgba(254,249,195,0.97)", fg: "#3f6212", border: 
 
 export default function CucumberTable3D(props: CucumberTable3DProps) {
   const { viewerSeat, activeSeat, winnerSeat } = props;
+  const me = props.seats.find((x) => x.seat === viewerSeat);
+  // my own body always keeps hold of its fan (shock/cheer would put it down)
+  const myMood: PersonMood = winnerSeat === viewerSeat && !props.finalTrick ? "smug" : "rest";
   const seats: TableSeat[] = props.seats.map((s) => {
     let mood: PersonMood = activeSeat === s.seat ? "think" : "rest";
     if (s.cucumbers >= props.threshold - 1 && !s.eliminated) mood = activeSeat === s.seat ? "nervous" : mood;
@@ -274,7 +285,9 @@ export default function CucumberTable3D(props: CucumberTable3DProps) {
       lookSeat: activeSeat !== null && activeSeat !== s.seat ? activeSeat : "center",
       active: activeSeat === s.seat && !s.eliminated,
       bubble: winnerSeat === s.seat ? { text: props.finalTrick ? "오이 먹었다… 🥒" : "이 트릭은 내 거!", style: props.finalTrick ? WARN : WIN, key: `w${props.roundNumber}-${props.trickNumber}`, width: 0.78 } : null,
-      tag: s.seat === viewerSeat ? { text: `🥒 내 오이 ${s.cucumbers}/${props.threshold}`, color: "#84cc16" } : null,
+      // my own count rides the board's DOM (hand header / first-person strip): a tag over my
+      // edge would sit right on the "who played it" chips under the trick
+      tag: null,
       held: s.seat !== viewerSeat && !s.eliminated && s.handCount > 0 ? <HeldFan count={s.handCount} back={back()} /> : null,
       front: (
         <group>
@@ -304,7 +317,10 @@ export default function CucumberTable3D(props: CucumberTable3DProps) {
       }
       center={
         <group>
-          <Trick plays={props.plays} winnerSeat={winnerSeat} />
+          <Trick plays={props.plays} winnerSeat={winnerSeat} nameOf={(seat) => (seat === viewerSeat ? "나" : (props.seats.find((x) => x.seat === seat)?.name ?? `${seat + 1}번`))}
+            // the table view sits back and up, so its chips need to be drawn bigger to read the same
+            chip={props.firstPerson ? 0.5 : 0.85}
+          />
           <PopIn key={props.trickNumber}>
             <TableSign text={props.finalTrick ? "⚠️ 마지막 7번째 트릭 — 이기면 오이!" : `라운드 ${props.roundNumber} · 트릭 ${props.trickNumber}/7`} style={props.finalTrick ? WARN : SIGN} y={0.85} width={0.62} />
           </PopIn>
@@ -318,8 +334,15 @@ export default function CucumberTable3D(props: CucumberTable3DProps) {
               held: <MyHand3D {...props.firstPerson} />,
               // eyes at the hand on my turn (cards readable, table still in view), else across the table
               pitch: props.firstPerson.lookDown ? -0.3 : 0,
-              // my body always keeps hold of the fan (shock/cheer would put it down)
-              mood: winnerSeat === viewerSeat && !props.finalTrick ? "smug" : "rest",
+              mood: myMood,
+            }
+          : null
+      }
+      selfBody={
+        props.showMe && !props.firstPerson
+          ? {
+              held: me && !me.eliminated && me.handCount > 0 ? <HeldFan count={me.handCount} back={back()} /> : null,
+              mood: myMood,
             }
           : null
       }

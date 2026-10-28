@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.117.0",
+    releaseDate: "2026-10-29",
+    title: "🪑 5 오이 테이블 시점에도 내 캐릭터 · 누가 낸 카드인지",
+    changes: [
+      { game: "five-cucumbers", type: "IMPROVE", desc: "🎥 1인칭 | 🪑 테이블 — 두 시점을 헤더에서 골라요 (지금 시점이 켜져 보여요)" },
+      { game: "five-cucumbers", type: "FEAT", desc: "🧍 테이블 시점에서도 내 캐릭터가 내 자리에 앉아 카드를 들고 있어요 — 내 어깨 너머로 테이블을 봐요" },
+      { game: "five-cucumbers", type: "FEAT", desc: "🏷️ 가운데 낸 카드마다 아래에 누가 냈는지 이름표 (그 사람 자리 색) — 내 카드는 '나'" },
+    ],
+  },
+  {
     version: "v1.116.0",
     releaseDate: "2026-10-29",
     title: "🎥 5 오이 1인칭 — 내 캐릭터가 직접 카드를 들어요",

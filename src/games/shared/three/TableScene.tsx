@@ -148,6 +148,11 @@ export interface TableSceneProps {
    * My name plate / tag / bubble are dropped — the board shows them in its own HUD.
    */
   firstPerson?: { held: ReactNode; pitch: number; mood: PersonMood } | null;
+  /**
+   * Table view, but with me in my chair too (seen from behind and above, over my own
+   * shoulder): my whole body holding `held`. My name plate / tag stay on the table edge.
+   */
+  selfBody?: { held: ReactNode; mood: PersonMood } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -333,7 +338,7 @@ function useSelect(onSelect: (() => void) | null | undefined) {
   };
 }
 
-function SeatView({ s, geo, theme, lowDetail, ringColor, quietMoods, firstPerson }: { s: TableSeat; geo: TableGeo; theme: TableTheme; lowDetail: boolean; ringColor: string; quietMoods?: readonly PersonMood[]; firstPerson?: TableSceneProps["firstPerson"] }) {
+function SeatView({ s, geo, theme, lowDetail, ringColor, quietMoods, firstPerson, selfBody }: { s: TableSeat; geo: TableGeo; theme: TableTheme; lowDetail: boolean; ringColor: string; quietMoods?: readonly PersonMood[]; firstPerson?: TableSceneProps["firstPerson"]; selfBody?: TableSceneProps["selfBody"] }) {
   const angle = geo.angleOf(s.seat);
   const isViewer = s.seat === geo.viewerSeat;
   const color = s.color ?? theme.seatColors[s.seat % theme.seatColors.length];
@@ -403,6 +408,24 @@ function SeatView({ s, geo, theme, lowDetail, ringColor, quietMoods, firstPerson
           firstPerson
         />
       ) : isViewer ? (
+        <group>
+        {selfBody && (
+          <Person
+            seed={s.seat * 7 + 3}
+            look={look}
+            color={color}
+            position={polar(angle, geo.seatR)}
+            facing={angle + Math.PI}
+            mood={selfBody.mood}
+            lookAt={null}
+            lowDetail={lowDetail}
+            // a backrest right under the camera would wall off the bottom of the view
+            chair="stool"
+            chairColor={theme.chairColor}
+            persona="focused"
+            held={selfBody.held}
+          />
+        )}
         <group position={geo.spotOf(s.seat, 0.08).toArray()} rotation-y={angle}>
           {/* my placard — tap target for picking myself */}
           <group {...handlers} position={[0, 0.06, 0]} rotation-x={-0.5}>
@@ -420,6 +443,7 @@ function SeatView({ s, geo, theme, lowDetail, ringColor, quietMoods, firstPerson
           {s.tag && <ScreenSprite position={theme.personStyle === "realistic" ? [0, 0.1, 0.12] : [0, 0.45, -0.1]} scale={theme.personStyle === "realistic" ? [0.5, 0.125] : [0.66, 0.165]} map={labelTexture(s.tag.text, s.tag.color, { bg: s.tag.bg })} />}
           {s.bubble && bubbleStyle && <SpeechBubble text={s.bubble.text} style={bubbleStyle} y={0.82} popKey={s.bubble.key} width={Math.max(0.62, s.bubble.width ?? 0.9)} />}
           {s.bubble && <SpeakerPulse color={color} popKey={s.bubble.key} y={0.3} size={0.5} />}
+        </group>
         </group>
       ) : (
         <group {...handlers}>
@@ -527,7 +551,7 @@ function SceneContents(props: TableSceneProps) {
       <Table tableR={geo.tableR} theme={theme} lowDetail={lowDetail} />
       <group position={[0, TABLE_Y, 0]}>{props.center}</group>
       {props.seats.map((s) => (
-        <SeatView key={s.seat} s={s} geo={geo} theme={theme} lowDetail={lowDetail} ringColor={props.ringColor ?? "#fbbf24"} quietMoods={props.quietMoods} firstPerson={props.firstPerson} />
+        <SeatView key={s.seat} s={s} geo={geo} theme={theme} lowDetail={lowDetail} ringColor={props.ringColor ?? "#fbbf24"} quietMoods={props.quietMoods} firstPerson={props.firstPerson} selfBody={props.selfBody} />
       ))}
       {props.extras}
       {theme.personStyle === "realistic" && (
