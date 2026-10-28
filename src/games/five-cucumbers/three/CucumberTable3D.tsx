@@ -63,8 +63,9 @@ function Cucumbers({ count, threshold }: { count: number; threshold: number }) {
   );
 }
 
-const TRICK_CARD_W = 0.34;
-const TRICK_CARD_H = 0.48;
+// big enough to read the number from my seat; a full 6-card trick overlaps a little
+const TRICK_CARD_W = 0.54;
+const TRICK_CARD_H = 0.76;
 
 /**
  * The trick, laid out for the viewer: one left-to-right row in play order,
@@ -76,14 +77,14 @@ function Trick({ plays, winnerSeat }: { plays: CucumberTable3DProps["plays"]; wi
   const facing = geo.angleOf(geo.viewerSeat);
   const right = new THREE.Vector3(Math.cos(facing), 0, -Math.sin(facing));
   const toward = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
-  const gap = Math.min(TRICK_CARD_W + 0.04, (geo.tableR * 1.5) / Math.max(1, plays.length - 1));
+  const gap = Math.min(TRICK_CARD_W + 0.04, (geo.tableR * 1.6) / Math.max(1, plays.length - 1));
   return (
     <group>
       {plays.map((p, i) => {
         const slot = right
           .clone()
           .multiplyScalar((i - (plays.length - 1) / 2) * gap)
-          .addScaledVector(toward, -0.04)
+          .addScaledVector(toward, -0.1)
           .setY(0.004 + i * 0.004);
         const from = geo.spotOf(p.seat, 0.4).sub(new THREE.Vector3(slot.x, geo.tableY, slot.z));
         const win = p.seat === winnerSeat;
@@ -94,7 +95,7 @@ function Trick({ plays, winnerSeat }: { plays: CucumberTable3DProps["plays"]; wi
                 <FlatCard face={face(p.value)} back={back()} w={TRICK_CARD_W} h={TRICK_CARD_H} glow={win ? "#fde68a" : null} />
               </group>
             </FlyIn>
-            {i === plays.length - 1 && <ImpactRing color="#86efac" size={0.7} />}
+            {i === plays.length - 1 && <ImpactRing color="#86efac" size={0.95} />}
           </group>
         );
       })}
@@ -171,7 +172,7 @@ export default function CucumberTable3D(props: CucumberTable3DProps) {
         <group>
           <Trick plays={props.plays} winnerSeat={winnerSeat} />
           <PopIn key={props.trickNumber}>
-            <TableSign text={props.finalTrick ? "⚠️ 마지막 7번째 트릭 — 이기면 오이!" : `라운드 ${props.roundNumber} · 트릭 ${props.trickNumber}/7`} style={props.finalTrick ? WARN : SIGN} y={0.24} width={0.62} />
+            <TableSign text={props.finalTrick ? "⚠️ 마지막 7번째 트릭 — 이기면 오이!" : `라운드 ${props.roundNumber} · 트릭 ${props.trickNumber}/7`} style={props.finalTrick ? WARN : SIGN} y={0.34} width={0.62} />
           </PopIn>
         </group>
       }
