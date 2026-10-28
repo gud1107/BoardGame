@@ -646,15 +646,19 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
                   : null
               }
             />
-            <span className="pointer-events-none absolute top-2 left-1/2 max-w-[92%] -translate-x-1/2 truncate rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-white/75">
-              {fpv ? "드래그로 고개 돌리기 · 빛나는 카드를 눌러 내기" : "남의 손패는 장수만 · 드래그로 둘러보기"}
-            </span>
+            {!fpv && (
+              <span className="pointer-events-none absolute top-2 left-1/2 max-w-[92%] -translate-x-1/2 truncate rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-white/75">
+                남의 손패는 장수만 · 드래그로 둘러보기
+              </span>
+            )}
           </div>
           {fpv ? (
-            // my own name plate / tag aren't in the first-person scene — they ride this strip instead
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 px-2.5 pb-2.5">
+            // my own name plate / tag aren't in the first-person scene — they ride this strip instead;
+            // on top, since the bottom edge is my hand (and the site's floating buttons on phones)
+            <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 px-2.5 pt-2.5">
               <span className="rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-semibold text-lime-200">
                 🥒 내 오이 {me.cucumbers}/{state.eliminationThreshold} · 🃏 {me.hand.length}장
+                <span className="hidden font-normal text-white/60 sm:inline"> · 드래그로 둘러보기, 빛나는 카드를 눌러 내기</span>
               </span>
               {me.hand.length > 0 && !gameJustEnded && (
                 <button

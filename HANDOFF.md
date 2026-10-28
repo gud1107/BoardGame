@@ -45,8 +45,8 @@
 - `TableScene` `firstPerson={ held, pitch, mood }`: 내 자리에 이름판 대신 내 VRM(`VrmPerson firstPerson`)을 `seatR - FPV_SEAT_IN(0.2)`에 앉힘. 내 태그·말풍선은 안 그림(보드 HUD로).
 - `VrmPerson firstPerson`: three-vrm `vrm.firstPerson.setup()` (레이어 9=머리 없는 몸, 10=전체) + 주석 없는 머리 부품/이식된 머리카락은 이름(`HEAD_PART`)으로 10번 레이어로. 대기 동작(think/shrug, 카드를 내려놓음) 끔, 모자 portal 안 그림.
 - `FirstPersonCamera fpv={ pitch }`: 눈 높이 1.5m, 가로 드래그 ±1.5rad, 마우스만 세로 드래그(터치 세로는 페이지 스크롤 유지), 놓으면 정면 복귀. 레이어 9 켜고 10 끔, overview(게임 끝)에선 반대로(머리 보임).
-- 5 오이: 헤더 `CameraToggle`(localStorage `five-cucumbers-camera`, 기본 fpv). fpv면 캔버스가 프레임 전체, DOM 손패 대신 하단 띠(🥒 내 오이 · 장수 · 👇 손패 보기/👀 테이블 보기 — 이번 턴만 덮어씀, 기본은 내 차례=내려보기). `MyHand3D`: 왼쪽 위 큰 숫자 손패 그림(`cucumber-hand:` 캐시), 낼 수 있는 카드 금색 테두리+들림, 나머지 어둡게, 탭(드래그 8px 넘으면 무시) → `playCard`. 세로 화면은 카드 0.215×0.32(가로 0.2×0.29), 장수 많으면 간격 자동 축소.
-- 확인: tsc/eslint 0, vitest 5 오이+shared three 74 + constants 68. 헤드리스(SwiftShader) 실제 코드 렌더 900×560·390×520 — 머리 안 보임, 손가락이 카드 쥠, 7장 숫자 모두 읽힘, 빛나는 카드 클릭 → `PLAYED c13/c15`. 프리뷰: claude.ai/artifact/PFetWCcHqWFUApVkgwX8SU.
+- 5 오이: 헤더 `CameraToggle`(localStorage `five-cucumbers-camera`, 기본 fpv). fpv면 캔버스가 프레임 전체, DOM 손패 대신 상단 띠(아래쪽은 손패와 휴대폰 사이트 플로팅 💬/🎲 버튼 자리라 위로 — 🥒 내 오이 · 장수 · 👇 손패 보기/👀 테이블 보기 — 이번 턴만 덮어씀, 기본은 내 차례=내려보기). `MyHand3D`: 왼쪽 위 큰 숫자 손패 그림(`cucumber-hand:` 캐시), 낼 수 있는 카드 금색 테두리+들림, 나머지 어둡게, 탭(드래그 8px 넘으면 무시) → `playCard`. 카드 크기는 화면비가 아니라 **손패 위치에서 보이는 폭**(fov·aspect, `FAN_DIST` 0.55, 여유 0.68)에 7장이 맞게 계산 + 숫자 순 정렬, 다음 카드가 폭의 40%(`UNCOVERED`)를 남겨 두 자리 숫자가 보임. (1차 배포 때 운영 PC 프레임이 588×654 세로형이라 '휴대폰용 큰 카드'가 걸려 숫자가 가려졌던 것을 이 방식으로 고침.)
+- 확인: tsc/eslint 0, vitest 5 오이+shared three 74 + constants 68. 헤드리스(SwiftShader) 실제 코드 렌더 900×560·390×520 + 운영 프레임 크기 588×654·334×514 — 머리 안 보임, 손가락이 카드 쥠, 7장 숫자 모두 읽힘, 빛나는 카드 클릭 → `PLAYED c13/c15`. 프리뷰: claude.ai/artifact/PFetWCcHqWFUApVkgwX8SU.
 - **안 한 것/남은 점**: 운영 실제 방 캡처·실기기 터치·FPS, 6인전(좌우 상대가 화면 밖 — 휴대폰은 맞은편만 보임), 탈락 후 내 몸(빈 손), 다른 23개 TableScene 게임 적용.
 
 ## 🗂 로그인 병합 후속 — 꽉 찬 저장칸 대기, 탭 두 개 경합 — 2026-10-29 (커밋/푸시, 배포는 웹훅 자동)

@@ -116,26 +116,36 @@ const GLOW = new THREE.MeshBasicMaterial({ color: "#fbbf24", transparent: true, 
 const DIM = new THREE.Color("#8a8a8a");
 const LIT = new THREE.Color("#ffffff");
 
+/** Distance from my eyes to the held fan (FirstPersonCamera eye vs VrmPerson's hold point). */
+const FAN_DIST = 0.55;
+/** Share of each card's width the next one leaves uncovered — room for a two-digit index. */
+const UNCOVERED = 0.4;
+
 /**
- * My fan, held by my own body (TableScene `firstPerson`). The held group is turned
- * toward me, so +z faces my eyes; each card to the right lies on top, pivoting well
- * below the cards (where the thumbs pinch) so every top-left index peeks out.
- * Portrait screens get bigger cards. On my turn the playable cards glow and lift;
- * a tap (not a look-around drag) plays one.
+ * My fan, held by my own body (TableScene `firstPerson`), sorted low → high. The held
+ * group is turned toward me, so +z faces my eyes; each card to the right lies on top,
+ * pivoting below the cards (where the thumbs pinch) so every top-left index peeks out.
+ * Card size comes from how wide the view is at the fan, so the whole hand fits any
+ * frame (a narrow phone or a tall desktop frame) and fewer cards are drawn bigger.
+ * On my turn the playable cards glow and lift; a tap (not a look-around drag) plays one.
  */
 function MyHand3D({ hand, playable, onPlay }: NonNullable<CucumberTable3DProps["firstPerson"]>) {
-  const big = useThree((s) => s.size.width < s.size.height);
+  const aspect = useThree((s) => s.size.width / s.size.height);
   const [hover, setHover] = useState<string | null>(null);
   const myTurn = playable.size > 0;
-  const n = hand.length;
-  const w = big ? 0.215 : 0.2;
-  const h = big ? 0.32 : 0.29;
-  // more cards → tighter fan, so 7 still fit a phone width
-  const step = (big ? 0.023 : 0.03) * Math.min(1, 6 / Math.max(1, n - 1));
-  const spread = (big ? 0.1 : 0.12) * Math.min(1, 6 / Math.max(1, n - 1));
+  const sorted = [...hand].sort((x, y) => x.value - y.value);
+  const n = sorted.length;
+  // same fov rule as FirstPersonCamera's fpv; 0.85 = VrmPerson's held-group scale
+  const halfTan = Math.tan(((aspect < 1 ? 80 : 68) * Math.PI) / 360) * aspect;
+  const budget = (2 * FAN_DIST * halfTan * 0.68) / 0.85;
+  const w = Math.min(0.24, Math.max(0.11, budget / (1 + UNCOVERED * (n - 1))));
+  const h = w * 1.45;
+  const spread = 0.08;
+  // the fan's rotation already opens the top by ~1.5·h·spread; the rest is a sideways step
+  const step = w * UNCOVERED - 1.5 * h * spread;
   return (
     <group>
-      {hand.map((c, i) => {
+      {sorted.map((c, i) => {
         const k = i - (n - 1) / 2;
         const can = playable.has(c.id);
         const lift = can ? (hover === c.id ? 0.07 : 0.035) : 0;
