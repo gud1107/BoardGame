@@ -94,19 +94,26 @@ export const useMyNickname = create<MyNicknameState>((set, get) => ({
   init: async () => {
     if (get().hydrated) return;
     set({ hydrated: true, nickname: readLocal() });
+    if (listening) return;
+    listening = true;
+    if (typeof window !== "undefined") {
+      // another tab changed it
+      window.addEventListener("storage", (e) => {
+        if (e.key === STORAGE_KEY) set({ nickname: readLocal() });
+      });
+    }
     const supabase = getAuthSupabase();
     if (!supabase) return;
     const sync = () => {
-      syncing ??= syncWithAccount().finally(() => (syncing = null));
+      const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+      // one tab at a time, each reading what the previous one left
+      syncing ??= (locks ? locks.request("bg-game-nickname-sync", syncWithAccount).then(() => {}) : syncWithAccount()).finally(() => (syncing = null));
       return syncing;
     };
-    if (!listening) {
-      listening = true;
-      // signing in happens without a reload (LoginForm → router.push): merge right then
-      supabase.auth.onAuthStateChange((event) => {
-        if (event === "SIGNED_IN") setTimeout(() => void sync(), 0);
-      });
-    }
+    // signing in happens without a reload (LoginForm → router.push): merge right then
+    supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_IN") setTimeout(() => void sync(), 0);
+    });
     await sync();
 
     async function syncWithAccount() {
@@ -116,7 +123,7 @@ export const useMyNickname = create<MyNicknameState>((set, get) => ({
         } = await supabase!.auth.getUser();
         if (!user) return;
         const remote = cleanNickname((user.user_metadata as { gameNickname?: unknown } | undefined)?.gameNickname);
-        const { name, push } = mergeGuestNickname(get().nickname, remote, guestEdited());
+        const { name, push } = mergeGuestNickname(readLocal(), remote, guestEdited());
         writeLocal(name);
         set({ nickname: name });
         if (push && (await supabase!.auth.updateUser({ data: { gameNickname: name || null } })).error) return;

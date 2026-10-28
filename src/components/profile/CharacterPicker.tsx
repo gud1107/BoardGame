@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { AVATAR_OPTIONS, CHARACTER_PRESETS, DYED_BY_DEFAULT, resolveLook, VRM_MODEL_GENDER, VRM_WARDROBE, wardrobeFor, type AvatarProfile, type PersonLook, type VrmModel, type WardrobeSlot } from "@/lib/character/avatar";
-import { MAX_SAVED, portraitKey, useMyCharacter } from "@/lib/character/myCharacter";
+import { MAX_SAVED, portraitKey, PREVIOUS_ACCOUNT_LOOK, useMyCharacter } from "@/lib/character/myCharacter";
 
 const CharacterPreview3D = dynamic(() => import("./CharacterPreview3D"), {
   ssr: false,
@@ -102,6 +102,9 @@ export default function CharacterPicker({ showPreview = true, customizing = fals
   const { character, save, clear, look } = useCharacterEdit();
   const savedLooks = useMyCharacter((s) => s.saved);
   const removeSaved = useMyCharacter((s) => s.removeSaved);
+  const parked = useMyCharacter((s) => s.parked);
+  const dismissParked = useMyCharacter((s) => s.dismissParked);
+  const swapParked = useMyCharacter((s) => s.swapParked);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const onShot = useCallback((id: string, url: string) => setThumbs((t) => (t[id] === url ? t : { ...t, [id]: url })), []);
   // saved looks get a thumbnail per look version, so editing one re-shoots it
@@ -128,6 +131,30 @@ export default function CharacterPicker({ showPreview = true, customizing = fals
         ✏️ 직접 꾸미기 — 얼굴·메이크업·헤어·옷
       </button>
       <Row label={`💾 내가 만든 캐릭터 (${savedLooks.length}/${MAX_SAVED})`}>
+        {parked && (
+          <div className="flex w-full flex-wrap items-center gap-2 rounded-xl border border-amber-400/40 bg-amber-500/10 p-2.5 text-[11px] leading-relaxed text-amber-100/90 light:border-amber-300 light:bg-amber-50 light:text-amber-800">
+            <span className="min-w-0 flex-1">
+              ⚠️ 칸이 꽉 차서 &lsquo;{PREVIOUS_ACCOUNT_LOOK}&rsquo;(로그인 전 계정에 있던 캐릭터)가 기다리고 있어요. 아래에서 하나를 지우면 그 자리에 자동으로 들어가요.
+            </span>
+            <button
+              type="button"
+              onClick={swapParked}
+              title="지금 입은 캐릭터가 대신 기다려요"
+              className="min-h-9 shrink-0 rounded-lg border border-amber-400/50 px-2.5 text-xs font-semibold hover:bg-amber-500/20 light:border-amber-400"
+            >
+              바꿔 입기
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm(`'${PREVIOUS_ACCOUNT_LOOK}'를 버릴까요? 되돌릴 수 없어요.`)) dismissParked();
+              }}
+              className="min-h-9 shrink-0 rounded-lg px-2.5 text-xs text-amber-100/70 underline hover:text-amber-100 light:text-amber-700"
+            >
+              버리기
+            </button>
+          </div>
+        )}
         {savedLooks.length === 0 ? (
           <p className="text-[11px] text-white/45 light:text-slate-500">직접 꾸미기에서 &lsquo;💾 저장&rsquo;을 누르면 여기에 모아 두고 언제든 다시 입을 수 있어요.</p>
         ) : (

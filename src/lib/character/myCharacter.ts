@@ -13,6 +13,10 @@ import { AVATAR_VERSION, sanitizeAvatar, type AvatarProfile } from "./avatar";
  *   account copy wins over the local one — unless it was changed here as a guest
  *   (`GUEST_EDITS_KEY`): then signing in keeps what they just made and parks the
  *   account's old look in 내가 만든 캐릭터 (`mergeGuestEdits`), so nothing is lost.
+ *   When that list is full the old look waits as `parked` (shown above the list)
+ *   and moves in by itself as soon as a slot frees up.
+ * - Tabs stay in step through `storage` events, and the sign-in merge runs under a
+ *   Web Lock reading localStorage, so two tabs can't each push a partial list.
  * - Stored as `{ v, look }` — `v` is AVATAR_VERSION so a future shape change can migrate.
  *
  * Other players see it through `roomCharacters.ts`, which shares it over the room's presence.
@@ -31,6 +35,8 @@ const PORTRAIT_KEY = "bg_my_character_portrait_v1";
 const SAVED_KEY = "bg_my_character_saved_v1";
 /** `{ look?, saved? }` — what was changed here while signed out, still to be merged into an account. */
 const GUEST_EDITS_KEY = "bg_my_character_guest_edits_v1";
+/** The account's previous look that didn't fit into a full saved list (`{ v, look }`). */
+const PARKED_KEY = "bg_my_character_parked_v1";
 /** Name the account's previous look is parked under when a guest look replaces it. */
 export const PREVIOUS_ACCOUNT_LOOK = "예전 계정 캐릭터";
 export const MAX_SAVED = 8;
@@ -86,7 +92,7 @@ export function mergeGuestEdits(
   account: { look: AvatarProfile | null; saved: SavedLook[] | undefined },
   edits: GuestEdits,
   newId: () => string,
-): { look: AvatarProfile | null; saved: SavedLook[]; pushLook: boolean; pushSaved: boolean } {
+): { look: AvatarProfile | null; saved: SavedLook[]; parked: AvatarProfile | null; pushLook: boolean; pushSaved: boolean } {
   let saved: SavedLook[];
   let pushSaved: boolean;
   if (account.saved === undefined) {
@@ -107,17 +113,20 @@ export function mergeGuestEdits(
 
   if (edits.look && local.look) {
     const old = account.look;
+    let parked: AvatarProfile | null = null;
     if (old && portraitKey(old) !== portraitKey(local.look) && !saved.some((s) => portraitKey(s.look) === portraitKey(old))) {
       const next = withSaved(saved, PREVIOUS_ACCOUNT_LOOK, old, newId());
       if (next) {
         saved = next;
         pushSaved = true;
+      } else {
+        parked = old; // list full: never drop it silently
       }
     }
-    return { look: local.look, saved, pushLook: !old || portraitKey(old) !== portraitKey(local.look), pushSaved };
+    return { look: local.look, saved, parked, pushLook: !old || portraitKey(old) !== portraitKey(local.look), pushSaved };
   }
-  if (account.look) return { look: account.look, saved, pushLook: false, pushSaved };
-  return { look: local.look, saved, pushLook: !!local.look, pushSaved };
+  if (account.look) return { look: account.look, saved, parked: null, pushLook: false, pushSaved };
+  return { look: local.look, saved, parked: null, pushLook: !!local.look, pushSaved };
 }
 
 export interface Portrait {
@@ -213,12 +222,43 @@ async function writeAccountSaved(list: SavedLook[]): Promise<void> {
   }
 }
 
+async function writeAccountData(data: Record<string, unknown>): Promise<void> {
+  const supabase = getAuthSupabase();
+  if (!supabase) return;
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) await supabase.auth.updateUser({ data });
+  } catch {
+    // Best-effort: the local copy is already saved.
+  }
+}
+
+function readParked(): AvatarProfile | null {
+  const look = sanitizeAvatar(readJson<Stored>(PARKED_KEY)?.look);
+  return Object.keys(look).length ? look : null;
+}
+
+const newId = () => Math.random().toString(36).slice(2, 10) || "x";
+
+/** Runs `fn` alone across this browser's tabs (Web Locks), or just runs it where unsupported. */
+function exclusive(name: string, fn: () => Promise<void>): Promise<void> {
+  const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+  return locks ? locks.request(name, fn).then(() => {}) : fn();
+}
+
 interface MyCharacterState {
   hydrated: boolean;
   /** null = no choice made → each table gives this seat its default K-pop look. */
   character: AvatarProfile | null;
   portrait: Portrait | null;
   saved: SavedLook[];
+  /** The account's previous look waiting for a free slot in `saved` (see `mergeGuestEdits`). */
+  parked: AvatarProfile | null;
+  dismissParked: () => void;
+  /** Wear the parked look; the one worn until now waits in its place. */
+  swapParked: () => void;
   /** Store `look` under `name` (overwriting a same-named one). False when the list is full. */
   saveLook: (name: string, look: AvatarProfile) => boolean;
   removeSaved: (id: string) => void;
@@ -237,6 +277,7 @@ export const useMyCharacter = create<MyCharacterState>((set, get) => ({
   character: null,
   portrait: null,
   saved: [],
+  parked: null,
 
   init: async () => {
     if (get().hydrated) return;
@@ -245,46 +286,59 @@ export const useMyCharacter = create<MyCharacterState>((set, get) => ({
       hydrated: true,
       character: readLocal(),
       saved: sanitizeSaved(readJson(SAVED_KEY)),
+      parked: readParked(),
       portrait: p && typeof p.key === "string" && typeof p.url === "string" && p.url.startsWith("data:image/") ? p : null,
     });
+    if (listening) return;
+    listening = true;
+    if (typeof window !== "undefined") {
+      // another tab changed it: follow, so this tab never writes back a stale list
+      window.addEventListener("storage", (e) => {
+        if (e.key === STORAGE_KEY) set({ character: readLocal() });
+        else if (e.key === SAVED_KEY) set({ saved: sanitizeSaved(readJson(SAVED_KEY)) });
+        else if (e.key === PARKED_KEY) set({ parked: readParked() });
+      });
+    }
     const supabase = getAuthSupabase();
     if (!supabase) return;
     const sync = () => {
-      syncing ??= syncWithAccount().finally(() => (syncing = null));
+      syncing ??= exclusive("bg-my-character-sync", syncWithAccount).finally(() => (syncing = null));
       return syncing;
     };
-    if (!listening) {
-      listening = true;
-      // signing in happens without a reload (LoginForm → router.push): merge right then
-      supabase.auth.onAuthStateChange((event) => {
-        if (event === "SIGNED_IN") setTimeout(() => void sync(), 0);
-      });
-    }
+    // signing in happens without a reload (LoginForm → router.push): merge right then
+    supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_IN") setTimeout(() => void sync(), 0);
+    });
     await sync();
 
+    // runs one tab at a time, each reading what the previous one left (localStorage + account)
     async function syncWithAccount() {
       try {
         const {
           data: { user },
         } = await supabase!.auth.getUser();
         if (!user) return;
-        const meta = user.user_metadata as { character?: Stored | null; savedCharacters?: unknown } | undefined;
+        const meta = user.user_metadata as { character?: Stored | null; savedCharacters?: unknown; parkedCharacter?: Stored | null } | undefined;
         const accountLook = sanitizeAvatar(meta?.character?.look);
         const merged = mergeGuestEdits(
-          { look: get().character, saved: get().saved },
+          { look: readLocal(), saved: sanitizeSaved(readJson(SAVED_KEY)) },
           {
             look: Object.keys(accountLook).length ? accountLook : null,
             saved: meta?.savedCharacters === undefined ? undefined : sanitizeSaved(meta.savedCharacters),
           },
           readJson<GuestEdits>(GUEST_EDITS_KEY) ?? {},
-          () => Math.random().toString(36).slice(2, 10) || "x",
+          newId,
         );
+        const accountParked = sanitizeAvatar(meta?.parkedCharacter?.look);
+        const parked = merged.parked ?? (Object.keys(accountParked).length ? accountParked : readParked());
         writeLocal(merged.look);
         writeJson(SAVED_KEY, merged.saved);
-        set({ character: merged.look, saved: merged.saved });
+        writeJson(PARKED_KEY, parked ? { v: AVATAR_VERSION, look: parked } : null);
+        set({ character: merged.look, saved: merged.saved, parked });
         const data: Record<string, unknown> = {};
         if (merged.pushLook) data.character = merged.look ? { v: AVATAR_VERSION, look: merged.look } : null;
         if (merged.pushSaved) data.savedCharacters = merged.saved;
+        if (merged.parked) data.parkedCharacter = { v: AVATAR_VERSION, look: merged.parked };
         // guest edits stay marked until the account really has them
         if (Object.keys(data).length && (await supabase!.auth.updateUser({ data })).error) return;
         writeJson(GUEST_EDITS_KEY, null);
@@ -312,8 +366,26 @@ export const useMyCharacter = create<MyCharacterState>((set, get) => ({
     set({ portrait: p });
   },
 
+  dismissParked: () => {
+    writeJson(PARKED_KEY, null);
+    set({ parked: null });
+    void writeAccountData({ parkedCharacter: null });
+  },
+
+  swapParked: () => {
+    const { parked, character } = get();
+    if (!parked) return;
+    writeLocal(parked);
+    writeJson(PARKED_KEY, character ? { v: AVATAR_VERSION, look: character } : null);
+    set({ character: parked, parked: character });
+    void writeAccountData({
+      character: { v: AVATAR_VERSION, look: parked },
+      parkedCharacter: character ? { v: AVATAR_VERSION, look: character } : null,
+    });
+  },
+
   saveLook: (name, look) => {
-    const next = withSaved(get().saved, name, look, Math.random().toString(36).slice(2, 10) || "x");
+    const next = withSaved(get().saved, name, look, newId());
     if (!next) return false;
     writeJson(SAVED_KEY, next);
     set({ saved: next });
@@ -322,9 +394,19 @@ export const useMyCharacter = create<MyCharacterState>((set, get) => ({
   },
 
   removeSaved: (id) => {
-    const next = get().saved.filter((s) => s.id !== id);
+    const kept = get().saved.filter((s) => s.id !== id);
+    const parked = get().parked;
+    // a freed slot goes to the account look that was waiting for one
+    const withParked = parked && kept.length < get().saved.length ? withSaved(kept, PREVIOUS_ACCOUNT_LOOK, parked, newId()) : null;
+    const next = withParked ?? kept;
     writeJson(SAVED_KEY, next);
-    set({ saved: next });
-    void writeAccountSaved(next);
+    if (withParked) {
+      writeJson(PARKED_KEY, null);
+      set({ saved: next, parked: null });
+      void writeAccountData({ savedCharacters: next, parkedCharacter: null });
+    } else {
+      set({ saved: next });
+      void writeAccountSaved(next);
+    }
   },
 }));
