@@ -37,7 +37,8 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
             <Link href="/login" onClick={onClose} className="font-semibold underline">
               로그인
             </Link>
-            하면 계정에 저장되어 다른 기기에서도 쓰고, 공개 랭킹 닉네임도 정할 수 있어요.
+            하면 지금 꾸민 그대로 계정에 옮겨져 다른 기기에서도 쓰고, 공개 랭킹 닉네임도 정할 수 있어요. 계정에 원래 있던 캐릭터는
+            &lsquo;내가 만든 캐릭터&rsquo;에 &lsquo;예전 계정 캐릭터&rsquo;로 남아요.
           </p>
         )}
         <div className="w-full border-t border-white/10 light:border-slate-200" />

@@ -11,7 +11,8 @@ import { getVisitorNickname, rememberRoomNickname } from "./lastNickname";
  *
  * - Everyone keeps it in localStorage; signed-in players also mirror it into
  *   `user_metadata.gameNickname` so it follows them to another device (the
- *   account copy wins on load, same as `myCharacter.ts`).
+ *   account copy wins on load, same as `myCharacter.ts` — and likewise a name
+ *   set here as a guest wins once, when they sign in: `GUEST_EDIT_KEY`).
  * - Not the 랭킹 닉네임 (`user_profiles.public_name`): that one is public and
  *   unique; this one is just what the table calls you.
  * - Unset → the room field falls back to the last name typed in any room.
@@ -19,6 +20,36 @@ import { getVisitorNickname, rememberRoomNickname } from "./lastNickname";
 
 const STORAGE_KEY = "bg_game_nickname_v1";
 export const GAME_NICKNAME_MAX = 12;
+/** "1" = set while signed out, still to be carried into the account on sign-in. */
+const GUEST_EDIT_KEY = "bg_game_nickname_guest_edit_v1";
+
+function guestEdited(): boolean {
+  try {
+    return window.localStorage.getItem(GUEST_EDIT_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function setGuestEdited(on: boolean): void {
+  try {
+    if (on) window.localStorage.setItem(GUEST_EDIT_KEY, "1");
+    else window.localStorage.removeItem(GUEST_EDIT_KEY);
+  } catch {
+    // Storage blocked — nothing to carry over then.
+  }
+}
+
+/** The name to keep on sign-in: a guest edit wins, else the account's, else this device's (then uploaded). */
+export function mergeGuestNickname(local: string, account: string, edited: boolean): { name: string; push: boolean } {
+  // a guest clearing the field doesn't wipe the account's name
+  if (edited && local) return { name: local, push: local !== account };
+  if (account) return { name: account, push: false };
+  return { name: local, push: !!local };
+}
+
+let syncing: Promise<void> | null = null;
+let listening = false;
 
 export function cleanNickname(raw: unknown): string {
   return typeof raw === "string" ? raw.replace(/\s+/g, " ").trim().slice(0, GAME_NICKNAME_MAX) : "";
@@ -65,17 +96,34 @@ export const useMyNickname = create<MyNicknameState>((set, get) => ({
     set({ hydrated: true, nickname: readLocal() });
     const supabase = getAuthSupabase();
     if (!supabase) return;
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      const remote = cleanNickname((user?.user_metadata as { gameNickname?: unknown } | undefined)?.gameNickname);
-      if (remote) {
-        writeLocal(remote);
-        set({ nickname: remote });
+    const sync = () => {
+      syncing ??= syncWithAccount().finally(() => (syncing = null));
+      return syncing;
+    };
+    if (!listening) {
+      listening = true;
+      // signing in happens without a reload (LoginForm → router.push): merge right then
+      supabase.auth.onAuthStateChange((event) => {
+        if (event === "SIGNED_IN") setTimeout(() => void sync(), 0);
+      });
+    }
+    await sync();
+
+    async function syncWithAccount() {
+      try {
+        const {
+          data: { user },
+        } = await supabase!.auth.getUser();
+        if (!user) return;
+        const remote = cleanNickname((user.user_metadata as { gameNickname?: unknown } | undefined)?.gameNickname);
+        const { name, push } = mergeGuestNickname(get().nickname, remote, guestEdited());
+        writeLocal(name);
+        set({ nickname: name });
+        if (push && (await supabase!.auth.updateUser({ data: { gameNickname: name || null } })).error) return;
+        setGuestEdited(false);
+      } catch {
+        // Offline — keep the local copy.
       }
-    } catch {
-      // Signed out / offline — keep the local copy.
     }
   },
 
@@ -92,6 +140,7 @@ export const useMyNickname = create<MyNicknameState>((set, get) => ({
           data: { user },
         } = await supabase.auth.getUser();
         if (user) await supabase.auth.updateUser({ data: { gameNickname: clean || null } });
+        else setGuestEdited(true);
       } catch {
         // Best-effort: the local copy is already saved.
       }

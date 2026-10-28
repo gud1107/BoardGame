@@ -32,3 +32,39 @@ describe("saved looks (내가 만든 캐릭터)", () => {
     expect(withSaved(list, "하나", { model: "vroid-g" }, "z")).not.toBeNull();
   });
 });
+
+describe("signing in after editing as a guest", () => {
+  const a = { model: "vroid-d" } as const;
+  const b = { model: "vroid-e" } as const;
+  const id = () => "new1";
+
+  it("without guest edits the account wins, and an empty account takes this device's copy", async () => {
+    const { mergeGuestEdits } = await import("./myCharacter");
+    expect(mergeGuestEdits({ look: a, saved: [] }, { look: b, saved: [] }, {}, id)).toMatchObject({ look: b, pushLook: false });
+    expect(mergeGuestEdits({ look: a, saved: [] }, { look: null, saved: undefined }, {}, id)).toMatchObject({ look: a, pushLook: true });
+  });
+
+  it("a guest's new look wins and the account's old one is kept in 내가 만든 캐릭터", async () => {
+    const { mergeGuestEdits, PREVIOUS_ACCOUNT_LOOK } = await import("./myCharacter");
+    const r = mergeGuestEdits({ look: a, saved: [] }, { look: b, saved: [] }, { look: true }, id);
+    expect(r.look).toEqual(a);
+    expect(r.pushLook).toBe(true);
+    expect(r.saved).toEqual([{ id: "new1", name: PREVIOUS_ACCOUNT_LOOK, look: b }]);
+    expect(r.pushSaved).toBe(true);
+  });
+
+  it("saved lists are united without duplicates, account entries first", async () => {
+    const { mergeGuestEdits } = await import("./myCharacter");
+    const account = [{ id: "acc1", name: "계정", look: a }];
+    const local = [
+      { id: "acc1", name: "계정", look: a },
+      { id: "dup2", name: "같은 모습", look: a },
+      { id: "g3", name: "게스트", look: b },
+    ];
+    const r = mergeGuestEdits({ look: null, saved: local }, { look: null, saved: account }, { saved: true }, id);
+    expect(r.saved.map((s) => s.id)).toEqual(["acc1", "g3"]);
+    expect(r.pushSaved).toBe(true);
+    // not edited as a guest: a stale device list never resurrects deleted entries
+    expect(mergeGuestEdits({ look: null, saved: local }, { look: null, saved: account }, {}, id).saved).toEqual(account);
+  });
+});
