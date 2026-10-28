@@ -146,9 +146,11 @@ export interface TableSceneProps {
   /**
    * Liar's Bar–style seat: my own body in my chair, holding `held` (keep `mood` one that holds
    * cards), the camera inside my head with its eyes resting at `pitch` (see FirstPersonCamera).
+   * `frontShift` [right, toward me] moves my own `front` aside — right under my eyes, a tall
+   * prop (페루도's cup) would wall off the middle of the table.
    * My name plate / tag / bubble are dropped — the board shows them in its own HUD.
    */
-  firstPerson?: { held: ReactNode; pitch: number; mood: PersonMood } | null;
+  firstPerson?: { held: ReactNode; pitch: number; mood: PersonMood; frontShift?: [number, number] } | null;
   /**
    * Table view, but with me in my chair too (seen from behind and above, over my own
    * shoulder): my whole body holding `held`. My name plate / tag stay on the table edge.
@@ -161,7 +163,7 @@ export interface TableSceneProps {
    */
   cameraKey?: string;
   /** What my own body holds / how it sits under `cameraKey` (default: my seat's mood, empty hands). */
-  selfView?: { held?: ReactNode; mood?: PersonMood; pitch?: number };
+  selfView?: { held?: ReactNode; mood?: PersonMood; pitch?: number; frontShift?: [number, number] };
 }
 
 // ---------------------------------------------------------------------------
@@ -396,7 +398,7 @@ function SeatView({ s, geo, theme, lowDetail, ringColor, quietMoods, firstPerson
     <group>
       {s.front && (
         <group position={frontSpot} rotation-y={angle}>
-          {s.front}
+          <group position={isViewer && firstPerson?.frontShift ? [firstPerson.frontShift[0], 0, firstPerson.frontShift[1]] : [0, 0, 0]}>{s.front}</group>
         </group>
       )}
       {s.active && <TurnRing position={geo.spotOf(s.seat, 0.16)} color={ringColor} />}
@@ -622,7 +624,7 @@ export default function TableScene(props: TableSceneProps) {
     const mood = props.selfView?.mood ?? me?.mood ?? "rest";
     // inside my head my hands keep hold of whatever they hold (a cheer would drop it)
     const fpMood = held && !holdsInMood(mood) ? "rest" : mood;
-    firstPerson = cam.camera === "fpv" ? { held, pitch: props.selfView?.pitch ?? 0, mood: fpMood } : null;
+    firstPerson = cam.camera === "fpv" ? { held, pitch: props.selfView?.pitch ?? 0, mood: fpMood, frontShift: props.selfView?.frontShift } : null;
     selfBody = cam.camera === "table" ? { held, mood } : null;
   }
   const canvas = (

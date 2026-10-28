@@ -653,8 +653,8 @@ export default function PerudoTable3D(props: PerudoTable3DProps & { names: Recor
   return (
     <TableScene
       cameraKey="perudo-camera"
-      // first person: eyes a little up, so my own cup in front doesn't wall off the bid ring
-      selfView={{ pitch: 0.16 }}
+      // first person: my own cup sits by my right hand, not dead ahead where it walls off the bid ring
+      selfView={{ pitch: 0.06, frontShift: [0.5, 0.05] }}
       seatCount={n}
       viewerSeat={viewerSeat}
       seats={seats}
