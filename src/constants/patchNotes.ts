@@ -64,6 +64,17 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.114.1",
+    releaseDate: "2026-10-29",
+    title: "🤖 갈틱폰 AI가 더 똑똑해졌어요",
+    changes: [
+      { game: "doodle-phone", type: "FIX", desc: "⚡ AI가 '번개장터'를 강아지로 그리던 문제 — 한 글자 낱말(개·차·해)은 단어 전체일 때만 알아봐요 (번개장터 → 번개 + 가게)" },
+      { game: "doodle-phone", type: "IMPROVE", desc: "🎨 AI가 그릴 줄 아는 그림이 21개 → 45개로 (가게·비행기·새·토끼·곰·공룡·배·기차·휴대폰·성·로켓 등)" },
+      { game: "doodle-phone", type: "IMPROVE", desc: "👀 AI가 그림을 맞힐 때 색깔만 세지 않고 모양과 색 배치를 보고 맞혀요 — 두 개가 나란히 있으면 둘 다 말해요" },
+      { game: "doodle-phone", type: "FIX", desc: "🌙 AI가 그린 달·낮은 레벨 그림의 칠하기가 테두리 밖으로 새서 종이 전체가 칠해지던 문제" },
+    ],
+  },
+  {
     version: "v1.114.0",
     releaseDate: "2026-10-28",
     title: "👥 같은 닉네임 구분 · 닉네임 하나로",

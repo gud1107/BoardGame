@@ -5,12 +5,17 @@
  * `getValidMoves` returns the bot's own shortlist of candidates and
  * `chooseBotAction` picks among them with the shared level curve.
  *
- * - Drawing: a small library of hand-tuned doodle templates, looked up by
- *   keywords in the prompt ("모자를 쓴 고양이" → cat + hat). Unknown prompts
+ * - Drawing: a library of hand-tuned doodle templates, looked up by keywords
+ *   in the prompt ("모자를 쓴 고양이" → cat + hat). Matching is word-aware: a
+ *   one-letter keyword only counts as a whole word (particles aside), so
+ *   "번개장터" is lightning + a market stall, not a 개 (dog). Unknown prompts
  *   get a random template — the bot "misread" it, which is on theme.
  * - Guessing: information-fair (§7.1) — the bot only looks at the drawing it
- *   was handed, never at the album history, and guesses from which colors
- *   carry the most ink.
+ *   was handed, never at the album history. It rasterizes the picture
+ *   (raster.ts), splits it into a left/right object when there's a clear gap,
+ *   and compares shape + color layout with its own templates; when nothing
+ *   looks familiar it falls back to guessing from which colors carry the most
+ *   ink.
  *
  * - Mode-specific drawing turns (see modes.ts `DrawingReference`): copy /
  *   memory → redraw the previous picture by hand (wobblier at low levels);
@@ -43,6 +48,7 @@ import {
 import { translateOp, unionBounds, type Bounds } from "./editing";
 import { ICEBREAKER_QUESTIONS, drawingReferenceFor, icebreakerQuestion, inspirationWord, openingChoices } from "./modes";
 import { BOT_OPENING_PROMPTS, FALLBACK_PROMPTS } from "./prompts";
+import { RASTER_W, rasterize, type Raster } from "./raster";
 
 // ---------------------------------------------------------------------------
 // Doodle templates — authored in a 100×100 box
@@ -70,7 +76,11 @@ class Pen {
   /** `weight` is a template-friendly 1 (hairline) … 6 (marker), mapped onto BRUSH_SIZES indices. */
   line(points: Point[], color: number, weight = 2): this {
     const sizeIndex = weight <= 1 ? 0 : weight <= 2 ? 1 : weight <= 4 ? 2 : 3;
-    this.ops.push(strokeOp(color, sizeIndex, points.map((p) => this.map(p))));
+    const mapped = points.map((p) => this.map(p));
+    // A closed outline must stay closed after the wobble, or the fill that follows leaks onto the whole sheet.
+    const [first, last] = [points[0], points[points.length - 1]];
+    if (points.length > 2 && Math.hypot(first.x - last.x, first.y - last.y) < 1e-6) mapped[mapped.length - 1] = mapped[0];
+    this.ops.push(strokeOp(color, sizeIndex, mapped));
     return this;
   }
 
@@ -169,9 +179,10 @@ const TEMPLATES: readonly Template[] = [
     name: "달",
     keywords: ["달", "밤", "새벽"],
     draw: (p) => {
-      p.ellipse(50, 50, 32, 32, C.amber, 2, Math.PI * 0.35, Math.PI * 1.65);
-      p.ellipse(62, 50, 26, 26, C.amber, 2, Math.PI * 0.62, Math.PI * 1.38);
-      p.fill(26, 50, C.cream);
+      // One closed outline (outer arc out, inner arc back) so the fill can't leak onto the paper.
+      const arc = (cx: number, r: number, from: number, to: number) => Array.from({ length: 21 }, (_, i) => ({ x: cx + Math.cos(from + ((to - from) * i) / 20) * r, y: 50 + Math.sin(from + ((to - from) * i) / 20) * r }));
+      p.line([...arc(50, 32, Math.PI * 0.4, Math.PI * 1.6), ...arc(70, 32, Math.PI * 1.398, Math.PI * 0.602)], C.amber, 2);
+      p.fill(28, 50, C.cream);
       p.dot(80, 20, C.amber, 3).dot(86, 70, C.amber, 3);
     },
   },
@@ -233,7 +244,7 @@ const TEMPLATES: readonly Template[] = [
   },
   {
     name: "사람",
-    keywords: ["사람", "친구", "남자", "여자", "아이", "나", "선생님", "우주비행사", "가족", "아빠", "엄마"],
+    keywords: ["사람", "친구", "남자", "여자", "아이", "선생님", "우주비행사", "가족", "아빠", "엄마", "춤", "댄스", "표정", "미소", "고음", "세레머니", "액션", "팔뚝", "탐정", "선수", "가수", "배우", "의사", "경찰", "요리사", "할머니", "할아버지"],
     draw: (p) => {
       p.circle(50, 24, 13, C.black, 2).fill(50, 24, C.cream);
       p.dot(45, 22, C.black, 2).dot(55, 22, C.black, 2).ellipse(50, 27, 5, 3, C.black, 1, 0.2, Math.PI - 0.2);
@@ -323,14 +334,305 @@ const TEMPLATES: readonly Template[] = [
       p.line(pts(32, 58, 68, 58), C.red, 4);
     },
   },
+  {
+    name: "번개",
+    keywords: ["번개", "천둥", "벼락", "전기", "볼트", "충전"],
+    draw: (p) => {
+      p.line(pts(60, 4, 24, 54, 48, 54, 36, 96, 80, 42, 55, 42, 72, 4, 60, 4), C.orange, 2).fill(52, 48, C.amber);
+    },
+  },
+  {
+    name: "가게",
+    keywords: ["가게", "시장", "장터", "마트", "상점", "편의점", "쇼핑", "장사", "중고", "거래", "판매", "장보기", "노점", "포장마차"],
+    draw: (p) => {
+      p.line(pts(30, 12, 70, 12, 70, 28, 30, 28, 30, 12), C.brown, 2).fill(50, 20, C.amber);
+      p.line(pts(40, 28, 40, 34), C.brown, 2).line(pts(60, 28, 60, 34), C.brown, 2);
+      p.line(pts(8, 34, 92, 34, 96, 48, 4, 48, 8, 34), C.darkRed, 2).fill(50, 41, C.red);
+      p.line(pts(29, 35, 27, 47), C.cream, 4).line(pts(50, 35, 50, 47), C.cream, 4).line(pts(71, 35, 73, 47), C.cream, 4);
+      p.line(pts(12, 48, 12, 92), C.brown, 3).line(pts(88, 48, 88, 92), C.brown, 3);
+      p.line(pts(8, 68, 92, 68, 92, 92, 8, 92, 8, 68), C.brown, 2).fill(50, 80, C.tan);
+      p.circle(26, 61, 6, C.darkRed, 2).fill(26, 61, C.red).circle(42, 61, 6, C.orange, 2).fill(42, 61, C.amber);
+      p.line(pts(58, 54, 76, 54, 76, 67, 58, 67, 58, 54), C.navy, 2).fill(67, 60, C.blue);
+    },
+  },
+  {
+    name: "비행기",
+    keywords: ["비행기", "비행", "공항", "항공", "여객기"],
+    draw: (p) => {
+      p.ellipse(50, 50, 42, 10, C.navy, 2).fill(50, 50, C.lightGray);
+      p.line(pts(44, 46, 32, 18, 42, 18, 60, 46), C.navy, 2).fill(46, 34, C.blue);
+      p.line(pts(44, 54, 32, 82, 42, 82, 60, 54), C.navy, 2).fill(46, 66, C.blue);
+      p.line(pts(14, 46, 6, 26, 16, 26, 26, 42), C.navy, 2).fill(14, 36, C.red);
+      p.dot(62, 48, C.cyan, 3).dot(70, 48, C.cyan, 3).dot(78, 48, C.cyan, 3);
+    },
+  },
+  {
+    name: "새",
+    keywords: ["새", "참새", "비둘기", "까치", "독수리", "앵무새", "병아리", "닭"],
+    draw: (p) => {
+      p.ellipse(46, 60, 28, 20, C.black, 2).fill(42, 64, C.amber);
+      p.circle(70, 36, 14, C.black, 2).fill(70, 34, C.amber);
+      p.line(pts(83, 32, 96, 37, 83, 42, 83, 32), C.black, 1).fill(87, 37, C.orange);
+      p.dot(73, 32, C.black, 3).ellipse(40, 60, 13, 8, C.orange, 2);
+      p.line(pts(40, 79, 38, 94), C.orange, 2).line(pts(54, 79, 56, 94), C.orange, 2);
+    },
+  },
+  {
+    name: "토끼",
+    keywords: ["토끼", "바니"],
+    draw: (p) => {
+      p.ellipse(38, 24, 7, 20, C.black, 2).fill(38, 24, C.lightPink).ellipse(62, 24, 7, 20, C.black, 2).fill(62, 24, C.lightPink);
+      p.circle(50, 64, 25, C.black, 2).fill(50, 70, C.lightGray);
+      p.dot(41, 60, C.black, 3).dot(59, 60, C.black, 3).dot(50, 68, C.pink, 4);
+      p.line(pts(50, 70, 50, 76), C.black, 1).line(pts(26, 70, 42, 72), C.black, 1).line(pts(58, 72, 74, 70), C.black, 1);
+    },
+  },
+  {
+    name: "곰",
+    keywords: ["곰", "곰돌이", "판다", "테디"],
+    draw: (p) => {
+      p.circle(26, 30, 11, C.black, 2).fill(26, 30, C.brown).circle(74, 30, 11, C.black, 2).fill(74, 30, C.brown);
+      p.circle(50, 56, 29, C.black, 2).fill(50, 46, C.brown);
+      p.ellipse(50, 68, 12, 9, C.black, 2).fill(50, 70, C.tan);
+      p.dot(40, 50, C.black, 4).dot(60, 50, C.black, 4).dot(50, 64, C.black, 5);
+    },
+  },
+  {
+    name: "돼지",
+    keywords: ["돼지", "꿀꿀", "삼겹살"],
+    draw: (p) => {
+      p.line(pts(24, 42, 18, 8, 48, 26, 24, 42), C.darkRed, 2).fill(30, 25, C.pink).line(pts(76, 42, 82, 8, 52, 26, 76, 42), C.darkRed, 2).fill(70, 25, C.pink);
+      p.circle(50, 56, 30, C.darkRed, 2).fill(50, 44, C.lightPink);
+      p.ellipse(50, 64, 13, 9, C.darkRed, 2).fill(50, 64, C.pink).dot(45, 64, C.darkRed, 3).dot(55, 64, C.darkRed, 3);
+      p.dot(39, 48, C.black, 3).dot(61, 48, C.black, 3);
+    },
+  },
+  {
+    name: "원숭이",
+    keywords: ["원숭이", "고릴라", "침팬지"],
+    draw: (p) => {
+      p.circle(22, 50, 9, C.black, 2).fill(22, 50, C.tan).circle(78, 50, 9, C.black, 2).fill(78, 50, C.tan);
+      p.circle(50, 50, 27, C.black, 2).fill(50, 30, C.brown);
+      p.ellipse(50, 60, 17, 14, C.black, 2).fill(50, 62, C.tan);
+      p.dot(42, 44, C.black, 4).dot(58, 44, C.black, 4).ellipse(50, 64, 7, 4, C.black, 1, 0.2, Math.PI - 0.2);
+    },
+  },
+  {
+    name: "공룡",
+    keywords: ["공룡", "용", "드래곤", "티라노", "도마뱀", "괴물"],
+    draw: (p) => {
+      p.line(pts(6, 80, 20, 60, 40, 52, 58, 52, 66, 30, 78, 20, 94, 24, 94, 34, 80, 36, 74, 54, 76, 84, 66, 84, 64, 68, 44, 68, 42, 84, 32, 84, 32, 70, 6, 80), C.forest, 2).fill(52, 60, C.green);
+      p.line(pts(30, 56, 34, 46, 40, 53), C.amber, 3).line(pts(44, 52, 49, 42, 54, 52), C.amber, 3);
+      p.dot(84, 27, C.black, 4);
+    },
+  },
+  {
+    name: "배",
+    keywords: ["배", "보트", "요트", "해적선", "타이타닉", "뱃머리", "항해", "선박", "유람선", "뗏목"],
+    draw: (p) => {
+      p.line(pts(50, 60, 50, 10), C.black, 3).line(pts(52, 12, 84, 54, 52, 54, 52, 12), C.black, 1).fill(60, 42, C.cream);
+      p.line(pts(50, 10, 34, 16, 50, 22), C.red, 2).fill(44, 16, C.red);
+      p.line(pts(8, 60, 92, 60, 76, 82, 24, 82, 8, 60), C.black, 2).fill(50, 70, C.brown);
+      p.line(pts(2, 92, 18, 86, 34, 92, 50, 86, 66, 92, 82, 86, 98, 92), C.blue, 2);
+    },
+  },
+  {
+    name: "책",
+    keywords: ["책", "공부", "도서관", "독서", "소설", "숙제", "시험", "일기"],
+    draw: (p) => {
+      p.line(pts(50, 28, 10, 20, 10, 80, 50, 88, 50, 28), C.navy, 2).fill(30, 50, C.cream);
+      p.line(pts(50, 28, 90, 20, 90, 80, 50, 88), C.navy, 2).fill(70, 50, C.cream);
+      for (const y of [36, 48, 60]) p.line(pts(18, y, 42, y + 5), C.gray, 1).line(pts(58, y + 5, 82, y), C.gray, 1);
+    },
+  },
+  {
+    name: "공",
+    keywords: ["공", "축구", "농구", "야구", "배구", "공놀이", "월드컵", "축구공"],
+    draw: (p) => {
+      p.circle(50, 50, 38, C.black, 2);
+      const pent: Point[] = [];
+      for (let i = 0; i <= 5; i++) {
+        const a = -Math.PI / 2 + (i * 2 * Math.PI) / 5;
+        pent.push({ x: 50 + Math.cos(a) * 13, y: 50 + Math.sin(a) * 13 });
+      }
+      p.line(pent, C.black, 2).fill(50, 50, C.black);
+      for (let i = 0; i < 5; i++) p.line([pent[i], { x: 50 + (pent[i].x - 50) * 2.9, y: 50 + (pent[i].y - 50) * 2.9 }], C.black, 2);
+    },
+  },
+  {
+    name: "기차",
+    keywords: ["기차", "지하철", "열차", "승강장", "전철", "철도"],
+    draw: (p) => {
+      p.line(pts(12, 22, 22, 22, 22, 40, 12, 40, 12, 22), C.black, 2).fill(17, 31, C.gray);
+      p.line(pts(6, 40, 46, 40, 46, 78, 6, 78, 6, 40), C.black, 2).fill(26, 66, C.red);
+      p.line(pts(26, 46, 40, 46, 40, 58, 26, 58, 26, 46), C.black, 1).fill(33, 52, C.cyan);
+      p.line(pts(52, 46, 94, 46, 94, 78, 52, 78, 52, 46), C.black, 2).fill(73, 62, C.blue).line(pts(46, 70, 52, 70), C.black, 3);
+      for (const x of [16, 36, 62, 84]) p.circle(x, 82, 7, C.black, 2).fill(x, 82, C.gray);
+      p.line(pts(2, 93, 98, 93), C.brown, 3);
+    },
+  },
+  {
+    name: "커피",
+    keywords: ["커피", "컵", "카페", "우유", "음료", "주스", "라떼", "머그"],
+    draw: (p) => {
+      p.line(pts(22, 34, 70, 34, 66, 90, 26, 90, 22, 34), C.black, 2).fill(46, 66, C.lightGray);
+      p.ellipse(46, 34, 24, 6, C.black, 2).fill(46, 34, C.brown);
+      p.ellipse(72, 60, 13, 15, C.black, 4, -Math.PI / 2, Math.PI / 2);
+      p.line(pts(36, 24, 32, 16, 38, 8, 34, 0), C.gray, 2).line(pts(54, 24, 50, 16, 56, 8, 52, 0), C.gray, 2);
+    },
+  },
+  {
+    name: "휴대폰",
+    keywords: ["휴대폰", "핸드폰", "스마트폰", "전화", "폰", "앱", "문자", "카톡", "게임"],
+    draw: (p) => {
+      p.line(pts(28, 4, 72, 4, 72, 96, 28, 96, 28, 4), C.black, 2).fill(30, 92, C.gray);
+      p.line(pts(32, 12, 68, 12, 68, 82, 32, 82, 32, 12), C.black, 1).fill(50, 70, C.cyan);
+      p.dot(40, 22, C.red, 6).dot(50, 22, C.amber, 6).dot(60, 22, C.green, 6).dot(40, 34, C.violet, 6).dot(50, 34, C.blue, 6);
+      p.circle(50, 89, 3, C.black, 1);
+    },
+  },
+  {
+    name: "아이스크림",
+    keywords: ["아이스크림", "빙수", "콘", "디저트", "젤라또"],
+    draw: (p) => {
+      p.line(pts(32, 50, 68, 50, 50, 96, 32, 50), C.brown, 2).fill(50, 64, C.tan);
+      p.line(pts(40, 58, 56, 74), C.brown, 1).line(pts(60, 58, 44, 74), C.brown, 1);
+      p.circle(50, 40, 18, C.pink, 2).fill(50, 44, C.lightPink);
+      p.circle(50, 18, 12, C.amber, 2).fill(50, 18, C.cream).dot(50, 5, C.red, 6);
+    },
+  },
+  {
+    name: "수박",
+    keywords: ["수박", "과일"],
+    draw: (p) => {
+      p.ellipse(50, 30, 44, 44, C.forest, 4, 0, Math.PI).line(pts(6, 30, 94, 30), C.forest, 2);
+      p.ellipse(50, 30, 36, 36, C.forest, 2, 0, Math.PI).fill(50, 70, C.green).fill(50, 46, C.red);
+      for (const [x, y] of [[34, 40], [50, 44], [66, 40], [42, 54], [58, 54]]) p.dot(x, y, C.black, 3);
+    },
+  },
+  {
+    name: "펭귄",
+    keywords: ["펭귄", "남극"],
+    draw: (p) => {
+      p.ellipse(50, 54, 25, 38, C.black, 2).fill(50, 24, C.navy);
+      p.ellipse(50, 62, 16, 26, C.black, 1).fill(50, 64, C.cream);
+      p.dot(43, 28, C.cream, 4).dot(57, 28, C.cream, 4).dot(43, 28, C.black, 2).dot(57, 28, C.black, 2);
+      p.line(pts(45, 35, 55, 35, 50, 42, 45, 35), C.orange, 2).fill(50, 37, C.orange);
+      p.ellipse(40, 93, 8, 3, C.orange, 3).ellipse(60, 93, 8, 3, C.orange, 3);
+    },
+  },
+  {
+    name: "개구리",
+    keywords: ["개구리", "올챙이", "우물"],
+    draw: (p) => {
+      p.circle(32, 34, 11, C.forest, 2).fill(32, 34, C.lime).circle(68, 34, 11, C.forest, 2).fill(68, 34, C.lime);
+      p.ellipse(50, 62, 36, 24, C.forest, 2).fill(50, 66, C.green);
+      p.dot(32, 33, C.black, 5).dot(68, 33, C.black, 5);
+      p.ellipse(50, 64, 18, 8, C.forest, 2, 0.2, Math.PI - 0.2);
+    },
+  },
+  {
+    name: "쥐",
+    keywords: ["쥐", "생쥐", "햄스터", "다람쥐"],
+    draw: (p) => {
+      p.ellipse(46, 62, 30, 20, C.black, 2).fill(40, 66, C.gray);
+      p.circle(66, 40, 10, C.black, 2).fill(66, 40, C.lightPink);
+      p.dot(70, 56, C.black, 3).dot(76, 64, C.pink, 4);
+      p.line(pts(16, 64, 6, 52, 12, 40, 4, 30), C.pink, 2);
+    },
+  },
+  {
+    name: "성",
+    keywords: ["성", "궁전", "왕국", "공주", "왕자", "왕"],
+    draw: (p) => {
+      p.line(pts(10, 92, 10, 26, 18, 26, 18, 34, 26, 34, 26, 26, 34, 26, 34, 44, 66, 44, 66, 26, 74, 26, 74, 34, 82, 34, 82, 26, 90, 26, 90, 92, 10, 92), C.gray, 2).fill(50, 60, C.lightGray);
+      p.line(pts(42, 92, 42, 74, 50, 66, 58, 74, 58, 92), C.black, 2).fill(50, 82, C.brown);
+      p.line(pts(22, 26, 22, 8), C.black, 2).line(pts(22, 8, 36, 12, 22, 16), C.red, 2).fill(27, 12, C.red);
+      p.line(pts(78, 26, 78, 8), C.black, 2).line(pts(78, 8, 92, 12, 78, 16), C.red, 2).fill(83, 12, C.red);
+    },
+  },
+  {
+    name: "무지개",
+    keywords: ["무지개", "희망"],
+    draw: (p) => {
+      [C.red, C.orange, C.amber, C.green, C.blue, C.violet].forEach((color, i) => p.ellipse(50, 74, 44 - i * 5, 44 - i * 5, color, 4, Math.PI, Math.PI * 2));
+      p.ellipse(10, 80, 12, 8, C.gray, 2).ellipse(90, 80, 12, 8, C.gray, 2);
+    },
+  },
+  {
+    name: "로켓",
+    keywords: ["로켓", "우주선", "발사", "외계인"],
+    draw: (p) => {
+      p.line(pts(50, 4, 66, 28, 66, 72, 34, 72, 34, 28, 50, 4), C.black, 2).fill(50, 56, C.lightGray);
+      p.circle(50, 38, 8, C.black, 2).fill(50, 38, C.cyan);
+      p.line(pts(34, 54, 20, 80, 34, 72), C.black, 2).fill(30, 70, C.red).line(pts(66, 54, 80, 80, 66, 72), C.black, 2).fill(70, 70, C.red);
+      p.line(pts(40, 72, 50, 96, 60, 72), C.red, 2).fill(50, 78, C.orange);
+    },
+  },
+  {
+    name: "소",
+    keywords: ["소", "젖소", "황소", "외양간", "목장"],
+    draw: (p) => {
+      p.line(pts(30, 26, 22, 10), C.tan, 4).line(pts(70, 26, 78, 10), C.tan, 4);
+      p.ellipse(50, 50, 26, 30, C.black, 2).fill(50, 40, C.lightGray);
+      p.ellipse(40, 34, 8, 6, C.black, 2).fill(40, 34, C.black).ellipse(62, 46, 7, 9, C.black, 2).fill(62, 46, C.black);
+      p.ellipse(50, 72, 18, 11, C.black, 2).fill(50, 74, C.lightPink).dot(43, 72, C.black, 3).dot(57, 72, C.black, 3);
+      p.dot(40, 50, C.black, 3);
+    },
+  },
 ];
 
+/** Endings that can ride on a noun inside one word ("개가", "집에서", "개들이"). */
+const PARTICLES = ["에서", "에게", "한테", "하고", "이랑", "처럼", "까지", "부터", "이", "가", "을", "를", "은", "는", "의", "와", "과", "랑", "에", "도", "만", "들"];
+
+/** The word plus what's left after peeling particles off its end ("개들이" → 개들이, 개들, 개). */
+function stemsOf(word: string): string[] {
+  const stems = [word];
+  let rest = word;
+  for (let i = 0; i < 3; i++) {
+    const particle = PARTICLES.find((p) => rest.length > p.length && rest.endsWith(p));
+    if (!particle) break;
+    rest = rest.slice(0, -particle.length);
+    stems.push(rest);
+  }
+  return stems;
+}
+
+/**
+ * Templates named in `text`, in the order they appear (at most two).
+ * A one-letter keyword ("개", "차", "해") must be the whole word give or take
+ * particles — otherwise "번개장터" reads as 개 and the bot draws a dog. Longer
+ * keywords may sit inside a compound ("생일케이크"), but one inside a longer
+ * match doesn't count ("눈사람" isn't also a 사람).
+ */
+/** Names of every doodle the bot knows, for tests. */
+export const TEMPLATE_NAMES: readonly string[] = TEMPLATES.map((t) => t.name);
+
 function templatesIn(text: string): Template[] {
-  const found = TEMPLATES.map((t) => ({ t, at: Math.min(...t.keywords.map((k) => (text.includes(k) ? text.indexOf(k) : Infinity))) }))
-    .filter((f) => Number.isFinite(f.at))
-    .sort((a, b) => a.at - b.at)
-    .map((f) => f.t);
+  const hits: { t: Template; at: number; end: number }[] = [];
+  for (const m of text.matchAll(/[^\s.,!?~"'()[\]·]+/g)) {
+    const word = m[0];
+    const start = m.index ?? 0;
+    const stems = stemsOf(word);
+    for (const t of TEMPLATES) {
+      for (const k of t.keywords) {
+        if (k.length === 1) {
+          if (stems.includes(k)) hits.push({ t, at: start, end: start + 1 });
+          continue;
+        }
+        for (let i = word.indexOf(k); i >= 0; i = word.indexOf(k, i + 1)) hits.push({ t, at: start + i, end: start + i + k.length });
+      }
+    }
+  }
+  const kept = hits.filter((h) => !hits.some((o) => o.at <= h.at && o.end >= h.end && o.end - o.at > h.end - h.at));
+  const found: Template[] = [];
+  for (const h of kept.sort((a, b) => a.at - b.at)) if (!found.includes(h.t)) found.push(h.t);
   return found.slice(0, 2);
+}
+
+/** Which doodles a prompt asks for, by template name — exported for tests. */
+export function templateNamesIn(text: string): string[] {
+  return templatesIn(text).map((t) => t.name);
 }
 
 function defaultBoxes(count: number): Box[] {
@@ -775,8 +1077,13 @@ function hasBatchim(word: string): boolean {
   return code >= 0 && code <= 11171 && code % 28 !== 0;
 }
 
-export function guessFromDrawing(drawing: Drawing, rng: () => number): string {
-  if (isBlankDrawing(drawing)) return BLANK_GUESSES[Math.floor(rng() * BLANK_GUESSES.length)];
+function joinWords(words: readonly string[]): string {
+  const guess = words.length === 1 ? words[0] : `${words[0]}${hasBatchim(words[0]) ? "과" : "와"} ${words[1]}`;
+  return Array.from(guess).slice(0, TEXT_MAX_CHARS).join("");
+}
+
+/** Last resort when nothing in the picture looks familiar: name the colors with the most ink. */
+function guessFromInk(drawing: Drawing, rng: () => number): string {
   const ranked = [...inkByColor(drawing).entries()].sort((a, b) => b[1] - a[1]).map(([color]) => color);
   const words: string[] = [];
   for (const color of ranked) {
@@ -785,8 +1092,159 @@ export function guessFromDrawing(drawing: Drawing, rng: () => number): string {
     if (words.length === 2) break;
   }
   if (words.length === 0) return BLANK_GUESSES[0];
-  const guess = words.length === 1 ? words[0] : `${words[0]}${hasBatchim(words[0]) ? "과" : "와"} ${words[1]}`;
-  return Array.from(guess).slice(0, TEXT_MAX_CHARS).join("");
+  return joinWords(words);
+}
+
+// ---------------------------------------------------------------------------
+// Guessing by looking — shape + color layout against the templates
+// ---------------------------------------------------------------------------
+
+/** Palette index → color family, so red vs dark red isn't a different picture. 0 = paper. */
+const FAMILY = [0, 1, 2, 2, 3, 3, 4, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9];
+const FAMILIES = 10;
+/** Grid sizes of the normalized silhouette and of the coarser color-layout map. */
+const SHAPE_N = 10;
+const PATCH_N = 5;
+/** Below this similarity the bot doesn't trust its eyes and falls back to the ink colors. Tuned on wobbly bot drawings (see the tests). */
+const RECOGNIZE_MIN = 0.62;
+/** An empty column run at least this wide (in raster cells) can separate two objects. */
+const MIN_GAP_CELLS = 3;
+
+interface Look {
+  readonly shape: Float64Array;
+  readonly patches: Float64Array;
+  readonly colors: Float64Array;
+  readonly aspect: number;
+}
+
+/** Features of the ink in columns [x0, x1): silhouette and color layout in its own bounding square, plus overall colors. */
+function lookAt(raster: Raster, x0: number, x1: number): Look | null {
+  const H = raster.length / RASTER_W;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (let y = 0; y < H; y++) {
+    for (let x = x0; x < x1; x++) {
+      if (raster[y * RASTER_W + x] === 0) continue;
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+    }
+  }
+  if (!Number.isFinite(minX)) return null;
+  const w = maxX - minX + 1;
+  const h = maxY - minY + 1;
+  const side = Math.max(w, h);
+  const offX = (side - w) / 2;
+  const offY = (side - h) / 2;
+  const raw = new Float64Array(SHAPE_N * SHAPE_N);
+  const patches = new Float64Array(PATCH_N * PATCH_N * FAMILIES);
+  const colors = new Float64Array(FAMILIES);
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      const fam = FAMILY[raster[y * RASTER_W + x]] ?? 1;
+      if (fam === 0) continue;
+      const u = (x - minX + offX + 0.5) / side;
+      const v = (y - minY + offY + 0.5) / side;
+      raw[Math.floor(v * SHAPE_N) * SHAPE_N + Math.floor(u * SHAPE_N)] += 1;
+      patches[(Math.floor(v * PATCH_N) * PATCH_N + Math.floor(u * PATCH_N)) * FAMILIES + fam] += 1;
+      colors[fam] += fam === 1 ? 0.4 : 1; // black outlines are in almost every drawing — they say little
+    }
+  }
+  // A light blur so a stroke one cell off still lines up.
+  const shape = new Float64Array(SHAPE_N * SHAPE_N);
+  for (let y = 0; y < SHAPE_N; y++) {
+    for (let x = 0; x < SHAPE_N; x++) {
+      let sum = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const yy = y + dy, xx = x + dx;
+        if (yy >= 0 && yy < SHAPE_N && xx >= 0 && xx < SHAPE_N) sum += raw[yy * SHAPE_N + xx] * (dx === 0 && dy === 0 ? 2 : 1);
+      }
+      shape[y * SHAPE_N + x] = sum;
+    }
+  }
+  return { shape, patches, colors, aspect: w / h };
+}
+
+function cosine(a: Float64Array, b: Float64Array): number {
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  return na === 0 || nb === 0 ? 0 : dot / Math.sqrt(na * nb);
+}
+
+function similarity(a: Look, b: Look): number {
+  return 0.35 * cosine(a.shape, b.shape) + 0.35 * cosine(a.patches, b.patches) + 0.3 * cosine(a.colors, b.colors) - 0.15 * Math.abs(Math.log(a.aspect / b.aspect));
+}
+
+let referenceLooks: { name: string; look: Look }[] | null = null;
+
+/** How each template looks drawn cleanly — computed once. */
+function references(): { name: string; look: Look }[] {
+  referenceLooks ??= TEMPLATES.flatMap((t) => {
+    const look = lookAt(rasterize(drawTemplates([t], () => 0.5, 10, [{ x: 130, y: 50, size: 220 }])), 0, RASTER_W);
+    return look ? [{ name: t.name, look }] : [];
+  });
+  return referenceLooks;
+}
+
+function bestMatch(look: Look | null): { name: string; score: number } {
+  let best = { name: "", score: -Infinity };
+  if (!look) return best;
+  for (const ref of references()) {
+    const score = similarity(look, ref.look);
+    if (score > best.score) best = { name: ref.name, score };
+  }
+  return best;
+}
+
+/** Column to cut the picture at when it holds two objects side by side (a clear empty band with real ink on both sides), else null. */
+function splitColumn(raster: Raster): number | null {
+  const H = raster.length / RASTER_W;
+  const cols = Array.from({ length: RASTER_W }, (_, x) => {
+    let n = 0;
+    for (let y = 0; y < H; y++) if (raster[y * RASTER_W + x] !== 0) n++;
+    return n;
+  });
+  const total = cols.reduce((a, b) => a + b, 0);
+  let best: { cut: number; width: number } | null = null;
+  let left = 0;
+  for (let x = 0; x < RASTER_W; x++) {
+    if (cols[x] !== 0) {
+      left += cols[x];
+      continue;
+    }
+    let end = x;
+    while (end < RASTER_W && cols[end] === 0) end++;
+    const width = end - x;
+    if (left >= total * 0.15 && total - left >= total * 0.15 && width >= MIN_GAP_CELLS && (!best || width > best.width)) best = { cut: x + Math.floor(width / 2), width };
+    x = end - 1;
+  }
+  return best?.cut ?? null;
+}
+
+/**
+ * What the bot thinks it's looking at: one or two template names (left to
+ * right), or null when nothing is a confident match.
+ */
+export function recognizeDrawing(drawing: Drawing): string[] | null {
+  const raster = rasterize(drawing, isSceneryOp);
+  const whole = bestMatch(lookAt(raster, 0, RASTER_W));
+  const cut = splitColumn(raster);
+  if (cut !== null) {
+    const left = bestMatch(lookAt(raster, 0, cut));
+    const right = bestMatch(lookAt(raster, cut, RASTER_W));
+    const sure = [left, right].filter((m) => m.score >= RECOGNIZE_MIN);
+    if (sure.length === 2 && (left.score + right.score) / 2 >= whole.score - 0.05) return left.name === right.name ? [left.name] : [left.name, right.name];
+    if (whole.score < RECOGNIZE_MIN && sure.length === 1) return [sure[0].name];
+  }
+  return whole.score >= RECOGNIZE_MIN ? [whole.name] : null;
+}
+
+export function guessFromDrawing(drawing: Drawing, rng: () => number): string {
+  if (isBlankDrawing(drawing)) return BLANK_GUESSES[Math.floor(rng() * BLANK_GUESSES.length)];
+  const seen = recognizeDrawing(drawing);
+  return seen ? joinWords(seen) : guessFromInk(drawing, rng);
 }
 
 /** One canned answer list per ICEBREAKER_QUESTIONS entry (same order). */

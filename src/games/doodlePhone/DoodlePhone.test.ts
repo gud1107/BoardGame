@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { seededRng, shuffle } from "@/lib/rng";
-import { SCENERY_ALPHA, SCENE_PIECE_COUNT, addToDrawing, chooseBotAction, isSceneryOp, nextAnimationFrame, sceneChoicesFor, scenePieceFor, getValidMoves, guessFromDrawing, botDrawingFor, inkByColor, nextBotActor, redrawDrawing } from "./bot";
+import { SCENERY_ALPHA, SCENE_PIECE_COUNT, addToDrawing, chooseBotAction, isSceneryOp, nextAnimationFrame, sceneChoicesFor, scenePieceFor, getValidMoves, guessFromDrawing, botDrawingFor, inkByColor, nextBotActor, recognizeDrawing, redrawDrawing, templateNamesIn, TEMPLATE_NAMES } from "./bot";
+import { RASTER_CELL, RASTER_W, rasterize } from "./raster";
 import {
   EMPTY_DRAWING,
   MAX_DRAWING_CHARS,
@@ -331,6 +332,48 @@ describe("AI bots (ARCHITECTURE.md §7)", () => {
     const heart = botDrawingFor("사랑의 하트", seededRng(2), 10).understood;
     expect(["사과", "하트", "딸기", "빨간 자동차", "문어"].some((w) => guessFromDrawing(heart, seededRng(4)).includes(w))).toBe(true);
     expect(guessFromDrawing(EMPTY_DRAWING, seededRng(5)).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("reads one-letter keywords only as whole words (번개장터 is not a 개)", () => {
+    expect(templateNamesIn("번개장터")).toEqual(["번개", "가게"]);
+    expect(templateNamesIn("닭 쫓던 개 지붕 쳐다본다")).toEqual(["새", "강아지"]);
+    expect(templateNamesIn("강아지들이 노는 공원")).toEqual(["강아지", "나무"]);
+    expect(templateNamesIn("눈사람과 구름")).toEqual(["눈사람", "구름"]);
+    expect(templateNamesIn("개구리")).toEqual(["개구리"]);
+    expect(templateNamesIn("하울의 움직이는 성")).toEqual(["성"]);
+    expect(templateNamesIn("나비 차가운 해바라기")).toEqual([]);
+  });
+
+  it("every doodle's outlines stay closed, so its fills never leak onto the paper", () => {
+    for (const name of TEMPLATE_NAMES) {
+      for (const level of [1, 10]) {
+        for (let seed = 1; seed <= 12; seed++) {
+          const cells = rasterize(botDrawingFor(name, seededRng(seed), level).understood);
+          // A lone doodle sits in the 240px box at (120, 40); allow the wobble and the brush.
+          const outside = cells.filter((c, i) => {
+            const x = (i % RASTER_W) * RASTER_CELL;
+            const y = Math.floor(i / RASTER_W) * RASTER_CELL;
+            return c !== 0 && (x < 100 || x > 380 || y < 20 || y > 300);
+          }).length;
+          expect(outside, `${name} Lv.${level} seed ${seed}`).toBe(0);
+        }
+      }
+    }
+  });
+
+  it("guesses by looking: recognises its own doodles, alone or side by side", () => {
+    let right = 0;
+    let total = 0;
+    for (const name of TEMPLATE_NAMES) {
+      for (let seed = 1; seed <= 3; seed++) {
+        expect(recognizeDrawing(botDrawingFor(name, seededRng(seed), 10).understood), name).toEqual([name]);
+        total++;
+        if (recognizeDrawing(botDrawingFor(name, seededRng(seed + 50), 5).understood)?.join() === name) right++;
+      }
+    }
+    expect(right / total).toBeGreaterThanOrEqual(0.95);
+    expect(guessFromDrawing(botDrawingFor("번개장터", seededRng(5), 8).understood, seededRng(1))).toBe("번개와 가게");
+    expect(guessFromDrawing(botDrawingFor("우산 쓴 고양이", seededRng(6), 8).understood, seededRng(1))).toBe("우산과 고양이");
   });
 
   it("Lv.1 and Lv.10 diverge under the same rng", () => {
