@@ -94,16 +94,15 @@ export default function SiteHeader() {
           </span>
         </Link>
         <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1.5 sm:gap-3">
-          {configured && userId && (
-            <button
-              onClick={() => setProfileModalOpen(true)}
-              className="shrink-0 rounded-full ring-1 ring-amber-400/40 transition hover:opacity-80 hover:ring-amber-300/70"
-              aria-label="프로필 이미지 변경"
-              title="프로필 이미지 변경"
-            >
-              <Avatar src={profileAvatarUrl} size={28} />
-            </button>
-          )}
+          {/* guests too: game nickname + character live in localStorage (ProfileModal) */}
+          <button
+            onClick={() => setProfileModalOpen(true)}
+            className="shrink-0 rounded-full ring-1 ring-amber-400/40 transition hover:opacity-80 hover:ring-amber-300/70"
+            aria-label="프로필 수정"
+            title="프로필 수정"
+          >
+            <Avatar src={profileAvatarUrl} size={28} />
+          </button>
           <OwnPortraitKeeper />
           <PublicPortraitPublisher />
           {configured && (

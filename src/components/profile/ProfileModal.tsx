@@ -1,18 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import Avatar from "@/components/common/Avatar";
 import { PUBLIC_NAME_RULE, useProfileStore } from "@/store/profileStore";
 import { useMyCharacter } from "@/lib/character/myCharacter";
 import CharacterStudio from "./CharacterStudio";
 import { cleanNickname, GAME_NICKNAME_MAX, useMyNickname } from "@/lib/identity/myNickname";
 import { useProfilePhoto } from "./ProfilePhoto";
+import { useSubscriptionStore } from "@/store/subscriptionStore";
 
 /**
- * Profile editor: the public ranking nickname + 3D character (its portrait is the profile picture) — logged-in accounts only (see `profileStore.ts`;
- * guests never see the entry point that opens this, both in `SiteHeader`
- * and `/account`). Reuses the shared `Overlay` chrome, same as every other
- * modal in the app.
+ * Profile editor: game nickname + public ranking nickname + 3D character (its
+ * portrait is the profile picture). Guests get it too (SiteHeader): the game
+ * nickname and character are kept on this device; the ranking nickname needs
+ * an account (`profileStore.ts`), so guests see a login link in its place.
+ * Reuses the shared `Overlay` chrome, same as every other modal in the app.
  */
 export default function ProfileModal({ onClose }: { onClose: () => void }) {
   const avatarUrl = useProfileStore((s) => s.avatarUrl);
@@ -21,11 +24,22 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
   const resetAvatar = useProfileStore((s) => s.resetAvatar);
   const photo = useProfilePhoto();
   const hasCharacter = useMyCharacter((s) => !!s.character);
+  const signedIn = !!useSubscriptionStore((s) => s.userId);
 
   return (
     <CharacterStudio title="🙂 프로필" onClose={onClose}>
-        <GameNicknameEditor />
-        <PublicNameEditor />
+        <GameNicknameEditor signedIn={signedIn} />
+        {signedIn ? (
+          <PublicNameEditor />
+        ) : (
+          <p className="w-full rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-[11px] leading-relaxed text-amber-100/80 light:border-amber-300 light:bg-amber-50 light:text-amber-800">
+            게스트로 꾸민 닉네임·캐릭터는 이 기기(브라우저)에만 저장돼요.{" "}
+            <Link href="/login" onClick={onClose} className="font-semibold underline">
+              로그인
+            </Link>
+            하면 계정에 저장되어 다른 기기에서도 쓰고, 공개 랭킹 닉네임도 정할 수 있어요.
+          </p>
+        )}
         <div className="w-full border-t border-white/10 light:border-slate-200" />
         <Avatar src={photo} size={112} className="border-2" />
         <p className="text-center text-[11px] leading-relaxed text-white/40 light:text-slate-400">
@@ -55,7 +69,7 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
 }
 
 /** 게임 닉네임: what every online game's room field starts filled with (`myNickname.ts`). */
-function GameNicknameEditor() {
+function GameNicknameEditor({ signedIn }: { signedIn: boolean }) {
   const nickname = useMyNickname((s) => s.nickname);
   const init = useMyNickname((s) => s.init);
   const setNickname = useMyNickname((s) => s.set);
@@ -64,7 +78,9 @@ function GameNicknameEditor() {
   const [draft, setDraft] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   // one name everywhere by default: the ranking shows the same name the table did
-  const [alsoRanking, setAlsoRanking] = useState(true);
+  const [alsoRankingPref, setAlsoRanking] = useState(true);
+  // guests have no ranking name to keep in step
+  const alsoRanking = signedIn && alsoRankingPref;
   useEffect(() => {
     void init();
   }, [init]);
@@ -103,10 +119,12 @@ function GameNicknameEditor() {
           저장
         </button>
       </div>
-      <label className="flex items-center gap-2 text-xs text-white/60 light:text-slate-500">
-        <input type="checkbox" checked={alsoRanking} onChange={(e) => setAlsoRanking(e.target.checked)} className="h-4 w-4 accent-rose-500" />
-        공개 랭킹에도 같은 이름으로 (다른 사람이 쓰고 있으면 랭킹 닉네임은 그대로예요)
-      </label>
+      {signedIn && (
+        <label className="flex items-center gap-2 text-xs text-white/60 light:text-slate-500">
+          <input type="checkbox" checked={alsoRanking} onChange={(e) => setAlsoRanking(e.target.checked)} className="h-4 w-4 accent-rose-500" />
+          공개 랭킹에도 같은 이름으로 (다른 사람이 쓰고 있으면 랭킹 닉네임은 그대로예요)
+        </label>
+      )}
       {saved ? (
         <p className="text-xs text-emerald-300 light:text-emerald-600">{nickname ? "저장했어요. 다음에 들어가는 방부터 이 닉네임이 입력돼요." : "지웠어요. 방에서 마지막으로 쓴 이름이 입력돼요."}</p>
       ) : (
