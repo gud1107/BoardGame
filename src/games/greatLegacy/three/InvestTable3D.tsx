@@ -118,6 +118,7 @@ export default function InvestTable3D(props: InvestTable3DProps) {
 
   return (
     <TableScene
+      cameraKey="great-legacy-camera"
       seatCount={props.playerCount}
       viewerSeat={viewerSeat}
       seats={seats}

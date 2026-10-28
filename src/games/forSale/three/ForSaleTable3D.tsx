@@ -180,6 +180,7 @@ export default function ForSaleTable3D(props: ForSaleTable3DProps) {
 
   return (
     <TableScene
+      cameraKey="for-sale-camera"
       seatCount={props.playerCount}
       viewerSeat={viewerSeat}
       seats={seats}

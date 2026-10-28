@@ -163,6 +163,7 @@ export default function CoinTable3D(props: CoinTable3DProps) {
 
   return (
     <TableScene
+      cameraKey="show-me-the-coin-camera"
       seatCount={2}
       viewerSeat={viewerSeat}
       seats={seats}

@@ -314,6 +314,7 @@ export default function MafiaTable3D(props: MafiaTable3DProps) {
 
   return (
     <TableScene
+      cameraKey="mafia-camera"
       seatCount={n}
       viewerSeat={viewerSeat}
       seats={seats}

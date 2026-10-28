@@ -121,8 +121,12 @@ export default function TelepathyTable3D(props: TelepathyTable3DProps) {
   });
 
   const status = `레벨 ${props.level}/${props.maxLevel}${props.lives !== null ? ` · ❤️ ${props.lives}` : ""}${props.stars !== null ? ` · ⚡ ${props.stars}` : ""}`;
+  const me = props.seats.find((x) => x.seat === viewerSeat);
   return (
     <TableScene
+      cameraKey="telepathy-camera"
+      // my own body holds my hand too (backs: the 2D hand panel shows the faces)
+      selfView={{ held: me && me.handCount > 0 ? <HeldFan count={me.handCount} back={back()} /> : null }}
       seatCount={props.playerCount}
       viewerSeat={viewerSeat}
       seats={seats}

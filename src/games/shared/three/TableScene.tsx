@@ -4,7 +4,8 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import FirstPersonCamera, { FPV_SEAT_IN } from "./FirstPersonCamera";
-import type { HatKind, PersonLook, PersonMood } from "./SeatedPerson";
+import { holdsInMood, type HatKind, type PersonLook, type PersonMood } from "./SeatedPerson";
+import { useCameraView } from "./viewPref";
 import { resolveLook, type AvatarProfile } from "@/lib/character/avatar";
 import { useRoomCharacter } from "@/lib/character/roomCharacters";
 import VrmPerson, { VRM_NAME_Y } from "./VrmPerson";
@@ -153,6 +154,14 @@ export interface TableSceneProps {
    * shoulder): my whole body holding `held`. My name plate / tag stay on the table edge.
    */
   selfBody?: { held: ReactNode; mood: PersonMood } | null;
+  /**
+   * Let the scene own the camera choice: a "🎥 1인칭 | 🪑 테이블" switch in the canvas corner
+   * (remembered under this key), my own body in my chair in both views. Ignored when the game
+   * drives `firstPerson` / `selfBody` itself (5 오이).
+   */
+  cameraKey?: string;
+  /** What my own body holds / how it sits under `cameraKey` (default: my seat's mood, empty hands). */
+  selfView?: { held?: ReactNode; mood?: PersonMood; pitch?: number };
 }
 
 // ---------------------------------------------------------------------------
@@ -400,6 +409,7 @@ function SeatView({ s, geo, theme, lowDetail, ringColor, quietMoods, firstPerson
           facing={angle + Math.PI}
           mood={firstPerson.mood}
           lookAt={null}
+          out={s.out}
           lowDetail={lowDetail}
           chair={chair === "throne" ? "wood" : chair}
           chairColor={theme.chairColor}
@@ -418,6 +428,7 @@ function SeatView({ s, geo, theme, lowDetail, ringColor, quietMoods, firstPerson
             facing={angle + Math.PI}
             mood={selfBody.mood}
             lookAt={null}
+            out={s.out}
             lowDetail={lowDetail}
             // a backrest right under the camera would wall off the bottom of the view
             chair="stool"
@@ -566,9 +577,55 @@ function SceneContents(props: TableSceneProps) {
   );
 }
 
+/** The scene-owned camera switch + (first person) my own name / status, since my plate isn't in view. */
+function CameraOverlay({ cam, me }: { cam: ReturnType<typeof useCameraView>; me: TableSeat | undefined }) {
+  const status = cam.camera === "fpv" && me ? [me.sub, me.tag?.text].filter(Boolean).join(" · ") : "";
+  return (
+    <div className="pointer-events-none absolute top-1.5 left-1.5 z-10 flex max-w-[70%] flex-col items-start gap-1">
+      <div role="group" aria-label="3D 시점" className="pointer-events-auto flex overflow-hidden rounded-full border border-white/20 bg-black/55 text-[10px] sm:text-[11px]">
+        {(
+          [
+            ["fpv", "🎥 1인칭", "내 캐릭터의 눈으로 봐요"],
+            ["table", "🪑 테이블", "내 자리 뒤·위에서 테이블 전체를 봐요"],
+          ] as const
+        ).map(([v, label, title]) => (
+          <button
+            key={v}
+            type="button"
+            title={title}
+            aria-pressed={cam.camera === v}
+            onClick={() => cam.setCamera(v)}
+            className={`px-2 py-0.5 transition sm:px-2.5 sm:py-1 ${cam.camera === v ? "bg-white/20 font-semibold text-white" : "text-white/60 hover:text-white"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {cam.camera === "fpv" && me && (
+        <span className="truncate rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-semibold text-white/85 sm:text-[11px]">
+          🙋 {me.name} (나){status ? ` · ${status}` : ""}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function TableScene(props: TableSceneProps) {
   const high = !props.lowDetail;
-  return (
+  // the scene owns the camera choice only when the game hasn't wired its own (5 오이 has)
+  const managed = !!props.cameraKey && props.firstPerson === undefined && props.selfBody === undefined;
+  const cam = useCameraView(props.cameraKey ?? "table-camera");
+  const me = props.seats.find((x) => x.seat === props.viewerSeat);
+  let { firstPerson, selfBody } = props;
+  if (managed) {
+    const held = props.selfView?.held ?? null;
+    const mood = props.selfView?.mood ?? me?.mood ?? "rest";
+    // inside my head my hands keep hold of whatever they hold (a cheer would drop it)
+    const fpMood = held && !holdsInMood(mood) ? "rest" : mood;
+    firstPerson = cam.camera === "fpv" ? { held, pitch: props.selfView?.pitch ?? 0, mood: fpMood } : null;
+    selfBody = cam.camera === "table" ? { held, mood } : null;
+  }
+  const canvas = (
     <Canvas
       shadows={high}
       // AdaptiveResolution picks the real ratio (≤ 2) and steps it down on a slow device;
@@ -581,7 +638,14 @@ export default function TableScene(props: TableSceneProps) {
         document.body.style.cursor = "";
       }}
     >
-      <SceneContents {...props} />
+      <SceneContents {...props} firstPerson={firstPerson} selfBody={selfBody} />
     </Canvas>
+  );
+  if (!managed) return canvas;
+  return (
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      {canvas}
+      <CameraOverlay cam={cam} me={me} />
+    </div>
   );
 }

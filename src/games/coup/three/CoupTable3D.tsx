@@ -537,6 +537,7 @@ export default function CoupTable3D(props: CoupTable3DProps) {
 
   return (
     <TableScene
+      cameraKey="coup-camera"
       seatCount={n}
       viewerSeat={viewerSeat}
       seats={seats}

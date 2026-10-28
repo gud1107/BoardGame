@@ -151,6 +151,7 @@ export default function GridPokerTable3D(props: GridPokerTable3DProps) {
 
   return (
     <TableScene
+      cameraKey="grid-poker-camera"
       seatCount={props.playerCount}
       viewerSeat={viewerSeat}
       seats={seats}

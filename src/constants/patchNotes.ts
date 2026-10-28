@@ -64,6 +64,17 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.118.0",
+    releaseDate: "2026-10-29",
+    title: "🎥 3D 테이블 게임 전부 1인칭 | 테이블 시점",
+    changes: [
+      { game: "common", type: "FEAT", desc: "🎥 3D 테이블 게임 23종에 '1인칭 | 테이블' 시점 선택 — 화면 왼쪽 위에서 골라요 (게임마다 기억)" },
+      { game: "common", type: "FEAT", desc: "🧍 두 시점 모두 내 캐릭터가 내 자리에 앉아 있어요 — 카드 게임은 내 손패를 쥐고, 쿠·러브레터는 내 앞 카드를 내려다봐요" },
+      { game: "common", type: "IMPROVE", desc: "🙋 1인칭에서는 내 이름·상태(남은 카드·점수 등)가 화면 위에 작게 떠요" },
+      { game: "dalmuti", type: "FEAT", desc: "🏷️ 가운데 더미 맨 위 카드를 누가 냈는지 이름표가 떠요 (그 사람 자리 색)" },
+    ],
+  },
+  {
     version: "v1.117.0",
     releaseDate: "2026-10-29",
     title: "🪑 5 오이 테이블 시점에도 내 캐릭터 · 누가 낸 카드인지",

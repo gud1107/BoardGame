@@ -652,6 +652,7 @@ export default function PerudoTable3D(props: PerudoTable3DProps & { names: Recor
 
   return (
     <TableScene
+      cameraKey="perudo-camera"
       seatCount={n}
       viewerSeat={viewerSeat}
       seats={seats}

@@ -142,6 +142,7 @@ export default function NoThanksTable3D(props: NoThanksTable3DProps) {
 
   return (
     <TableScene
+      cameraKey="no-thanks-camera"
       seatCount={props.playerCount}
       viewerSeat={viewerSeat}
       seats={seats}

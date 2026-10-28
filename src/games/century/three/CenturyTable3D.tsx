@@ -169,6 +169,7 @@ export default function CenturyTable3D(props: CenturyTable3DProps) {
 
   return (
     <TableScene
+      cameraKey="century-camera"
       seatCount={props.playerCount}
       viewerSeat={viewerSeat}
       seats={seats}

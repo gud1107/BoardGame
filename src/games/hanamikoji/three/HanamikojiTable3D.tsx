@@ -200,6 +200,7 @@ export default function HanamikojiTable3D(props: HanamikojiTable3DProps) {
 
   return (
     <TableScene
+      cameraKey="hanamikoji-camera"
       seatCount={2}
       viewerSeat={viewerSeat}
       seats={seats}

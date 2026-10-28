@@ -180,6 +180,9 @@ export default function LostCitiesTable3D(props: LostCitiesTable3DProps) {
 
   return (
     <TableScene
+      cameraKey="lost-cities-camera"
+      // my own body holds my hand too (backs: the 2D hand panel shows the faces)
+      selfView={{ held: props.handCounts[viewerSeat as 0 | 1] > 0 ? <HeldFan count={props.handCounts[viewerSeat as 0 | 1]} back={back()} /> : null }}
       seatCount={2}
       viewerSeat={viewerSeat}
       seats={seats}

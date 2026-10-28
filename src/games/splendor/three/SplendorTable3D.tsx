@@ -255,6 +255,7 @@ export default function SplendorTable3D(props: SplendorTable3DProps) {
 
   return (
     <TableScene
+      cameraKey="splendor-camera"
       seatCount={props.playerCount}
       viewerSeat={viewerSeat}
       seats={seats}

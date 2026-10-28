@@ -130,6 +130,7 @@ export default function HillTable3D(props: HillTable3DProps) {
 
   return (
     <TableScene
+      cameraKey="hill-of-truth-camera"
       seatCount={order.length}
       viewerSeat={pos(viewerSeat)}
       seats={seats}

@@ -5,7 +5,8 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
 import { FlatCard, FlyIn, HeldFan, ImpactRing, FloatIcon, TableSign } from "@/games/shared/three/tablePieces";
-import { paintedTexture, FONTS, type BubbleStyle } from "@/games/shared/three/tableKit";
+import { labelTexture, paintedTexture, FONTS, type BubbleStyle } from "@/games/shared/three/tableKit";
+import ScreenSprite from "@/games/shared/three/ScreenSprite";
 import type { HatKind, PersonMood } from "@/games/shared/three/SeatedPerson";
 import { CARD_RANK_INFO } from "../CardArt";
 import { JOKER_RANK, type Card } from "../engine";
@@ -357,7 +358,11 @@ function CenterSign({ text }: { text: string }) {
   return <TableSign text={text} style={SIGN_STYLE} y={0.95} width={1.15} />;
 }
 
-function TrickPile({ plays }: { plays: DalmutiTable3DProps["plays"] }) {
+/**
+ * The plays pile up in one heap, so only the set on top — the one to beat — gets a
+ * "who played it" chip (in that seat's colour) just in front of the heap.
+ */
+function TrickPile({ plays, nameOf }: { plays: DalmutiTable3DProps["plays"]; nameOf: (seat: number) => string }) {
   const geo = useTableGeo();
   const visible = plays.slice(-4);
   const offset = plays.length - visible.length;
@@ -376,6 +381,7 @@ function TrickPile({ plays }: { plays: DalmutiTable3DProps["plays"] }) {
               </group>
             </FlyIn>
             {latest && <ImpactRing key={i} color={p.cards.some((c) => c.isJoker) ? "#fb7185" : "#fde68a"} size={1.1} />}
+            {latest && <ScreenSprite position={[0, 0.06, 0.52]} scale={[0.7, 0.175]} map={labelTexture(nameOf(p.seat), SEAT_COLORS[p.seat % SEAT_COLORS.length])} />}
           </group>
         );
       })}
@@ -460,8 +466,12 @@ export default function DalmutiTable3D(props: DalmutiTable3DProps) {
     };
   });
 
+  const me = props.seats.find((x) => x.seat === viewerSeat);
   return (
     <TableScene
+      cameraKey="dalmuti-camera"
+      // my own body holds my hand too (backs: the 2D hand panel shows the faces)
+      selfView={{ held: me && me.handCount > 0 ? <HeldFan count={me.handCount} back={cardBack()} max={13} /> : null }}
       seatCount={n}
       viewerSeat={viewerSeat}
       seats={seats}
@@ -469,7 +479,7 @@ export default function DalmutiTable3D(props: DalmutiTable3DProps) {
       environment={<ThroneHall lowDetail={props.lowDetail} />}
       center={
         <group>
-          <TrickPile plays={plays} />
+          <TrickPile plays={plays} nameOf={(seat) => (seat === viewerSeat ? "나" : (props.seats.find((x) => x.seat === seat)?.name ?? `${seat + 1}번`))} />
           <CenterSign text={props.sign} />
           {revolution && (
             <group position={[0, 0.2, 0]}>

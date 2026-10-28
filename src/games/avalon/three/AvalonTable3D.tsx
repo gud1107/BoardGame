@@ -640,6 +640,7 @@ export default function AvalonTable3D(props: AvalonTable3DProps & { names: Recor
 
   return (
     <TableScene
+      cameraKey="avalon-camera"
       seatCount={n}
       viewerSeat={viewerSeat}
       seats={seats}

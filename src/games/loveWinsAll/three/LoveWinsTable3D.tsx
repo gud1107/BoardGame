@@ -112,6 +112,7 @@ export default function LoveWinsTable3D(props: LoveWinsTable3DProps) {
 
   return (
     <TableScene
+      cameraKey="love-wins-all-camera"
       seatCount={2}
       viewerSeat={viewerSeat}
       seats={seats}

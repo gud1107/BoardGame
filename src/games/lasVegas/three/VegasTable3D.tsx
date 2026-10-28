@@ -206,6 +206,7 @@ export default function VegasTable3D(props: VegasTable3DProps) {
 
   return (
     <TableScene
+      cameraKey="las-vegas-camera"
       seatCount={props.playerCount}
       viewerSeat={viewerSeat}
       seats={seats}

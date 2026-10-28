@@ -151,6 +151,7 @@ export default function RiftTable3D(props: RiftTable3DProps) {
   const last = props.revealed[props.revealed.length - 1];
   return (
     <TableScene
+      cameraKey="summoners-rift-camera"
       seatCount={props.playerCount}
       viewerSeat={viewerSeat}
       seats={seats}

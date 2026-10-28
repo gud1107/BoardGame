@@ -117,8 +117,12 @@ export default function DestinyTable3D(props: DestinyTable3DProps) {
     };
   });
 
+  const me = props.seats.find((x) => x.seat === viewerSeat);
   return (
     <TableScene
+      cameraKey="destiny-war39-camera"
+      // my own body holds my hand too (backs: the 2D hand panel shows the faces)
+      selfView={{ held: me && me.handCount > 0 ? <HeldFan count={me.handCount} back={back()} max={9} /> : null }}
       seatCount={order.length}
       viewerSeat={pos(viewerSeat)}
       seats={seats}

@@ -219,6 +219,7 @@ export default function LoveLetterTable3D(props: LoveLetterTable3DProps & { name
 
   return (
     <TableScene
+      cameraKey="love-letter-camera"
       seatCount={props.playerCount}
       viewerSeat={viewerSeat}
       seats={seats}

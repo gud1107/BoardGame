@@ -125,6 +125,7 @@ export default function RatTable3D(props: RatTable3DProps) {
 
   return (
     <TableScene
+      cameraKey="rat-atat-cat-camera"
       seatCount={props.playerCount}
       viewerSeat={viewerSeat}
       seats={seats}
