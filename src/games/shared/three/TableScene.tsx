@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
-import FirstPersonCamera from "./FirstPersonCamera";
+import FirstPersonCamera, { FPV_SEAT_IN } from "./FirstPersonCamera";
 import type { HatKind, PersonLook, PersonMood } from "./SeatedPerson";
 import { resolveLook, type AvatarProfile } from "@/lib/character/avatar";
 import { useRoomCharacter } from "@/lib/character/roomCharacters";
@@ -25,7 +25,9 @@ import { nextEmotionLine, speakEmotion } from "@/lib/audio/characterVoice";
  * camera. It never sees hidden state, so it can't leak it.
  *
  * Coordinates: the viewer sits at +z (angle 0) and has no body (first
- * person). `front` children are placed on the table in front of their seat
+ * person) — unless `firstPerson` is on: then my own VRM sits in my chair,
+ * holding `firstPerson.held`, and the camera looks out of its head.
+ * `front` children are placed on the table in front of their seat
  * in a local frame where +z points toward that seat's player and y = 0 is
  * the table top.
  */
@@ -140,6 +142,12 @@ export interface TableSceneProps {
   lampDim?: number;
   /** Moods that stay silent at this table (no voice line, no caption) — e.g. 텔레파시 bans talking. */
   quietMoods?: readonly PersonMood[];
+  /**
+   * Liar's Bar–style seat: my own body in my chair, holding `held` (keep `mood` one that holds
+   * cards), the camera inside my head with its eyes resting at `pitch` (see FirstPersonCamera).
+   * My name plate / tag / bubble are dropped — the board shows them in its own HUD.
+   */
+  firstPerson?: { held: ReactNode; pitch: number; mood: PersonMood } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -325,7 +333,7 @@ function useSelect(onSelect: (() => void) | null | undefined) {
   };
 }
 
-function SeatView({ s, geo, theme, lowDetail, ringColor, quietMoods }: { s: TableSeat; geo: TableGeo; theme: TableTheme; lowDetail: boolean; ringColor: string; quietMoods?: readonly PersonMood[] }) {
+function SeatView({ s, geo, theme, lowDetail, ringColor, quietMoods, firstPerson }: { s: TableSeat; geo: TableGeo; theme: TableTheme; lowDetail: boolean; ringColor: string; quietMoods?: readonly PersonMood[]; firstPerson?: TableSceneProps["firstPerson"] }) {
   const angle = geo.angleOf(s.seat);
   const isViewer = s.seat === geo.viewerSeat;
   const color = s.color ?? theme.seatColors[s.seat % theme.seatColors.length];
@@ -378,7 +386,23 @@ function SeatView({ s, geo, theme, lowDetail, ringColor, quietMoods }: { s: Tabl
         </group>
       )}
       {s.active && <TurnRing position={geo.spotOf(s.seat, 0.16)} color={ringColor} />}
-      {isViewer ? (
+      {isViewer && firstPerson ? (
+        <Person
+          seed={s.seat * 7 + 3}
+          look={look}
+          color={color}
+          position={polar(angle, geo.seatR - FPV_SEAT_IN)}
+          facing={angle + Math.PI}
+          mood={firstPerson.mood}
+          lookAt={null}
+          lowDetail={lowDetail}
+          chair={chair === "throne" ? "wood" : chair}
+          chairColor={theme.chairColor}
+          persona="focused"
+          held={firstPerson.held}
+          firstPerson
+        />
+      ) : isViewer ? (
         <group position={geo.spotOf(s.seat, 0.08).toArray()} rotation-y={angle}>
           {/* my placard — tap target for picking myself */}
           <group {...handlers} position={[0, 0.06, 0]} rotation-x={-0.5}>
@@ -503,14 +527,14 @@ function SceneContents(props: TableSceneProps) {
       <Table tableR={geo.tableR} theme={theme} lowDetail={lowDetail} />
       <group position={[0, TABLE_Y, 0]}>{props.center}</group>
       {props.seats.map((s) => (
-        <SeatView key={s.seat} s={s} geo={geo} theme={theme} lowDetail={lowDetail} ringColor={props.ringColor ?? "#fbbf24"} quietMoods={props.quietMoods} />
+        <SeatView key={s.seat} s={s} geo={geo} theme={theme} lowDetail={lowDetail} ringColor={props.ringColor ?? "#fbbf24"} quietMoods={props.quietMoods} firstPerson={props.firstPerson} />
       ))}
       {props.extras}
       {theme.personStyle === "realistic" && (
         // a soft key light from my side so faces across the table read clearly
         <directionalLight position={[0, 2.6, geo.seatR + 2]} intensity={0.9} color="#fff4e6" />
       )}
-      <FirstPersonCamera seatR={geo.seatR} tableY={TABLE_Y} overview={props.overview} seats={n} eyeLevel={theme.personStyle === "realistic"} />
+      <FirstPersonCamera seatR={geo.seatR} tableY={TABLE_Y} overview={props.overview} seats={n} eyeLevel={theme.personStyle === "realistic"} fpv={props.firstPerson ? { pitch: props.firstPerson.pitch } : null} />
       <AdaptiveResolution />
       <PerfHud />
       {!lowDetail && <PostFx bloom={theme.fx?.bloom ?? 0.28} />}

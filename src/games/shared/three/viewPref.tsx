@@ -49,6 +49,48 @@ export function useBoardView(storageKey: string): { view: BoardView; setView: (v
   return { view: hasWebgl ? view : "2d", setView, canToggle: hasWebgl };
 }
 
+export type CameraView = "fpv" | "table";
+
+/**
+ * The 3D table's camera: 🎥 first person (my own body in my chair, Liar's Bar style)
+ * or 🪑 the over-the-shoulder table view. Remembered per game; first person by default.
+ */
+export function useCameraView(storageKey: string): { camera: CameraView; setCamera: (v: CameraView) => void } {
+  const [camera, setState] = useState<CameraView>(() => {
+    if (typeof window === "undefined") return "fpv";
+    try {
+      return window.localStorage.getItem(storageKey) === "table" ? "table" : "fpv";
+    } catch {
+      return "fpv";
+    }
+  });
+  const setCamera = useCallback(
+    (v: CameraView) => {
+      setState(v);
+      try {
+        window.localStorage.setItem(storageKey, v);
+      } catch {
+        /* private mode — keep the in-memory choice */
+      }
+    },
+    [storageKey],
+  );
+  return { camera, setCamera };
+}
+
+/** The header's "🪑 테이블 시점 / 🎥 1인칭" pill. */
+export function CameraToggle({ cam }: { cam: ReturnType<typeof useCameraView> }) {
+  return (
+    <button
+      type="button"
+      onClick={() => cam.setCamera(cam.camera === "fpv" ? "table" : "fpv")}
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:bg-white/80 light:text-slate-600"
+    >
+      {cam.camera === "fpv" ? "🪑 테이블 시점" : "🎥 1인칭"}
+    </button>
+  );
+}
+
 /** Low detail on narrow / weak devices (fewer segments, no shadows). */
 export function preferLowDetail(): boolean {
   if (typeof window === "undefined") return true;

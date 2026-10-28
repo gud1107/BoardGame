@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import dynamic from "next/dynamic";
 import Avatar from "@/components/common/Avatar";
-import { Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
+import { CameraToggle, Loading3D, preferLowDetail, useBoardView, useCameraView, ViewToggle } from "@/games/shared/three/viewPref";
 import RulebookModal from "./RulebookModal";
 import CucumberSoundHud from "./CucumberSoundHud";
 import { getCucumberSound } from "./cucumberSound";
@@ -234,6 +234,8 @@ function TrickHoldCountdown({ durationMs }: { durationMs: number }) {
 // three.js only loads when the 3D table is shown (🖼️ 2D otherwise / without WebGL).
 const CucumberTable3D = dynamic(() => import("./three/CucumberTable3D"), { ssr: false, loading: () => <Loading3D /> });
 
+const NO_CARDS: ReadonlySet<string> = new Set();
+
 /** Slight arc + overlap so a hand of cards reads like it's fanned out by hand, not stacked in a grid — same technique as hanamikoji/HanamikojiBoard.tsx's `fanStyle`. */
 function fanStyle(index: number, total: number, overlapPx: number): CSSProperties {
   if (total <= 1) return { zIndex: index };
@@ -253,9 +255,15 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
   // stay crisp and tappable). The 2D DOM FX fly between those 2D sections, so
   // they're off in 3D — the scene's own FlyIn/cucumber stacks cover it.
   const is3D = board3d.view === "3d";
+  // 🎥 first person (default): my own body holds my hand inside the scene and the
+  // canvas fills the frame; 🪑 table view keeps the DOM hand overlay below it
+  const cam = useCameraView("five-cucumbers-camera");
+  const fpv = is3D && cam.camera === "fpv";
   const [lowDetail] = useState(preferLowDetail);
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const [scoresOpen, setScoresOpen] = useState(false);
+  /** first person: the 👇/👀 override of where my eyes rest, for one turn only (`turnKey`) */
+  const [peek, setPeek] = useState<{ key: string; down: boolean } | null>(null);
 
   // Whenever `state` changes, notice freshly-resolved tricks/rounds and flash
   // a transient banner about them — same "diff consecutive snapshots on
@@ -496,6 +504,10 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
     onAction({ type: "playCard", seat: viewerSeat, cardId });
   }
 
+  // first person: eyes drop to my hand on my turn; the 👇/👀 button overrides that for this turn only
+  const turnKey = `${state.roundNumber}-${state.trickNumber}-${state.activeSeat}-${isMyTurn}`;
+  const lookDown = peek?.key === turnKey ? peek.down : isMyTurn;
+
   const handFan =
     me.hand.length === 0 ? (
       <p className="text-xs text-white/30 light:text-slate-400">손패가 없습니다.</p>
@@ -542,6 +554,7 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
           </span>
         </span>
         <div className="flex items-center gap-1.5">
+          {is3D && <CameraToggle cam={cam} />}
           <ViewToggle board={board3d} />
           <CucumberSoundHud />
           {rulebookButton}
@@ -605,7 +618,7 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
           className="relative z-10 h-[516px] w-full overflow-hidden rounded-2xl border border-black/50 sm:h-[616px] lg:h-[656px]"
           style={{ background: "#081108" }}
         >
-          <div className="absolute inset-x-0 top-0 bottom-[112px] sm:bottom-[136px] lg:bottom-[148px]">
+          <div className={`absolute inset-x-0 top-0 ${fpv ? "bottom-0" : "bottom-[112px] sm:bottom-[136px] lg:bottom-[148px]"}`}>
             <CucumberTable3D
               playerCount={state.playerCount}
               viewerSeat={viewerSeat}
@@ -622,11 +635,38 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
               threshold={state.eliminationThreshold}
               overview={gameJustEnded}
               lowDetail={lowDetail}
+              firstPerson={
+                fpv
+                  ? {
+                      hand: me.hand.map((c) => ({ id: c.id, value: c.value })),
+                      playable: isMyTurn ? legal : NO_CARDS,
+                      onPlay: playCard,
+                      lookDown,
+                    }
+                  : null
+              }
             />
             <span className="pointer-events-none absolute top-2 left-1/2 max-w-[92%] -translate-x-1/2 truncate rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-white/75">
-              남의 손패는 장수만 · 드래그로 둘러보기
+              {fpv ? "드래그로 고개 돌리기 · 빛나는 카드를 눌러 내기" : "남의 손패는 장수만 · 드래그로 둘러보기"}
             </span>
           </div>
+          {fpv ? (
+            // my own name plate / tag aren't in the first-person scene — they ride this strip instead
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 px-2.5 pb-2.5">
+              <span className="rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-semibold text-lime-200">
+                🥒 내 오이 {me.cucumbers}/{state.eliminationThreshold} · 🃏 {me.hand.length}장
+              </span>
+              {me.hand.length > 0 && !gameJustEnded && (
+                <button
+                  type="button"
+                  onClick={() => setPeek({ key: turnKey, down: !lookDown })}
+                  className="pointer-events-auto rounded-full border border-white/20 bg-black/60 px-3 py-1.5 text-[12px] font-semibold text-white/90 transition hover:border-white/40"
+                >
+                  {lookDown ? "👀 테이블 보기" : "👇 손패 보기"}
+                </button>
+              )}
+            </div>
+          ) : (
           <section
             ref={handSectionRef}
             // pb-6: the fan's edge cards tilt/drop up to ~18px below the row
@@ -639,6 +679,7 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
             </h3>
             <div className="pointer-events-auto">{handFan}</div>
           </section>
+          )}
         </div>
       )}
 

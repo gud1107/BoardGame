@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
+import { useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
 import { HeldFan, FlatCard, FlyIn, ImpactRing, PopIn, TableSign } from "@/games/shared/three/tablePieces";
 import { OutdoorPlaza } from "@/games/shared/three/environments";
-import { simpleBackTexture, simpleCardTexture, type BubbleStyle } from "@/games/shared/three/tableKit";
+import { paintedTexture, simpleBackTexture, simpleCardTexture, type BubbleStyle } from "@/games/shared/three/tableKit";
 import type { PersonMood } from "@/games/shared/three/SeatedPerson";
 
 /**
@@ -36,6 +38,15 @@ export interface CucumberTable3DProps {
   threshold: number;
   overview: boolean;
   lowDetail: boolean;
+  /** 🎥 first person: my own body holds my real hand; tap a lit card to play it. */
+  firstPerson?: {
+    hand: { id: string; value: number }[];
+    /** cards I may play right now (empty when it isn't my turn) */
+    playable: ReadonlySet<string>;
+    onPlay: (cardId: string) => void;
+    /** eyes down at my hand (my turn) or up at the table */
+    lookDown: boolean;
+  } | null;
 }
 
 const SEAT_COLORS = ["#4ade80", "#fbbf24", "#38bdf8", "#f472b6", "#a78bfa", "#fb923c"];
@@ -59,6 +70,113 @@ function Cucumbers({ count, threshold }: { count: number; threshold: number }) {
           <meshStandardMaterial color={count >= threshold - 1 ? "#4d7c0f" : "#16a34a"} roughness={0.55} />
         </mesh>
       ))}
+    </group>
+  );
+}
+
+/**
+ * My own hand card, read from behind my fan: a big index in the top-left corner
+ * (like a real playing card) stays visible when the next card covers the rest.
+ */
+const handFace = (v: number) =>
+  paintedTexture(`cucumber-hand:${v}`, 256, 360, (g, W, H) => {
+    const [a, b] = v === 1 ? ["#dc2626", "#450a0a"] : v >= 12 ? ["#ca8a04", "#422006"] : ["#16a34a", "#052e16"];
+    g.fillStyle = "#f8fafc";
+    g.beginPath();
+    g.roundRect(0, 0, W, H, 26);
+    g.fill();
+    const grad = g.createLinearGradient(0, 0, W * 0.6, H);
+    grad.addColorStop(0, a);
+    grad.addColorStop(1, b);
+    g.fillStyle = grad;
+    g.beginPath();
+    g.roundRect(10, 10, W - 20, H - 20, 20);
+    g.fill();
+    g.fillStyle = "#fff";
+    g.textAlign = "center";
+    g.textBaseline = "top";
+    const index = () => {
+      // two digits squeeze into the same strip the next card leaves uncovered
+      g.font = `900 ${v >= 10 ? 76 : 88}px system-ui, sans-serif`;
+      g.letterSpacing = v >= 10 ? "-11px" : "-9px";
+      g.fillText(String(v), v >= 10 ? 50 : 56, 24);
+    };
+    index();
+    g.letterSpacing = "0px";
+    g.font = "48px system-ui, sans-serif";
+    g.fillText(v === 1 ? "×2" : "🥒".repeat(Math.min(3, Math.ceil(v / 5))), W / 2, 168);
+    g.save();
+    g.translate(W, H);
+    g.rotate(Math.PI);
+    index();
+    g.restore();
+  });
+
+const GLOW = new THREE.MeshBasicMaterial({ color: "#fbbf24", transparent: true, opacity: 0.9, toneMapped: false });
+const DIM = new THREE.Color("#8a8a8a");
+const LIT = new THREE.Color("#ffffff");
+
+/**
+ * My fan, held by my own body (TableScene `firstPerson`). The held group is turned
+ * toward me, so +z faces my eyes; each card to the right lies on top, pivoting well
+ * below the cards (where the thumbs pinch) so every top-left index peeks out.
+ * Portrait screens get bigger cards. On my turn the playable cards glow and lift;
+ * a tap (not a look-around drag) plays one.
+ */
+function MyHand3D({ hand, playable, onPlay }: NonNullable<CucumberTable3DProps["firstPerson"]>) {
+  const big = useThree((s) => s.size.width < s.size.height);
+  const [hover, setHover] = useState<string | null>(null);
+  const myTurn = playable.size > 0;
+  const n = hand.length;
+  const w = big ? 0.215 : 0.2;
+  const h = big ? 0.32 : 0.29;
+  // more cards → tighter fan, so 7 still fit a phone width
+  const step = (big ? 0.023 : 0.03) * Math.min(1, 6 / Math.max(1, n - 1));
+  const spread = (big ? 0.1 : 0.12) * Math.min(1, 6 / Math.max(1, n - 1));
+  return (
+    <group>
+      {hand.map((c, i) => {
+        const k = i - (n - 1) / 2;
+        const can = playable.has(c.id);
+        const lift = can ? (hover === c.id ? 0.07 : 0.035) : 0;
+        return (
+          <group key={c.id} position={[k * step, -h * 0.5 + lift, i * 0.006]} rotation-z={k * -spread}>
+            <group position={[0, h * 0.5, 0]}>
+              <group rotation-x={-0.35} position={[0, h / 2, 0]}>
+                <mesh
+                  onClick={(e: ThreeEvent<MouseEvent>) => {
+                    e.stopPropagation();
+                    if (e.delta > 8 || !can) return;
+                    onPlay(c.id);
+                  }}
+                  onPointerOver={(e: ThreeEvent<PointerEvent>) => {
+                    e.stopPropagation();
+                    if (!can) return;
+                    setHover(c.id);
+                    document.body.style.cursor = "pointer";
+                  }}
+                  onPointerOut={() => {
+                    setHover((x) => (x === c.id ? null : x));
+                    document.body.style.cursor = "";
+                  }}
+                >
+                  <boxGeometry args={[w, h, 0.004]} />
+                  <meshStandardMaterial color="#f5efe0" roughness={0.6} />
+                </mesh>
+                <mesh position={[0, 0, 0.0025]}>
+                  <planeGeometry args={[w * 0.98, h * 0.98]} />
+                  <meshStandardMaterial map={handFace(c.value)} roughness={0.55} color={myTurn && !can ? DIM : LIT} />
+                </mesh>
+                {can && (
+                  <mesh position={[0, 0, -0.003]} material={GLOW}>
+                    <planeGeometry args={[w + 0.024, h + 0.024]} />
+                  </mesh>
+                )}
+              </group>
+            </group>
+          </group>
+        );
+      })}
     </group>
   );
 }
@@ -184,6 +302,17 @@ export default function CucumberTable3D(props: CucumberTable3DProps) {
       }
       overview={props.overview}
       lowDetail={props.lowDetail}
+      firstPerson={
+        props.firstPerson
+          ? {
+              held: <MyHand3D {...props.firstPerson} />,
+              // eyes at the hand on my turn (cards readable, table still in view), else across the table
+              pitch: props.firstPerson.lookDown ? -0.3 : 0,
+              // my body always keeps hold of the fan (shock/cheer would put it down)
+              mood: winnerSeat === viewerSeat && !props.finalTrick ? "smug" : "rest",
+            }
+          : null
+      }
     />
   );
 }

@@ -517,6 +517,27 @@ function resolveArmCollisions(vrm: VRM, scale: number) {
 export interface VrmPersonProps extends SeatedPersonProps {
   /** Called once the VRM has replaced the cartoon stand-in (e.g. to take a portrait). */
   onReady?: () => void;
+  /**
+   * This is me, seen from inside my own head (FirstPersonCamera `fpv`): the head is moved to
+   * {@link THIRD_PERSON_LAYER} so only my arms, body and held cards show, and the idle
+   * fidgets are off (they'd put my cards down).
+   */
+  firstPerson?: boolean;
+}
+
+/** Layers VRMFirstPerson.setup uses: the head-less copy of my body / the full one (overview shots). */
+export const FIRST_PERSON_LAYER = 9;
+export const THIRD_PERSON_LAYER = 10;
+const HEAD_PART = /face|hair|eye|brow|mouth|teeth|tooth|lash|^head/i;
+
+/** Hide my own head from my eyes: the model's first-person annotations, plus grafted hair / un-annotated head parts. */
+function setupFirstPerson(vrm: VRM) {
+  vrm.firstPerson?.setup({ firstPersonOnlyLayer: FIRST_PERSON_LAYER, thirdPersonOnlyLayer: THIRD_PERSON_LAYER });
+  vrm.scene.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh || mesh.layers.mask !== 1) return;
+    if (HEAD_PART.test(`${mesh.name} ${firstMaterial(mesh)?.name ?? ""}`)) mesh.layers.set(THIRD_PERSON_LAYER);
+  });
 }
 
 export default function VrmPerson(props: VrmPersonProps) {
@@ -556,6 +577,10 @@ export default function VrmPerson(props: VrmPersonProps) {
   useEffect(() => {
     if (vrm) tint(vrm, key, look, !!props.out);
   }, [vrm, key, look, props.out]);
+  const firstPerson = !!props.firstPerson;
+  useEffect(() => {
+    if (vrm && firstPerson) setupFirstPerson(vrm);
+  }, [vrm, firstPerson]);
   const morphs = useRef<FaceMorph[]>([]);
   const { eyes, face } = look;
   useEffect(() => {
@@ -596,8 +621,8 @@ export default function VrmPerson(props: VrmPersonProps) {
     const c = cur.current;
     const ps = PERSONA_STYLE[props.persona ?? "focused"];
     let mood: PersonMood = props.out ? "slump" : props.mood;
-    // same idle fidgets as SeatedPerson
-    if (mood === "rest") {
+    // same idle fidgets as SeatedPerson (never my own body: they'd put my cards down)
+    if (mood === "rest" && !props.firstPerson) {
       const slot = Math.floor((now + seed * 2.3) / 7);
       if ((now + seed * 2.3) % 7 < 2.2) {
         const r = hash(seed, slot);
@@ -737,6 +762,7 @@ export default function VrmPerson(props: VrmPersonProps) {
         </group>
       )}
       {head &&
+        !props.firstPerson &&
         createPortal(
           // the head bone sits at the skull base; the cartoon head's centre (hat / headSlot origin) is ~0.1 above
           <group position={[0, 0.1, 0]} rotation-y={vrm.meta.metaVersion === "0" ? Math.PI : 0}>

@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.116.0",
+    releaseDate: "2026-10-29",
+    title: "🎥 5 오이 1인칭 — 내 캐릭터가 직접 카드를 들어요",
+    changes: [
+      { game: "five-cucumbers", type: "FEAT", desc: "🎥 3D 1인칭: 내 캐릭터의 눈으로 테이블을 봐요 — 내 손이 손패를 쥐고, 빛나는 카드를 눌러 바로 내요" },
+      { game: "five-cucumbers", type: "IMPROVE", desc: "👇 내 차례엔 시선이 손패로 내려가요 — '손패 보기/테이블 보기' 버튼, 드래그로 고개 돌리기 (PC는 위아래도)" },
+      { game: "five-cucumbers", type: "IMPROVE", desc: "📱 휴대폰은 손패 카드가 더 크고, 숫자가 왼쪽 위에 크게 — 겹쳐도 읽혀요. 예전 시점은 '🪑 테이블 시점'으로" },
+    ],
+  },
+  {
     version: "v1.115.0",
     releaseDate: "2026-10-29",
     title: "💡 갈틱폰 AI가 새 주제를 지어내요",
