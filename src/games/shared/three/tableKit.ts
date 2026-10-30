@@ -1,6 +1,7 @@
 "use client";
 
 import * as THREE from "three";
+import { drawPattern, type PlateSkin } from "@/lib/skins/catalog";
 
 /**
  * Small helpers shared by the "people around a table" 3D boards (코요테,
@@ -57,22 +58,54 @@ function makeTexture(c: HTMLCanvasElement): THREE.CanvasTexture {
 
 const labelCache = new Map<string, THREE.CanvasTexture>();
 /** Rounded name tag (512×128). */
-export function labelTexture(text: string, color: string, opts: { bg?: string; fg?: string } = {}): THREE.CanvasTexture {
-  const key = `${text}|${color}|${opts.bg ?? ""}|${opts.fg ?? ""}`;
+/**
+ * A pill-shaped name tag. `opts.plate` = the player's 🎨 name-plate skin: patterned fill,
+ * an outer frame and an emblem on each end — the seat `color` stays as the inner border.
+ */
+export function labelTexture(text: string, color: string, opts: { bg?: string; fg?: string; plate?: PlateSkin | null } = {}): THREE.CanvasTexture {
+  const plate = opts.plate ?? null;
+  const key = `${text}|${color}|${opts.bg ?? ""}|${opts.fg ?? ""}|${plate?.id ?? ""}`;
   let t = labelCache.get(key);
   if (t) return t;
   const c = document.createElement("canvas");
   c.width = 512;
   c.height = 128;
   const ctx = c.getContext("2d")!;
-  ctx.fillStyle = opts.bg ?? "rgba(12,10,9,0.78)";
   ctx.beginPath();
   ctx.roundRect(8, 20, 496, 88, 44);
-  ctx.fill();
+  if (plate) {
+    ctx.save();
+    ctx.clip();
+    drawPattern(ctx, plate.pattern, plate.colors, 512, 128, 20);
+    // keeps the name readable over the pattern
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.fillRect(0, 0, 512, 128);
+    ctx.restore();
+    ctx.beginPath();
+    ctx.roundRect(8, 20, 496, 88, 44);
+  } else {
+    ctx.fillStyle = opts.bg ?? "rgba(12,10,9,0.78)";
+    ctx.fill();
+  }
   ctx.strokeStyle = color;
   ctx.lineWidth = 6;
   ctx.stroke();
-  ctx.fillStyle = opts.fg ?? "#fef3c7";
+  let maxW = 456;
+  if (plate) {
+    ctx.beginPath();
+    ctx.roundRect(3, 15, 506, 98, 49);
+    ctx.strokeStyle = plate.accent;
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.fillStyle = plate.accent;
+    ctx.font = `700 40px ${TEXT_FONT}, ${EMOJI_FONT}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(plate.emblem, 50, 66);
+    ctx.fillText(plate.emblem, 462, 66);
+    maxW = 360;
+  }
+  ctx.fillStyle = plate?.fg ?? opts.fg ?? "#fef3c7";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   const shown = [...text].length > 16 ? `${[...text].slice(0, 15).join("")}…` : text;
@@ -80,7 +113,7 @@ export function labelTexture(text: string, color: string, opts: { bg?: string; f
   let size = 50;
   for (; size > 30; size -= 2) {
     ctx.font = `700 ${size}px ${TEXT_FONT}, ${EMOJI_FONT}`;
-    if (ctx.measureText(shown).width <= 456) break;
+    if (ctx.measureText(shown).width <= maxW) break;
   }
   ctx.fillText(shown, 256, 66);
   t = makeTexture(c);

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import Overlay from "@/components/Overlay";
-import { CARD_BACK_SKINS, DEFAULT_SKIN_ID, TABLE_SKINS, cardBackSkin, patternCss, tableSkin, type SkinPattern } from "@/lib/skins/catalog";
+import { CARD_BACK_SKINS, DEFAULT_SKIN_ID, PLATE_SKINS, TABLE_SKINS, cardBackSkin, patternCss, plateSkin, tableSkin, type PlateSkin, type SkinPattern } from "@/lib/skins/catalog";
 import { useMySkin } from "@/lib/skins/mySkin";
 import SkinBackFace from "./SkinBackFace";
 
@@ -33,12 +33,34 @@ function Tile({ selected, onClick, label, kind, children }: { selected: boolean;
   );
 }
 
+/** The 3D name plate as CSS — same layers as `labelTexture` (seat-colour inner border, skin frame + emblems). */
+function PlateFace({ plate, name, seatColor = "#fbbf24" }: { plate: PlateSkin | null; name: string; seatColor?: string }) {
+  if (!plate)
+    return (
+      <div className="flex h-9 w-full min-w-0 items-center justify-center rounded-full border-[3px] bg-stone-950/80 px-3 text-xs font-bold text-amber-50" style={{ borderColor: seatColor }}>
+        <span className="truncate">{name}</span>
+      </div>
+    );
+  return (
+    <div
+      className="flex h-9 w-full min-w-0 items-center justify-between gap-1 rounded-full border-[3px] px-2 text-xs font-bold"
+      style={{ borderColor: seatColor, boxShadow: `0 0 0 2px ${plate.accent}`, background: `linear-gradient(rgba(0,0,0,0.3),rgba(0,0,0,0.3)),${patternCss(plate.pattern, plate.colors)}`, color: plate.fg }}
+    >
+      <span style={{ color: plate.accent }}>{plate.emblem}</span>
+      <span className="truncate">{name}</span>
+      <span style={{ color: plate.accent }}>{plate.emblem}</span>
+    </div>
+  );
+}
+
 /** The current pick, big, so the choice reads at a glance before scrolling the lists. */
-function CurrentPreview({ backId, tableId }: { backId: string; tableId: string }) {
+function CurrentPreview({ backId, tableId, plateId }: { backId: string; tableId: string; plateId: string }) {
   const back = cardBackSkin(backId);
   const table = tableSkin(tableId);
+  const plate = plateSkin(plateId);
   return (
-    <div className="flex items-center gap-4 rounded-2xl border-2 border-amber-300/60 bg-amber-300/10 p-3 light:border-amber-400 light:bg-amber-50">
+    <div className="flex flex-col gap-3 rounded-2xl border-2 border-amber-300/60 bg-amber-300/10 p-3 light:border-amber-400 light:bg-amber-50">
+    <div className="flex items-center gap-4">
       {back ? (
         <SkinBackFace skin={back} className="h-24 w-16 shadow-lg" emblemClassName="text-3xl" />
       ) : (
@@ -55,12 +77,17 @@ function CurrentPreview({ backId, tableId }: { backId: string; tableId: string }
         <p className="font-bold text-amber-200 light:text-amber-700">지금 내 스킨</p>
         <p className="mt-1">🃏 {back ? `${back.emoji} ${back.name}` : "게임 기본"}</p>
         <p>🎲 {table ? `${table.emoji} ${table.name}` : "게임 기본"}</p>
+        <p>🏷️ {plate ? `${plate.emoji} ${plate.name}` : "기본 이름표"}</p>
       </div>
+    </div>
+    <div className="mx-auto w-full max-w-60">
+      <PlateFace plate={plate} name="내 이름" />
+    </div>
     </div>
   );
 }
 
-/** 🎨 내 스킨: card back (my hand, seen by everyone) + table (the whole room's, when I'm the host). */
+/** 🎨 내 스킨: card back + name plate (mine, seen by everyone) + table (the whole room's, when I'm the host). */
 export function SkinPicker() {
   const skin = useMySkin((s) => s.skin);
   const set = useMySkin((s) => s.set);
@@ -71,7 +98,7 @@ export function SkinPicker() {
 
   return (
     <div className="flex flex-col gap-5">
-      <CurrentPreview backId={skin.back} tableId={skin.table} />
+      <CurrentPreview backId={skin.back} tableId={skin.table} plateId={skin.plate} />
       <section>
         <h3 className="text-sm font-bold text-white light:text-slate-900">🃏 카드 뒷면</h3>
         <p className="mt-0.5 text-xs text-white/50 light:text-slate-500">내 손패를 같은 방 사람들이 이 뒷면으로 봐요. 덱·버린 더미 같은 공용 카드는 게임 기본 뒷면 그대로예요.</p>
@@ -102,6 +129,20 @@ export function SkinPicker() {
           ))}
         </div>
       </section>
+      <section>
+        <h3 className="text-sm font-bold text-white light:text-slate-900">🏷️ 3D 이름표</h3>
+        <p className="mt-0.5 text-xs text-white/50 light:text-slate-500">3D 테이블에서 내 머리 위 이름표를 모두가 이 스킨으로 봐요. 안쪽 테두리는 자리 색 그대로라 누구 자리인지 헷갈리지 않아요.</p>
+        <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+          <Tile selected={skin.plate === DEFAULT_SKIN_ID} onClick={() => set({ plate: DEFAULT_SKIN_ID })} label="기본 이름표" kind="어두운 기본형">
+            <PlateFace plate={null} name="이름" />
+          </Tile>
+          {PLATE_SKINS.map((pl) => (
+            <Tile key={pl.id} selected={skin.plate === pl.id} onClick={() => set({ plate: pl.id })} label={`${pl.emoji} ${pl.name}`} kind={`${PATTERN_LABEL[pl.pattern]} · ${pl.emblem}`}>
+              <PlateFace plate={pl} name="이름" />
+            </Tile>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
@@ -116,7 +157,9 @@ export default function SkinButton() {
   }, [init]);
   const back = cardBackSkin(skin.back);
   const table = tableSkin(skin.table);
-  const summary = [back && `${back.emoji} ${back.name}`, table && `${table.emoji} ${table.name}`].filter(Boolean).join(" · ");
+  const plate = plateSkin(skin.plate);
+  // emoji only — three names wouldn't fit one line on a 360px phone
+  const summary = [back, table, plate].map((x) => x?.emoji ?? "").join("");
   return (
     <>
       <button
@@ -124,7 +167,7 @@ export default function SkinButton() {
         onClick={() => setOpen(true)}
         className="flex items-center gap-1.5 self-start text-xs text-white/50 underline hover:text-white/80 light:text-slate-500 light:hover:text-slate-700"
       >
-        🎨 {summary ? `내 스킨: ${summary}` : "카드 뒷면·테이블 스킨 고르기"}
+        🎨 {summary ? `내 스킨 ${summary} 바꾸기` : "카드 뒷면·테이블·이름표 스킨 고르기"}
       </button>
       {open && (
         <Overlay title="🎨 내 스킨" onClose={() => setOpen(false)} wide>

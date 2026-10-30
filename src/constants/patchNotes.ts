@@ -64,6 +64,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.120.0",
+    releaseDate: "2026-10-31",
+    title: "🏷️ 3D 이름표 스킨",
+    changes: [
+      { game: "common", type: "FEAT", desc: "🏷️ 3D 이름표 스킨 8종 — 내 머리 위 이름표를 같은 방 모두가 이 스킨으로 봐요 (자리 색 테두리는 그대로)" },
+    ],
+  },
+  {
     version: "v1.119.0",
     releaseDate: "2026-10-31",
     title: "🎨 내 스킨 — 카드 뒷면·테이블을 꾸며 모두에게 보여줘요",

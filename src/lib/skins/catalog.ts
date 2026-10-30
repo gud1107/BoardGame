@@ -1,8 +1,9 @@
 /**
  * The cosmetic skins a player can pick (🎨 내 스킨): one table skin (felt +
- * room colour of every 3D table) and one card-back skin. Both are shown to
- * everyone in the room — the table is the host's, each player's own hand of
- * cards wears that player's back (see `src/lib/skins/useSkins.ts`).
+ * room colour of every 3D table), one card-back skin and one 3D name-plate
+ * skin. All are shown to everyone in the room — the table is the host's, each
+ * player's own hand of cards and name plate wear that player's pick (see
+ * `src/lib/skins/useSkins.ts`).
  *
  * Purely visual: a skin never changes what a card is, and shared piles
  * (decks, discards, the market) always keep the game's own back so nobody
@@ -40,6 +41,24 @@ export interface TableSkin {
   background: string;
 }
 
+/**
+ * The 3D name plate over a player's head. The seat colour stays as the inner
+ * border (it's how a seat is told apart); the skin adds the outer frame, the
+ * patterned fill and an emblem on both ends.
+ */
+export interface PlateSkin {
+  id: string;
+  name: string;
+  emoji: string;
+  colors: [string, string];
+  /** Outer frame + emblems. */
+  accent: string;
+  pattern: SkinPattern;
+  emblem: string;
+  /** Name text colour. */
+  fg: string;
+}
+
 export const DEFAULT_SKIN_ID = "default";
 
 /** `default` = the game's own back. */
@@ -66,6 +85,22 @@ export const TABLE_SKINS: readonly TableSkin[] = [
   { id: "slate", name: "모던 슬레이트", emoji: "🪨", felt: "#3f4650", pattern: "diag", feltAccent: "#48505b", inlay: "#e5e7eb", background: "#121417" },
 ];
 
+/** `default` = the plain dark plate. */
+export const PLATE_SKINS: readonly PlateSkin[] = [
+  { id: "crown", name: "왕관 골드", emoji: "👑", colors: ["#3b2a0b", "#4d3810"], accent: "#fbbf24", pattern: "diamond", emblem: "♛", fg: "#fef3c7" },
+  { id: "starlight", name: "별빛", emoji: "🌌", colors: ["#0b1330", "#1a2a5c"], accent: "#a5b4fc", pattern: "dots", emblem: "✦", fg: "#e0e7ff" },
+  { id: "sakura", name: "벚꽃", emoji: "🌸", colors: ["#9d174d", "#b8245f"], accent: "#fbcfe8", pattern: "waves", emblem: "✿", fg: "#fff1f5" },
+  { id: "neon", name: "네온", emoji: "⚡", colors: ["#1a0533", "#2e0a59"], accent: "#f0abfc", pattern: "grid", emblem: "⚡", fg: "#fae8ff" },
+  { id: "emerald", name: "에메랄드", emoji: "💚", colors: ["#053d2e", "#0a5c45"], accent: "#6ee7b7", pattern: "diag", emblem: "♣", fg: "#ecfdf5" },
+  { id: "flame", name: "불꽃", emoji: "🔥", colors: ["#5b0f0f", "#7c2d12"], accent: "#fb923c", pattern: "diag", emblem: "♦", fg: "#ffedd5" },
+  { id: "frost", name: "서리", emoji: "❄️", colors: ["#0c3a5a", "#14527a"], accent: "#bae6fd", pattern: "grid", emblem: "❄", fg: "#f0f9ff" },
+  { id: "mono", name: "모노", emoji: "♟️", colors: ["#111111", "#2a2a2a"], accent: "#f5f5f5", pattern: "diamond", emblem: "♠", fg: "#fafafa" },
+];
+
+export function plateSkin(id: string | null | undefined): PlateSkin | null {
+  return PLATE_SKINS.find((s) => s.id === id) ?? null;
+}
+
 export function cardBackSkin(id: string | null | undefined): CardBackSkin | null {
   return CARD_BACK_SKINS.find((s) => s.id === id) ?? null;
 }
@@ -77,9 +112,10 @@ export function tableSkin(id: string | null | undefined): TableSkin | null {
 export interface SkinChoice {
   table: string;
   back: string;
+  plate: string;
 }
 
-export const DEFAULT_SKIN: SkinChoice = { table: DEFAULT_SKIN_ID, back: DEFAULT_SKIN_ID };
+export const DEFAULT_SKIN: SkinChoice = { table: DEFAULT_SKIN_ID, back: DEFAULT_SKIN_ID, plate: DEFAULT_SKIN_ID };
 
 /** Untrusted input (localStorage, account metadata, another player's presence) → known ids only. */
 export function sanitizeSkin(raw: unknown): SkinChoice {
@@ -87,6 +123,7 @@ export function sanitizeSkin(raw: unknown): SkinChoice {
   return {
     table: typeof r.table === "string" && tableSkin(r.table) ? r.table : DEFAULT_SKIN_ID,
     back: typeof r.back === "string" && cardBackSkin(r.back) ? r.back : DEFAULT_SKIN_ID,
+    plate: typeof r.plate === "string" && plateSkin(r.plate) ? r.plate : DEFAULT_SKIN_ID,
   };
 }
 

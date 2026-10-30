@@ -18,7 +18,7 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
  */
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
   "2026-10-31": {
-    common: "🎨 내 스킨 — 카드 뒷면 8종·3D 테이블 8종, 같은 방 모두에게 보여요 (방장 테이블·내 손패 뒷면)",
+    common: "🎨 내 스킨 — 카드 뒷면·3D 테이블·🏷️ 이름표 각 8종, 같은 방 모두에게 보여요 (방장 테이블·내 뒷면·내 이름표)",
   },
   "2026-10-29": {
     "five-cucumbers": "🎥 1인칭(내 캐릭터가 손패를 쥐고 눌러서 내기) | 🪑 테이블 시점에도 내 캐릭터, 🏷️ 누가 낸 카드인지",

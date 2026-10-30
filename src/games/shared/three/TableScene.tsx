@@ -15,7 +15,7 @@ import { AdaptiveResolution, BlobShadow, PerfHud, PostFx, StudioEnvironment } fr
 import { labelTexture, polar, seatAngle, type BubbleStyle } from "./tableKit";
 import { personaFor } from "./persona";
 import { nextEmotionLine, speakEmotion } from "@/lib/audio/characterVoice";
-import { useTableSkin } from "@/lib/skins/useSkins";
+import { usePlateSkin, useTableSkin } from "@/lib/skins/useSkins";
 import { CardBackOwner, skinFeltTexture } from "./skinTextures";
 
 /**
@@ -368,6 +368,8 @@ function SeatBody({ s, geo, theme, lowDetail, ringColor, quietMoods, firstPerson
   const color = s.color ?? theme.seatColors[s.seat % theme.seatColors.length];
   const { hover, handlers } = useSelect(s.onSelect);
   const chosen = useRoomCharacter(s.name);
+  // the player's 🎨 name-plate skin; a 📴 away seat keeps the plain grey plate so the state reads
+  const plate = usePlateSkin(s.name, isViewer);
   const look = useMemo(() => {
     const base = resolveLook(s.seat, theme.hats, s.avatar ?? chosen);
     return { ...base, ...(s.hat ? { hat: s.hat } : {}), ...s.look };
@@ -462,7 +464,7 @@ function SeatBody({ s, geo, theme, lowDetail, ringColor, quietMoods, firstPerson
             </mesh>
             <mesh position={[0, 0, 0.012]}>
               <planeGeometry args={[0.48, 0.12]} />
-              <meshBasicMaterial map={labelTexture(`${s.name} (나)`, color)} transparent />
+              <meshBasicMaterial map={labelTexture(`${s.name} (나)`, color, { plate })} transparent />
             </mesh>
           </group>
           {/* with the low lifelike camera, keep my own tag on the table so it doesn't cover faces opposite */}
@@ -500,7 +502,7 @@ function SeatBody({ s, geo, theme, lowDetail, ringColor, quietMoods, firstPerson
           >
             {(s.ring || hover) && <FloorRing color={hover && !s.ring ? "#fde68a" : (s.ring ?? "#fde68a")} />}
             {/* the stack (sub · name · tag · bubble) grows as one block with distance */}
-            <ScreenSprite anchorY={labelBase} position={[0, nameY, 0]} scale={[0.86, 0.21]} map={labelTexture(s.away ? `📴 ${s.name}` : s.name, s.away ? "#71717a" : color)} />
+            <ScreenSprite anchorY={labelBase} position={[0, nameY, 0]} scale={[0.86, 0.21]} map={s.away ? labelTexture(`📴 ${s.name}`, "#71717a") : labelTexture(s.name, color, { plate })} />
             {s.sub && <ScreenSprite anchorY={labelBase} position={[0, nameY - 0.2, 0]} scale={[0.7, 0.175]} map={labelTexture(s.sub, color, { bg: "rgba(0,0,0,0.75)" })} />}
             {s.tag && <ScreenSprite anchorY={labelBase} position={[0, nameY + 0.22, 0]} scale={[0.7, 0.175]} map={labelTexture(s.tag.text, s.tag.color, { bg: s.tag.bg ?? "rgba(20,10,10,0.85)" })} />}
             {shownBubble && bubbleStyle && <SpeechBubble anchorY={labelBase} text={shownBubble.text} style={bubbleStyle} y={bubbleY} popKey={shownBubble.key} width={Math.max(0.62, shownBubble.width ?? 1.0)} />}
