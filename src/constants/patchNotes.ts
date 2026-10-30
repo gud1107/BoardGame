@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.119.0",
+    releaseDate: "2026-10-31",
+    title: "🎨 내 스킨 — 카드 뒷면·테이블을 꾸며 모두에게 보여줘요",
+    changes: [
+      { game: "common", type: "FEAT", desc: "🎨 내 스킨: 카드 뒷면 8종·3D 테이블 8종 — 방 입장 화면·프로필에서 골라요 (로그인하면 다른 기기에서도)" },
+      { game: "common", type: "FEAT", desc: "🃏 내 손패는 같은 방 모두에게 내 뒷면으로 보여요 (3D 손패, 쿠·러브레터·하나미코지·블러프 룰렛) — 공용 덱은 기본 뒷면" },
+      { game: "common", type: "FEAT", desc: "🎲 방장이 고른 테이블 천·배경이 그 방 모두의 3D 테이블에 깔려요" },
+    ],
+  },
+  {
     version: "v1.118.0",
     releaseDate: "2026-10-29",
     title: "🎥 3D 테이블 게임 전부 1인칭 | 테이블 시점",

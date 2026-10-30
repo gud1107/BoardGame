@@ -7,6 +7,7 @@ import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeom
 import { bubbleTexture, clamp01, easeInOut, easeOutBack, emojiTexture, paintedTexture, type BubbleStyle } from "./tableKit";
 import { distanceBoost } from "./ScreenSprite";
 import { useTableGeoOptional } from "./TableScene";
+import { useSkinnedBack } from "./skinTextures";
 
 /**
  * Small props shared by the 3D table games: cards, coins, fly-in animation,
@@ -239,9 +240,11 @@ export function TableSign({ text, y = 0.95, width = 1.15, style }: { text: strin
 /**
  * A hand of cards held up in both hands (`TableSeat.held`): fanned out from the grip at the
  * origin, backs toward the table. Replaces the fans that used to stand on the felt out of
- * the player's reach while their hands hovered empty.
+ * the player's reach while their hands hovered empty. Held by a seat whose player picked a
+ * 🎨 card-back skin, the backs wear that skin (see skinTextures.tsx).
  */
-export function HeldFan({ count, back, max = 10, w = 0.2, h = 0.28 }: { count: number; back: THREE.Texture; max?: number; w?: number; h?: number }) {
+export function HeldFan({ count, back: gameBack, max = 10, w = 0.2, h = 0.28 }: { count: number; back: THREE.Texture; max?: number; w?: number; h?: number }) {
+  const back = useSkinnedBack(gameBack);
   const shown = Math.min(count, max);
   const spread = Math.min(0.2, 1.4 / Math.max(1, shown));
   return (

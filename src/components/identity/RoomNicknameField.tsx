@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useBettingStore } from "@/store/bettingStore";
 import { rememberRoomNickname } from "@/lib/identity/lastNickname";
 import CharacterButton from "@/components/profile/CharacterButton";
+import SkinButton from "@/components/skins/SkinPicker";
 import { cleanNickname, startingNickname, useMyNickname } from "@/lib/identity/myNickname";
 
 export interface RoomIdentityValue {
@@ -119,6 +120,7 @@ export default function RoomNicknameField({ value, onChange: onChangeProp, place
           다른 이름으로 입장 (내기 참가자 아님)
         </button>
         <CharacterButton />
+        <SkinButton />
       </div>
     );
   }
@@ -164,6 +166,7 @@ export default function RoomNicknameField({ value, onChange: onChangeProp, place
         </button>
       )}
       <CharacterButton />
+      <SkinButton />
     </div>
   );
 }

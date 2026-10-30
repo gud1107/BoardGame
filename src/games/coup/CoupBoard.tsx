@@ -387,7 +387,7 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
                 <span className="flex gap-1">
                   {v.influence
                     ? v.influence.map((c) => <CharacterCardFace key={c.id} card={c} size="xs" />)
-                    : Array.from({ length: v.influenceCount }, (_, i) => <CardBack key={i} size="xs" />)}
+                    : Array.from({ length: v.influenceCount }, (_, i) => <CardBack key={i} size="xs" owner={names[p.seat]} />)}
                   {v.revealed.map((c) => (
                     <CharacterCardFace key={c.id} card={c} size="xs" dead />
                   ))}

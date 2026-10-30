@@ -289,7 +289,7 @@ function Table2D({
         {showdown ? (
           <div className="flex gap-1">
             {showdown.res.revealed.map((c, i) =>
-              t >= showdown.tl.flipAt(i) ? <CardFace key={c.id} kind={c.kind} className="h-16 w-12 drop-shadow-lg" /> : <CardBack key={c.id} className="h-16 w-12" />,
+              t >= showdown.tl.flipAt(i) ? <CardFace key={c.id} kind={c.kind} className="h-16 w-12 drop-shadow-lg" /> : <CardBack key={c.id} className="h-16 w-12" owner={names[showdown.res.accusedSeat]} />,
             )}
           </div>
         ) : (

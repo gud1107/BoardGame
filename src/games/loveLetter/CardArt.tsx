@@ -1,3 +1,5 @@
+import SkinBackFace from "@/components/skins/SkinBackFace";
+import { useCardBackSkin } from "@/lib/skins/useSkins";
 import Image from "next/image";
 import { CARD_NAMES, type Card, type CardNumber } from "./engine";
 
@@ -34,7 +36,10 @@ const DIMS: Record<"xs" | "sm" | "md" | "lg", string> = {
 };
 
 /** Face-down card back — no back photo exists in the source folder (see module doc). Used for hidden hands, the draw pile, and the burned reserve card. */
-export function CardBack({ size = "md", className = "" }: { size?: "xs" | "sm" | "md" | "lg"; className?: string }) {
+export function CardBack({ size = "md", className = "", owner }: { size?: "xs" | "sm" | "md" | "lg"; className?: string; owner?: string }) {
+  // a hidden hand wears its holder's 🎨 card-back skin; the pile and burned card pass no owner
+  const skin = useCardBackSkin(owner);
+  if (skin) return <SkinBackFace skin={skin} className={`${DIMS[size]} ${className}`} emblemClassName={size === "xs" ? "text-xs" : size === "sm" ? "text-lg" : "text-2xl"} />;
   return (
     <div
       className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg border ${DIMS[size]} ${className}`}

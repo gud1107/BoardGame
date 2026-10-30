@@ -6,6 +6,7 @@ import Avatar from "@/components/common/Avatar";
 import { PUBLIC_NAME_RULE, useProfileStore } from "@/store/profileStore";
 import { useMyCharacter } from "@/lib/character/myCharacter";
 import CharacterStudio from "./CharacterStudio";
+import SkinButton from "@/components/skins/SkinPicker";
 import { cleanNickname, GAME_NICKNAME_MAX, useMyNickname } from "@/lib/identity/myNickname";
 import { useProfilePhoto } from "./ProfilePhoto";
 import { useSubscriptionStore } from "@/store/subscriptionStore";
@@ -63,6 +64,8 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
+        <div className="w-full border-t border-white/10 light:border-slate-200" />
+        <SkinButton />
         <div className="w-full border-t border-white/10 light:border-slate-200" />
         <span className="self-start text-xs font-semibold text-white/70 light:text-slate-600">🧑‍🎤 3D 게임 캐릭터</span>
     </CharacterStudio>

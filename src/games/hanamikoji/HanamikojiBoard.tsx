@@ -3,6 +3,8 @@
 import { type CSSProperties, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Tooltip from "@/components/Tooltip";
+import SkinBackFace from "@/components/skins/SkinBackFace";
+import { useCardBackSkin } from "@/lib/skins/useSkins";
 import { Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
@@ -139,8 +141,15 @@ function CardChip({
   );
 }
 
-function CardBack({ size = "md" }: { size?: "sm" | "md" }) {
+function CardBack({ size = "md", owner }: { size?: "sm" | "md"; owner?: string }) {
   const dims = size === "sm" ? "h-16 w-11" : "h-24 w-16";
+  const skin = useCardBackSkin(owner);
+  if (skin)
+    return (
+      <Tooltip text="상대방의 카드입니다 (비공개).">
+        <SkinBackFace skin={skin} className={`${dims} rounded-xl shadow-[0_4px_10px_rgba(0,0,0,0.5)]`} emblemClassName="text-sm" />
+      </Tooltip>
+    );
   return (
     <Tooltip text="상대방의 카드입니다 (비공개).">
       {/* TODO(theme): the card-back art itself is a hardcoded dark-purple
@@ -704,7 +713,7 @@ export default function HanamikojiBoard({
           <div className="flex justify-center pt-2">
             {Array.from({ length: opponentHandCount }).map((_, i) => (
               <div key={i} style={fanStyle(i, opponentHandCount, 16)}>
-                <CardBack size="sm" />
+                <CardBack size="sm" owner={names[opponentRole]} />
               </div>
             ))}
           </div>

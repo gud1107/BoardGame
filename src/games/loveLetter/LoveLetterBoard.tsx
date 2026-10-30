@@ -324,7 +324,7 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
               <span className="flex items-center gap-1.5">
                 <span className="flex gap-1">
                   {Array.from({ length: v.handSize }, (_, i) =>
-                    v.hand ? <CardFace key={i} card={v.hand[i]} size="xs" /> : <CardBack key={i} size="xs" />,
+                    v.hand ? <CardFace key={i} card={v.hand[i]} size="xs" /> : <CardBack key={i} size="xs" owner={names[p.seat]} />,
                   )}
                 </span>
                 {p.discardPile.length > 0 && (

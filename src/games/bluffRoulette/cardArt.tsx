@@ -1,3 +1,5 @@
+import SkinBackFace from "@/components/skins/SkinBackFace";
+import { useCardBackSkin } from "@/lib/skins/useSkins";
 import { useSyncExternalStore } from "react";
 import type { CardKind, Suit } from "./engine";
 
@@ -274,8 +276,11 @@ export function CardFace({ kind, className = "", dim = false }: { kind: CardKind
   );
 }
 
-export function CardBack({ className = "" }: { className?: string }) {
+/** `owner` = whose cards these are (the accused at a showdown) — their 🎨 back skin wins when set. */
+export function CardBack({ className = "", owner }: { className?: string; owner?: string }) {
   const theme = useCardTheme();
+  const skin = useCardBackSkin(owner);
+  if (skin) return <SkinBackFace skin={skin} className={className} emblemClassName="text-lg" />;
   return (
     // eslint-disable-next-line @next/next/no-img-element -- inline data: SVG, nothing for next/image to optimise
     <img src={cardImageUrl("back", theme)} alt="뒷면" draggable={false} className={`select-none drop-shadow-[0_2px_3px_rgba(0,0,0,0.45)] ${className}`} />

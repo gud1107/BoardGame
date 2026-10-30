@@ -10,6 +10,8 @@
  * HANDOFF.md 이미지 생성 도구) it is painted underneath via `PORTRAIT`, with
  * the emoji kept as a corner badge and the name overlaid in code.
  */
+import SkinBackFace from "@/components/skins/SkinBackFace";
+import { useCardBackSkin } from "@/lib/skins/useSkins";
 import { usePortrait } from "../shared/portrait/usePortrait";
 import { CHARACTER_EMOJI, CHARACTER_NAMES, type Card, type Character } from "./engine";
 
@@ -44,7 +46,10 @@ const DIMS = { xs: "h-12 w-9", sm: "h-16 w-12", md: "h-24 w-16", lg: "h-32 w-22"
 const TEXT_LABEL = { xs: "text-[9px]", sm: "text-[10px]", md: "text-xs", lg: "text-sm" } as const;
 const TEXT_EMOJI = { xs: "text-base", sm: "text-lg", md: "text-2xl", lg: "text-3xl" } as const;
 
-export function CardBack({ size = "md", className = "" }: { size?: keyof typeof DIMS; className?: string }) {
+/** `owner` = the seat name holding it — their 🎨 card-back skin replaces the default when they picked one. */
+export function CardBack({ size = "md", className = "", owner }: { size?: keyof typeof DIMS; className?: string; owner?: string }) {
+  const skin = useCardBackSkin(owner);
+  if (skin) return <SkinBackFace skin={skin} className={`${DIMS[size]} ${className}`} emblemClassName={TEXT_EMOJI[size]} />;
   return (
     <div
       className={`flex ${DIMS[size]} shrink-0 items-center justify-center rounded-lg border border-white/15 bg-[repeating-linear-gradient(135deg,#1a0d2e_0px,#1a0d2e_6px,#120822_6px,#120822_12px)] light:border-slate-300 light:shadow-sm ${className}`}

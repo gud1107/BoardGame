@@ -78,7 +78,7 @@ export function useActiveRoomListing({
   useRoomFunnelEvents({ gameId, roomCode, isHost, isWaiting, isPlaying });
   useWaitingRoomArrivals({ roomCode, isWaiting, playerCount, occupants });
   // everyone's chosen 3D character, shared for the tables (see roomCharacters.ts)
-  useRoomCharacterSync({ gameId, roomCode, occupants });
+  useRoomCharacterSync({ gameId, roomCode, occupants, isHost });
 
   // Heartbeat reads the latest counts without needing to restart the
   // interval every time they change. Synced in its own effect (not during

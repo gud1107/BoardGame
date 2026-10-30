@@ -15,6 +15,8 @@ import { AdaptiveResolution, BlobShadow, PerfHud, PostFx, StudioEnvironment } fr
 import { labelTexture, polar, seatAngle, type BubbleStyle } from "./tableKit";
 import { personaFor } from "./persona";
 import { nextEmotionLine, speakEmotion } from "@/lib/audio/characterVoice";
+import { useTableSkin } from "@/lib/skins/useSkins";
+import { CardBackOwner, skinFeltTexture } from "./skinTextures";
 
 /**
  * The shared "real people around a table" scene for the card / social
@@ -349,7 +351,18 @@ function useSelect(onSelect: (() => void) | null | undefined) {
   };
 }
 
-function SeatView({ s, geo, theme, lowDetail, ringColor, quietMoods, firstPerson, selfBody }: { s: TableSeat; geo: TableGeo; theme: TableTheme; lowDetail: boolean; ringColor: string; quietMoods?: readonly PersonMood[]; firstPerson?: TableSceneProps["firstPerson"]; selfBody?: TableSceneProps["selfBody"] }) {
+type SeatViewProps = { s: TableSeat; geo: TableGeo; theme: TableTheme; lowDetail: boolean; ringColor: string; quietMoods?: readonly PersonMood[]; firstPerson?: TableSceneProps["firstPerson"]; selfBody?: TableSceneProps["selfBody"] };
+
+/** Everything this seat holds wears its player's 🎨 card back (HeldFan reads the owner). */
+function SeatView(props: SeatViewProps) {
+  return (
+    <CardBackOwner name={props.s.name} me={props.s.seat === props.geo.viewerSeat}>
+      <SeatBody {...props} />
+    </CardBackOwner>
+  );
+}
+
+function SeatBody({ s, geo, theme, lowDetail, ringColor, quietMoods, firstPerson, selfBody }: SeatViewProps) {
   const angle = geo.angleOf(s.seat);
   const isViewer = s.seat === geo.viewerSeat;
   const color = s.color ?? theme.seatColors[s.seat % theme.seatColors.length];
@@ -529,8 +542,22 @@ function Lamp({ lamp, lowDetail, dim }: { lamp: NonNullable<TableTheme["lamp"]>;
   );
 }
 
+/** The game's theme with the room's 🎨 table skin (the host's pick) painted over felt, inlay and room colour. */
+function useSkinnedTheme(theme: TableTheme): TableTheme {
+  const skin = useTableSkin();
+  return useMemo(() => {
+    if (!skin) return theme;
+    return {
+      ...theme,
+      background: skin.background,
+      table: { ...theme.table, felt: skin.felt, inlay: skin.inlay, feltMap: () => skinFeltTexture(skin) },
+    };
+  }, [theme, skin]);
+}
+
 function SceneContents(props: TableSceneProps) {
-  const { seatCount: n, viewerSeat, theme, lowDetail } = props;
+  const { seatCount: n, viewerSeat, lowDetail } = props;
+  const theme = useSkinnedTheme(props.theme);
   const geo = useMemo<TableGeo>(() => {
     const { seatR, tableR } = tableDims(n, theme.personStyle === "realistic");
     const angleOf = (seat: number) => seatAngle(seat, viewerSeat, n);
