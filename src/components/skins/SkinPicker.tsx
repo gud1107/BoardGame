@@ -27,7 +27,7 @@ function Tile({ selected, onClick, label, kind, children }: { selected: boolean;
         </span>
       )}
       {children}
-      <span className="leading-tight">{label}</span>
+      <span className="leading-tight break-keep">{label}</span>
       <span className={`text-[10px] leading-tight ${selected ? "text-amber-200 light:text-amber-700" : "text-white/40 light:text-slate-400"}`}>{selected ? "✓ 선택됨" : kind}</span>
     </button>
   );
@@ -51,7 +51,7 @@ function CurrentPreview({ backId, tableId }: { backId: string; tableId: string }
           <span className="text-3xl">🪑</span>
         )}
       </div>
-      <div className="min-w-0 text-xs text-white/70 light:text-slate-600">
+      <div className="min-w-0 break-keep text-xs text-white/70 light:text-slate-600">
         <p className="font-bold text-amber-200 light:text-amber-700">지금 내 스킨</p>
         <p className="mt-1">🃏 {back ? `${back.emoji} ${back.name}` : "게임 기본"}</p>
         <p>🎲 {table ? `${table.emoji} ${table.name}` : "게임 기본"}</p>
