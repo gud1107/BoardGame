@@ -64,6 +64,17 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.121.0",
+    releaseDate: "2026-10-31",
+    title: "🌸 방 테마 · 🖼️ 그림 뒷면 해금 · 🏺 소품 스킨 · ✨ 세트",
+    changes: [
+      { game: "common", type: "FEAT", desc: "🌸 테이블 스킨이 방 테마로 — 조명색·의자까지 바뀌고 꽃잎·별빛·눈·거품·불씨가 흩날려요 (저사양 모드는 효과 꺼짐)" },
+      { game: "common", type: "FEAT", desc: "🖼️ 그림 카드 뒷면 4종·🧊 오로라 테이블·🏆 전설 이름표 — 사람과 한 판·승리, 업적으로 해금 (봇 판은 안 세요)" },
+      { game: "common", type: "FEAT", desc: "🏺 소품 스킨 8종 — 내 페루도 컵과 코인 더미 색 (자리 색 띠, 뜻이 있는 금·은·보석 색은 그대로)" },
+      { game: "common", type: "FEAT", desc: "✨ 어울리는 4종 세트를 한 번에, 3D 화면 왼쪽 위 🎨 스킨 버튼으로 게임 중에도 바꿔요" },
+    ],
+  },
+  {
     version: "v1.120.0",
     releaseDate: "2026-10-31",
     title: "🏷️ 3D 이름표 스킨",

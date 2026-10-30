@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRoomCharacters } from "@/lib/character/roomCharacters";
-import { DEFAULT_SKIN, cardBackSkin, plateSkin, tableSkin, type CardBackSkin, type PlateSkin, type SkinChoice, type TableSkin } from "./catalog";
+import { DEFAULT_SKIN, cardBackSkin, plateSkin, propSkin, tableSkin, type CardBackSkin, type PlateSkin, type PropSkin, type SkinChoice, type TableSkin } from "./catalog";
 import { useMySkin } from "./mySkin";
 
 /**
@@ -46,4 +46,8 @@ export function useCardBackSkin(owner: string | null | undefined, isMe = false):
 
 export function usePlateSkin(owner: string | null | undefined, isMe = false): PlateSkin | null {
   return plateSkin(useSeatSkin(owner, isMe).plate);
+}
+
+export function usePropSkin(owner: string | null | undefined, isMe = false): PropSkin | null {
+  return propSkin(useSeatSkin(owner, isMe).prop);
 }

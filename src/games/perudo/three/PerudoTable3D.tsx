@@ -8,6 +8,7 @@ import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/game
 import { Clickable, GlowDisc, HitBox, PopIn, TableSign } from "@/games/shared/three/tablePieces";
 import { easeInOut, paintedTexture, polar, type BubbleStyle } from "@/games/shared/three/tableKit";
 import type { PersonMood } from "@/games/shared/three/SeatedPerson";
+import { useOwnerProp } from "@/games/shared/three/skinTextures";
 
 /**
  * 페루도 3D — 해 질 녘 안데스 석조 마당. 각자 앞에 가죽 컵이 엎어져 있고(속
@@ -209,6 +210,8 @@ const cupProfile = [
  * changes (a new round's roll).
  */
 function Cup({ open, accent, shakeKey, lowDetail, sneak = false }: { open: boolean; accent: string; shakeKey: string; lowDetail: boolean; sneak?: boolean }) {
+  // the owner's 🎨 prop skin paints the body and ring; the seat-colour band stays so cups stay tellable apart
+  const prop = useOwnerProp();
   const geo = useMemo(() => new THREE.LatheGeometry(cupProfile, lowDetail ? 16 : 28), [lowDetail]);
   const ref = useRef<THREE.Group>(null);
   const t = useRef(open ? 1 : 0);
@@ -232,7 +235,7 @@ function Cup({ open, accent, shakeKey, lowDetail, sneak = false }: { open: boole
   return (
     <group ref={ref}>
       <mesh geometry={geo} castShadow receiveShadow>
-        <meshStandardMaterial color="#6b3a1f" roughness={0.7} side={THREE.DoubleSide} />
+        <meshStandardMaterial color={prop?.cup ?? "#6b3a1f"} roughness={0.7} side={THREE.DoubleSide} />
       </mesh>
       <mesh position={[0, 0.2, 0]}>
         <cylinderGeometry args={[0.197, 0.192, 0.045, lowDetail ? 16 : 28, 1, true]} />
@@ -240,7 +243,7 @@ function Cup({ open, accent, shakeKey, lowDetail, sneak = false }: { open: boole
       </mesh>
       <mesh position={[0, 0.09, 0]}>
         <cylinderGeometry args={[0.18, 0.177, 0.02, lowDetail ? 16 : 28, 1, true]} />
-        <meshStandardMaterial color="#e9b949" roughness={0.45} metalness={0.5} side={THREE.DoubleSide} />
+        <meshStandardMaterial color={prop?.ring ?? "#e9b949"} roughness={0.45} metalness={0.5} side={THREE.DoubleSide} />
       </mesh>
     </group>
   );

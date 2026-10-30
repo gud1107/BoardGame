@@ -16,7 +16,8 @@ import { labelTexture, polar, seatAngle, type BubbleStyle } from "./tableKit";
 import { personaFor } from "./persona";
 import { nextEmotionLine, speakEmotion } from "@/lib/audio/characterVoice";
 import { usePlateSkin, useTableSkin } from "@/lib/skins/useSkins";
-import { CardBackOwner, skinFeltTexture } from "./skinTextures";
+import { CardBackOwner, SkinParticleField, skinFeltTexture } from "./skinTextures";
+import SkinButton from "@/components/skins/SkinPicker";
 
 /**
  * The shared "real people around a table" scene for the card / social
@@ -544,7 +545,11 @@ function Lamp({ lamp, lowDetail, dim }: { lamp: NonNullable<TableTheme["lamp"]>;
   );
 }
 
-/** The game's theme with the room's 🎨 table skin (the host's pick) painted over felt, inlay and room colour. */
+/**
+ * The game's theme with the room's 🎨 table skin (the host's pick) painted over felt, inlay,
+ * room colour, lamp colour and chairs. Only colours change — every light keeps the game's
+ * intensity, so a skin never makes a table harder to read.
+ */
 function useSkinnedTheme(theme: TableTheme): TableTheme {
   const skin = useTableSkin();
   return useMemo(() => {
@@ -552,6 +557,8 @@ function useSkinnedTheme(theme: TableTheme): TableTheme {
     return {
       ...theme,
       background: skin.background,
+      chairColor: skin.chairColor,
+      lamp: theme.lamp ? { ...theme.lamp, color: skin.lamp } : null,
       table: { ...theme.table, felt: skin.felt, inlay: skin.inlay, feltMap: () => skinFeltTexture(skin) },
     };
   }, [theme, skin]);
@@ -560,6 +567,7 @@ function useSkinnedTheme(theme: TableTheme): TableTheme {
 function SceneContents(props: TableSceneProps) {
   const { seatCount: n, viewerSeat, lowDetail } = props;
   const theme = useSkinnedTheme(props.theme);
+  const tableSkin = useTableSkin();
   const geo = useMemo<TableGeo>(() => {
     const { seatR, tableR } = tableDims(n, theme.personStyle === "realistic");
     const angleOf = (seat: number) => seatAngle(seat, viewerSeat, n);
@@ -591,6 +599,7 @@ function SceneContents(props: TableSceneProps) {
       {theme.lamp && <Lamp lamp={theme.lamp} lowDetail={lowDetail} dim={props.lampDim ?? 1} />}
       {props.environment}
       <Table tableR={geo.tableR} theme={theme} lowDetail={lowDetail} />
+      {tableSkin?.particles && !lowDetail && <SkinParticleField kind={tableSkin.particles} color={tableSkin.particleColor ?? "#ffffff"} radius={geo.tableR} />}
       <group position={[0, TABLE_Y, 0]}>{props.center}</group>
       {props.seats.map((s) => (
         <SeatView key={s.seat} s={s} geo={geo} theme={theme} lowDetail={lowDetail} ringColor={props.ringColor ?? "#fbbf24"} quietMoods={props.quietMoods} firstPerson={props.firstPerson} selfBody={props.selfBody} />
@@ -613,6 +622,7 @@ function CameraOverlay({ cam, me }: { cam: ReturnType<typeof useCameraView>; me:
   const status = cam.camera === "fpv" && me ? [me.sub, me.tag?.text].filter(Boolean).join(" · ") : "";
   return (
     <div className="pointer-events-none absolute top-1.5 left-1.5 z-10 flex max-w-[70%] flex-col items-start gap-1">
+      <div className="flex items-center gap-1">
       <div role="group" aria-label="3D 시점" className="pointer-events-auto flex overflow-hidden rounded-full border border-white/20 bg-black/55 text-[10px] sm:text-[11px]">
         {(
           [
@@ -631,6 +641,9 @@ function CameraOverlay({ cam, me }: { cam: ReturnType<typeof useCameraView>; me:
             {label}
           </button>
         ))}
+      </div>
+      {/* 🎨 change skins mid-game — the others see the new back / plate right away */}
+      <SkinButton compact />
       </div>
       {cam.camera === "fpv" && me && (
         <span className="truncate rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-semibold text-white/85 sm:text-[11px]">

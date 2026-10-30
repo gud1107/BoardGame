@@ -40,7 +40,7 @@ function writeLocal(skin: SkinChoice): void {
   }
 }
 
-const isDefault = (s: SkinChoice) => s.table === DEFAULT_SKIN.table && s.back === DEFAULT_SKIN.back && s.plate === DEFAULT_SKIN.plate;
+const isDefault = (s: SkinChoice) => s.table === DEFAULT_SKIN.table && s.back === DEFAULT_SKIN.back && s.plate === DEFAULT_SKIN.plate && s.prop === DEFAULT_SKIN.prop;
 
 async function writeAccount(skin: SkinChoice): Promise<void> {
   const supabase = getAuthSupabase();

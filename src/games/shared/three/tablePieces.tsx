@@ -7,7 +7,7 @@ import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeom
 import { bubbleTexture, clamp01, easeInOut, easeOutBack, emojiTexture, paintedTexture, type BubbleStyle } from "./tableKit";
 import { distanceBoost } from "./ScreenSprite";
 import { useTableGeoOptional } from "./TableScene";
-import { useSkinnedBack } from "./skinTextures";
+import { useOwnerProp, useSkinnedBack } from "./skinTextures";
 
 /**
  * Small props shared by the 3D table games: cards, coins, fly-in animation,
@@ -106,8 +106,14 @@ export function PopIn({ delay = 0, children }: { delay?: number; children: React
 const coinGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.018, 20);
 const coinEdgeGeo = new THREE.TorusGeometry(0.06, 0.004, 4, 20);
 
-/** Gold coins stacked in short columns (10 per column). */
-export function CoinStack({ count, color = "#f2c14e", max = 30 }: { count: number; color?: string; max?: number }) {
+/**
+ * Gold coins stacked in short columns (10 per column). With no `color` from the game, a
+ * seat's coins take its player's 🎨 prop skin; a colour the game sets (it means something) stays.
+ */
+export function CoinStack({ count, color: gameColor, max = 30 }: { count: number; color?: string; max?: number }) {
+  const prop = useOwnerProp();
+  const color = gameColor ?? prop?.coin ?? "#f2c14e";
+  const edge = gameColor ? "#a8801e" : (prop?.coinEdge ?? "#a8801e");
   const shown = Math.min(count, max);
   const coins = useMemo(() => {
     const out: [number, number, number, number][] = [];
@@ -127,7 +133,7 @@ export function CoinStack({ count, color = "#f2c14e", max = 30 }: { count: numbe
             <meshStandardMaterial color={color} metalness={0.9} roughness={0.28} />
           </mesh>
           <mesh geometry={coinEdgeGeo} rotation-x={Math.PI / 2} position={[0, 0.009, 0]}>
-            <meshStandardMaterial color="#a8801e" metalness={0.9} roughness={0.35} />
+            <meshStandardMaterial color={edge} metalness={0.9} roughness={0.35} />
           </mesh>
         </group>
       ))}
