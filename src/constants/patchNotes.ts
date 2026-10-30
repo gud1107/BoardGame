@@ -71,6 +71,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       { game: "common", type: "FEAT", desc: "🎨 내 스킨: 카드 뒷면 8종·3D 테이블 8종 — 방 입장 화면·프로필에서 골라요 (로그인하면 다른 기기에서도)" },
       { game: "common", type: "FEAT", desc: "🃏 내 손패는 같은 방 모두에게 내 뒷면으로 보여요 (3D 손패, 쿠·러브레터·하나미코지·블러프 룰렛) — 공용 덱은 기본 뒷면" },
       { game: "common", type: "FEAT", desc: "🎲 방장이 고른 테이블 천·배경이 그 방 모두의 3D 테이블에 깔려요" },
+      { game: "common", type: "IMPROVE", desc: "✨ 스킨 창: 고른 스킨은 금빛 테두리·✓ 배지로 확 눈에 띄고, 카드마다 무늬 종류 표시, 맨 위에 지금 내 스킨 미리보기" },
     ],
   },
   {
