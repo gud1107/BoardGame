@@ -22,7 +22,7 @@ import {
   type UnlockId,
 } from "@/lib/skins/catalog";
 import { useMySkin } from "@/lib/skins/mySkin";
-import { TIERS, TIER_ORDER, UNLOCKS, isUnlocked, tierBorder, tierText, tierVars, type RewardTier, useSkinProgress, type SkinProgress } from "@/lib/skins/unlocks";
+import { TIERS, TIER_ORDER, TRACKS, UNLOCKS, isUnlocked, tierBg, tierBorder, tierText, tierVars, type RewardTier, useSkinProgress, type SkinProgress } from "@/lib/skins/unlocks";
 import SkinBackFace from "./SkinBackFace";
 
 const PATTERN_LABEL: Record<SkinPattern, string> = { diag: "사선 무늬", diamond: "다이아 무늬", dots: "물방울 무늬", waves: "물결 무늬", grid: "격자 무늬", plain: "단색" };
@@ -39,6 +39,7 @@ function Tile({
   kind,
   lock,
   reward,
+  onLocked,
   children,
 }: {
   selected: boolean;
@@ -48,6 +49,8 @@ function Tile({
   lock?: { label: string; value: number; goal: number } | null;
   /** Reward skin: its tier badge shows whether it's earned yet or not. */
   reward?: UnlockId;
+  /** Tapping a locked tile explains how to earn it instead of doing nothing. */
+  onLocked?: () => void;
   children: ReactNode;
 }) {
   const locked = !!lock;
@@ -56,13 +59,13 @@ function Tile({
       type="button"
       aria-pressed={selected}
       aria-disabled={locked}
-      onClick={locked ? undefined : onClick}
+      onClick={locked ? onLocked : onClick}
       title={locked ? `🔒 ${lock.label} (${lock.value}/${lock.goal})` : undefined}
       className={`relative flex min-h-11 flex-col items-center gap-0.5 rounded-lg p-1 pt-2 text-[11px] transition duration-200 ${
         selected
           ? "z-10 scale-105 border-2 border-amber-300 bg-amber-300/20 font-bold text-amber-50 shadow-[0_0_0_3px_rgba(252,211,77,0.35),0_0_20px_rgba(252,211,77,0.55)] light:border-amber-500 light:bg-amber-100 light:text-amber-900 light:shadow-[0_0_0_3px_rgba(245,158,11,0.3),0_0_16px_rgba(245,158,11,0.45)]"
           : locked
-            ? "cursor-not-allowed border border-dashed border-white/15 text-white/50 light:border-slate-300 light:text-slate-500"
+            ? "cursor-help border border-dashed border-white/15 text-white/50 light:border-slate-300 light:text-slate-500"
             : "border border-white/10 text-white/70 opacity-80 hover:border-white/30 hover:opacity-100 light:border-slate-200 light:text-slate-600"
       }`}
     >
@@ -239,6 +242,34 @@ function Chip({ on, onClick, children, style, className = "" }: { on: boolean; o
   );
 }
 
+/** What a locked reward needs, pinned to the bottom of the picker after tapping its tile. */
+function UnlockHint({ name, unlock, progress, onClose }: { name: string; unlock: UnlockId; progress: SkinProgress; onClose: () => void }) {
+  const u = UNLOCKS[unlock];
+  const tier = TIERS[u.tier];
+  const value = Math.min(progress[u.of], u.goal);
+  const left = u.goal - value;
+  return (
+    <div role="status" className="sticky bottom-0 z-20 -mx-1 flex flex-col gap-1.5 rounded-xl border-2 border-amber-300/70 bg-stone-950/95 p-3 text-xs shadow-2xl backdrop-blur light:border-amber-400 light:bg-white/95">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-bold text-white light:text-slate-900">🔒 {name}</span>
+        <span className={`rounded-full border px-1.5 text-[10px] leading-4 font-bold ${tierBorder} ${tierText}`} style={tierVars(u.tier)}>
+          {tier.emoji} {tier.label}
+        </span>
+        <button type="button" onClick={onClose} aria-label="닫기" className="ml-auto rounded-full px-2 text-base text-white/60 hover:text-white light:text-slate-500">
+          ✕
+        </button>
+      </div>
+      <p className="font-semibold break-keep text-amber-200 light:text-amber-800">
+        {TRACKS[u.of].emoji} {u.label} — 지금 {value}/{u.goal}, {left}만 더 하면 열려요
+      </p>
+      <span className="block h-1.5 w-full overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
+        <span className={`block h-full rounded-full ${tierBg}`} style={{ ...tierVars(u.tier), width: `${(value / u.goal) * 100}%` }} />
+      </span>
+      <p className="break-keep text-white/60 light:text-slate-500">{TRACKS[u.of].how}</p>
+    </div>
+  );
+}
+
 /** 🎨 내 스킨: sets, card back, table (room theme), 3D name plate, props — reward skins unlock from /stats. */
 export function SkinPicker() {
   const skin = useMySkin((s) => s.skin);
@@ -246,6 +277,7 @@ export function SkinPicker() {
   const init = useMySkin((s) => s.init);
   const progress = useSkinProgress();
   const [filter, setFilterState] = useState(readFilter);
+  const [hint, setHint] = useState<{ name: string; unlock: UnlockId } | null>(null);
   useEffect(() => {
     void init();
   }, [init]);
@@ -336,7 +368,7 @@ export function SkinPicker() {
           </Tile>
         )}
         {backs.map((b) => (
-          <Tile key={b.id} selected={skin.back === b.id} onClick={() => set({ back: b.id })} label={`${b.emoji} ${b.name}`} kind={b.image ? "🖼️ 그림 뒷면" : `${PATTERN_LABEL[b.pattern]} · ${b.emblem}`} lock={lockOf(b.unlock, progress)} reward={b.unlock}>
+          <Tile key={b.id} selected={skin.back === b.id} onClick={() => set({ back: b.id })} label={`${b.emoji} ${b.name}`} kind={b.image ? "🖼️ 그림 뒷면" : `${PATTERN_LABEL[b.pattern]} · ${b.emblem}`} lock={lockOf(b.unlock, progress)} reward={b.unlock} onLocked={() => b.unlock && setHint({ name: `${b.emoji} ${b.name}`, unlock: b.unlock })}>
             <SkinBackFace skin={b} className="h-16 w-11" emblemClassName="text-xl" />
           </Tile>
         ))}
@@ -350,7 +382,7 @@ export function SkinPicker() {
           </Tile>
         )}
         {tables.map((t) => (
-          <Tile key={t.id} selected={skin.table === t.id} onClick={() => set({ table: t.id })} label={`${t.emoji} ${t.name}`} kind={t.particles ? PARTICLE_LABEL[t.particles] : PATTERN_LABEL[t.pattern]} lock={lockOf(t.unlock, progress)} reward={t.unlock}>
+          <Tile key={t.id} selected={skin.table === t.id} onClick={() => set({ table: t.id })} label={`${t.emoji} ${t.name}`} kind={t.particles ? PARTICLE_LABEL[t.particles] : PATTERN_LABEL[t.pattern]} lock={lockOf(t.unlock, progress)} reward={t.unlock} onLocked={() => t.unlock && setHint({ name: `${t.emoji} ${t.name}`, unlock: t.unlock })}>
             <TableFace table={t} />
           </Tile>
         ))}
@@ -364,7 +396,7 @@ export function SkinPicker() {
           </Tile>
         )}
         {plates.map((pl) => (
-          <Tile key={pl.id} selected={skin.plate === pl.id} onClick={() => set({ plate: pl.id })} label={`${pl.emoji} ${pl.name}`} kind={`${PATTERN_LABEL[pl.pattern]} · ${pl.emblem}`} lock={lockOf(pl.unlock, progress)} reward={pl.unlock}>
+          <Tile key={pl.id} selected={skin.plate === pl.id} onClick={() => set({ plate: pl.id })} label={`${pl.emoji} ${pl.name}`} kind={`${PATTERN_LABEL[pl.pattern]} · ${pl.emblem}`} lock={lockOf(pl.unlock, progress)} reward={pl.unlock} onLocked={() => pl.unlock && setHint({ name: `${pl.emoji} ${pl.name}`, unlock: pl.unlock })}>
             <PlateFace plate={pl} name="이름" />
           </Tile>
         ))}
@@ -382,6 +414,7 @@ export function SkinPicker() {
         ))}
       </Section>
       )}
+      {hint && <UnlockHint name={hint.name} unlock={hint.unlock} progress={progress} onClose={() => setHint(null)} />}
     </div>
   );
 }

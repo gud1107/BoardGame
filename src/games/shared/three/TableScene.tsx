@@ -356,7 +356,7 @@ type SeatViewProps = { s: TableSeat; geo: TableGeo; theme: TableTheme; lowDetail
 /** Everything this seat holds wears its player's 🎨 card back (HeldFan reads the owner). */
 function SeatView(props: SeatViewProps) {
   return (
-    <CardBackOwner name={props.s.name} me={props.s.seat === props.geo.viewerSeat}>
+    <CardBackOwner name={props.s.name} me={props.s.seat === props.geo.viewerSeat} color={props.s.color ?? props.theme.seatColors[props.s.seat % props.theme.seatColors.length]}>
       <SeatBody {...props} />
     </CardBackOwner>
   );

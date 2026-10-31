@@ -17,21 +17,41 @@ import { useCardBackSkin, usePropSkin } from "@/lib/skins/useSkins";
 const backCache = new Map<string, THREE.CanvasTexture>();
 const feltCache = new Map<string, THREE.CanvasTexture>();
 
-const imageCache = new Map<string, THREE.Texture>();
+/**
+ * Two players can wear the same back. A held card stays in its holder's hands
+ * under their name plate, but the card itself also carries the seat colour as a
+ * band top and bottom (like the plate's inner border), so whose card it is reads
+ * from the card alone. Cached per skin + seat colour.
+ */
+function drawSeatBands(ctx: CanvasRenderingContext2D, w: number, h: number, band: string | undefined) {
+  if (!band) return;
+  ctx.fillStyle = band;
+  ctx.fillRect(18, 18, w - 36, 24);
+  ctx.fillRect(18, h - 42, w - 36, 24);
+}
 
-export function skinBackTexture(skin: CardBackSkin): THREE.Texture {
+export function skinBackTexture(skin: CardBackSkin, band?: string): THREE.Texture {
+  const key = `${skin.id}|${band ?? ""}`;
+  const hit = backCache.get(key);
+  if (hit) return hit;
   if (skin.image) {
-    // painted back: the texture shows up as soon as the image has loaded
-    let tex = imageCache.get(skin.id);
-    if (!tex) {
-      tex = new THREE.TextureLoader().load(skin.image);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      imageCache.set(skin.id, tex);
-    }
+    // painted back: drawn onto the canvas (with the seat bands) once the image has loaded
+    const c = document.createElement("canvas");
+    c.width = 256;
+    c.height = 360;
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const img = new Image();
+    img.onload = () => {
+      const ctx = c.getContext("2d")!;
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      drawSeatBands(ctx, c.width, c.height, band);
+      tex.needsUpdate = true;
+    };
+    img.src = skin.image;
+    backCache.set(key, tex);
     return tex;
   }
-  const hit = backCache.get(skin.id);
-  if (hit) return hit;
   const w = 256;
   const h = 360;
   const c = document.createElement("canvas");
@@ -60,9 +80,10 @@ export function skinBackTexture(skin: CardBackSkin): THREE.Texture {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(skin.emblem, w / 2, h / 2 + 8);
+  drawSeatBands(ctx, w, h, band);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  backCache.set(skin.id, tex);
+  backCache.set(key, tex);
   return tex;
 }
 
@@ -81,17 +102,17 @@ export function skinFeltTexture(skin: TableSkin): THREE.CanvasTexture {
   return tex;
 }
 
-const OwnerContext = createContext<{ name: string; me: boolean } | null>(null);
+const OwnerContext = createContext<{ name: string; me: boolean; color?: string } | null>(null);
 
-export function CardBackOwner({ name, me, children }: { name: string; me: boolean; children: ReactNode }) {
-  return <OwnerContext.Provider value={{ name, me }}>{children}</OwnerContext.Provider>;
+export function CardBackOwner({ name, me, color, children }: { name: string; me: boolean; color?: string; children: ReactNode }) {
+  return <OwnerContext.Provider value={{ name, me, color }}>{children}</OwnerContext.Provider>;
 }
 
 /** The owner's skinned back when the surrounding seat's player picked one, else `fallback`. */
 export function useSkinnedBack(fallback: THREE.Texture): THREE.Texture {
   const owner = useContext(OwnerContext);
   const skin = useCardBackSkin(owner?.name, owner?.me ?? false);
-  return owner && skin ? skinBackTexture(skin) : fallback;
+  return owner && skin ? skinBackTexture(skin, owner.color) : fallback;
 }
 
 /** The surrounding seat's player's 🎨 prop skin (null outside a seat or when they picked none). */

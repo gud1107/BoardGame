@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.130.0",
+    releaseDate: "2026-11-01",
+    title: "🔒 잠긴 스킨 누르면 얻는 법 · 3D 카드에 자리 색 띠",
+    changes: [
+      { game: "common", type: "IMPROVE", desc: "🔒 잠긴 스킨을 누르면 아래에 얻는 법이 떠요 — 조건, 지금 진행도와 남은 수, 어떻게 세는지 (휴대폰에서도)" },
+      { game: "common", type: "IMPROVE", desc: "🎨 3D 손패의 스킨 뒷면 위아래에 자리 색 띠 — 같은 뒷면을 낀 두 사람도 누구 카드인지 카드만 보고 알아요" },
+    ],
+  },
+  {
     version: "v1.129.0",
     releaseDate: "2026-11-01",
     title: "🎙️ 큐플레이 3D 퀴즈 스튜디오 — 내 캐릭터로 참가",
@@ -71,6 +80,15 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       { game: "qplay", type: "FEAT", desc: "🧊 큐플레이에 3D 퀴즈 스튜디오가 생겼어요 — 내가 고른 캐릭터로 원탁에 앉아 🎥 1인칭 / 🪑 테이블 시점으로 봐요 (🖼️ 2D로 버튼으로 예전 화면)" },
       { game: "qplay", type: "FEAT", desc: "🔔 답을 내면 내 앞 버저가 켜지고, 정답 공개 때 모두의 답이 말풍선으로 — 맞히면 환호, 틀리면 낙담, 탈락하면 털썩" },
       { game: "qplay", type: "FEAT", desc: "🚀 미사일은 쏜 사람 → 맞은 사람으로 날아가고, 조준 중엔 노릴 사람의 자리를 눌러 바로 발사할 수 있어요" },
+    ],
+  },
+  {
+    version: "v1.128.0",
+    releaseDate: "2026-11-01",
+    title: "🎭 쿠 — 패스·방어·스킬마다 캐릭터 동작",
+    changes: [
+      { game: "coup", type: "FEAT", desc: "🎭 3D 캐릭터가 행동마다 몸으로 연기해요 — 🗡️ 암살 찌르기, ⚓ 갈취 낚아채기, 👑 세금 쓸어담기, 🕊️ 카드 섞기, ⚔️ 쿠데타 내리치기" },
+      { game: "coup", type: "FEAT", desc: "🛡️ 방어하면 팔을 X자로 막고, 👋 패스하면 손사래 + '패스' 말풍선 (2D 화면엔 자리 옆 👋 패스 표시)" },
     ],
   },
   {
