@@ -18,6 +18,7 @@ import ThemeToggle from "@/components/theme/ThemeToggle";
 import { recordMatchStat } from "@/lib/stats/playerStats";
 import MatchRecordCard, { type MatchRecord } from "@/components/stats/MatchRecordCard";
 import GameChampionChip from "@/components/stats/GameChampionChip";
+import RewardTracker from "@/components/skins/RewardTracker";
 
 type Stage = "select" | "playing" | "record" | "done";
 /** Frozen once per page load right after the subscription store hydrates — see the entitlement gate below. */
@@ -470,6 +471,9 @@ export default function GamePlayPage() {
       {stage === "playing" && hydrated && (
         <GameComponent participants={activeParticipants} onComplete={handleGameComplete} />
       )}
+
+      {/* 🎁 보상 도전 — 모든 게임 공통, 클라이언트에서만(localStorage로 접힘 상태를 기억) */}
+      {stage === "playing" && hydrated && <RewardTracker />}
 
       {matchRecord && <MatchRecordCard key={matchRecord.id} record={matchRecord} onClose={closeMatchRecord} />}
 

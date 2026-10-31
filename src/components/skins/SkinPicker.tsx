@@ -22,7 +22,7 @@ import {
   type UnlockId,
 } from "@/lib/skins/catalog";
 import { useMySkin } from "@/lib/skins/mySkin";
-import { UNLOCKS, isUnlocked, useSkinProgress, type SkinProgress } from "@/lib/skins/unlocks";
+import { TIERS, UNLOCKS, isUnlocked, useSkinProgress, type SkinProgress } from "@/lib/skins/unlocks";
 import SkinBackFace from "./SkinBackFace";
 
 const PATTERN_LABEL: Record<SkinPattern, string> = { diag: "사선 무늬", diamond: "다이아 무늬", dots: "물방울 무늬", waves: "물결 무늬", grid: "격자 무늬", plain: "단색" };
@@ -38,6 +38,7 @@ function Tile({
   label,
   kind,
   lock,
+  reward,
   children,
 }: {
   selected: boolean;
@@ -45,6 +46,8 @@ function Tile({
   label: string;
   kind: string;
   lock?: { label: string; value: number; goal: number } | null;
+  /** Reward skin: its tier badge shows whether it's earned yet or not. */
+  reward?: UnlockId;
   children: ReactNode;
 }) {
   const locked = !!lock;
@@ -63,6 +66,14 @@ function Tile({
             : "border border-white/10 text-white/70 opacity-80 hover:border-white/30 hover:opacity-100 light:border-slate-200 light:text-slate-600"
       }`}
     >
+      {reward && (
+        <span
+          className="absolute -top-2 -left-1.5 rounded-full border bg-stone-950 px-1.5 text-[9px] leading-4 font-bold whitespace-nowrap light:bg-white"
+          style={{ borderColor: TIERS[UNLOCKS[reward].tier].color, color: TIERS[UNLOCKS[reward].tier].color }}
+        >
+          {TIERS[UNLOCKS[reward].tier].emoji} {TIERS[UNLOCKS[reward].tier].label}
+        </span>
+      )}
       {selected && (
         <span aria-hidden className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-amber-400 text-xs font-black text-slate-900 shadow light:border-white">
           ✓
@@ -225,7 +236,7 @@ export function SkinPicker() {
           <div className="flex h-16 w-11 items-center justify-center rounded-lg border-2 border-dashed border-white/25 text-lg light:border-slate-300">🂠</div>
         </Tile>
         {CARD_BACK_SKINS.map((b) => (
-          <Tile key={b.id} selected={skin.back === b.id} onClick={() => set({ back: b.id })} label={`${b.emoji} ${b.name}`} kind={b.image ? "🖼️ 그림 뒷면" : `${PATTERN_LABEL[b.pattern]} · ${b.emblem}`} lock={lockOf(b.unlock, progress)}>
+          <Tile key={b.id} selected={skin.back === b.id} onClick={() => set({ back: b.id })} label={`${b.emoji} ${b.name}`} kind={b.image ? "🖼️ 그림 뒷면" : `${PATTERN_LABEL[b.pattern]} · ${b.emblem}`} lock={lockOf(b.unlock, progress)} reward={b.unlock}>
             <SkinBackFace skin={b} className="h-16 w-11" emblemClassName="text-xl" />
           </Tile>
         ))}
@@ -235,7 +246,7 @@ export function SkinPicker() {
           <TableFace table={null} />
         </Tile>
         {TABLE_SKINS.map((t) => (
-          <Tile key={t.id} selected={skin.table === t.id} onClick={() => set({ table: t.id })} label={`${t.emoji} ${t.name}`} kind={t.particles ? PARTICLE_LABEL[t.particles] : PATTERN_LABEL[t.pattern]} lock={lockOf(t.unlock, progress)}>
+          <Tile key={t.id} selected={skin.table === t.id} onClick={() => set({ table: t.id })} label={`${t.emoji} ${t.name}`} kind={t.particles ? PARTICLE_LABEL[t.particles] : PATTERN_LABEL[t.pattern]} lock={lockOf(t.unlock, progress)} reward={t.unlock}>
             <TableFace table={t} />
           </Tile>
         ))}
@@ -245,7 +256,7 @@ export function SkinPicker() {
           <PlateFace plate={null} name="이름" />
         </Tile>
         {PLATE_SKINS.map((pl) => (
-          <Tile key={pl.id} selected={skin.plate === pl.id} onClick={() => set({ plate: pl.id })} label={`${pl.emoji} ${pl.name}`} kind={`${PATTERN_LABEL[pl.pattern]} · ${pl.emblem}`} lock={lockOf(pl.unlock, progress)}>
+          <Tile key={pl.id} selected={skin.plate === pl.id} onClick={() => set({ plate: pl.id })} label={`${pl.emoji} ${pl.name}`} kind={`${PATTERN_LABEL[pl.pattern]} · ${pl.emblem}`} lock={lockOf(pl.unlock, progress)} reward={pl.unlock}>
             <PlateFace plate={pl} name="이름" />
           </Tile>
         ))}

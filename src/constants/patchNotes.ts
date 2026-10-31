@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.123.0",
+    releaseDate: "2026-11-01",
+    title: "🎁 보상 도전 — 등급 5단계 · 보상 25종 · 게임 중 진행도",
+    changes: [
+      { game: "common", type: "FEAT", desc: "🎁 보상 25종을 🥉브론즈~👑레전드 5등급으로 — 판수·이긴 게임 종류·강한 봇 격파·한 게임 장인·1인 도전 목표 추가, 새 뒷면 9·테이블 5·이름표 5" },
+      { game: "common", type: "FEAT", desc: "🎁 게임 화면 왼쪽 위 보상 창 — 거의 다 온 목표, 등급별 전체 목표·보상, 세는 방법을 접었다 펴며 언제든 확인 (새로 열리면 NEW)" },
+      { game: "common", type: "FIX", desc: "🧭 1인 게임 판은 혼자 해도 '사람과 함께 1등'으로 세져서 보상이 쉽게 열리던 문제 — 이제 1인 도전 목표로 따로 세요" },
+    ],
+  },
+  {
     version: "v1.122.0",
     releaseDate: "2026-11-01",
     title: "✓ 쿠 — 내 카드 능력 표시 · 진실 행동 하이라이트",
