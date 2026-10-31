@@ -58,7 +58,6 @@ function Tile({
     <button
       type="button"
       aria-pressed={selected}
-      aria-disabled={locked}
       onClick={locked ? onLocked : onClick}
       title={locked ? `🔒 ${lock.label} (${lock.value}/${lock.goal})` : undefined}
       className={`relative flex min-h-11 flex-col items-center gap-0.5 rounded-lg p-1 pt-2 text-[11px] transition duration-200 ${
