@@ -21,6 +21,7 @@ import {
   type Question,
   type Seat,
 } from "./engine";
+import OxArena from "./OxArena";
 import RulebookModal from "./RulebookModal";
 import { getQPlaySound, qplayCues } from "./qplaySound";
 
@@ -470,16 +471,18 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
     getQPlaySound().play("tick");
   }, [hurry, remaining, state.stage]);
 
-  // 내 선택은 방장 왕복 전에도 바로 보여 준다.
+  // 내 선택은 방장 왕복 전에도 바로 보여 준다(OX는 마지막으로 옮긴 쪽).
   const [localPick, setLocalPick] = useState<{ stage: number; choice: number } | null>(null);
   const myAnswer = state.answers[viewerSeat];
-  const picked = myAnswer?.choice ?? (localPick && localPick.stage === state.stage ? localPick.choice : null);
+  const picked = localPick && localPick.stage === state.stage ? localPick.choice : (myAnswer?.choice ?? null);
   const eligible = eligibleSeats(state).includes(viewerSeat);
 
   const answeredSeats = new Set(Object.keys(state.answers).map(Number).filter((s) => hasFinished(state, s)));
   const scoreboard = Array.from({ length: state.seatCount }, (_, s) => s).sort((a, b) => state.scores[b] + state.miniScores[b] - (state.scores[a] + state.miniScores[a]) || a - b);
   const showQuestion = q && (state.phase === "question" || state.phase === "reveal" || state.phase === "aim") && mini !== "climb";
   const survival = mini === "ox" || mini === "missile";
+  // OX 문제·공개 중엔 광장이 주인공 — 3D 테이블은 아래로(같은 요소라 다시 그리지 않는다)
+  const oxFocus = !!showQuestion && q?.kind === "ox";
 
   return (
     <div className="relative flex flex-col gap-3">
@@ -530,6 +533,7 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
       )}
 
       {board3d.view === "3d" && (
+        <div style={{ order: oxFocus ? 1 : 0 }}>
         <Frame3D hint={state.phase === "aim" && state.shooter === viewerSeat ? "🎯 노릴 사람의 자리를 눌러도 발사돼요" : "문제·보기는 아래에서 · 드래그로 둘러보기"}>
           <QPlayTable3D
             state={state}
@@ -541,6 +545,7 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
             lowDetail={lowDetail}
           />
         </Frame3D>
+        </div>
       )}
 
       {/* 소개 */}
@@ -561,7 +566,27 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
         <div className="relative flex flex-col gap-3">
           <QuestionCard key={`${state.miniIndex}-${state.qIndex}`} q={q} mini={mini} index={state.qIndex} total={state.questions.length} />
           {state.phase === "reveal" && <ShotBanner state={state} names={names} />}
-          {q.kind !== "chosung" && (
+          {q.kind === "ox" && (
+            <OxArena
+              state={state}
+              viewerSeat={viewerSeat}
+              names={names}
+              colors={SEAT_COLORS}
+              picked={picked}
+              reveal={state.phase !== "question"}
+              onMove={
+                state.phase === "question" && eligible
+                  ? (choice) => {
+                      getQPlaySound().unlock();
+                      getQPlaySound().play("pick");
+                      setLocalPick({ stage: state.stage, choice });
+                      onAction({ type: "ANSWER", seat: viewerSeat, q: state.qIndex, choice });
+                    }
+                  : null
+              }
+            />
+          )}
+          {q.kind === "choice" && (
             <ChoiceGrid
               state={state}
               names={names}
@@ -583,7 +608,7 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
             </p>
           )}
           {state.phase === "question" && !eligible && <p className="text-center text-sm font-bold text-white/60 light:text-slate-500">💀 탈락 — 남은 사람들의 대결을 구경해요</p>}
-          {state.phase === "question" && eligible && picked !== null && q.kind !== "chosung" && (
+          {state.phase === "question" && eligible && picked !== null && q.kind === "choice" && (
             <p className="text-center text-xs text-white/60 light:text-slate-500">
               답변 완료! 다른 사람을 기다리는 중 ({answeredSeats.size}/{eligibleSeats(state).length})
             </p>

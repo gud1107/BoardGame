@@ -431,6 +431,8 @@ export function hasFinished(state: GameState, seat: Seat): boolean {
 export function allAnswered(state: GameState): boolean {
   if (state.phase === "climb") return eligibleSeats(state).every((s) => state.floor[s] >= CLIMB_TOP || state.climbIdx[s] >= state.questions.length);
   if (state.phase !== "question") return false;
+  // OX는 마음을 바꿀 수 있으니 모두 자리를 잡아도 시간이 끝날 때까지 기다린다.
+  if (currentQuestion(state)?.kind === "ox") return false;
   return eligibleSeats(state).every((s) => hasFinished(state, s));
 }
 
@@ -747,10 +749,13 @@ export function applyAction(state: GameState, action: EngineAction): GameState {
       if (state.phase !== "question" || action.q !== state.qIndex) return state;
       const q = currentQuestion(state);
       if (!q || q.kind === "chosung") return state;
-      if (!eligibleSeats(state).includes(action.seat) || state.answers[action.seat]) return state;
+      if (!eligibleSeats(state).includes(action.seat)) return state;
       if (!Number.isInteger(action.choice) || action.choice < 0 || action.choice >= q.choices.length) return state;
-      const answer: Answer = { choice: action.choice, correct: action.choice === q.answer, order: state.arrivals };
-      return { ...state, answers: { ...state.answers, [action.seat]: answer }, arrivals: state.arrivals + 1 };
+      const prev = state.answers[action.seat];
+      // OX는 시간이 끝날 때 서 있는 쪽이 답 — 그 전엔 몇 번이든 O ↔ X로 옮겨 다닐 수 있다(§4).
+      if (prev && (q.kind !== "ox" || prev.choice === action.choice)) return state;
+      const answer: Answer = { choice: action.choice, correct: action.choice === q.answer, order: prev?.order ?? state.arrivals };
+      return { ...state, answers: { ...state.answers, [action.seat]: answer }, arrivals: prev ? state.arrivals : state.arrivals + 1 };
     }
     case "TYPE": {
       if (state.phase !== "question" || action.q !== state.qIndex) return state;
@@ -874,6 +879,20 @@ export function chooseBotTyping(state: GameState, seat: Seat, level: BotLevel, r
   if (tries >= 1 || rng() > 0.6) return null;
   const sameLen = CHOSUNG_POOL.filter((p) => p.word.length === q.word!.length && !q.accepted?.includes(p.word));
   return sameLen.length > 0 ? pickFrom(rng, sameLen).word : null;
+}
+
+/**
+ * 봇의 OX 이동 계획 — 마지막 칸이 최종 답(정답률은 `chooseBotChoice` 그대로). 사람처럼
+ * 가끔 반대쪽에 먼저 갔다가 넘어오거나, 갔다가 되돌아온다.
+ */
+export function chooseBotOxPlan(state: GameState, level: BotLevel, rng: () => number = Math.random): number[] {
+  const final = chooseBotChoice(state, level, rng);
+  if (final === null) return [];
+  const other = 1 - final;
+  const r = rng();
+  if (r < 0.3) return [other, final];
+  if (r < 0.42) return [final, other, final];
+  return [final];
 }
 
 /** 봇의 올라올라 답(보기 번호). */

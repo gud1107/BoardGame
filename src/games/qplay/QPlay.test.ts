@@ -13,6 +13,7 @@ import {
   OX_CORRECT,
   OX_SURVIVE,
   allAnswered,
+  chooseBotOxPlan,
   applyAction,
   autoTarget,
   buildClimbQuestions,
@@ -196,6 +197,35 @@ describe("OX survival (§4)", () => {
     expect(s.miniScores[1]).toBe(OX_CORRECT * 2 + OX_SURVIVE);
     expect(s.history[0].winners).toEqual([1]);
     expect(s.stats.oxSurvived).toEqual([0, 1, 0]);
+  });
+});
+
+describe("OX free movement (§4)", () => {
+  it("lets players switch sides until time runs out — where they stand at the end counts", () => {
+    let s = only("ox", 2);
+    const a = currentQuestion(s)!.answer;
+    s = act(s, { type: "ANSWER", seat: 0, q: 0, choice: a });
+    s = act(s, { type: "ANSWER", seat: 1, q: 0, choice: a });
+    // 모두 자리를 잡아도 시간이 끝날 때까지 기다린다
+    expect(allAnswered(s)).toBe(false);
+    s = act(s, { type: "ANSWER", seat: 0, q: 0, choice: 1 - a });
+    expect(s.answers[0].correct).toBe(false);
+    const same = act(s, { type: "ANSWER", seat: 0, q: 0, choice: 1 - a });
+    expect(same).toBe(s);
+    s = act(s, { type: "ANSWER", seat: 1, q: 0, choice: 1 - a });
+    s = act(s, { type: "ANSWER", seat: 1, q: 0, choice: a });
+    s = timeout(s);
+    expect(s.eliminated).toEqual([0]);
+    expect(s.alive).toEqual([false, true]);
+  });
+
+  it("bot plans end on the bot's final choice", () => {
+    const s = only("ox", 2);
+    for (let i = 0; i < 50; i++) {
+      const plan = chooseBotOxPlan(s, 5);
+      expect(plan.length).toBeGreaterThan(0);
+      for (const c of plan) expect([0, 1]).toContain(c);
+    }
   });
 });
 

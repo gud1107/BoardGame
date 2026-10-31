@@ -135,6 +135,10 @@ export default function QPlayTable3D({ state, viewerSeat, names, connectedSeats,
       if (a?.correct && q?.kind === "chosung") {
         mood = "smug";
         tag = { text: `✅ ${order.indexOf(s) + 1}등`, color: "#4ade80" };
+      } else if (q?.kind === "ox" && a?.choice != null) {
+        // OX는 광장에서 서 있는 쪽이 다 보이니 3D에서도 지금 쪽을 띄운다(시간 끝까지 바뀔 수 있음)
+        mood = "nervous";
+        tag = a.choice === 0 ? { text: "⭕ 쪽", color: "#7dd3fc" } : { text: "❌ 쪽", color: "#fda4af" };
       } else if (finished) {
         tag = { text: "✔️ 답변 완료", color: "#e2e8f0" };
       } else {

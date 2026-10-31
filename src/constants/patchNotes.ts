@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.133.0",
+    releaseDate: "2026-11-01",
+    title: "⭕❌ 큐플레이 OX — 광장을 뛰어다니며 고르기",
+    changes: [
+      { game: "qplay", type: "FEAT", desc: "⭕❌ OX 서바이벌이 광장으로 바뀌었어요 — 내 말을 눌러·끌어 ⭕ 구역과 ❌ 구역을 마음대로 오가고, 시간이 끝날 때 서 있는 쪽이 내 답 (←/→ 키도 OK)" },
+      { game: "qplay", type: "FEAT", desc: "👀 다른 사람이 어느 쪽으로 달려가는지 실시간으로 보여요 — 따라갈지 버틸지 눈치 싸움! 봇도 가끔 반대쪽에 갔다가 넘어와요" },
+      { game: "qplay", type: "IMPROVE", desc: "⏱ OX는 모두 자리를 잡아도 8초를 끝까지 써요 (막판에 옮길 수 있게) · 3D 화면에선 광장이 위, 테이블이 아래" },
+    ],
+  },
+  {
     version: "v1.132.0",
     releaseDate: "2026-11-01",
     title: "🏷️ 카드 자리 띠에 이름 · 내 카드는 띠 없이",

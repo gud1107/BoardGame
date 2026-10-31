@@ -25,10 +25,12 @@ import {
   botDelayMs,
   chooseBotChoice,
   chooseBotClimb,
+  chooseBotOxPlan,
   chooseBotTarget,
   chooseBotTyping,
   computeRankings,
   currentMini,
+  currentQuestion,
   eligibleSeats,
   hasFinished,
   phaseDurationMs,
@@ -659,7 +661,7 @@ export default function QPlayGame({ onComplete }: PlayableGameProps) {
   const stageSeenRef = useRef<{ stage: number; round: number; at: number } | null>(null);
   const timeoutSentRef = useRef<number | null>(null);
   /** 봇 좌석 → 다음에 답할 시각. stage가 바뀌면 새로 잡는다. */
-  const botClockRef = useRef<{ stage: number; next: Map<Seat, number> }>({ stage: -1, next: new Map() });
+  const botClockRef = useRef<{ stage: number; next: Map<Seat, number>; ox: Map<Seat, number[]> }>({ stage: -1, next: new Map(), ox: new Map() });
   useEffect(() => {
     if (phase !== "playing") return;
     const interval = window.setInterval(() => {
@@ -691,12 +693,14 @@ export default function QPlayGame({ onComplete }: PlayableGameProps) {
         if (clock.stage !== state.stage) {
           clock.stage = state.stage;
           clock.next = new Map();
+          clock.ox = new Map();
         }
         const mini = currentMini(state);
+        const isOx = state.phase === "question" && currentQuestion(state)?.kind === "ox";
         for (const seat of allBotSeatsRef.current) {
           if (seat >= state.seatCount) continue;
           if (state.phase === "aim" && seat !== state.shooter) continue;
-          if (state.phase === "question" && (!eligibleSeats(state).includes(seat) || hasFinished(state, seat))) continue;
+          if (state.phase === "question" && (!eligibleSeats(state).includes(seat) || (hasFinished(state, seat) && !(isOx && clock.ox.get(seat)?.length)))) continue;
           const idx = botSeatsRef.current.indexOf(seat);
           const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
           const at = clock.next.get(seat);
@@ -717,6 +721,15 @@ export default function QPlayGame({ onComplete }: PlayableGameProps) {
             const right = move.choice === state.questions[move.idx]?.answer;
             clock.next.set(seat, now + botClimbDelayMs(level) + (right ? 0 : 1000));
             handleAction({ type: "CLIMB", seat, ...move });
+          } else if (isOx) {
+            // OX — 계획대로 O ↔ X를 오가다 마지막 칸에 선다(마감 0.7초 전엔 바로 최종 칸으로).
+            const plan = clock.ox.get(seat) ?? chooseBotOxPlan(state, level);
+            const left = seen.at + duration - now;
+            const choice = left < 1600 ? plan[plan.length - 1] : plan[0];
+            const rest = left < 1600 ? [] : plan.slice(1);
+            clock.ox.set(seat, rest);
+            clock.next.set(seat, rest.length ? now + Math.min(900 + Math.random() * 1300, Math.max(0, left - 900)) : now + 60_000);
+            if (choice !== undefined) handleAction({ type: "ANSWER", seat, q: state.qIndex, choice });
           } else if (mini === "chosung") {
             const text = chooseBotTyping(state, seat, level);
             clock.next.set(seat, text ? now + 2500 + Math.random() * 3000 : now + 60_000);
