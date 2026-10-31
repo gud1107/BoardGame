@@ -81,4 +81,23 @@ describe("skin catalog", () => {
         expect(d, `${backs[i].id} ~ ${backs[j].id}`).toBeGreaterThanOrEqual(10);
       }
   });
+
+  it("keeps every pattern back's silhouette visible on both themes (border or fill ≥ 3:1)", () => {
+    // WCAG non-text contrast: a card edge reads when its frame (accent) or its
+    // body (base) stands 3:1 off the page. Dark = page bg and its lighter top glow,
+    // light = page bg, panel and white. A light accent on a light base fails here.
+    const lum = (hex: string) => {
+      const n = parseInt(hex.slice(1), 16);
+      const f = (v: number) => ((v /= 255) > 0.03928 ? ((v + 0.055) / 1.055) ** 2.4 : v / 12.92);
+      return 0.2126 * f(n >> 16) + 0.7152 * f((n >> 8) & 255) + 0.0722 * f(n & 255);
+    };
+    const ratio = (a: string, b: string) => {
+      const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+      return (hi + 0.05) / (lo + 0.05);
+    };
+    const pages = { dark: ["#0b0b12", "#1a1230"], light: ["#dde2e8", "#eceff3", "#ffffff"] };
+    for (const b of CARD_BACK_SKINS.filter((s) => !s.image))
+      for (const [theme, bgs] of Object.entries(pages))
+        for (const bg of bgs) expect(Math.max(ratio(b.accent, bg), ratio(b.colors[0], bg)), `${b.id} on ${theme} ${bg}`).toBeGreaterThanOrEqual(3);
+  });
 });

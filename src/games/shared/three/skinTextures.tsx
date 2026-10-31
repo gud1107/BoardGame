@@ -20,18 +20,36 @@ const feltCache = new Map<string, THREE.CanvasTexture>();
 /**
  * Two players can wear the same back. A held card stays in its holder's hands
  * under their name plate, but the card itself also carries the seat colour as a
- * band top and bottom (like the plate's inner border), so whose card it is reads
- * from the card alone. Cached per skin + seat colour.
+ * band top and bottom (like the plate's inner border) with the first two
+ * characters of the holder's name in it — colour alone fails red/green colour
+ * blindness, and two characters keep 민수/민지 apart. Never on my own cards (in
+ * first person they sit right under my eyes). Cached per skin + seat.
  */
-function drawSeatBands(ctx: CanvasRenderingContext2D, w: number, h: number, band: string | undefined) {
-  if (!band) return;
-  ctx.fillStyle = band;
-  ctx.fillRect(18, 18, w - 36, 24);
-  ctx.fillRect(18, h - 42, w - 36, 24);
+export interface SeatBand {
+  color: string;
+  name: string;
 }
 
-export function skinBackTexture(skin: CardBackSkin, band?: string): THREE.Texture {
-  const key = `${skin.id}|${band ?? ""}`;
+const tmpHsl = { h: 0, s: 0, l: 0 };
+
+function drawSeatBands(ctx: CanvasRenderingContext2D, w: number, h: number, band: SeatBand | undefined) {
+  if (!band) return;
+  const label = Array.from(band.name.trim()).slice(0, 2).join("");
+  const dark = new THREE.Color(band.color).getHSL(tmpHsl).l > 0.6;
+  for (const y of [18, h - 52]) {
+    ctx.fillStyle = band.color;
+    ctx.fillRect(18, y, w - 36, 34);
+    if (!label) continue;
+    ctx.fillStyle = dark ? "#111" : "#fff";
+    ctx.font = "bold 28px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, w / 2, y + 18);
+  }
+}
+
+export function skinBackTexture(skin: CardBackSkin, band?: SeatBand): THREE.Texture {
+  const key = `${skin.id}|${band ? `${band.color}|${band.name}` : ""}`;
   const hit = backCache.get(key);
   if (hit) return hit;
   if (skin.image) {
@@ -112,7 +130,8 @@ export function CardBackOwner({ name, me, color, children }: { name: string; me:
 export function useSkinnedBack(fallback: THREE.Texture): THREE.Texture {
   const owner = useContext(OwnerContext);
   const skin = useCardBackSkin(owner?.name, owner?.me ?? false);
-  return owner && skin ? skinBackTexture(skin, owner.color) : fallback;
+  if (!owner || !skin) return fallback;
+  return skinBackTexture(skin, owner.me || !owner.color ? undefined : { color: owner.color, name: owner.name });
 }
 
 /** The surrounding seat's player's 🎨 prop skin (null outside a seat or when they picked none). */

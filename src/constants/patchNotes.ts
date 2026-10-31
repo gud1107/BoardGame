@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.132.0",
+    releaseDate: "2026-11-01",
+    title: "🏷️ 카드 자리 띠에 이름 · 내 카드는 띠 없이",
+    changes: [
+      { game: "common", type: "IMPROVE", desc: "🏷️ 3D 스킨 뒷면의 자리 색 띠에 주인 이름 앞 두 글자 — 색이 헷갈려도(적록 색약 등) 가까이서 누구 카드인지 읽혀요" },
+      { game: "common", type: "IMPROVE", desc: "🙈 내 손패에는 자리 띠를 넣지 않아요 — 1인칭으로 내려다볼 때 눈앞을 가리지 않게" },
+    ],
+  },
+  {
     version: "v1.131.0",
     releaseDate: "2026-11-01",
     title: "🗣️ 여러 게임에서 내 캐릭터 목소리로 외치기",
