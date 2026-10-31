@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { describe, expect, it } from "vitest";
 import { compileScore, compileTrack, eventsAt, loopLength, noteToFreq } from "./proceduralScore";
 import { INSTRUMENTS, type SfxPart, type SuiteConfig } from "./proceduralSuite";
