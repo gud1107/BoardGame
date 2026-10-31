@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PERSONA_ORDER } from "@/games/shared/three/persona";
 import { CHARACTER_PRESETS } from "@/lib/character/avatar";
-import { characterVoice, introLine, isVoiced, passLine, PRESET_VOICES, spokenPhrases, VOICE_GAP, VoiceGate, voiceLine, voiceProfile, type VoicedMood } from "./characterVoice";
+import { characterVoice, CROSS_VOICE, introLine, isVoiced, PASS_STALE, PassQueue, voiceGender, passLine, PRESET_VOICES, spokenPhrases, VOICE_GAP, VoiceGate, voiceLine, voiceProfile, type VoicedMood } from "./characterVoice";
 
 const MOODS: VoicedMood[] = ["cheer", "shock", "laugh", "sad", "smug", "nervous", "point", "clap", "shrug", "slump", "raise"];
 
@@ -128,5 +128,77 @@ describe("character voices", () => {
     for (const c of CHARACTER_PRESETS)
       for (const ph of spokenPhrases(introLine(PRESET_VOICES[c.id].persona, c.name))) expect(ph.text).toMatch(/^[가-힣 ,.!?]+$/);
     expect(said.size).toBeGreaterThanOrEqual(8);
+  });
+});
+
+describe("one installed voice", () => {
+  it("knows the gender of the common Korean voices", () => {
+    expect(voiceGender("Microsoft Heami - Korean (Korean)")).toBe("f");
+    expect(voiceGender("Google 한국의")).toBe("f");
+    expect(voiceGender("Microsoft InJoon Online (Natural) - Korean (Korea)")).toBe("m");
+    expect(voiceGender("Microsoft SunHi Online (Natural) - Korean (Korea)")).toBe("f");
+    expect(voiceGender("ko-kr-x-koc-local")).toBe("m");
+    expect(voiceGender("ko-kr-x-ism-network")).toBe("f");
+    expect(voiceGender("Female")).toBe("f");
+    expect(voiceGender("Korean")).toBeNull();
+  });
+
+  it("keeps every man below every woman when both share one woman's voice", () => {
+    const voices = CHARACTER_PRESETS.map((c) => characterVoice(0, { presetId: c.id }));
+    const men = voices.filter((v) => v.gender === "m").map((v) => v.pitch * CROSS_VOICE.m.pitch);
+    const women = voices.filter((v) => v.gender === "f").map((v) => v.pitch);
+    // a clear gap (≈ 4 semitones+), not a hair's breadth
+    expect(Math.min(...women) / Math.max(...men)).toBeGreaterThan(1.3);
+    expect(Math.min(...men)).toBeGreaterThanOrEqual(0.5); // lower turns robotic
+  });
+});
+
+describe("pass queue", () => {
+  it("speaks at once when quiet, waits when busy, and keeps only the latest waiting pass", () => {
+    const q = new PassQueue<string>();
+    expect(q.offer("a", 0, false)).toBe("a");
+    expect(q.offer("b", 0.5, true)).toBeNull();
+    expect(q.offer("c", 0.9, true)).toBeNull();
+    expect(q.take(1.2, true)).toBeNull();
+    expect(q.take(1.4, false)).toBe("c");
+    expect(q.pending).toBe(false);
+  });
+
+  it("drops a pass that waited too long", () => {
+    const q = new PassQueue<string>();
+    q.offer("a", 0, true);
+    expect(q.take(PASS_STALE + 0.1, false)).toBeNull();
+  });
+
+  it("8-player bot burst: no line is cut, the last pass is heard, none heard late", () => {
+    for (let seed = 1; seed <= 50; seed++) {
+      let r = seed;
+      const rand = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+      const passAt: number[] = [];
+      for (let t = 0, i = 0; i < 7; i++) passAt.push((t += 0.5 + rand())); // bots act 0.5–1.5 s apart
+      const LINE = 1.45; // longest pass line ("저, 패스할게요…") at normal pace
+      const q = new PassQueue<number>();
+      const heard: { seat: number; start: number }[] = [];
+      let busyUntil = -1;
+      const start = (seat: number, t: number, pace: number) => {
+        heard.push({ seat, start: t });
+        busyUntil = t + LINE / pace;
+      };
+      for (let t = 0; t <= 20; t = Math.round((t + 0.12) * 100) / 100) {
+        passAt.forEach((at, seat) => {
+          if (at > t - 0.12 && at <= t) {
+            const ready = q.offer(seat, t, t < busyUntil);
+            if (ready !== null) start(ready, t, 1);
+          }
+        });
+        const next = q.take(t, t < busyUntil);
+        if (next !== null) start(next, t, 1.15);
+      }
+      // a line starts only once the previous finished — nothing chopped
+      for (let i = 1; i < heard.length; i++) expect(heard[i].start).toBeGreaterThanOrEqual(heard[i - 1].start + LINE / 1.15 - 1e-9);
+      expect(heard.at(-1)?.seat).toBe(6);
+      for (const h of heard) expect(h.start - passAt[h.seat]).toBeLessThanOrEqual(PASS_STALE);
+      expect(heard.length).toBeGreaterThanOrEqual(3);
+    }
   });
 });

@@ -285,21 +285,79 @@ export function introLine(persona: Persona, name: string): string {
   }[persona];
 }
 
+/**
+ * Which gender an installed Korean voice speaks in, from its name (null = can't tell).
+ * Windows: Heami/SunHi (f), InJoon/Hyunsu (m); Chrome's network "Google 한국의" is a woman;
+ * Android ships codes (ko-kr-x-ism/kob = f, koc/kod = m); iOS Yuna/Sora/Suhyun (f), Minsu (m).
+ */
+export function voiceGender(name: string): "f" | "m" | null {
+  // "female" contains "male" — rule female names out before matching male ones
+  if (/female|woman|여성|heami|sunhi|yuna|sora|jimin|seoyeon|nara|suhyun|google|x-ism|x-kob/i.test(name)) return "f";
+  if (/male|\bman\b|남성|injoon|hyunsu|minho|jinho|minsu|x-koc|x-kod/i.test(name)) return "m";
+  return null;
+}
+
+/**
+ * With no voice of the character's gender installed (desktop Chrome on Windows has only women:
+ * Heami + Google), pitch alone has to carry it: a man on a woman's voice goes well below his
+ * usual pitch and a touch slower, a woman on a man's voice well above, so they still read as
+ * the other gender rather than a slightly lower/higher copy of the same one.
+ */
+export const CROSS_VOICE: Record<"f" | "m", { pitch: number; rate: number }> = {
+  m: { pitch: 0.75, rate: 0.94 },
+  f: { pitch: 1.25, rate: 1.03 },
+};
+
+/** Seconds a waiting pass stays news; older ones are dropped (the bubble already showed it). */
+export const PASS_STALE = 2.5;
+
+/**
+ * Passes take turns instead of cutting each other off. Bots pass 0.5–1.5 s apart while a pass
+ * line takes about 1–1.5 s, so cutting the one playing chopped every line in a big game. Now a
+ * line always finishes; while it plays, the newest pass waits (replacing any older waiting
+ * one — at a fast table you hear the first and the latest, never fragments).
+ */
+export class PassQueue<T> {
+  private waiting: { item: T; at: number } | null = null;
+
+  /** A new pass at `now` (seconds): the item to speak right away, or null if it waits. */
+  offer(item: T, now: number, busy: boolean): T | null {
+    if (!busy) {
+      this.waiting = null;
+      return item;
+    }
+    this.waiting = { item, at: now };
+    return null;
+  }
+
+  /** Once the voice is free: the waiting pass, unless it went stale. */
+  take(now: number, busy: boolean): T | null {
+    if (busy || !this.waiting) return null;
+    const w = this.waiting;
+    this.waiting = null;
+    return now - w.at <= PASS_STALE ? w.item : null;
+  }
+
+  get pending(): boolean {
+    return this.waiting !== null;
+  }
+}
+
 // --- browser side -------------------------------------------------------------------------
 
 const gate = new VoiceGate();
 const said = new Map<number, number>();
 
-const FEMALE = /female|woman|여성|heami|sunhi|yuna|sora|jimin|seoyeon|nara/i;
-const MALE = /male|man|남성|injoon|hyunsu|minho|jinho/i;
-
-function pickVoice(gender: "f" | "m", slot: number): SpeechSynthesisVoice | null {
-  const ko = window.speechSynthesis.getVoices().filter((v) => v.lang?.toLowerCase().startsWith("ko"));
-  if (ko.length === 0) return null;
-  // "female" contains "male" — rule female names out before matching male ones
-  const want = ko.filter((v) => (gender === "f" ? FEMALE.test(v.name) : !FEMALE.test(v.name) && MALE.test(v.name)));
-  const pool = want.length > 0 ? want : ko;
-  return pool[slot % pool.length];
+/** An installed Korean voice for `gender`; `cross` = none of that gender, so the pitch has to carry it. */
+function pickVoice(gender: "f" | "m", slot: number): { voice: SpeechSynthesisVoice | null; cross: boolean } {
+  const ko = window.speechSynthesis.getVoices().filter((v) => v.lang?.toLowerCase().startsWith("ko") || /ko-kr/i.test(v.name));
+  if (ko.length === 0) return { voice: null, cross: false };
+  const want = ko.filter((v) => voiceGender(v.name) === gender);
+  if (want.length > 0) return { voice: want[slot % want.length], cross: false };
+  // unknown names may well be the right gender; only a table of known other-gender voices is cross
+  const unknown = ko.filter((v) => voiceGender(v.name) === null);
+  if (unknown.length > 0) return { voice: unknown[slot % unknown.length], cross: false };
+  return { voice: ko[slot % ko.length], cross: true };
 }
 
 /**
@@ -314,18 +372,19 @@ export function nextEmotionLine(seat: number, mood: PersonMood, persona: Persona
   return voiceLine(persona, mood, seat, n);
 }
 
-/** Queue `text` in `voice`, phrase by phrase. The caller has already checked sound is on. */
-function say(voice: CharacterVoice, text: string) {
+/** Queue `text` in `voice`, phrase by phrase (`pace` > 1 = hurried). The caller has already checked sound is on. */
+function say(voice: CharacterVoice, text: string, pace = 1) {
   const synth = window.speechSynthesis;
   const volume = voice.volume * useAudioSettingsStore.getState().sfxVolume;
   try {
-    const v = pickVoice(voice.gender, voice.slot);
+    const { voice: v, cross } = pickVoice(voice.gender, voice.slot);
+    const shift = cross ? CROSS_VOICE[voice.gender] : { pitch: 1, rate: 1 };
     // queued back to back, so the phrases play as one line with a breath between them
     for (const ph of spokenPhrases(text)) {
       const u = new SpeechSynthesisUtterance(ph.text);
       u.lang = "ko-KR";
-      u.pitch = Math.max(0, Math.min(2, voice.pitch * ph.pitch));
-      u.rate = voice.rate * ph.rate;
+      u.pitch = Math.max(0, Math.min(2, voice.pitch * shift.pitch * ph.pitch));
+      u.rate = voice.rate * shift.rate * ph.rate * pace;
       u.volume = volume;
       if (v) u.voice = v;
       synth.speak(u);
@@ -347,23 +406,36 @@ export function speakEmotion(o: { seat: number; mood: PersonMood; voice: Charact
   say(o.voice, o.text);
 }
 
-let lastPass = -Infinity;
+const passQueue = new PassQueue<{ seat: number; voice: CharacterVoice }>();
 const passes = new Map<number, number>();
+let passTimer: number | null = null;
+
+const sayPass = (p: { seat: number; voice: CharacterVoice }, pace: number) => {
+  const n = (passes.get(p.seat) ?? 0) + 1;
+  passes.set(p.seat, n);
+  say(p.voice, passLine(p.voice.persona, p.seat, n), pace);
+};
+const voiceBusy = () => window.speechSynthesis.speaking || window.speechSynthesis.pending;
 
 /**
- * A pass in this seat's character voice ("저, 패스할게요…" / "패스 패스!" …). A newer pass cuts
- * the one still playing (passes run round the table fast, the latest is the news); two
- * within 200 ms collapse into one. Safe to call anywhere.
+ * A pass in this seat's character voice ("저, 패스할게요…" / "패스 패스!" …). Never cuts a
+ * line that is playing — it waits its turn (see PassQueue) and, having waited, is said a bit
+ * quicker to catch up with the table. Safe to call anywhere.
  */
 export function speakPass(seat: number, voice: CharacterVoice) {
   if (!canSpeak()) return;
-  const now = performance.now();
-  if (now - lastPass < 200) return;
-  lastPass = now;
-  const n = (passes.get(seat) ?? 0) + 1;
-  passes.set(seat, n);
-  window.speechSynthesis.cancel();
-  say(voice, passLine(voice.persona, seat, n));
+  const now = performance.now() / 1000;
+  const ready = passQueue.offer({ seat, voice }, now, voiceBusy());
+  if (ready) return sayPass(ready, 1);
+  if (passTimer !== null) return;
+  passTimer = window.setInterval(() => {
+    const next = passQueue.take(performance.now() / 1000, voiceBusy());
+    if (next && canSpeak()) sayPass(next, 1.15);
+    if (!passQueue.pending && passTimer !== null) {
+      window.clearInterval(passTimer);
+      passTimer = null;
+    }
+  }, 120);
 }
 
 /** The picked cast character introduces themself in their own voice (profile preview). */

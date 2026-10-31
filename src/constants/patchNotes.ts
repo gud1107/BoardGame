@@ -79,6 +79,8 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     changes: [
       { game: "common", type: "FEAT", desc: "🗣️ 프로필에서 고른 캐릭터(하린·도윤…)마다 자기 목소리·말투 — 어느 자리에 앉아도 같은 목소리, 고를 때 인사해요" },
       { game: "dalmuti", type: "IMPROVE", desc: "🗣️ 패스도 그 사람 캐릭터 목소리로 — 수줍은 \"저, 패스할게요…\"부터 \"패스 패스!\"까지 성격마다 달라요" },
+      { game: "dalmuti", type: "FIX", desc: "🗣️ 봇 여러 명이 연달아 패스해도 앞사람 음성이 중간에 끊기지 않고, 차례를 기다렸다 조금 빠르게 말해요" },
+      { game: "common", type: "IMPROVE", desc: "🗣️ 남자 음성이 없는 기기(윈도우 크롬 등)에서도 남자 캐릭터는 확실히 낮은 목소리로 — 여자 캐릭터와 헷갈리지 않아요" },
     ],
   },
   {
