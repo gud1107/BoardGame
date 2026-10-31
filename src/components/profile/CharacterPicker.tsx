@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
+import { speakIntro } from "@/lib/audio/characterVoice";
 import { AVATAR_OPTIONS, CHARACTER_PRESETS, DYED_BY_DEFAULT, resolveLook, VRM_MODEL_GENDER, VRM_WARDROBE, wardrobeFor, type AvatarProfile, type PersonLook, type VrmModel, type WardrobeSlot } from "@/lib/character/avatar";
 import { MAX_SAVED, portraitKey, PREVIOUS_ACCOUNT_LOOK, useMyCharacter } from "@/lib/character/myCharacter";
 
@@ -213,7 +214,11 @@ export default function CharacterPicker({ showPreview = true, customizing = fals
                 key={c.id}
                 type="button"
                 aria-pressed={selected}
-                onClick={() => save({ ...c.look, presetId: c.id })}
+                onClick={() => {
+                  save({ ...c.look, presetId: c.id });
+                  // a hello in the voice they'll have at every table
+                  speakIntro(c.id);
+                }}
                 className={`flex flex-col items-center gap-0.5 rounded-xl border p-1.5 transition ${
                   selected
                     ? "border-rose-400 bg-rose-500/15 ring-2 ring-rose-400/40"

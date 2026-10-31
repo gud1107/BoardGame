@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.126.0",
+    releaseDate: "2026-11-01",
+    title: "🗣️ 캐릭터마다 고유 목소리",
+    changes: [
+      { game: "common", type: "FEAT", desc: "🗣️ 프로필에서 고른 캐릭터(하린·도윤…)마다 자기 목소리·말투 — 어느 자리에 앉아도 같은 목소리, 고를 때 인사해요" },
+      { game: "dalmuti", type: "IMPROVE", desc: "🗣️ 패스도 그 사람 캐릭터 목소리로 — 수줍은 \"저, 패스할게요…\"부터 \"패스 패스!\"까지 성격마다 달라요" },
+    ],
+  },
+  {
     version: "v1.125.0",
     releaseDate: "2026-11-01",
     title: "🎁 보상 69종 — 몇 판마다 하나씩 촘촘하게",

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PERSONA_ORDER } from "@/games/shared/three/persona";
-import { isVoiced, spokenPhrases, VOICE_GAP, VoiceGate, voiceLine, voiceProfile, type VoicedMood } from "./characterVoice";
+import { CHARACTER_PRESETS } from "@/lib/character/avatar";
+import { characterVoice, introLine, isVoiced, passLine, PRESET_VOICES, spokenPhrases, VOICE_GAP, VoiceGate, voiceLine, voiceProfile, type VoicedMood } from "./characterVoice";
 
 const MOODS: VoicedMood[] = ["cheer", "shock", "laugh", "sad", "smug", "nervous", "point", "clap", "shrug", "slump", "raise"];
 
@@ -85,5 +86,47 @@ describe("VoiceGate", () => {
     expect(g.allow(3, "shock", VOICE_GAP.urgent - 0.1, true)).toBe("skip");
     expect(g.allow(4, "shock", VOICE_GAP.urgent + 0.1, true)).toBe("cut");
     expect(g.allow(5, "sad", VOICE_GAP.urgent + VOICE_GAP.global + 0.2, false)).toBe("speak");
+  });
+});
+
+describe("character voices", () => {
+  it("gives every cast character their own pitch, inside their gender's band", () => {
+    const pitches = CHARACTER_PRESETS.map((p) => {
+      const v = PRESET_VOICES[p.id];
+      expect(v, p.id).toBeDefined();
+      if (p.look.gender === "f") expect(v.pitch).toBeGreaterThan(1.05);
+      else expect(v.pitch).toBeLessThan(1.05);
+      return v.pitch.toFixed(2);
+    });
+    expect(new Set(pitches).size).toBe(CHARACTER_PRESETS.length);
+  });
+
+  it("keeps a chosen character's voice the same at any seat", () => {
+    const a = characterVoice(0, { presetId: "haerin" });
+    const b = characterVoice(5, { presetId: "haerin" }, "m");
+    expect(b).toEqual(a);
+    expect(a).toMatchObject({ gender: "f", persona: "shy", pitch: PRESET_VOICES.haerin.pitch });
+    expect(characterVoice(0, { presetId: "doyoon" }).gender).toBe("m");
+  });
+
+  it("falls back to the seat's voice without a cast character", () => {
+    const v = characterVoice(3, { gender: "f" });
+    expect(v.gender).toBe("f");
+    expect(v.pitch).toBe(voiceProfile(3, "f", v.persona).pitch);
+    expect(characterVoice(3, { presetId: "no-such" }, "m").gender).toBe("m");
+    expect(characterVoice(2).gender).toBe("f");
+  });
+
+  it("says a pass each persona's way, in words the engine can speak", () => {
+    const said = new Set<string>();
+    for (const p of PERSONA_ORDER)
+      for (let n = 1; n <= 6; n++) {
+        const line = passLine(p, n, n);
+        said.add(line);
+        for (const ph of spokenPhrases(line)) expect(ph.text).toMatch(/^[가-힣 ,.!?]+$/);
+      }
+    for (const c of CHARACTER_PRESETS)
+      for (const ph of spokenPhrases(introLine(PRESET_VOICES[c.id].persona, c.name))) expect(ph.text).toMatch(/^[가-힣 ,.!?]+$/);
+    expect(said.size).toBeGreaterThanOrEqual(8);
   });
 });

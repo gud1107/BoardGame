@@ -4,17 +4,20 @@
  *
  * Each character sounds like themself along three axes:
  *  - lines:  the persona picks the words ("야호!" vs a shy "와… 됐다" vs a starer's "봤지?")
- *  - voice:  gender + seat set the pitch; with several Korean voices installed, women and men
- *            get different ones
+ *  - voice:  gender + pitch; with several Korean voices installed, women and men get different ones
  *  - manner: the persona sets speed and loudness (the dreamer drawls, the shy one murmurs)
+ *
+ * A player who picked a ready-made character (프로필 → 캐릭터 선택) gets that character's own
+ * voice at every table and seat (`characterVoice`); everyone else falls back to their seat.
  *
  * The choice logic (lines, profile, who may speak now) is pure and unit-tested; `speakEmotion`
  * is the thin browser side. Respects the shared SFX mute/volume — speechSynthesis bypasses the
  * Web Audio gain graph, so it is checked here (same as SoundEngine.speakPass).
  */
 
-import type { Persona } from "@/games/shared/three/persona";
+import { personaFor, type Persona } from "@/games/shared/three/persona";
 import type { PersonMood } from "@/games/shared/three/SeatedPerson";
+import { CHARACTER_PRESETS, type AvatarProfile } from "@/lib/character/avatar";
 import { isSfxEffectivelyMuted, useAudioSettingsStore } from "./audioSettings";
 
 /** Moods worth a voice line. Idle/working moods (rest, think, talk, write) stay silent. */
@@ -132,6 +135,57 @@ export function voiceProfile(seat: number, gender: "f" | "m", persona: Persona):
   return { pitch: Math.max(0.5, Math.min(2, pitch)), rate: m.rate, volume: m.volume };
 }
 
+/**
+ * The ready-made cast's voices: a persona that fits the concept (words + manner) and a pitch
+ * inside their gender's band, all different, so 하린 sounds like 하린 wherever she sits.
+ * Keyed by preset id (stable, stored in profiles); the test checks every preset has one.
+ */
+export const PRESET_VOICES: Record<string, { persona: Persona; pitch: number }> = {
+  haerin: { persona: "shy", pitch: 1.42 },
+  yuna: { persona: "starer", pitch: 1.18 },
+  sia: { persona: "fidget", pitch: 1.56 },
+  chaewon: { persona: "focused", pitch: 1.24 },
+  minji: { persona: "scanner", pitch: 1.36 },
+  seoa: { persona: "starer", pitch: 1.1 },
+  doyoon: { persona: "starer", pitch: 0.78 },
+  jun: { persona: "dreamer", pitch: 0.83 },
+  taeo: { persona: "shy", pitch: 0.95 },
+  hyun: { persona: "focused", pitch: 0.88 },
+  riku: { persona: "scanner", pitch: 0.98 },
+  ian: { persona: "fidget", pitch: 1.02 },
+  danbi: { persona: "shy", pitch: 1.5 },
+  sua: { persona: "focused", pitch: 1.3 },
+  bomi: { persona: "dreamer", pitch: 1.46 },
+  ella: { persona: "scanner", pitch: 1.52 },
+  nabi: { persona: "fidget", pitch: 1.62 },
+  vita: { persona: "focused", pitch: 1.14 },
+  ria: { persona: "dreamer", pitch: 1.2 },
+  geonu: { persona: "focused", pitch: 0.73 },
+  haechan: { persona: "scanner", pitch: 0.9 },
+};
+
+/** Everything that makes one character sound like themself. `slot` picks among installed Korean voices. */
+export interface CharacterVoice extends VoiceProfile {
+  gender: "f" | "m";
+  persona: Persona;
+  slot: number;
+}
+
+/**
+ * The voice of whoever sits at `seat`: their chosen character's own voice if they picked one
+ * from the cast, else a seat-based one in the gender they look (`gender`, default: the
+ * seat's default look — women on even seats).
+ */
+export function characterVoice(seat: number, avatar?: AvatarProfile, gender?: "f" | "m"): CharacterVoice {
+  const idx = avatar?.presetId ? CHARACTER_PRESETS.findIndex((p) => p.id === avatar.presetId) : -1;
+  const preset = idx >= 0 ? CHARACTER_PRESETS[idx] : null;
+  const own = preset ? PRESET_VOICES[preset.id] : undefined;
+  const g = preset?.look.gender ?? avatar?.gender ?? gender ?? (seat % 2 === 0 ? "f" : "m");
+  if (own) return { gender: g, persona: own.persona, pitch: own.pitch, ...MANNER[own.persona], slot: idx };
+  const persona = personaFor(seat);
+  return { gender: g, persona, ...voiceProfile(seat, g, persona), slot: seat };
+}
+
 /** One breath of a line, with its intonation relative to the speaker's own pitch and pace. */
 export interface SpokenPhrase {
   text: string;
@@ -203,6 +257,34 @@ export class VoiceGate {
   }
 }
 
+/** A pass, said the character's way — short, since passes come every round. */
+const PASS_LINES: Record<Persona, string[]> = {
+  starer: ["패스.", "넘겨."],
+  shy: ["저, 패스할게요…", "패스요…"],
+  scanner: ["난 패스!", "패스, 패스!"],
+  focused: ["패스.", "이번엔 넘긴다."],
+  dreamer: ["음~ 패스.", "패스~"],
+  fidget: ["패스 패스!", "아, 패스!"],
+};
+
+/** The `n`-th pass line for this character. */
+export function passLine(persona: Persona, seat: number, n: number): string {
+  const lines = PASS_LINES[persona];
+  return lines[Math.floor(hash(seat + 3, n) * lines.length) % lines.length];
+}
+
+/** How a character greets you when picked in the profile — a preview of their voice. */
+export function introLine(persona: Persona, name: string): string {
+  return {
+    starer: `${name}. 잘 부탁해.`,
+    shy: `저, ${name}… 잘 부탁해요.`,
+    scanner: `안녕! ${name}, 잘 부탁해!`,
+    focused: `${name}. 같이 잘 해보자.`,
+    dreamer: `음~ ${name}, 잘 부탁해~`,
+    fidget: `안녕 안녕! ${name}, 잘 부탁해!`,
+  }[persona];
+}
+
 // --- browser side -------------------------------------------------------------------------
 
 const gate = new VoiceGate();
@@ -211,13 +293,13 @@ const said = new Map<number, number>();
 const FEMALE = /female|woman|여성|heami|sunhi|yuna|sora|jimin|seoyeon|nara/i;
 const MALE = /male|man|남성|injoon|hyunsu|minho|jinho/i;
 
-function pickVoice(gender: "f" | "m", seat: number): SpeechSynthesisVoice | null {
+function pickVoice(gender: "f" | "m", slot: number): SpeechSynthesisVoice | null {
   const ko = window.speechSynthesis.getVoices().filter((v) => v.lang?.toLowerCase().startsWith("ko"));
   if (ko.length === 0) return null;
   // "female" contains "male" — rule female names out before matching male ones
   const want = ko.filter((v) => (gender === "f" ? FEMALE.test(v.name) : !FEMALE.test(v.name) && MALE.test(v.name)));
   const pool = want.length > 0 ? want : ko;
-  return pool[seat % pool.length];
+  return pool[slot % pool.length];
 }
 
 /**
@@ -232,30 +314,63 @@ export function nextEmotionLine(seat: number, mood: PersonMood, persona: Persona
   return voiceLine(persona, mood, seat, n);
 }
 
-/** Say `text` in this seat's voice, if sound is on, the mood is a big moment and the gate lets it through. Safe to call anywhere. */
-export function speakEmotion(o: { seat: number; mood: PersonMood; persona: Persona; gender: "f" | "m"; text: string }) {
-  if (!isVoiced(o.mood)) return;
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  const settings = useAudioSettingsStore.getState();
-  if (isSfxEffectivelyMuted(settings)) return;
+/** Queue `text` in `voice`, phrase by phrase. The caller has already checked sound is on. */
+function say(voice: CharacterVoice, text: string) {
   const synth = window.speechSynthesis;
-  const verdict = gate.allow(o.seat, o.mood, performance.now() / 1000, synth.speaking || synth.pending);
-  if (verdict === "skip") return;
-  if (verdict === "cut") synth.cancel();
-  const p = voiceProfile(o.seat, o.gender, o.persona);
+  const volume = voice.volume * useAudioSettingsStore.getState().sfxVolume;
   try {
-    const v = pickVoice(o.gender, o.seat);
+    const v = pickVoice(voice.gender, voice.slot);
     // queued back to back, so the phrases play as one line with a breath between them
-    for (const ph of spokenPhrases(o.text)) {
+    for (const ph of spokenPhrases(text)) {
       const u = new SpeechSynthesisUtterance(ph.text);
       u.lang = "ko-KR";
-      u.pitch = Math.max(0, Math.min(2, p.pitch * ph.pitch));
-      u.rate = p.rate * ph.rate;
-      u.volume = p.volume * settings.sfxVolume;
+      u.pitch = Math.max(0, Math.min(2, voice.pitch * ph.pitch));
+      u.rate = voice.rate * ph.rate;
+      u.volume = volume;
       if (v) u.voice = v;
       synth.speak(u);
     }
   } catch {
     // an old WebView without SpeechSynthesisUtterance — voices are decoration, stay silent
   }
+}
+
+const canSpeak = () => typeof window !== "undefined" && "speechSynthesis" in window && !isSfxEffectivelyMuted(useAudioSettingsStore.getState());
+
+/** Say `text` in this seat's voice, if sound is on, the mood is a big moment and the gate lets it through. Safe to call anywhere. */
+export function speakEmotion(o: { seat: number; mood: PersonMood; voice: CharacterVoice; text: string }) {
+  if (!isVoiced(o.mood) || !canSpeak()) return;
+  const synth = window.speechSynthesis;
+  const verdict = gate.allow(o.seat, o.mood, performance.now() / 1000, synth.speaking || synth.pending);
+  if (verdict === "skip") return;
+  if (verdict === "cut") synth.cancel();
+  say(o.voice, o.text);
+}
+
+let lastPass = -Infinity;
+const passes = new Map<number, number>();
+
+/**
+ * A pass in this seat's character voice ("저, 패스할게요…" / "패스 패스!" …). A newer pass cuts
+ * the one still playing (passes run round the table fast, the latest is the news); two
+ * within 200 ms collapse into one. Safe to call anywhere.
+ */
+export function speakPass(seat: number, voice: CharacterVoice) {
+  if (!canSpeak()) return;
+  const now = performance.now();
+  if (now - lastPass < 200) return;
+  lastPass = now;
+  const n = (passes.get(seat) ?? 0) + 1;
+  passes.set(seat, n);
+  window.speechSynthesis.cancel();
+  say(voice, passLine(voice.persona, seat, n));
+}
+
+/** The picked cast character introduces themself in their own voice (profile preview). */
+export function speakIntro(presetId: string) {
+  const preset = CHARACTER_PRESETS.find((p) => p.id === presetId);
+  if (!preset || !canSpeak()) return;
+  const voice = characterVoice(0, { presetId });
+  window.speechSynthesis.cancel();
+  say(voice, introLine(voice.persona, preset.name));
 }

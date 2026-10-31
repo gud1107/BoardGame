@@ -19,7 +19,7 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
   "2026-11-01": {
     coup: "💥 행동·방어·의심마다 화려한 연출, 📜 내 카드 능력 표시, ✓ 진짜 가진 카드의 행동·방어 하이라이트",
-    common: "🎁 보상 69종 5등급(🥉~👑) + 게임 화면 🎁 보상 창, 1인 게임은 '사람과 함께'에서 제외",
+    common: "🎁 보상 69종 5등급(🥉~👑) + 게임 화면 🎁 보상 창, 🗣️ 캐릭터마다 고유 목소리",
   },
   "2026-10-31": {
     common: "🎨 내 스킨 — 뒷면·테이블(방 테마)·🏷️ 이름표·🏺 소품, ✨ 세트, 🖼️ 그림 뒷면 해금 — 같은 방 모두에게 보여요",

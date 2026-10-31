@@ -6,6 +6,8 @@ import Avatar from "@/components/common/Avatar";
 import { preferLowDetail, useBoardView } from "@/games/shared/three/viewPref";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
+import { characterVoice, speakPass } from "@/lib/audio/characterVoice";
+import { roomCharacterOf, useRoomCharacters } from "@/lib/character/roomCharacters";
 import { isBgmEffectivelyMuted, useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import { getDalmutiSound } from "./audio/dalmutiSoundEngine";
 import RulebookModal from "./RulebookModal";
@@ -137,6 +139,11 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     bgm.setBgmWanted(true);
     return () => bgm.setBgmWanted(false);
   }, []);
+  // each seat passes in the voice of the character its player chose (프로필 → 캐릭터) — the
+  // same voice the 3D table gives them; bots and players without one get their seat's voice
+  function sayPass(seat: SeatIndex) {
+    speakPass(seat, characterVoice(seat, roomCharacterOf(useRoomCharacters.getState().byName, names[seat])));
+  }
   function dispatch(action: EngineAction) {
     const engine = getSoundEngine();
     engine.unlock();
@@ -151,7 +158,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     // 보내므로, 수동 클릭이든 자동 패스든 항상 같은 SFX+음성을 듣는다.
     else if (action.type === "pass") {
       engine.playPassWhiff();
-      engine.speakPass(viewerSeat);
+      sayPass(viewerSeat);
     }
     onAction(action);
   }
@@ -273,7 +280,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
       for (const e of newPasses) {
         if (e.seat === viewerSeat) continue;
         engine.playPassWhiff();
-        engine.speakPass(e.seat);
+        sayPass(e.seat);
       }
     }
     if (newTax.length > 0 || newCommonerSwaps.length > 0) {

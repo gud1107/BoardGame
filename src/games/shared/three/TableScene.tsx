@@ -13,8 +13,7 @@ import ScreenSprite from "./ScreenSprite";
 import SpeechBubble from "./SpeechBubble";
 import { AdaptiveResolution, BlobShadow, PerfHud, PostFx, StudioEnvironment } from "./sceneFx";
 import { labelTexture, polar, seatAngle, type BubbleStyle } from "./tableKit";
-import { personaFor } from "./persona";
-import { nextEmotionLine, speakEmotion } from "@/lib/audio/characterVoice";
+import { characterVoice, nextEmotionLine, speakEmotion } from "@/lib/audio/characterVoice";
 import { usePlateSkin, useTableSkin } from "@/lib/skins/useSkins";
 import { CardBackOwner, SkinParticleField, skinFeltTexture } from "./skinTextures";
 import SkinButton from "@/components/skins/SkinPicker";
@@ -375,6 +374,8 @@ function SeatBody({ s, geo, theme, lowDetail, ringColor, quietMoods, firstPerson
     const base = resolveLook(s.seat, theme.hats, s.avatar ?? chosen);
     return { ...base, ...(s.hat ? { hat: s.hat } : {}), ...s.look };
   }, [s.seat, s.hat, s.avatar, chosen, s.look, theme.hats]);
+  // a chosen cast character keeps their own voice and temperament at any seat
+  const voice = useMemo(() => characterVoice(s.seat, s.avatar ?? chosen, look.gender), [s.seat, s.avatar, chosen, look.gender]);
   const lookAt = s.lookSeat === "center" ? new THREE.Vector3(0, TABLE_Y, 0) : s.lookSeat === null || s.lookSeat === undefined ? null : geo.headOf(s.lookSeat);
   const nameY = theme.nameY ?? (theme.personStyle === "realistic" ? 1.86 : VRM_NAME_Y);
   // bubble bottom edge (SpeechBubble centres itself above it when anchored)
@@ -395,16 +396,16 @@ function SeatBody({ s, geo, theme, lowDetail, ringColor, quietMoods, firstPerson
     if (isViewer || s.out || quietMoods?.includes(s.mood)) return;
     const now = performance.now();
     if (now - lastLine.current < 2500) return;
-    const text = nextEmotionLine(s.seat, s.mood, personaFor(s.seat));
+    const text = nextEmotionLine(s.seat, s.mood, voice.persona);
     if (!text) return;
     lastLine.current = now;
-    speakEmotion({ seat: s.seat, mood: s.mood, persona: personaFor(s.seat), gender: look.gender, text });
+    speakEmotion({ seat: s.seat, mood: s.mood, voice, text });
     const key = `${s.seat}:${now}`;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- a timed caption triggered by a prop change
     setEmote({ text, key });
     const t = window.setTimeout(() => setEmote((e) => (e?.key === key ? null : e)), 2400);
     return () => window.clearTimeout(t);
-  }, [s.mood, s.seat, s.out, isViewer, look.gender, quietMoods]);
+  }, [s.mood, s.seat, s.out, isViewer, voice, quietMoods]);
   // a game bubble always wins the spot above the head
   const shownBubble = useMemo(() => s.bubble ?? (emote ? { text: emote.text, style: EMOTE_STYLE, key: emote.key, width: 0.8 } : null), [s.bubble, emote]);
   // every bubble carries its speaker: a name tab in the seat colour (and a matching border)
@@ -497,7 +498,7 @@ function SeatBody({ s, geo, theme, lowDetail, ringColor, quietMoods, firstPerson
             chair={chair === "throne" ? "none" : chair}
             chairColor={theme.chairColor}
             headSlot={s.headSlot}
-            persona={personaFor(s.seat)}
+            persona={voice.persona}
             viewerAt={geo.headOf(geo.viewerSeat)}
             held={s.held}
           >
