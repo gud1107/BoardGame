@@ -17,6 +17,9 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
  * Keep it short (≤ 80 chars), headline features only.
  */
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
+  "2026-11-01": {
+    coup: "💥 행동·방어·의심마다 화려한 연출, 📜 내 카드 능력 표시, ✓ 진짜 가진 카드의 행동·방어 하이라이트",
+  },
   "2026-10-31": {
     common: "🎨 내 스킨 — 뒷면·테이블(방 테마)·🏷️ 이름표·🏺 소품, ✨ 세트, 🖼️ 그림 뒷면 해금 — 같은 방 모두에게 보여요",
   },

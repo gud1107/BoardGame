@@ -108,11 +108,11 @@ export function CharacterCardFace({
 
 /** What holding this card lets you do *truthfully* — mirrors engine.ts CLAIMED_CHARACTER_FOR_ACTION / BLOCK_CHARACTERS. */
 export const CHARACTER_ABILITY: Record<Character, { act?: string; block?: string }> = {
-  duke: { act: "세금 +3", block: "외화 도입" },
-  assassin: { act: "암살 (3코인)" },
-  contessa: { block: "암살" },
-  captain: { act: "갈취 2코인", block: "갈취" },
-  ambassador: { act: "카드 교환", block: "갈취" },
+  duke: { act: "👑 세금 +3🪙", block: "💸 외화 도입" },
+  assassin: { act: "🗡️ 암살 (3🪙)" },
+  contessa: { block: "🗡️ 암살" },
+  captain: { act: "⚓ 갈취 2🪙", block: "⚓ 갈취" },
+  ambassador: { act: "🕊️ 카드 교환", block: "⚓ 갈취" },
 };
 
 /** 행동/방어 caption shown under the viewer's own face-up hand cards — that panel is always dark, so no light: overrides. */
@@ -133,8 +133,8 @@ export function AbilityCaption({ character, active = false }: { character: Chara
       }`}
       style={active ? undefined : { background: "linear-gradient(180deg,rgba(255,255,255,0.07) 0%,rgba(0,0,0,0.35) 100%)" }}
     >
-      {a.act && line("행동", "bg-amber-300 text-amber-950", a.act)}
-      {a.block && line("방어", "bg-sky-300 text-sky-950", a.block)}
+      {a.act && line("⚡ 행동", "bg-amber-300 text-amber-950", a.act)}
+      {a.block && line("🛡️ 방어", "bg-sky-300 text-sky-950", a.block)}
     </div>
   );
 }

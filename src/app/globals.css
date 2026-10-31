@@ -2776,6 +2776,101 @@ html {
   }
 }
 
+/* 레지스탕스 쿠's per-event action burst (see CoupEffects.tsx / ActionBurst):
+   every declare/block/challenge/result gets a short centre-screen cinematic —
+   colour flash, shockwave rings, flying emoji sparks, an optional blade
+   slash, and the headline popping in. Particles read their flight vector
+   from --dx/--dy/--rot set inline per spark. */
+@keyframes coup-fx-flash {
+  0% {
+    opacity: 0;
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes coup-fx-pop {
+  0% {
+    transform: scale(0.3) rotate(-8deg);
+    opacity: 0;
+  }
+  22% {
+    transform: scale(1.15) rotate(2deg);
+    opacity: 1;
+  }
+  36% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  80% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.06) translateY(-12px);
+    opacity: 0;
+  }
+}
+@keyframes coup-fx-ring {
+  0% {
+    transform: scale(0.15);
+    opacity: 0.95;
+  }
+  100% {
+    transform: scale(3.2);
+    opacity: 0;
+  }
+}
+@keyframes coup-fx-spark {
+  0% {
+    transform: translate(-50%, -50%) scale(0.4) rotate(0deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.1) rotate(var(--rot));
+    opacity: 0;
+  }
+}
+@keyframes coup-fx-slash {
+  0% {
+    transform: translate(-50%, -50%) rotate(-32deg) scaleX(0);
+    opacity: 1;
+  }
+  28% {
+    transform: translate(-50%, -50%) rotate(-32deg) scaleX(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(-32deg) scaleX(1.05);
+    opacity: 0;
+  }
+}
+@keyframes coup-fx-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-7px);
+  }
+  40%,
+  80% {
+    transform: translateX(7px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .coup-fx-motion {
+    display: none;
+  }
+}
+
 /* 지렁이 has no CSS-keyframe FX — its previous dice/tile flourishes were
    deleted along with the dice-based engine (see engine.ts's module doc);
    the real-time Slither.io-style replacement draws everything on a Canvas

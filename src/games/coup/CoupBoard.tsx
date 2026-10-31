@@ -13,7 +13,7 @@ import ResponseDock from "./ResponseDock";
 import ExchangeModal from "./ExchangeModal";
 import LoseInfluenceModal from "./LoseInfluenceModal";
 import { AbilityCaption, CardBack, CharacterCardFace, CoinStack } from "./CardArt";
-import { CardFlipWrapper, detectGameJustEnded, detectNewlyEliminated, EliminationToast, GameOverBanner } from "./CoupEffects";
+import { ActionBurst, burstOf, CardFlipWrapper, detectGameJustEnded, detectNewlyEliminated, EliminationToast, GameOverBanner, type BurstSpec } from "./CoupEffects";
 import {
   ACTION_NAMES,
   aliveSeats,
@@ -149,6 +149,7 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
   const [trackedState, setTrackedState] = useState(state);
   const [eliminationToast, setEliminationToast] = useState<{ id: number; names: string[] } | null>(null);
   const [gameOverBanner, setGameOverBanner] = useState(false);
+  const [burst, setBurst] = useState<{ id: number; spec: BurstSpec } | null>(null);
   // Palace Intrigue sound suite (coupSound.ts) — cues from the engine's lastEvent, heard by every client.
   useSoundCues(state, getCoupSound, coupSoundCues);
   useSuiteBgm(getCoupSound, state.phase !== "gameOver", coupIntensity(state));
@@ -156,6 +157,8 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
     const newlyEliminated = detectNewlyEliminated(trackedState, state);
     const justEnded = detectGameJustEnded(trackedState, state);
     setTrackedState(state);
+    const spec = state.lastEvent !== trackedState.lastEvent ? burstOf(state.lastEvent, names) : null;
+    if (spec) setBurst((b) => ({ id: (b?.id ?? 0) + 1, spec }));
     if (newlyEliminated.length > 0) setEliminationToast({ id: state.eliminationOrder.length, names: newlyEliminated.map((s) => names[s] ?? "상대") });
     if (justEnded) setGameOverBanner(true);
   }
@@ -165,6 +168,7 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
 
   const fx = (
     <>
+      {burst && <ActionBurst key={burst.id} spec={burst.spec} onDone={() => setBurst((b) => (b?.id === burst.id ? null : b))} />}
       {eliminationToast && <EliminationToast key={eliminationToast.id} names={eliminationToast.names} onDone={() => setEliminationToast(null)} />}
       {gameOverBanner && state.winnerSeat !== null && (
         <GameOverBanner winnerName={names[state.winnerSeat] ?? "상대"} onDone={() => setGameOverBanner(false)} />

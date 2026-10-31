@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.124.0",
+    releaseDate: "2026-11-01",
+    title: "💥 쿠 — 모든 행동·방어·의심에 화려한 연출",
+    changes: [
+      { game: "coup", type: "FEAT", desc: "💥 행동 선언·🛡️ 방어·🧐 의심 결과·🪙 코인 획득·💔 카드 상실마다 화면 가운데 섬광·충격파·파티클 연출 (암살·쿠데타는 베기 자국)" },
+      { game: "coup", type: "IMPROVE", desc: "⚡ 행동 · 🛡️ 방어 라벨과 능력별 이모지로 내 카드 능력이 한눈에" },
+    ],
+  },
+  {
     version: "v1.123.0",
     releaseDate: "2026-11-01",
     title: "🎁 보상 도전 — 등급 5단계 · 보상 25종 · 게임 중 진행도",
