@@ -259,7 +259,7 @@ function UnlockHint({ name, unlock, progress, onClose }: { name: string; unlock:
         </button>
       </div>
       <p className="font-semibold break-keep text-amber-200 light:text-amber-800">
-        {TRACKS[u.of].emoji} {u.label} — 지금 {value}/{u.goal}, {left}만 더 하면 열려요
+        {TRACKS[u.of].emoji} {u.label} — 지금 {value}/{u.goal} · 앞으로 {left} 남았어요
       </p>
       <span className="block h-1.5 w-full overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
         <span className={`block h-full rounded-full ${tierBg}`} style={{ ...tierVars(u.tier), width: `${(value / u.goal) * 100}%` }} />
