@@ -47,6 +47,8 @@ import {
 } from "@/games/shared/bot/botTakeover";
 import { selfResult } from "@/games/shared/selfResult";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
+import { PHASE_DURATION_MS } from "./secure";
+import { seatToken, startSecureMatch, storeMatchId, storedMatchId, useSecureMatch } from "@/lib/secureMatch/client";
 
 /**
  * 라이어를 찾아라 온라인 대전 진입점 — 진실의 고개와 같은 락스텝 패턴(docs/cloud-sync.md).
@@ -60,16 +62,12 @@ import { withUniqueNames } from "@/games/shared/room/uniqueNames";
  * 이탈/무응답 → 투표 기반 AI 봇 대체(botTakeover.ts). 무응답은 "연속 2번 시간 초과"
  * (엔진의 `idleStreak`)로 판단한다 — 이 게임은 단계마다 시간 제한이 있어서 다른 게임처럼
  * "차례가 45초 그대로"인 상황이 생기지 않기 때문.
+ *
+ * 🔒 서버 판정(secure.ts, src/lib/secureMatch): 서버가 준비돼 있고 모든 사람이 좌석 토큰
+ * 해시를 갖고 있으면 시드를 뿌리지 않고 `/api/match`가 게임을 돌린다. 각 기기는 자기 좌석에
+ * 보이는 상태만 받아서, 개발자도구로도 라이어·제시어·남의 설명을 볼 수 없다. 서버가
+ * 준비 안 됐으면(503) 위의 락스텝으로 그대로 돌아간다.
  */
-
-const PHASE_DURATION_MS: Record<GameState["phase"], number> = {
-  describe: 45_000, // 바퀴마다 모두 동시에 쓰므로 1인 30초가 아니라 바퀴당 45초
-  discuss: 90_000,
-  vote: 30_000,
-  guess: 30_000,
-  roundEnd: 15_000,
-  ended: 0,
-};
 const IDLE_STREAK_FOR_VOTE = 2;
 
 type Occupant = {
@@ -81,6 +79,8 @@ type Occupant = {
   targetPlayerCount?: number;
   /** 방장이 고른 버전 — 대기실에서 손님도 볼 수 있게 presence에 싣는다. */
   mode?: GameOptions["mode"];
+  /** 서버 판정용 좌석 토큰의 SHA-256 — 토큰 자체는 이 기기에만 있다. */
+  tokenHash?: string;
 };
 
 type Phase = "choose" | "enter-name" | "connecting" | "waiting" | "playing" | "post-game" | "room-full" | "supabase-missing" | "channel-error";
@@ -159,7 +159,7 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
   const [myName, setMyName] = useState("");
   const [myPlayerId, setMyPlayerId] = useState<string | undefined>(undefined);
   const [occupants, setOccupants] = useState<Occupant[]>([]);
-  const [gameState, setGameState] = useState<GameState | null>(null);
+  const [lockstepState, setGameState] = useState<GameState | null>(null);
   const [finalWinners, setFinalWinners] = useState<Seat[] | null>(null);
 
   const [botSeats, setBotSeats] = useState<Seat[]>([]);
@@ -188,7 +188,12 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
   }, [phase]);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const [secureMatchId, setSecureMatchId] = useState<string | null>(null);
+  const secureMatchIdRef = useRef<string | null>(null);
+  const [seatTok, setSeatTok] = useState<{ token: string; hash: string } | null>(null);
+  const secureRefreshRef = useRef<() => void>(() => {});
   function requestStateSync() {
+    secureRefreshRef.current();
     const channel = channelRef.current;
     if (!channel) return;
     if (channel.state !== "joined") channel.subscribe();
@@ -200,9 +205,6 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
   const isHost = intent === "create";
 
   const gameStateRef = useRef<GameState | null>(null);
-  useEffect(() => {
-    gameStateRef.current = gameState;
-  }, [gameState]);
 
   const occupantsRef = useRef<Occupant[]>([]);
   useEffect(() => {
@@ -257,12 +259,43 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
       setBotLevels(levels);
       botTakeoverRef.current = INITIAL_BOT_TAKEOVER_STATE;
       setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
+      secureMatchIdRef.current = null;
+      setSecureMatchId(null);
       setGameState(startGame(playerCount, seed, roomOptions));
       setFinalWinners(null);
       setPhase("playing");
     });
 
+    channel.on("broadcast", { event: "match-start" }, ({ payload }) => {
+      const matchId = payload?.matchId as string | undefined;
+      if (!matchId) return;
+      const fresh = secureMatchIdRef.current !== matchId;
+      const roster = (payload?.botSeats as Seat[] | undefined) ?? [];
+      const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
+      botSeatsRef.current = roster;
+      setBotSeats(roster);
+      botLevelsRef.current = levels;
+      setBotLevels(levels);
+      const takeover = payload?.botTakeover as BotTakeoverState | undefined;
+      if (takeover || fresh) {
+        botTakeoverRef.current = takeover ?? INITIAL_BOT_TAKEOVER_STATE;
+        setBotTakeover(botTakeoverRef.current);
+      }
+      if (!fresh) return;
+      secureMatchIdRef.current = matchId;
+      setSecureMatchId(matchId);
+      storeMatchId("liar-game", roomCode, `${Date.now()}|${matchId}`);
+      setGameState(null);
+      setFinalWinners(null);
+      setPhase("playing");
+    });
+
+    channel.on("broadcast", { event: "match-version" }, () => {
+      secureRefreshRef.current();
+    });
+
     channel.on("broadcast", { event: "game-action" }, ({ payload }) => {
+      if (secureMatchIdRef.current) return;
       const action = payload?.action as EngineAction;
       setGameState((prev) => (prev ? applyAction(prev, action) : prev));
     });
@@ -297,7 +330,14 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
     });
 
     channel.on("broadcast", { event: "state-request" }, () => {
-      if (gameStateRef.current) {
+      if (secureMatchIdRef.current) {
+        // 서버 판정 중엔 상태 대신 대전 id만 알려 준다 — 각자 자기 몫을 서버에서 받는다.
+        channel.send({
+          type: "broadcast",
+          event: "match-start",
+          payload: { matchId: secureMatchIdRef.current, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current, botTakeover: botTakeoverRef.current },
+        });
+      } else if (gameStateRef.current) {
         channel.send({
           type: "broadcast",
           event: "state-sync",
@@ -315,7 +355,7 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
 
     channel.on("broadcast", { event: "state-sync" }, ({ payload }) => {
       const state = payload?.state as GameState | undefined;
-      if (!state) return;
+      if (!state || secureMatchIdRef.current) return;
       // 이미 더 진행된 상태를 들고 있으면(재접속 응답이 늦게 온 경우) 덮어쓰지 않는다.
       const mine = gameStateRef.current;
       if (mine && mine.roundIndex === state.roundIndex && mine.stage > state.stage) return;
@@ -390,11 +430,21 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
           storeSeat(roomCode, seat);
         }
         setMySeat(seat);
+        const tok = await seatToken("liar-game", roomCode);
+        setSeatTok(tok);
+        // 새로고침 직후 남은 사람이 봇뿐이면 아무도 대전 id를 다시 알려 주지 않는다 — 이 기기 기록으로 이어 받는다.
+        const stored = storedMatchId("liar-game", roomCode)?.split("|");
+        if (stored?.length === 2 && Date.now() - Number(stored[0]) < 3 * 3600_000 && !secureMatchIdRef.current) {
+          secureMatchIdRef.current = stored[1];
+          setSecureMatchId(stored[1]);
+          setPhase("playing");
+        }
         await channel.track({
           deviceId,
           seat,
           name: myName,
           playerId: myPlayerId,
+          ...(tok ? { tokenHash: tok.hash } : {}),
           ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mode: optionsRef.current.mode } : {}),
         } satisfies Occupant);
         requestStateSync();
@@ -439,9 +489,10 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
       seat: next,
       name: myName,
       playerId: myPlayerId,
+      ...(seatTok ? { tokenHash: seatTok.hash } : {}),
       ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mode: optionsRef.current.mode } : {}),
     } satisfies Occupant);
-  }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost]);
+  }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost, seatTok]);
 
   const sendGameStart = useCallback(() => {
     startSentRef.current = true;
@@ -455,16 +506,44 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
       botSeatsRef.current = [...botSeatsRef.current, ...gaps];
       botLevelsRef.current = [...botLevelsRef.current, ...gaps.map(() => DEFAULT_BOT_LEVEL)];
     }
-    channelRef.current?.send({
-      type: "broadcast",
-      event: "game-start",
-      payload: {
-        seed: randomSeed(),
-        playerCount: count,
-        options: optionsRef.current,
-        botSeats: botSeatsRef.current,
-        botLevels: botLevelsRef.current,
-      },
+    const legacyStart = () =>
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "game-start",
+        payload: {
+          seed: randomSeed(),
+          playerCount: count,
+          options: optionsRef.current,
+          botSeats: botSeatsRef.current,
+          botLevels: botLevelsRef.current,
+        },
+      });
+    // 사람 좌석이 모두 토큰 해시를 갖고 있을 때만 서버 판정 — 옛 버전 탭이 섞이면 락스텝.
+    const humans = occupantsRef.current.filter((o) => o.seat < count && !botSeatsRef.current.includes(o.seat));
+    if (humans.length === 0 || humans.some((o) => !o.tokenHash)) {
+      legacyStart();
+      return;
+    }
+    const bots: Record<number, number> = {};
+    botSeatsRef.current.forEach((seat, i) => {
+      bots[seat] = botLevelsRef.current[i] ?? DEFAULT_BOT_LEVEL;
+    });
+    void startSecureMatch({
+      game: "liar-game",
+      playerCount: count,
+      options: optionsRef.current,
+      seatHashes: Object.fromEntries(humans.map((o) => [o.seat, o.tokenHash!])),
+      bots,
+    }).then((matchId) => {
+      if (!matchId) {
+        legacyStart();
+        return;
+      }
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "match-start",
+        payload: { matchId, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current },
+      });
     });
   }, []);
 
@@ -532,9 +611,40 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
     }
   }
 
-  const handleAction = useCallback((action: EngineAction) => {
-    channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
-  }, []);
+  // 서버 판정: 마감·봇 차례를 서버에 먼저 알리는 순서 — 보통 첫 번째 사람만 보낸다.
+  const humanRank = useMemo(() => {
+    const seats = occupants
+      .map((o) => o.seat)
+      .filter((s) => !(String(s) in botTakeover.takeovers))
+      .sort((a, b) => a - b);
+    return Math.max(0, mySeat === null ? 0 : seats.indexOf(mySeat));
+  }, [occupants, botTakeover, mySeat]);
+  const secure = useSecureMatch<GameState>({
+    matchId: secureMatchId,
+    seat: mySeat,
+    token: seatTok?.token ?? null,
+    tickerRank: humanRank,
+    announce: (version) => channelRef.current?.send({ type: "broadcast", event: "match-version", payload: { version } }),
+  });
+  useEffect(() => {
+    secureRefreshRef.current = secure.refresh;
+  }, [secure.refresh]);
+  // 서버 판정이면 서버가 준 내 몫의 상태, 아니면 락스텝으로 직접 계산한 상태.
+  const gameState = secureMatchId ? secure.view : lockstepState;
+  useEffect(() => {
+    gameStateRef.current = gameState;
+    // 끝난 판은 새로고침해도 다시 열지 않는다(결과가 두 번 기록되지 않게).
+    if (secureMatchId && gameState?.phase === "ended" && roomCode) storeMatchId("liar-game", roomCode, "");
+  }, [gameState, secureMatchId, roomCode]);
+
+  const secureAct = secure.act;
+  const handleAction = useCallback(
+    (action: EngineAction) => {
+      if (secureMatchIdRef.current) secureAct(action);
+      else channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
+    },
+    [secureAct],
+  );
 
   function castTakeoverVote(seatKey: string) {
     channelRef.current?.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type: "vote-cast", seatKey, voterDeviceId: deviceId } } });
@@ -552,6 +662,18 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
   const takeoverSeats = useMemo(() => (takeoverSeatKey ? (takeoverSeatKey.split(",").map(Number) as Seat[]) : []), [takeoverSeatKey]);
   const allBotSeatSet = useMemo(() => new Set([...botSeatSet, ...takeoverSeats]), [botSeatSet, takeoverSeats]);
 
+  // 서버 판정 중 봇 대체/되찾기 — 봇은 서버가 돌리므로 바뀐 명단을 알린다(같은 명단이면 서버가 무시).
+  const secureSetBots = secure.setBots;
+  useEffect(() => {
+    if (!secureMatchId) return;
+    const bots: Record<number, number> = {};
+    botSeatsRef.current.forEach((seat, i) => {
+      bots[seat] = botLevelsRef.current[i] ?? DEFAULT_BOT_LEVEL;
+    });
+    for (const seat of takeoverSeats) bots[seat] = DEFAULT_BOT_LEVEL;
+    secureSetBots(bots);
+  }, [secureMatchId, takeoverSeats, secureSetBots]);
+
   // 동시 행동 단계(토론 준비·투표)가 있어서 "지금 결정할 봇"은 대기 좌석 중 첫 번째 봇이다.
   // 봇 한 명이 행동할 때마다 상태가 바뀌므로 다음 봇이 이어서 행동한다.
   const currentActor = useCallback((state: GameState): Seat | null => pendingSeats(state).find((s) => allBotSeatSet.has(s)) ?? null, [allBotSeatSet]);
@@ -563,7 +685,7 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
   }, []);
 
   useBotAutoplay<GameState, EngineAction, Seat>({
-    active: isHost && phase === "playing",
+    active: isHost && phase === "playing" && !secureMatchId,
     state: gameState,
     currentActor,
     botSeats: allBotSeatSet,
@@ -594,7 +716,7 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
         return;
       }
       const duration = PHASE_DURATION_MS[state.phase];
-      if (isHost && duration > 0 && now - seen.at >= duration && timeoutSentRef.current !== state.stage) {
+      if (isHost && !secureMatchIdRef.current && duration > 0 && now - seen.at >= duration && timeoutSentRef.current !== state.stage) {
         timeoutSentRef.current = state.stage;
         channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action: { type: "TIMEOUT", stage: state.stage } } });
       }
@@ -623,8 +745,9 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
     return () => window.clearInterval(interval);
   }, [phase, isHost, roomCode]);
 
-  const deadlineMs =
-    gameState && stageSeen && stageSeen.stage === gameState.stage && PHASE_DURATION_MS[gameState.phase] > 0
+  const deadlineMs = secureMatchId
+    ? secure.deadlineMs
+    : gameState && stageSeen && stageSeen.stage === gameState.stage && PHASE_DURATION_MS[gameState.phase] > 0
       ? stageSeen.at + PHASE_DURATION_MS[gameState.phase]
       : null;
 
@@ -680,6 +803,7 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
       finishedAt: new Date().toISOString(),
     });
     setFinalWinners(winnerSeats(gameState));
+    if (roomCode) storeMatchId("liar-game", roomCode, "");
     setPhase("post-game");
   }
 
@@ -694,6 +818,9 @@ export default function LiarGameGame({ onComplete }: PlayableGameProps) {
     setMySeat(null);
     setOccupants([]);
     setGameState(null);
+    secureMatchIdRef.current = null;
+    setSecureMatchId(null);
+    setSeatTok(null);
     setFinalWinners(null);
     setIdentity({ name: "" });
     setMyPlayerId(undefined);
