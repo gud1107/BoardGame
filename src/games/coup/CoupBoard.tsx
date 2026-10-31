@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { preferLowDetail, useBoardView } from "@/games/shared/three/viewPref";
 import type { CoupBeat } from "./three/CoupTable3D";
@@ -13,7 +13,7 @@ import ResponseDock from "./ResponseDock";
 import ExchangeModal from "./ExchangeModal";
 import LoseInfluenceModal from "./LoseInfluenceModal";
 import { AbilityCaption, CardBack, CharacterCardFace, CoinStack } from "./CardArt";
-import { ActionBurst, burstOf, CardFlipWrapper, detectGameJustEnded, detectNewlyEliminated, EliminationToast, GameOverBanner, type BurstSpec } from "./CoupEffects";
+import { ActionBurst, burstOf, CardFlipWrapper, detectGameJustEnded, detectNewlyEliminated, detectPassers, EliminationToast, GameOverBanner, type BurstSpec } from "./CoupEffects";
 import {
   ACTION_NAMES,
   aliveSeats,
@@ -110,7 +110,7 @@ function beatOf(state: CoupState, names: Record<SeatIndex, string>): CoupBeat | 
     case "declare": {
       const claim = state.pendingAction?.actorSeat === e.seat ? state.pendingAction.claimedCharacter : null;
       const target = e.targetSeat !== null ? ` → ${names[e.targetSeat] ?? "상대"}` : "";
-      return { kind: "declare", seat: e.seat, target: e.targetSeat, claim, label: `${ACTION_EMOJI[e.action]} ${ACTION_NAMES[e.action]}${target}${claim ? `
+      return { kind: "declare", seat: e.seat, action: e.action, target: e.targetSeat, claim, label: `${ACTION_EMOJI[e.action]} ${ACTION_NAMES[e.action]}${target}${claim ? `
 (${CHARACTER_NAMES[claim]} 주장)` : ""}` };
     }
     case "challengeAction":
@@ -121,7 +121,7 @@ function beatOf(state: CoupState, names: Record<SeatIndex, string>): CoupBeat | 
       return { kind: "block", seat: e.blockerSeat, actor: e.actorSeat, character: e.character };
     case "actionResolved": {
       const coins = e.action === "income" ? 1 : e.action === "foreignAid" ? 2 : e.action === "tax" ? 3 : e.action === "steal" ? (e.amount ?? 0) : 0;
-      return { kind: "resolved", seat: e.actorSeat, target: e.targetSeat, label: ACTION_NAMES[e.action], blocked: e.blocked, coins };
+      return { kind: "resolved", seat: e.actorSeat, action: e.action, target: e.targetSeat, label: ACTION_NAMES[e.action], blocked: e.blocked, coins };
     }
     case "influenceLost":
       return { kind: "lost", seat: e.seat, character: e.character };
@@ -150,6 +150,13 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
   const [eliminationToast, setEliminationToast] = useState<{ id: number; names: string[] } | null>(null);
   const [gameOverBanner, setGameOverBanner] = useState(false);
   const [burst, setBurst] = useState<{ id: number; spec: BurstSpec } | null>(null);
+  /** Seats that just passed — a short 👋 wave on the 3D table / a pill on the 2D seat row. */
+  const [passFx, setPassFx] = useState<{ id: number; seats: SeatIndex[] } | null>(null);
+  useEffect(() => {
+    if (!passFx) return;
+    const t = setTimeout(() => setPassFx((p) => (p?.id === passFx.id ? null : p)), 1800);
+    return () => clearTimeout(t);
+  }, [passFx]);
   // Palace Intrigue sound suite (coupSound.ts) — cues from the engine's lastEvent, heard by every client.
   useSoundCues(state, getCoupSound, coupSoundCues);
   useSuiteBgm(getCoupSound, state.phase !== "gameOver", coupIntensity(state));
@@ -159,6 +166,8 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
     setTrackedState(state);
     const spec = state.lastEvent !== trackedState.lastEvent ? burstOf(state.lastEvent, names) : null;
     if (spec) setBurst((b) => ({ id: (b?.id ?? 0) + 1, spec }));
+    const passed = detectPassers(trackedState, state);
+    if (passed.length > 0) setPassFx((p) => ({ id: (p?.id ?? 0) + 1, seats: passed }));
     if (newlyEliminated.length > 0) setEliminationToast({ id: state.eliminationOrder.length, names: newlyEliminated.map((s) => names[s] ?? "상대") });
     if (justEnded) setGameOverBanner(true);
   }
@@ -341,6 +350,8 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
             }
             beat={beatOf(state, names)}
             beatKey={`${state.turnNumber}-${JSON.stringify(state.lastEvent)}`}
+            passers={passFx?.seats ?? []}
+            passKey={passFx?.id ?? 0}
             deckCount={state.deck.length}
             sign={
               state.phase === "action"
@@ -395,6 +406,11 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
                 {isSelf && <span className="text-amber-200">(나)</span>}
                 {isEliminated && <span className="text-white/40">💀 탈락</span>}
                 {!isEliminated && mustCoup(p.coins) && <span title="쿠데타 필수" className="text-rose-300">⚠️쿠필수</span>}
+                {passFx?.seats.includes(p.seat) && (
+                  <span key={passFx.id} className="rounded-full bg-white/15 px-2 py-0.5 text-[11px] text-white" style={{ animation: "coup-fx-pop 1.8s ease-out both" }}>
+                    👋 패스
+                  </span>
+                )}
               </span>
               <span className="flex items-center gap-1.5">
                 <CoinStack coins={p.coins} />

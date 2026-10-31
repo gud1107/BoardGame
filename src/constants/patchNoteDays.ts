@@ -18,7 +18,7 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
  */
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
   "2026-11-01": {
-    coup: "💥 행동·방어·의심마다 화려한 연출, 📜 내 카드 능력 표시, ✓ 진짜 가진 카드의 행동·방어 하이라이트",
+    coup: "💥 화려한 연출, 🎭 행동·방어·패스마다 캐릭터 동작, 📜 내 카드 능력, ✓ 진실 행동 하이라이트",
     common: "🎁 보상 69종 5등급(🥉~👑) + 게임 화면 🎁 보상 창, 🗣️ 캐릭터마다 고유 목소리",
   },
   "2026-10-31": {

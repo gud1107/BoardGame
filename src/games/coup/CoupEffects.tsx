@@ -17,6 +17,21 @@ export function detectNewlyEliminated(prev: CoupState, next: CoupState): SeatInd
   return next.eliminationOrder.slice(prev.eliminationOrder.length);
 }
 
+const RESPONSE_WINDOWS = new Set(["actionChallengeWindow", "blockWindow", "blockChallengeWindow"]);
+
+/**
+ * Seats that just answered a response window with 패스 (pass has no lastEvent of
+ * its own). A challenge/block closes the window without the others passing; a
+ * window that closes any other way means everyone still waiting passed.
+ */
+export function detectPassers(prev: CoupState, next: CoupState): SeatIndex[] {
+  if (prev === next || !RESPONSE_WINDOWS.has(prev.phase)) return [];
+  const ev = next.lastEvent !== prev.lastEvent ? next.lastEvent : null;
+  if (ev && (ev.type === "challengeAction" || ev.type === "challengeBlock" || ev.type === "block")) return [];
+  if (!ev && next.phase === prev.phase) return prev.awaitingSeats.filter((s) => !next.awaitingSeats.includes(s));
+  return prev.awaitingSeats;
+}
+
 export function detectGameJustEnded(prev: CoupState, next: CoupState): boolean {
   return prev !== next && prev.phase !== "gameOver" && next.phase === "gameOver";
 }

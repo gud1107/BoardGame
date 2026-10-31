@@ -29,7 +29,15 @@ export type PersonMood =
   | "raise"
   | "write"
   | "shrug"
-  | "slump";
+  | "slump"
+  // one-shot action gestures (games show them for a couple of seconds after the event)
+  | "wave" // "pass" — waving a hand off
+  | "guard" // blocking — forearms crossed in front of the face
+  | "stab" // a dagger thrust
+  | "grab" // reach out and snatch back
+  | "rake" // scooping coins in with both hands
+  | "shuffle" // riffling cards between the hands
+  | "slam"; // fist raised high and brought down
 
 // The look data (types, palettes, seat defaults, profile validation) lives in the
 // three-free @/lib/character/avatar module so profile UIs and storage can use it without three.js.
@@ -79,6 +87,13 @@ const SPECS: Record<PersonMood, PoseSpec> = {
   write: { spine: [0.26, 0, 0], head: [0.42, 0, 0], lS: [-1.05, 0.3, 0.1], lE: -1.2, rS: [-1.1, -0.2, -0.1], rE: -1.05 },
   shrug: { head: [0, 0, 0.15], lS: [-0.55, 0.2, 0.65], lE: -1.6, rS: [-0.55, -0.2, -0.65], rE: -1.6 },
   slump: { spine: [0.5, 0, 0.08], head: [0.65, 0, 0.35], lS: [-1.3, 0.35, 0], lE: -0.7, rS: [-1.3, -0.35, 0], rE: -0.7 },
+  wave: { head: [0.05, 0, 0], rS: [-1.35, -0.15, 0.25], rE: -1.5 },
+  guard: { spine: [-0.1, 0, 0], head: [0.15, 0, 0], lS: [-1.75, 0.7, 0.15], lE: -1.95, rS: [-1.75, -0.7, -0.15], rE: -1.95 },
+  stab: { spine: [0.22, 0, 0.05], head: [0, 0, 0], lS: [-0.6, 0, 0.2], lE: -1.2, rS: [-1.55, -0.1, -0.05], rE: -0.2 },
+  grab: { spine: [0.2, 0, 0], head: [0, 0, 0], rS: [-1.6, -0.05, -0.05], rE: -0.1 },
+  rake: { spine: [0.25, 0, 0], head: [0.2, 0, 0], lS: [-1.35, 0.35, 0.15], lE: -0.35, rS: [-1.35, -0.35, -0.15], rE: -0.35 },
+  shuffle: { spine: [0.08, 0, 0], head: [0.25, 0, 0], lS: [-1.15, 0.55, 0], lE: -1.45, rS: [-1.15, -0.55, 0], rE: -1.45 },
+  slam: { spine: [0.05, 0, 0], head: [-0.05, 0, 0], rS: [-1.3, -0.1, -0.1], rE: -0.5 },
 };
 
 const mapSpecs = (base: Required<PoseSpec>) => Object.fromEntries(Object.entries(SPECS).map(([k, v]) => [k, P(v, base)])) as Record<PersonMood, Pose>;
@@ -127,6 +142,13 @@ export const FACES: Record<PersonMood, Face> = {
   write: { brow: -0.3, mouth: "flat", eye: 0.6, sweat: 0 },
   shrug: { brow: 0.6, mouth: "frown", eye: 1, sweat: 0 },
   slump: { brow: 0.4, mouth: "o", eye: 0.08, sweat: 0 },
+  wave: { brow: 0.1, mouth: "flat", eye: 0.85, sweat: 0 },
+  guard: { brow: -0.7, mouth: "frown", eye: 1.1, sweat: 0 },
+  stab: { brow: -0.9, mouth: "grin", eye: 0.7, sweat: 0 },
+  grab: { brow: -0.5, mouth: "grin", eye: 0.9, sweat: 0 },
+  rake: { brow: 0.3, mouth: "grin", eye: 0.8, sweat: 0 },
+  shuffle: { brow: -0.2, mouth: "smile", eye: 0.7, sweat: 0 },
+  slam: { brow: -1, mouth: "o", eye: 1.2, sweat: 0 },
 };
 
 /** Natural blinking: irregular gaps (2-6 s) and the occasional double blink. */
@@ -335,4 +357,4 @@ export interface SeatedPersonProps {
 }
 
 /** Moods with something to react to: every persona follows the game's cue then. */
-export const STRONG_MOODS = new Set<PersonMood>(["point", "cheer", "shock", "laugh", "clap", "raise", "slump", "sad"]);
+export const STRONG_MOODS = new Set<PersonMood>(["point", "cheer", "shock", "laugh", "clap", "raise", "slump", "sad", "guard", "stab", "grab", "slam"]);

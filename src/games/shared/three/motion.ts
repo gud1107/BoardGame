@@ -42,6 +42,13 @@ export const HANDS: Record<PersonMood, HandPose> = {
   write: [0.15, 0, 0.35, 0, 0.35, 0.8],
   shrug: [-0.3, 0.6, -0.3, -0.6, 0.05, 0.05],
   slump: [0.4, 0, 0.4, 0, 0.6, 0.6],
+  wave: [0.15, 0, -0.3, 0, 0.35, 0.05],
+  guard: [0, 0, 0, 0, 0.9, 0.9],
+  stab: [0.15, 0, 0, 0, 0.4, 1],
+  grab: [0.15, 0, -0.1, 0, 0.4, 0.15],
+  rake: [0.3, 0.3, 0.3, -0.3, 0.55, 0.55],
+  shuffle: [-0.1, 0.4, -0.1, -0.4, 0.3, 0.3],
+  slam: [0.15, 0, 0, 0, 0.4, 1],
 };
 
 /** Hard joint limits the summed target is clamped to (also asserted in tests). */
@@ -191,6 +198,67 @@ export function gestureInto(out: number[], mood: PersonMood, t: number, seed: nu
     case "sad":
     case "slump":
       break;
+    case "wave": {
+      // palm out, waving side to side + a small head shake: "pass"
+      const w = Math.sin(t * 8 + s);
+      out[12] += w * 0.22;
+      out[17] += w * 0.45;
+      out[4] += Math.sin(t * 4 + s) * 0.15;
+      break;
+    }
+    case "guard": {
+      // braced X-block that shoves forward on each beat
+      const e = bump(((t + s) % 0.9) / 0.9);
+      out[0] += 0.06 * e;
+      out[6] -= 0.15 * e;
+      out[10] -= 0.15 * e;
+      break;
+    }
+    case "stab": {
+      // slow wind-back, then a snap thrust (the spring adds the follow-through)
+      const u = ((t + s) % 0.8) / 0.8;
+      const back = u < 0.6 ? Math.sin((u / 0.6) * (Math.PI / 2)) ** 2 : Math.max(0, 1 - (u - 0.6) / 0.08);
+      out[13] -= 1.4 * back;
+      out[10] += 0.6 * back;
+      out[0] -= 0.1 * back;
+      break;
+    }
+    case "grab": {
+      // open hand reaching out, then a fist pulled back to the chest
+      const u = ((t + s) % 1) / 1;
+      const pull = u < 0.35 ? 0 : Math.sin(((u - 0.35) / 0.65) * Math.PI) ** 2;
+      out[10] += 0.8 * pull;
+      out[13] -= 1.6 * pull;
+      out[19] += 0.8 * pull;
+      out[0] -= 0.12 * pull;
+      break;
+    }
+    case "rake": {
+      // both cupped hands sweeping coins in toward the body
+      const c = Math.sin(t * 5 + s) * 0.5 + 0.5;
+      out[9] -= 0.55 * c;
+      out[13] -= 0.55 * c;
+      out[6] += 0.25 * c;
+      out[10] += 0.25 * c;
+      break;
+    }
+    case "shuffle": {
+      const w = Math.sin(t * 11 + s);
+      out[9] += 0.2 * w;
+      out[13] -= 0.2 * w;
+      out[15] += 0.3 * w;
+      out[17] += 0.3 * w;
+      break;
+    }
+    case "slam": {
+      // fist rises high, then crashes down onto the table
+      const u = ((t + s) % 1.2) / 1.2;
+      const up = u < 0.65 ? Math.sin((u / 0.65) * (Math.PI / 2)) ** 2 : Math.max(0, 1 - (u - 0.65) / 0.07);
+      out[10] -= 1.4 * up;
+      out[13] -= 0.4 * up;
+      out[0] += u >= 0.65 ? 0.12 * (1 - up) : -0.1 * up;
+      break;
+    }
   }
 }
 

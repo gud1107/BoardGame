@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
@@ -8,7 +8,7 @@ import { HeldFan, CoinStack, FlatCard, FlyIn, ImpactRing, StandingCard, TableSig
 import { paintedTexture, FONTS, type BubbleStyle } from "@/games/shared/three/tableKit";
 import type { PersonMood } from "@/games/shared/three/SeatedPerson";
 import { PORTRAIT } from "../CardArt";
-import { CHARACTER_EMOJI, CHARACTER_NAMES, type Character } from "../engine";
+import { CHARACTER_EMOJI, CHARACTER_NAMES, type ActionKind, type Character } from "../engine";
 
 /**
  * 쿠 3D — 르네상스 궁정의 밀실. 각자 앞에 영향력 카드 2장이 세워져 있고
@@ -35,10 +35,10 @@ export interface CoupSeat3D {
 }
 
 export type CoupBeat =
-  | { kind: "declare"; seat: number; label: string; target: number | null; claim: Character | null }
+  | { kind: "declare"; seat: number; action: ActionKind; label: string; target: number | null; claim: Character | null }
   | { kind: "challenge"; challenger: number; accused: number; caught: boolean; character: Character }
   | { kind: "block"; seat: number; actor: number; character: Character }
-  | { kind: "resolved"; seat: number; target: number | null; label: string; blocked: boolean; coins: number }
+  | { kind: "resolved"; seat: number; action: ActionKind; target: number | null; label: string; blocked: boolean; coins: number }
   | { kind: "lost"; seat: number; character: Character }
   | { kind: "other"; seat: number; label: string };
 
@@ -54,6 +54,9 @@ export interface CoupTable3DProps {
   beat: CoupBeat | null;
   /** 말풍선 재생 키(이벤트가 바뀔 때마다 새로 튀어나오게). */
   beatKey: string;
+  /** 방금 패스한 좌석 — 손사래 + "패스" 말풍선. */
+  passers: number[];
+  passKey: number;
   deckCount: number;
   sign: string;
   overview: boolean;
@@ -460,8 +463,28 @@ const THEME: TableTheme = {
   hats: ["fedora", "none", "beret", "bowler", "none", "beret"],
 };
 
+/** The gesture a seat acts out right after declaring each action. */
+const ACTION_MOOD: Record<ActionKind, PersonMood> = {
+  income: "rake",
+  foreignAid: "rake",
+  tax: "rake",
+  assassinate: "stab",
+  steal: "grab",
+  exchange: "shuffle",
+  coup: "slam",
+};
+/** How long an action gesture plays before the seat settles into its holding pose. */
+const GESTURE_MS = 2400;
+
 export default function CoupTable3D(props: CoupTable3DProps) {
   const { playerCount: n, viewerSeat, beat, awaiting, activeSeat } = props;
+  // A beat's gesture plays only while it is fresh; the initial mount counts as settled.
+  const [settledKey, setSettledKey] = useState(props.beatKey);
+  useEffect(() => {
+    const t = setTimeout(() => setSettledKey(props.beatKey), GESTURE_MS);
+    return () => clearTimeout(t);
+  }, [props.beatKey]);
+  const fresh = settledKey !== props.beatKey;
 
   const seats: TableSeat[] = props.seats.map((s) => {
     const out = s.hiddenCount === 0;
@@ -477,7 +500,7 @@ export default function CoupTable3D(props: CoupTable3DProps) {
       switch (beat.kind) {
         case "declare":
           if (beat.seat === s.seat) {
-            mood = beat.target !== null ? "point" : "talk";
+            mood = fresh ? ACTION_MOOD[beat.action] : beat.target !== null ? "point" : "talk";
             lookSeat = beat.target ?? "center";
             bubble = { text: beat.label, style: SAY, key: props.beatKey, width: 0.95 };
           }
@@ -494,14 +517,14 @@ export default function CoupTable3D(props: CoupTable3DProps) {
           break;
         case "block":
           if (beat.seat === s.seat) {
-            mood = "raise";
+            mood = fresh ? "guard" : "raise";
             lookSeat = beat.actor;
             bubble = { text: `${CHARACTER_EMOJI[beat.character]} ${CHARACTER_NAMES[beat.character]}(으)로 방어!`, style: BLOCK, key: props.beatKey, width: 0.95 };
           } else if (beat.actor === s.seat) mood = "shrug";
           break;
         case "resolved":
           if (beat.seat === s.seat) {
-            mood = beat.blocked ? "sad" : "smug";
+            mood = beat.blocked ? "sad" : fresh && beat.coins > 0 ? "rake" : "smug";
             if (!beat.blocked && beat.coins > 0) bubble = { text: `+${beat.coins} 🪙`, style: SAY, key: props.beatKey, width: 0.5 };
           } else if (beat.target === s.seat && !beat.blocked) mood = "sad";
           break;
@@ -515,6 +538,10 @@ export default function CoupTable3D(props: CoupTable3DProps) {
           if (beat.seat === s.seat) bubble = { text: beat.label, style: SAY, key: props.beatKey, width: 0.8 };
           break;
       }
+    }
+    if (props.passers.includes(s.seat)) {
+      mood = "wave";
+      bubble = { text: "패스 👋", style: SAY, key: `pass-${props.passKey}-${s.seat}`, width: 0.55 };
     }
     return {
       seat: s.seat,
