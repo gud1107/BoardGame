@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import {
   CHOSUNG_TRIES,
   CLIMB_TOP,
@@ -21,6 +23,8 @@ import {
 } from "./engine";
 import RulebookModal from "./RulebookModal";
 import { getQPlaySound, qplayCues } from "./qplaySound";
+
+const QPlayTable3D = dynamic(() => import("./three/QPlayTable3D"), { ssr: false, loading: () => <Loading3D /> });
 
 export const SEAT_COLORS = ["#f43f5e", "#3b82f6", "#22c55e", "#f59e0b", "#a855f7", "#14b8a6", "#ec4899", "#84cc16"];
 const NUMS = ["①", "②", "③", "④"];
@@ -444,6 +448,8 @@ function FinalPanel({ state, viewerSeat, names, onGameEnd }: { state: GameState;
 /* ── 보드 ─────────────────────────────────────────────────── */
 
 export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, isHost, deadlineMs, nowMs, onAction, onGameEnd }: Props) {
+  const board3d = useBoardView("qplay-view");
+  const [lowDetail] = useState(preferLowDetail);
   const [rules, setRules] = useState(false);
   const mini = currentMini(state);
   const info = MINI_INFO[mini];
@@ -501,6 +507,7 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
           </span>
         )}
         <span className="ml-auto flex items-center gap-1.5">
+          <ViewToggle board={board3d} />
           <SuiteSoundHud suite={getQPlaySound} icon="🎙️" label="Quiz Show" preview="miniWin" />
           <button onClick={() => setRules(true)} className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] font-bold text-white/70 light:border-slate-300 light:text-slate-600">
             📖 룰북
@@ -520,6 +527,20 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
             <span className={`w-8 text-right text-lg font-black tabular-nums ${hurry ? "animate-pulse text-rose-400" : "text-white light:text-slate-900"}`}>{remaining}</span>
           )}
         </div>
+      )}
+
+      {board3d.view === "3d" && (
+        <Frame3D hint={state.phase === "aim" && state.shooter === viewerSeat ? "🎯 노릴 사람의 자리를 눌러도 발사돼요" : "문제·보기는 아래에서 · 드래그로 둘러보기"}>
+          <QPlayTable3D
+            state={state}
+            viewerSeat={viewerSeat}
+            names={names}
+            connectedSeats={connectedSeats}
+            onFire={(target) => onAction({ type: "FIRE", seat: viewerSeat, target })}
+            overview={state.phase === "ended"}
+            lowDetail={lowDetail}
+          />
+        </Frame3D>
       )}
 
       {/* 소개 */}

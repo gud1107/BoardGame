@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.129.0",
+    releaseDate: "2026-11-01",
+    title: "🎙️ 큐플레이 3D 퀴즈 스튜디오 — 내 캐릭터로 참가",
+    changes: [
+      { game: "qplay", type: "FEAT", desc: "🧊 큐플레이에 3D 퀴즈 스튜디오가 생겼어요 — 내가 고른 캐릭터로 원탁에 앉아 🎥 1인칭 / 🪑 테이블 시점으로 봐요 (🖼️ 2D로 버튼으로 예전 화면)" },
+      { game: "qplay", type: "FEAT", desc: "🔔 답을 내면 내 앞 버저가 켜지고, 정답 공개 때 모두의 답이 말풍선으로 — 맞히면 환호, 틀리면 낙담, 탈락하면 털썩" },
+      { game: "qplay", type: "FEAT", desc: "🚀 미사일은 쏜 사람 → 맞은 사람으로 날아가고, 조준 중엔 노릴 사람의 자리를 눌러 바로 발사할 수 있어요" },
+    ],
+  },
+  {
     version: "v1.127.0",
     releaseDate: "2026-11-01",
     title: "🔎 스킨 필터 · 3D에서도 구분되는 카드 뒷면",
