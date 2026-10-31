@@ -115,15 +115,13 @@ export const CHARACTER_ABILITY: Record<Character, { act?: string; block?: string
   ambassador: { act: "카드 교환", block: "갈취" },
 };
 
-/** Small "▶ 행동 / 🛡 방어" caption shown under the viewer's own face-up hand cards. */
+/** Small "▶ 행동 / 🛡 방어" caption shown under the viewer's own face-up hand cards — that panel is always dark, so no light: overrides. */
 export function AbilityCaption({ character, active = false }: { character: Character; active?: boolean }) {
   const a = CHARACTER_ABILITY[character];
   return (
     <div
-      className={`flex w-[4.75rem] flex-col gap-0.5 rounded-md border px-1 py-0.5 text-[9px] leading-tight transition ${
-        active
-          ? "border-emerald-300/70 bg-emerald-400/15 text-emerald-100 light:border-emerald-500 light:bg-emerald-50 light:text-emerald-800"
-          : "border-white/10 bg-black/30 text-white/70 light:border-slate-200 light:bg-white light:text-slate-600"
+      className={`flex min-w-16 flex-col gap-0.5 rounded-md border px-1 py-0.5 text-[9px] leading-tight whitespace-nowrap transition ${
+        active ? "border-emerald-300/70 bg-emerald-400/15 text-emerald-100" : "border-white/10 bg-black/30 text-white/70"
       }`}
     >
       {a.act && <span>▶ {a.act}</span>}

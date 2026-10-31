@@ -451,7 +451,7 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
                       disabled
                         ? "cursor-not-allowed border-white/10 text-white/25"
                         : truthful
-                          ? "border-emerald-300/80 bg-emerald-400/15 text-emerald-50 shadow-[0_0_14px_-2px_rgba(52,211,153,0.75)] hover:bg-emerald-400/25 light:border-emerald-500 light:bg-emerald-50 light:text-emerald-800"
+                          ? "border-emerald-300/80 bg-emerald-400/15 text-emerald-50 shadow-[0_0_14px_-2px_rgba(52,211,153,0.75)] hover:bg-emerald-400/25"
                           : "border-amber-300/30 text-amber-100 hover:bg-amber-400/10"
                     }`}
                   >
