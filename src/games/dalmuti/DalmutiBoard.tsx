@@ -1010,36 +1010,58 @@ ${names[lastPlay3D.seat]}`
           </p>
           )}
           {boardView === "2d" && (
-          <section className="flex flex-wrap items-start justify-center gap-2.5 rounded-2xl border border-white/10 bg-black/25 p-3 light:border-slate-200 light:bg-slate-50">
+          <section className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-black/25 p-3 light:border-slate-200 light:bg-slate-50">
             {state.trick.plays.length === 0 ? (
               <p className="py-6 text-xs text-white/30 light:text-slate-400">아직 아무도 카드를 내지 않았어요. 이 트릭의 선입니다.</p>
             ) : (
-              state.trick.plays.map((play, i) => {
-                const cardsEl = (
-                  <div className="flex -space-x-8">
-                    {play.cards.map((c) => (
-                      <CardFace key={c.id} card={c} />
-                    ))}
-                  </div>
-                );
-                // 이 play에 해당하는 카드 출도 타격 이펙트가 아직 재생 중이면
-                // 감싸서 보여준다 — playIndex로 정확히 매칭(task brief §1).
-                const impact = playImpacts.find((e) => e.playIndex === i);
+              (() => {
+                // The play on top (the one to beat) sits big in the middle; earlier
+                // plays of this trick line up small and dimmed underneath, oldest first.
+                const plays = state.trick.plays;
+                const renderPlay = (play: (typeof plays)[number], i: number, latest: boolean) => {
+                  // Up to 12 cards can go down at once — tighten the overlap (the
+                  // corner index stays visible) so a big set still fits a 360px phone.
+                  const many = play.cards.length > 6;
+                  const big = latest && !many;
+                  const cardsEl = (
+                    <div className={`flex ${big || many ? "-space-x-11" : "-space-x-10"}`}>
+                      {play.cards.map((c) => (
+                        <CardFace key={c.id} card={c} size={big ? "lg" : "md"} />
+                      ))}
+                    </div>
+                  );
+                  // 이 play에 해당하는 카드 출도 타격 이펙트가 아직 재생 중이면
+                  // 감싸서 보여준다 — playIndex로 정확히 매칭(task brief §1).
+                  const impact = playImpacts.find((e) => e.playIndex === i);
+                  const mine = play.seat === viewerSeat;
+                  return (
+                    <div key={`${play.seat}-${i}`} className={`flex flex-col items-center gap-1 ${latest ? "" : "opacity-60"}`}>
+                      <span
+                        className={`font-semibold ${latest ? "rounded-full bg-black/40 px-2.5 py-0.5 text-xs light:bg-white/80" : "text-[10px]"} ${mine ? "text-amber-200 light:text-amber-700" : latest ? "text-white/90 light:text-slate-700" : "text-white/50 light:text-slate-500"}`}
+                      >
+                        {latest ? `🎯 ${names[play.seat]} — 이걸 넘어야 해요` : `${i + 1}. ${names[play.seat]}`}
+                      </span>
+                      {impact ? (
+                        <PlayImpactBurst isGrand={impact.isGrand} onDone={() => clearPlayImpact(impact.id)}>
+                          {cardsEl}
+                        </PlayImpactBurst>
+                      ) : (
+                        cardsEl
+                      )}
+                    </div>
+                  );
+                };
                 return (
-                  <div key={`${play.seat}-${i}`} className="flex flex-col items-center gap-1">
-                    <span className={`text-[10px] font-semibold ${play.seat === viewerSeat ? "text-amber-200 light:text-amber-700" : "text-white/50 light:text-slate-500"}`}>
-                      {i + 1}. {names[play.seat]}
-                    </span>
-                    {impact ? (
-                      <PlayImpactBurst isGrand={impact.isGrand} onDone={() => clearPlayImpact(impact.id)}>
-                        {cardsEl}
-                      </PlayImpactBurst>
-                    ) : (
-                      cardsEl
+                  <>
+                    {renderPlay(plays[plays.length - 1], plays.length - 1, true)}
+                    {plays.length > 1 && (
+                      <div className="flex w-full flex-wrap items-start justify-center gap-2.5 border-t border-white/10 pt-2 light:border-slate-200">
+                        {plays.slice(0, -1).map((play, i) => renderPlay(play, i, false))}
+                      </div>
                     )}
-                  </div>
+                  </>
                 );
-              })
+              })()
             )}
           </section>
           )}

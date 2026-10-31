@@ -55,17 +55,21 @@ export function CardFace({
   card,
   className = "",
   highlight = false,
+  size = "md",
 }: {
   card: Card;
   className?: string;
   highlight?: boolean;
+  /** "lg" = the play on top of the trick pile, the one everyone has to beat. */
+  size?: "md" | "lg";
 }) {
+  const lg = size === "lg";
   const info = CARD_RANK_INFO[card.rank];
   const art = usePortrait(PORTRAIT[card.rank]);
   const rankLabel = card.isJoker ? "★" : card.rank;
   return (
     <div
-      className={`relative flex h-24 w-16 shrink-0 flex-col items-center overflow-hidden rounded-lg border transition light:shadow-sm ${
+      className={`relative flex ${lg ? "h-32 w-[88px]" : "h-24 w-16"} shrink-0 flex-col items-center overflow-hidden rounded-lg border transition light:shadow-sm ${
         art.show ? "justify-end p-0" : "justify-between p-1"
       } ${cardTierBorder(card.rank)} ${highlight ? "shadow-[0_0_14px_-2px_rgba(251,191,36,0.85)] ring-2 ring-amber-300/70" : ""} ${className}`}
       style={{ background: cardTierBg(card.rank) }}
@@ -83,14 +87,14 @@ export function CardFace({
       ) : (
         <>
           {/* Corner index sits inside the 18px sliver the squeezed 3D hand row leaves visible. */}
-          <span className="absolute top-0.5 left-0.5 min-w-[1rem] rounded bg-black/70 px-0.5 text-center text-[15px] leading-tight font-black text-white [text-shadow:0_1px_1px_#000]">
+          <span className={`absolute top-0.5 left-0.5 min-w-[1rem] rounded bg-black/70 px-0.5 text-center ${lg ? "text-lg" : "text-[15px]"} leading-tight font-black text-white [text-shadow:0_1px_1px_#000]`}>
             {rankLabel}
           </span>
-          <span className="self-end text-sm leading-none">{info.emoji}</span>
-          <span className="text-[34px] leading-none font-black text-white [-webkit-text-stroke:1px_rgba(0,0,0,0.6)] [text-shadow:0_2px_4px_#000,0_0_8px_rgba(0,0,0,0.8)]">
+          <span className={`self-end ${lg ? "text-lg" : "text-sm"} leading-none`}>{info.emoji}</span>
+          <span className={`${lg ? "text-[48px]" : "text-[34px]"} leading-none font-black text-white [-webkit-text-stroke:1px_rgba(0,0,0,0.6)] [text-shadow:0_2px_4px_#000,0_0_8px_rgba(0,0,0,0.8)]`}>
             {rankLabel}
           </span>
-          <span className="max-w-full truncate text-center text-[9px] leading-tight font-semibold text-white/90 [text-shadow:0_1px_2px_#000]">{info.short}</span>
+          <span className={`max-w-full truncate text-center ${lg ? "text-[11px]" : "text-[9px]"} leading-tight font-semibold text-white/90 [text-shadow:0_1px_2px_#000]`}>{info.short}</span>
         </>
       )}
     </div>

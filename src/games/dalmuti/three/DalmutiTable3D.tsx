@@ -116,10 +116,14 @@ function cardFace(card: Card): THREE.CanvasTexture {
     ctx.fillStyle = "rgba(255,255,255,0.85)";
     ctx.font = `700 30px ${FONTS.text}`;
     ctx.fillText(info.short, W / 2, 300);
-    // corner indices
-    ctx.font = `800 34px ${FONTS.text}`;
-    ctx.fillStyle = edge;
-    ctx.fillText(card.isJoker ? "★" : String(card.rank), 38, 44);
+    // corner index — white on a dark chip so it reads when the next card covers the rest
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.beginPath();
+    ctx.roundRect(14, 14, 64, 60, 12);
+    ctx.fill();
+    ctx.font = `900 50px ${FONTS.text}`;
+    ctx.fillStyle = "#fff";
+    ctx.fillText(card.isJoker ? "★" : String(card.rank), 46, 46);
   });
 }
 
@@ -338,14 +342,19 @@ function ThroneHall({ lowDetail }: { lowDetail: boolean }) {
 // Table props
 // ---------------------------------------------------------------------------
 
-/** One play in the centre pile: the cards fanned face up. */
-function PlayFan({ cards }: { cards: Card[] }) {
+/**
+ * One play laid face up in a straight overlapping row, upright for me (+z is my side).
+ * The step shrinks for big sets so 12 cards still fit the felt; each card's top-left
+ * corner index stays uncovered.
+ */
+function PlayFan({ cards, w, h, maxWidth }: { cards: Card[]; w: number; h: number; maxWidth: number }) {
   const back = cardBack();
+  const step = cards.length > 1 ? Math.min(w * 0.55, (maxWidth - w) / (cards.length - 1)) : 0;
   return (
     <group>
       {cards.map((c, i) => (
-        <group key={c.id} position={[(i - (cards.length - 1) / 2) * 0.13, i * 0.003, 0]} rotation-y={(i - (cards.length - 1) / 2) * -0.08}>
-          <FlatCard face={cardFace(c)} back={back} w={0.32} h={0.45} />
+        <group key={c.id} position={[(i - (cards.length - 1) / 2) * step, i * 0.003, 0]}>
+          <FlatCard face={cardFace(c)} back={back} w={w} h={h} />
         </group>
       ))}
     </group>
@@ -358,33 +367,41 @@ function CenterSign({ text }: { text: string }) {
   return <TableSign text={text} style={SIGN_STYLE} y={0.95} width={1.15} />;
 }
 
+const TOP_W = 0.46;
+const TOP_H = 0.64;
+const OLD_W = 0.24;
+const OLD_H = 0.34;
+
 /**
- * The plays pile up in one heap, so only the set on top — the one to beat — gets a
- * "who played it" chip (in that seat's colour) just in front of the heap.
+ * The play on top — the one to beat — lies big and square in the middle, facing me,
+ * with a "who played it" chip in front. The earlier plays of this trick (up to 3)
+ * line up small and dimmed-by-size in one tidy row behind it, oldest on the left.
  */
 function TrickPile({ plays, nameOf }: { plays: DalmutiTable3DProps["plays"]; nameOf: (seat: number) => string }) {
   const geo = useTableGeo();
-  const visible = plays.slice(-4);
-  const offset = plays.length - visible.length;
+  const top = plays[plays.length - 1];
+  const older = plays.slice(-4, -1);
+  const topWidth = Math.min(1.9, geo.tableR * 1.3);
+  const oldWidth = Math.min(0.7, (geo.tableR * 1.5) / Math.max(1, older.length) - 0.08);
   return (
     <group>
-      {visible.map((p, k) => {
-        const i = k + offset;
-        const from = geo.spotOf(p.seat, 0.4).sub(new THREE.Vector3(0, geo.tableY, 0));
-        const latest = i === plays.length - 1;
-        return (
-          <group key={`${p.seat}-${p.cards.map((c) => c.id).join(",")}`} position={[Math.sin(i * 1.7) * 0.1, 0.004 + k * 0.012, Math.cos(i * 2.3) * 0.08]}>
-            <FlyIn from={from} dur={0.5} arc={0.55}>
-              {/* face the player who played it a little, like a real tossed pile */}
-              <group rotation-y={geo.angleOf(p.seat) * 0.35 + Math.sin(i * 3.1) * 0.35}>
-                <PlayFan cards={p.cards} />
-              </group>
-            </FlyIn>
-            {latest && <ImpactRing key={i} color={p.cards.some((c) => c.isJoker) ? "#fb7185" : "#fde68a"} size={1.1} />}
-            {latest && <ScreenSprite position={[0, 0.06, 0.52]} scale={[0.7, 0.175]} map={labelTexture(nameOf(p.seat), SEAT_COLORS[p.seat % SEAT_COLORS.length])} />}
-          </group>
-        );
-      })}
+      {older.map((p, k) => (
+        <group
+          key={`${p.seat}-${p.cards.map((c) => c.id).join(",")}`}
+          position={[(k - (older.length - 1) / 2) * (oldWidth + 0.08), 0.002, -0.62]}
+        >
+          <PlayFan cards={p.cards} w={OLD_W} h={OLD_H} maxWidth={oldWidth} />
+        </group>
+      ))}
+      {top && (
+        <group key={`${top.seat}-${top.cards.map((c) => c.id).join(",")}`} position={[0, 0.006, 0.12]}>
+          <FlyIn from={geo.spotOf(top.seat, 0.4).sub(new THREE.Vector3(0, geo.tableY, 0))} dur={0.5} arc={0.55}>
+            <PlayFan cards={top.cards} w={TOP_W} h={TOP_H} maxWidth={topWidth} />
+          </FlyIn>
+          <ImpactRing key={plays.length} color={top.cards.some((c) => c.isJoker) ? "#fb7185" : "#fde68a"} size={1.3} />
+          <ScreenSprite position={[0, 0.06, TOP_H / 2 + 0.14]} scale={[0.7, 0.175]} map={labelTexture(nameOf(top.seat), SEAT_COLORS[top.seat % SEAT_COLORS.length])} />
+        </group>
+      )}
     </group>
   );
 }
