@@ -5,8 +5,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
 import { FlatCard, FlyIn, HeldFan, ImpactRing, FloatIcon, TableSign } from "@/games/shared/three/tablePieces";
-import { labelTexture, paintedTexture, FONTS, type BubbleStyle } from "@/games/shared/three/tableKit";
-import ScreenSprite from "@/games/shared/three/ScreenSprite";
+import { paintedTexture, FONTS, type BubbleStyle } from "@/games/shared/three/tableKit";
 import type { HatKind, PersonMood } from "@/games/shared/three/SeatedPerson";
 import { CARD_RANK_INFO } from "../CardArt";
 import { JOKER_RANK, type Card } from "../engine";
@@ -367,39 +366,40 @@ function CenterSign({ text }: { text: string }) {
   return <TableSign text={text} style={SIGN_STYLE} y={0.95} width={1.15} />;
 }
 
-const TOP_W = 0.46;
-const TOP_H = 0.64;
-const OLD_W = 0.24;
-const OLD_H = 0.34;
+const TOP_W = 0.6;
+const TOP_H = 0.84;
+const OLD_W = 0.28;
+const OLD_H = 0.4;
+/** The centre sign already names who played the top set — it floats over the back of the felt so it never covers the cards. */
+const SIGN_Z = -0.95;
 
 /**
- * The play on top — the one to beat — lies big and square in the middle, facing me,
- * with a "who played it" chip in front. The earlier plays of this trick (up to 3)
+ * The play on top — the one to beat — lies big and square on my side of the centre,
+ * facing me. The earlier plays of this trick (up to 3)
  * line up small and dimmed-by-size in one tidy row behind it, oldest on the left.
  */
-function TrickPile({ plays, nameOf }: { plays: DalmutiTable3DProps["plays"]; nameOf: (seat: number) => string }) {
+function TrickPile({ plays }: { plays: DalmutiTable3DProps["plays"] }) {
   const geo = useTableGeo();
   const top = plays[plays.length - 1];
   const older = plays.slice(-4, -1);
-  const topWidth = Math.min(1.9, geo.tableR * 1.3);
+  const topWidth = Math.min(2.1, geo.tableR * 1.4);
   const oldWidth = Math.min(0.7, (geo.tableR * 1.5) / Math.max(1, older.length) - 0.08);
   return (
     <group>
       {older.map((p, k) => (
         <group
           key={`${p.seat}-${p.cards.map((c) => c.id).join(",")}`}
-          position={[(k - (older.length - 1) / 2) * (oldWidth + 0.08), 0.002, -0.62]}
+          position={[(k - (older.length - 1) / 2) * (oldWidth + 0.08), 0.002, -0.5]}
         >
           <PlayFan cards={p.cards} w={OLD_W} h={OLD_H} maxWidth={oldWidth} />
         </group>
       ))}
       {top && (
-        <group key={`${top.seat}-${top.cards.map((c) => c.id).join(",")}`} position={[0, 0.006, 0.12]}>
+        <group key={`${top.seat}-${top.cards.map((c) => c.id).join(",")}`} position={[0, 0.006, 0.3]}>
           <FlyIn from={geo.spotOf(top.seat, 0.4).sub(new THREE.Vector3(0, geo.tableY, 0))} dur={0.5} arc={0.55}>
             <PlayFan cards={top.cards} w={TOP_W} h={TOP_H} maxWidth={topWidth} />
           </FlyIn>
-          <ImpactRing key={plays.length} color={top.cards.some((c) => c.isJoker) ? "#fb7185" : "#fde68a"} size={1.3} />
-          <ScreenSprite position={[0, 0.06, TOP_H / 2 + 0.14]} scale={[0.7, 0.175]} map={labelTexture(nameOf(top.seat), SEAT_COLORS[top.seat % SEAT_COLORS.length])} />
+          <ImpactRing key={plays.length} color={top.cards.some((c) => c.isJoker) ? "#fb7185" : "#fde68a"} size={1.5} />
         </group>
       )}
     </group>
@@ -496,8 +496,10 @@ export default function DalmutiTable3D(props: DalmutiTable3DProps) {
       environment={<ThroneHall lowDetail={props.lowDetail} />}
       center={
         <group>
-          <TrickPile plays={plays} nameOf={(seat) => (seat === viewerSeat ? "나" : (props.seats.find((x) => x.seat === seat)?.name ?? `${seat + 1}번`))} />
-          <CenterSign text={props.sign} />
+          <TrickPile plays={plays} />
+          <group position-z={SIGN_Z}>
+            <CenterSign text={props.sign} />
+          </group>
           {revolution && (
             <group position={[0, 0.2, 0]}>
               <FloatIcon icon={revolution.isGrand ? "🔥" : "⚡"} y={0.5} size={0.45} />
