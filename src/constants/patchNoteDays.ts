@@ -19,6 +19,7 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
   "2026-11-01": {
     coup: "💥 화려한 연출, 🎭 행동·방어·패스마다 캐릭터 동작, 📜 내 카드 능력, ✓ 진실 행동 하이라이트",
+    qplay: "🧊 내 캐릭터로 3D 퀴즈 스튜디오, ⭕❌ OX는 광장을 뛰어다니며 시간 끝날 때 선 쪽이 답",
     common: "🎁 보상 69종 5등급(🥉~👑) + 게임 화면 🎁 보상 창, 🗣️ 캐릭터마다 고유 목소리",
   },
   "2026-10-31": {
