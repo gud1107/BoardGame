@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import Overlay from "@/components/Overlay";
 import {
   CARD_BACK_SKINS,
@@ -22,7 +22,7 @@ import {
   type UnlockId,
 } from "@/lib/skins/catalog";
 import { useMySkin } from "@/lib/skins/mySkin";
-import { TIERS, TIER_ORDER, UNLOCKS, isUnlocked, tierBorder, tierText, tierVars, useSkinProgress, type SkinProgress } from "@/lib/skins/unlocks";
+import { TIERS, TIER_ORDER, UNLOCKS, isUnlocked, tierBorder, tierText, tierVars, type RewardTier, useSkinProgress, type SkinProgress } from "@/lib/skins/unlocks";
 import SkinBackFace from "./SkinBackFace";
 
 const PATTERN_LABEL: Record<SkinPattern, string> = { diag: "사선 무늬", diamond: "다이아 무늬", dots: "물방울 무늬", waves: "물결 무늬", grid: "격자 무늬", plain: "단색" };
@@ -208,19 +208,109 @@ function Section({ title, hint, cols = "grid-cols-4 sm:grid-cols-6 lg:grid-cols-
   );
 }
 
+type ViewFilter = "all" | "owned" | "locked";
+type TierFilter = "any" | "free" | RewardTier;
+const FILTER_KEY = "bg_skin_filter_v1";
+
+function readFilter(): { view: ViewFilter; tier: TierFilter } {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FILTER_KEY) ?? "null") as { view?: string; tier?: string } | null;
+    const view = (["all", "owned", "locked"] as const).find((v) => v === raw?.view) ?? "all";
+    const tier = (["any", "free", ...TIER_ORDER] as const).find((t) => t === raw?.tier) ?? "any";
+    return { view, tier };
+  } catch {
+    return { view: "all", tier: "any" };
+  }
+}
+
+function Chip({ on, onClick, children, style, className = "" }: { on: boolean; onClick: () => void; children: ReactNode; style?: CSSProperties; className?: string }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onClick}
+      style={style}
+      className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold whitespace-nowrap transition ${
+        on ? "border-amber-300 bg-amber-300/25 text-amber-50 light:border-amber-500 light:bg-amber-100 light:text-amber-900" : `border-white/15 text-white/60 hover:text-white light:border-slate-300 light:text-slate-500 ${className}`
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 /** 🎨 내 스킨: sets, card back, table (room theme), 3D name plate, props — reward skins unlock from /stats. */
 export function SkinPicker() {
   const skin = useMySkin((s) => s.skin);
   const set = useMySkin((s) => s.set);
   const init = useMySkin((s) => s.init);
   const progress = useSkinProgress();
+  const [filter, setFilterState] = useState(readFilter);
   useEffect(() => {
     void init();
   }, [init]);
 
+  const setFilter = (f: Partial<typeof filter>) => {
+    const next = { ...filter, ...f };
+    setFilterState(next);
+    try {
+      localStorage.setItem(FILTER_KEY, JSON.stringify(next));
+    } catch {
+      // the choice just lasts this window
+    }
+  };
+  const shows = (unlock: UnlockId | undefined) => {
+    const owned = isUnlocked(unlock, progress);
+    if (filter.view === "owned" && !owned) return false;
+    if (filter.view === "locked" && owned) return false;
+    if (filter.tier === "free") return !unlock;
+    if (filter.tier !== "any") return !!unlock && UNLOCKS[unlock].tier === filter.tier;
+    return true;
+  };
+  // "게임 기본", sets and props are free and always yours
+  const showFree = shows(undefined);
+  const backs = byReward(CARD_BACK_SKINS).filter((b) => shows(b.unlock));
+  const tables = byReward(TABLE_SKINS).filter((t) => shows(t.unlock));
+  const plates = byReward(PLATE_SKINS).filter((pl) => shows(pl.unlock));
+  const rewards = [...CARD_BACK_SKINS, ...TABLE_SKINS, ...PLATE_SKINS];
+  const tierCount = (t: RewardTier) => {
+    const list = rewards.filter((x) => x.unlock && UNLOCKS[x.unlock].tier === t);
+    return `${list.filter((x) => isUnlocked(x.unlock, progress)).length}/${list.length}`;
+  };
+  const shown = backs.length + tables.length + plates.length + (showFree ? PROP_SKINS.length : 0);
+
   return (
     <div className="flex flex-col gap-5">
       <CurrentPreview backId={skin.back} tableId={skin.table} plateId={skin.plate} propId={skin.prop} />
+      <div className="sticky -top-4 z-20 -mx-1 flex flex-col gap-1.5 rounded-xl border border-white/10 bg-stone-950/95 p-2 backdrop-blur light:border-slate-200 light:bg-white/95">
+        <div className="flex gap-1 overflow-x-auto">
+          <Chip on={filter.view === "all"} onClick={() => setFilter({ view: "all" })}>
+            전체
+          </Chip>
+          <Chip on={filter.view === "owned"} onClick={() => setFilter({ view: "owned" })}>
+            ✅ 쓸 수 있는 것
+          </Chip>
+          <Chip on={filter.view === "locked"} onClick={() => setFilter({ view: "locked" })}>
+            🔒 잠긴 것
+          </Chip>
+          <span className="ml-auto shrink-0 self-center pl-2 text-[11px] text-white/45 tabular-nums light:text-slate-500">{shown}종</span>
+        </div>
+        <div className="flex gap-1 overflow-x-auto">
+          <Chip on={filter.tier === "any"} onClick={() => setFilter({ tier: "any" })}>
+            모든 등급
+          </Chip>
+          <Chip on={filter.tier === "free"} onClick={() => setFilter({ tier: "free" })}>
+            무료
+          </Chip>
+          {TIER_ORDER.map((t) => (
+            <Chip key={t} on={filter.tier === t} onClick={() => setFilter({ tier: t })} style={tierVars(t)} className={tierText}>
+              {TIERS[t].emoji} {TIERS[t].label} <span className="font-normal tabular-nums opacity-70">{tierCount(t)}</span>
+            </Chip>
+          ))}
+        </div>
+      </div>
+      {shown === 0 && <p className="py-6 text-center text-xs text-white/50 light:text-slate-500">이 조건에 맞는 스킨이 없어요. 다른 필터를 골라 보세요.</p>}
+      {showFree && (
       <Section title="✨ 세트로 한 번에" hint="카드 뒷면·테이블·이름표·소품을 어울리는 조합으로 한 번에 바꿔요. 고른 뒤에 하나씩 바꿔도 돼요." cols="grid-cols-3">
         {SKIN_SETS.map((st) => {
           const on = skin.table === st.table && skin.back === st.back && skin.plate === st.plate && skin.prop === st.prop;
@@ -237,36 +327,50 @@ export function SkinPicker() {
           );
         })}
       </Section>
-      <Section title="🃏 카드 뒷면" hint="내 손패를 같은 방 사람들이 이 뒷면으로 봐요. 덱·버린 더미 같은 공용 카드는 게임 기본 뒷면 그대로예요. 🖼️ 그림 뒷면은 플레이로 해금돼요.">
-        <Tile selected={skin.back === DEFAULT_SKIN_ID} onClick={() => set({ back: DEFAULT_SKIN_ID })} label="게임 기본" kind="게임마다 달라요">
-          <div className="flex h-16 w-11 items-center justify-center rounded-lg border-2 border-dashed border-white/25 text-lg light:border-slate-300">🂠</div>
-        </Tile>
-        {byReward(CARD_BACK_SKINS).map((b) => (
+      )}
+      {(showFree || backs.length > 0) && (
+      <Section title={`🃏 카드 뒷면 · ${backs.length + (showFree ? 1 : 0)}`} hint="내 손패를 같은 방 사람들이 이 뒷면으로 봐요. 덱·버린 더미 같은 공용 카드는 게임 기본 뒷면 그대로예요. 🖼️ 그림 뒷면은 플레이로 해금돼요.">
+        {showFree && (
+          <Tile selected={skin.back === DEFAULT_SKIN_ID} onClick={() => set({ back: DEFAULT_SKIN_ID })} label="게임 기본" kind="게임마다 달라요">
+            <div className="flex h-16 w-11 items-center justify-center rounded-lg border-2 border-dashed border-white/25 text-lg light:border-slate-300">🂠</div>
+          </Tile>
+        )}
+        {backs.map((b) => (
           <Tile key={b.id} selected={skin.back === b.id} onClick={() => set({ back: b.id })} label={`${b.emoji} ${b.name}`} kind={b.image ? "🖼️ 그림 뒷면" : `${PATTERN_LABEL[b.pattern]} · ${b.emblem}`} lock={lockOf(b.unlock, progress)} reward={b.unlock}>
             <SkinBackFace skin={b} className="h-16 w-11" emblemClassName="text-xl" />
           </Tile>
         ))}
       </Section>
-      <Section title="🎲 테이블 · 방 테마 (3D)" cols="grid-cols-3 sm:grid-cols-5 lg:grid-cols-7" hint="내가 방장인 방에서는 모두의 3D 테이블 천·배경·조명색·의자가 이 테마로 바뀌고, 꽃잎·별빛 같은 효과가 흩날려요(저사양 모드에선 효과 꺼짐). 다른 사람 방에서는 방장의 테마가 보여요.">
-        <Tile selected={skin.table === DEFAULT_SKIN_ID} onClick={() => set({ table: DEFAULT_SKIN_ID })} label="게임 기본" kind="게임마다 달라요">
-          <TableFace table={null} />
-        </Tile>
-        {byReward(TABLE_SKINS).map((t) => (
+      )}
+      {(showFree || tables.length > 0) && (
+      <Section title={`🎲 테이블 · 방 테마 (3D) · ${tables.length + (showFree ? 1 : 0)}`} cols="grid-cols-3 sm:grid-cols-5 lg:grid-cols-7" hint="내가 방장인 방에서는 모두의 3D 테이블 천·배경·조명색·의자가 이 테마로 바뀌고, 꽃잎·별빛 같은 효과가 흩날려요(저사양 모드에선 효과 꺼짐). 다른 사람 방에서는 방장의 테마가 보여요.">
+        {showFree && (
+          <Tile selected={skin.table === DEFAULT_SKIN_ID} onClick={() => set({ table: DEFAULT_SKIN_ID })} label="게임 기본" kind="게임마다 달라요">
+            <TableFace table={null} />
+          </Tile>
+        )}
+        {tables.map((t) => (
           <Tile key={t.id} selected={skin.table === t.id} onClick={() => set({ table: t.id })} label={`${t.emoji} ${t.name}`} kind={t.particles ? PARTICLE_LABEL[t.particles] : PATTERN_LABEL[t.pattern]} lock={lockOf(t.unlock, progress)} reward={t.unlock}>
             <TableFace table={t} />
           </Tile>
         ))}
       </Section>
-      <Section title="🏷️ 3D 이름표" hint="3D 테이블에서 내 머리 위 이름표를 모두가 이 스킨으로 봐요. 안쪽 테두리는 자리 색 그대로라 누구 자리인지 헷갈리지 않아요." cols="grid-cols-2 sm:grid-cols-4 lg:grid-cols-5">
-        <Tile selected={skin.plate === DEFAULT_SKIN_ID} onClick={() => set({ plate: DEFAULT_SKIN_ID })} label="기본 이름표" kind="어두운 기본형">
-          <PlateFace plate={null} name="이름" />
-        </Tile>
-        {byReward(PLATE_SKINS).map((pl) => (
+      )}
+      {(showFree || plates.length > 0) && (
+      <Section title={`🏷️ 3D 이름표 · ${plates.length + (showFree ? 1 : 0)}`} hint="3D 테이블에서 내 머리 위 이름표를 모두가 이 스킨으로 봐요. 안쪽 테두리는 자리 색 그대로라 누구 자리인지 헷갈리지 않아요." cols="grid-cols-2 sm:grid-cols-4 lg:grid-cols-5">
+        {showFree && (
+          <Tile selected={skin.plate === DEFAULT_SKIN_ID} onClick={() => set({ plate: DEFAULT_SKIN_ID })} label="기본 이름표" kind="어두운 기본형">
+            <PlateFace plate={null} name="이름" />
+          </Tile>
+        )}
+        {plates.map((pl) => (
           <Tile key={pl.id} selected={skin.plate === pl.id} onClick={() => set({ plate: pl.id })} label={`${pl.emoji} ${pl.name}`} kind={`${PATTERN_LABEL[pl.pattern]} · ${pl.emblem}`} lock={lockOf(pl.unlock, progress)} reward={pl.unlock}>
             <PlateFace plate={pl} name="이름" />
           </Tile>
         ))}
       </Section>
+      )}
+      {showFree && (
       <Section title="🏺 소품 (컵·코인)" hint="3D 테이블에서 내 자리의 페루도 컵과 코인 더미가 이 색이 돼요. 컵의 자리 색 띠, 그리고 금·은·보석처럼 색이 뜻을 가진 코인은 그대로예요.">
         <Tile selected={skin.prop === DEFAULT_SKIN_ID} onClick={() => set({ prop: DEFAULT_SKIN_ID })} label="게임 기본" kind="나무 컵 · 금화">
           <PropFace prop={null} />
@@ -277,6 +381,7 @@ export function SkinPicker() {
           </Tile>
         ))}
       </Section>
+      )}
     </div>
   );
 }

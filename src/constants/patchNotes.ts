@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.127.0",
+    releaseDate: "2026-11-01",
+    title: "🔎 스킨 필터 · 3D에서도 구분되는 카드 뒷면",
+    changes: [
+      { game: "common", type: "FEAT", desc: "🔎 스킨 창 필터 — 전체 / ✅ 쓸 수 있는 것 / 🔒 잠긴 것, 무료·🥉~👑 등급별 보기(등급마다 해금 수 표시), 고른 필터는 기억해요" },
+      { game: "common", type: "IMPROVE", desc: "🃏 3D 손패처럼 작게 보여도 뒷면끼리 구분되게 — 큰 문양·굵은 테두리·강조색 무늬, 비슷했던 뒷면 11종 색 변경" },
+    ],
+  },
+  {
     version: "v1.126.0",
     releaseDate: "2026-11-01",
     title: "🗣️ 캐릭터마다 고유 목소리",

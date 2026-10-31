@@ -38,21 +38,28 @@ export function skinBackTexture(skin: CardBackSkin): THREE.Texture {
   c.width = w;
   c.height = h;
   const ctx = c.getContext("2d")!;
+  // A held card is ~20×28 px on screen, where the fine pattern and a small
+  // emblem blur into one dark tile (53 backs measured ΔE ≈ 3 apart). So: a bold
+  // accent-coloured copy of the pattern on top, a thick frame and a big emblem
+  // — measured again at 20×28, the closest pair is ΔE ≈ 13.
   drawPattern(ctx, skin.pattern, skin.colors, w, h, 22);
+  ctx.globalAlpha = 0.45;
+  drawPattern(ctx, skin.pattern, ["rgba(0,0,0,0)", skin.accent], w, h, 72);
+  ctx.globalAlpha = 1;
   ctx.strokeStyle = skin.accent;
-  ctx.lineWidth = 10;
+  ctx.lineWidth = 18;
   ctx.strokeRect(9, 9, w - 18, h - 18);
-  ctx.lineWidth = 3;
-  ctx.strokeRect(24, 24, w - 48, h - 48);
   ctx.fillStyle = skin.colors[0];
   ctx.beginPath();
-  ctx.arc(w / 2, h / 2, 52, 0, Math.PI * 2);
+  ctx.arc(w / 2, h / 2, 92, 0, Math.PI * 2);
   ctx.fill();
+  ctx.lineWidth = 8;
+  ctx.stroke();
   ctx.fillStyle = skin.accent;
-  ctx.font = "bold 72px serif";
+  ctx.font = "bold 140px serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(skin.emblem, w / 2, h / 2 + 4);
+  ctx.fillText(skin.emblem, w / 2, h / 2 + 8);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   backCache.set(skin.id, tex);
