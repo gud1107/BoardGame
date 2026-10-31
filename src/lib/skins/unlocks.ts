@@ -42,13 +42,22 @@ export interface SkinProgress {
 
 export type RewardTier = "bronze" | "silver" | "gold" | "diamond" | "legend";
 
-export const TIERS: Record<RewardTier, { label: string; emoji: string; color: string }> = {
-  bronze: { label: "브론즈", emoji: "🥉", color: "#c98a4b" },
-  silver: { label: "실버", emoji: "🥈", color: "#cbd5e1" },
-  gold: { label: "골드", emoji: "🥇", color: "#fbbf24" },
-  diamond: { label: "다이아", emoji: "💎", color: "#7dd3fc" },
-  legend: { label: "레전드", emoji: "👑", color: "#f0abfc" },
+/** `color` on the dark theme, `lightColor` on white (silver/diamond pastels vanish there). */
+export const TIERS: Record<RewardTier, { label: string; emoji: string; color: string; lightColor: string }> = {
+  bronze: { label: "브론즈", emoji: "🥉", color: "#d6995a", lightColor: "#9a5b1e" },
+  silver: { label: "실버", emoji: "🥈", color: "#cbd5e1", lightColor: "#64748b" },
+  gold: { label: "골드", emoji: "🥇", color: "#fbbf24", lightColor: "#b7791f" },
+  diamond: { label: "다이아", emoji: "💎", color: "#7dd3fc", lightColor: "#0369a1" },
+  legend: { label: "레전드", emoji: "👑", color: "#f0abfc", lightColor: "#a21caf" },
 };
+
+/** CSS vars for `tierText` / `tierBorder` / `tierBg` classes. */
+export function tierVars(tier: RewardTier): Record<string, string> {
+  return { "--tier": TIERS[tier].color, "--tier-l": TIERS[tier].lightColor };
+}
+export const tierText = "text-[color:var(--tier)] light:text-[color:var(--tier-l)]";
+export const tierBorder = "border-[color:var(--tier)] light:border-[color:var(--tier-l)]";
+export const tierBg = "bg-[color:var(--tier)] light:bg-[color:var(--tier-l)]";
 
 export const TIER_ORDER: readonly RewardTier[] = ["bronze", "silver", "gold", "diamond", "legend"];
 

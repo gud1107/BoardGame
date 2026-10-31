@@ -22,7 +22,7 @@ import {
   type UnlockId,
 } from "@/lib/skins/catalog";
 import { useMySkin } from "@/lib/skins/mySkin";
-import { TIERS, UNLOCKS, isUnlocked, useSkinProgress, type SkinProgress } from "@/lib/skins/unlocks";
+import { TIERS, UNLOCKS, isUnlocked, tierBorder, tierText, tierVars, useSkinProgress, type SkinProgress } from "@/lib/skins/unlocks";
 import SkinBackFace from "./SkinBackFace";
 
 const PATTERN_LABEL: Record<SkinPattern, string> = { diag: "사선 무늬", diamond: "다이아 무늬", dots: "물방울 무늬", waves: "물결 무늬", grid: "격자 무늬", plain: "단색" };
@@ -68,8 +68,8 @@ function Tile({
     >
       {reward && (
         <span
-          className="absolute -top-2 -left-1.5 rounded-full border bg-stone-950 px-1.5 text-[9px] leading-4 font-bold whitespace-nowrap light:bg-white"
-          style={{ borderColor: TIERS[UNLOCKS[reward].tier].color, color: TIERS[UNLOCKS[reward].tier].color }}
+          className={`absolute -top-2 -left-1.5 rounded-full border bg-stone-950 px-1.5 text-[9px] leading-4 font-bold whitespace-nowrap light:bg-white ${tierBorder} ${tierText}`}
+          style={tierVars(UNLOCKS[reward].tier)}
         >
           {TIERS[UNLOCKS[reward].tier].emoji} {TIERS[UNLOCKS[reward].tier].label}
         </span>

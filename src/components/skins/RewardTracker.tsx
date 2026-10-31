@@ -11,6 +11,10 @@ import {
   isUnlocked,
   nextGoals,
   rewardsFor,
+  tierBg,
+  tierBorder,
+  tierText,
+  tierVars,
   useSkinProgressState,
   type SkinProgress,
 } from "@/lib/skins/unlocks";
@@ -49,7 +53,7 @@ function GoalRow({ id, p, isNew }: { id: UnlockId; p: SkinProgress; isNew: boole
       }`}
     >
       <div className="flex items-center gap-1.5 text-xs">
-        <span className="shrink-0 rounded-full border px-1.5 text-[9px] leading-4 font-bold" style={{ borderColor: tier.color, color: tier.color }}>
+        <span className={`shrink-0 rounded-full border px-1.5 text-[9px] leading-4 font-bold ${tierBorder} ${tierText}`} style={tierVars(u.tier)}>
           {tier.emoji} {tier.label}
         </span>
         <span className="min-w-0 flex-1 font-semibold break-keep text-white light:text-slate-900">
@@ -67,7 +71,7 @@ function GoalRow({ id, p, isNew }: { id: UnlockId; p: SkinProgress; isNew: boole
       </div>
       {!done && (
         <span className="block h-1 w-full overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
-          <span className="block h-full rounded-full" style={{ width: `${(value / u.goal) * 100}%`, background: tier.color }} />
+          <span className={`block h-full rounded-full ${tierBg}`} style={{ ...tierVars(u.tier), width: `${(value / u.goal) * 100}%` }} />
         </span>
       )}
       <span className="text-[10px] break-keep text-white/50 light:text-slate-500">
@@ -163,7 +167,7 @@ export default function RewardTracker() {
 
           {next.length > 0 && (
             <section className="flex flex-col gap-1.5">
-              <h3 className="text-xs font-bold text-white/80 light:text-slate-700">🎯 거의 다 왔어요</h3>
+              <h3 className="text-xs font-bold text-white/80 light:text-slate-700">🎯 다음 목표</h3>
               <ul className="flex flex-col gap-1.5">
                 {next.slice(0, 3).map((id) => (
                   <GoalRow key={id} id={id} p={p} isNew={false} />
@@ -179,7 +183,7 @@ export default function RewardTracker() {
             return (
               <details key={tier} className="group rounded-lg border border-white/10 light:border-slate-200">
                 <summary className="flex cursor-pointer list-none items-center gap-2 px-2.5 py-2 text-xs font-bold">
-                  <span style={{ color: t.color }}>
+                  <span className={tierText} style={tierVars(tier)}>
                     {t.emoji} {t.label}
                   </span>
                   <span className="text-white/50 tabular-nums light:text-slate-500">
