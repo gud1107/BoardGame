@@ -115,17 +115,26 @@ export const CHARACTER_ABILITY: Record<Character, { act?: string; block?: string
   ambassador: { act: "카드 교환", block: "갈취" },
 };
 
-/** Small "▶ 행동 / 🛡 방어" caption shown under the viewer's own face-up hand cards — that panel is always dark, so no light: overrides. */
+/** 행동/방어 caption shown under the viewer's own face-up hand cards — that panel is always dark, so no light: overrides. */
 export function AbilityCaption({ character, active = false }: { character: Character; active?: boolean }) {
   const a = CHARACTER_ABILITY[character];
+  const line = (tag: string, tagClass: string, text: string) => (
+    <span className="flex items-center gap-1">
+      <span className={`rounded px-1 py-px text-[9px] leading-none font-bold sm:text-[10px] ${tagClass}`}>{tag}</span>
+      <span className="font-semibold">{text}</span>
+    </span>
+  );
   return (
     <div
-      className={`flex min-w-16 flex-col gap-0.5 rounded-md border px-1 py-0.5 text-[9px] leading-tight whitespace-nowrap transition ${
-        active ? "border-emerald-300/70 bg-emerald-400/15 text-emerald-100" : "border-white/10 bg-black/30 text-white/70"
+      className={`flex min-w-16 flex-col gap-1 rounded-lg border px-1.5 py-1 text-[11px] leading-tight whitespace-nowrap shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition sm:text-xs ${
+        active
+          ? "border-emerald-300/80 bg-emerald-500/20 text-emerald-50 shadow-[0_0_12px_-3px_rgba(52,211,153,0.8)]"
+          : `${CHARACTER_BORDER[character]} text-amber-50/95`
       }`}
+      style={active ? undefined : { background: "linear-gradient(180deg,rgba(255,255,255,0.07) 0%,rgba(0,0,0,0.35) 100%)" }}
     >
-      {a.act && <span>▶ {a.act}</span>}
-      {a.block && <span>🛡 {a.block} 방어</span>}
+      {a.act && line("행동", "bg-amber-300 text-amber-950", a.act)}
+      {a.block && line("방어", "bg-sky-300 text-sky-950", a.block)}
     </div>
   );
 }
