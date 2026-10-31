@@ -3,9 +3,10 @@
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import ScreenSprite from "@/games/shared/three/ScreenSprite";
 import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
 import { FlatCard, FlyIn, HeldFan, ImpactRing, FloatIcon, TableSign } from "@/games/shared/three/tablePieces";
-import { paintedTexture, FONTS, type BubbleStyle } from "@/games/shared/three/tableKit";
+import { labelTexture, paintedTexture, FONTS, type BubbleStyle } from "@/games/shared/three/tableKit";
 import type { HatKind, PersonMood } from "@/games/shared/three/SeatedPerson";
 import { CARD_RANK_INFO } from "../CardArt";
 import { JOKER_RANK, type Card } from "../engine";
@@ -346,14 +347,18 @@ function ThroneHall({ lowDetail }: { lowDetail: boolean }) {
  * The step shrinks for big sets so 12 cards still fit the felt; each card's top-left
  * corner index stays uncovered.
  */
-function PlayFan({ cards, w, h, maxWidth }: { cards: Card[]; w: number; h: number; maxWidth: number }) {
+function fanStep(count: number, w: number, maxWidth: number) {
+  return count > 1 ? Math.min(w * 0.55, (maxWidth - w) / (count - 1)) : 0;
+}
+
+function PlayFan({ cards, w, h, maxWidth, glow }: { cards: Card[]; w: number; h: number; maxWidth: number; glow?: string }) {
   const back = cardBack();
-  const step = cards.length > 1 ? Math.min(w * 0.55, (maxWidth - w) / (cards.length - 1)) : 0;
+  const step = fanStep(cards.length, w, maxWidth);
   return (
     <group>
       {cards.map((c, i) => (
         <group key={c.id} position={[(i - (cards.length - 1) / 2) * step, i * 0.003, 0]}>
-          <FlatCard face={cardFace(c)} back={back} w={w} h={h} />
+          <FlatCard face={cardFace(c)} back={back} w={w} h={h} glow={glow} />
         </group>
       ))}
     </group>
@@ -375,14 +380,17 @@ const SIGN_Z = -0.95;
 
 /**
  * The play on top — the one to beat — lies big and square on my side of the centre,
- * facing me. The earlier plays of this trick (up to 3)
+ * facing me, glowing in its player's seat colour with their name chip beside it (not
+ * in front: a chip there sat over the cards from my eye line). The earlier plays of this trick (up to 3)
  * line up small and dimmed-by-size in one tidy row behind it, oldest on the left.
  */
-function TrickPile({ plays }: { plays: DalmutiTable3DProps["plays"] }) {
+function TrickPile({ plays, nameOf }: { plays: DalmutiTable3DProps["plays"]; nameOf: (seat: number) => string }) {
   const geo = useTableGeo();
   const top = plays[plays.length - 1];
   const older = plays.slice(-4, -1);
   const topWidth = Math.min(2.1, geo.tableR * 1.4);
+  const topColor = top ? SEAT_COLORS[top.seat % SEAT_COLORS.length] : undefined;
+  const chipScale = Math.max(1, geo.tableR / 1.6);
   const oldWidth = Math.min(0.7, (geo.tableR * 1.5) / Math.max(1, older.length) - 0.08);
   return (
     <group>
@@ -397,8 +405,14 @@ function TrickPile({ plays }: { plays: DalmutiTable3DProps["plays"] }) {
       {top && (
         <group key={`${top.seat}-${top.cards.map((c) => c.id).join(",")}`} position={[0, 0.006, 0.3]}>
           <FlyIn from={geo.spotOf(top.seat, 0.4).sub(new THREE.Vector3(0, geo.tableY, 0))} dur={0.5} arc={0.55}>
-            <PlayFan cards={top.cards} w={TOP_W} h={TOP_H} maxWidth={topWidth} />
+            <PlayFan cards={top.cards} w={TOP_W} h={TOP_H} maxWidth={topWidth} glow={topColor} />
           </FlyIn>
+          {/* big tables put me further away — grow the chip with the table so 6~8인 can still read it */}
+          <ScreenSprite
+            position={[Math.min((TOP_W + fanStep(top.cards.length, TOP_W, topWidth) * (top.cards.length - 1)) / 2 + 0.5, geo.tableR - 0.45), 0.1, 0.3]}
+            scale={[0.75 * chipScale, 0.19 * chipScale]}
+            map={labelTexture(`🃏 ${nameOf(top.seat)}`, topColor!)}
+          />
           <ImpactRing key={plays.length} color={top.cards.some((c) => c.isJoker) ? "#fb7185" : "#fde68a"} size={1.5} />
         </group>
       )}
@@ -496,7 +510,7 @@ export default function DalmutiTable3D(props: DalmutiTable3DProps) {
       environment={<ThroneHall lowDetail={props.lowDetail} />}
       center={
         <group>
-          <TrickPile plays={plays} />
+          <TrickPile plays={plays} nameOf={(seat) => (seat === viewerSeat ? "나" : (props.seats.find((x) => x.seat === seat)?.name ?? `${seat + 1}번`))} />
           <group position-z={SIGN_Z}>
             <CenterSign text={props.sign} />
           </group>

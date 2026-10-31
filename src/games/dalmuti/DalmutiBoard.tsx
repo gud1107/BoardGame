@@ -239,7 +239,12 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     const newPlayImpacts = detectPlayImpactEvents(trackedState, state);
     const newPasses = detectPassEvents(trackedState, state);
     const newTrick = state.lastTrickResult !== trackedState.lastTrickResult ? state.lastTrickResult : null;
-    const newRevolution = state.revolutionDeclared !== trackedState.revolutionDeclared ? state.revolutionDeclared : null;
+    // Compare by value, not reference: every reconnect / background-tab resync swaps in a
+    // freshly deserialized state, and a reference check replayed the 혁명 banner + bell
+    // on every such sync for the rest of the round.
+    const prevRev = trackedState.revolutionDeclared;
+    const nextRev = state.revolutionDeclared;
+    const newRevolution = nextRev && (!prevRev || prevRev.seat !== nextRev.seat || prevRev.isGrand !== nextRev.isGrand) ? nextRev : null;
     const enteredGameOver = trackedState.phase !== "gameOver" && state.phase === "gameOver";
     setTrackedState(state);
     if (enteredGameOver) {
