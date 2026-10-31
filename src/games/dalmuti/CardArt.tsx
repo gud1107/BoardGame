@@ -82,9 +82,15 @@ export function CardFace({
         </>
       ) : (
         <>
-          <span className="text-base leading-none">{info.emoji}</span>
-          <span className="text-2xl leading-none font-black text-white">{rankLabel}</span>
-          <span className="max-w-full truncate text-center text-[8px] leading-tight text-white/70">{info.short}</span>
+          {/* Corner index sits inside the 18px sliver the squeezed 3D hand row leaves visible. */}
+          <span className="absolute top-0.5 left-0.5 min-w-[1rem] rounded bg-black/70 px-0.5 text-center text-[15px] leading-tight font-black text-white [text-shadow:0_1px_1px_#000]">
+            {rankLabel}
+          </span>
+          <span className="self-end text-sm leading-none">{info.emoji}</span>
+          <span className="text-[34px] leading-none font-black text-white [-webkit-text-stroke:1px_rgba(0,0,0,0.6)] [text-shadow:0_2px_4px_#000,0_0_8px_rgba(0,0,0,0.8)]">
+            {rankLabel}
+          </span>
+          <span className="max-w-full truncate text-center text-[9px] leading-tight font-semibold text-white/90 [text-shadow:0_1px_2px_#000]">{info.short}</span>
         </>
       )}
     </div>

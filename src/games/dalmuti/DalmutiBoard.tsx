@@ -708,7 +708,14 @@ ${names[lastPlay3D.seat]}`
         variant="card"
         disabled={!clickable || (!highlighted && !selected.has(c.id))}
         onClick={() => toggleCard(c)}
-        className={`transition ${clickable && (highlighted || selected.has(c.id)) ? "cursor-pointer hover:-translate-y-1" : "cursor-not-allowed opacity-40"} ${
+        className={`transition ${
+          clickable && (highlighted || selected.has(c.id))
+            ? "cursor-pointer hover:-translate-y-1"
+            : // Off-turn the hand is just for reading — keep the numbers bright; only dim unplayable cards on my turn.
+              clickable
+              ? "cursor-not-allowed opacity-50 saturate-50"
+              : "cursor-default"
+        } ${
           selected.has(c.id) ? "-translate-y-2" : ""
         }`}
       >
