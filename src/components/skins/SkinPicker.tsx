@@ -22,7 +22,7 @@ import {
   type UnlockId,
 } from "@/lib/skins/catalog";
 import { useMySkin } from "@/lib/skins/mySkin";
-import { TIERS, UNLOCKS, isUnlocked, tierBorder, tierText, tierVars, useSkinProgress, type SkinProgress } from "@/lib/skins/unlocks";
+import { TIERS, TIER_ORDER, UNLOCKS, isUnlocked, tierBorder, tierText, tierVars, useSkinProgress, type SkinProgress } from "@/lib/skins/unlocks";
 import SkinBackFace from "./SkinBackFace";
 
 const PATTERN_LABEL: Record<SkinPattern, string> = { diag: "사선 무늬", diamond: "다이아 무늬", dots: "물방울 무늬", waves: "물결 무늬", grid: "격자 무늬", plain: "단색" };
@@ -58,7 +58,7 @@ function Tile({
       aria-disabled={locked}
       onClick={locked ? undefined : onClick}
       title={locked ? `🔒 ${lock.label} (${lock.value}/${lock.goal})` : undefined}
-      className={`relative flex min-h-11 flex-col items-center gap-1 rounded-xl p-1.5 pt-2 text-[11px] transition duration-200 ${
+      className={`relative flex min-h-11 flex-col items-center gap-0.5 rounded-lg p-1 pt-2 text-[11px] transition duration-200 ${
         selected
           ? "z-10 scale-105 border-2 border-amber-300 bg-amber-300/20 font-bold text-amber-50 shadow-[0_0_0_3px_rgba(252,211,77,0.35),0_0_20px_rgba(252,211,77,0.55)] light:border-amber-500 light:bg-amber-100 light:text-amber-900 light:shadow-[0_0_0_3px_rgba(245,158,11,0.3),0_0_16px_rgba(245,158,11,0.45)]"
           : locked
@@ -101,6 +101,12 @@ function Tile({
       )}
     </button>
   );
+}
+
+/** Free skins first, then rewards from 🥉 to 👑 and, within a tier, the nearer goal first. */
+function byReward<T extends { unlock?: UnlockId }>(list: readonly T[]): T[] {
+  const key = (s: T) => (s.unlock ? [1 + TIER_ORDER.indexOf(UNLOCKS[s.unlock].tier), UNLOCKS[s.unlock].goal] : [0, 0]);
+  return [...list].sort((a, b) => key(a)[0] - key(b)[0] || key(a)[1] - key(b)[1]);
 }
 
 function lockOf(id: UnlockId | undefined, p: SkinProgress) {
@@ -192,12 +198,12 @@ function CurrentPreview({ backId, tableId, plateId, propId }: { backId: string; 
   );
 }
 
-function Section({ title, hint, cols = "grid-cols-3 sm:grid-cols-5", children }: { title: string; hint: string; cols?: string; children: ReactNode }) {
+function Section({ title, hint, cols = "grid-cols-4 sm:grid-cols-6 lg:grid-cols-8", children }: { title: string; hint: string; cols?: string; children: ReactNode }) {
   return (
     <section>
       <h3 className="text-sm font-bold text-white light:text-slate-900">{title}</h3>
       <p className="mt-0.5 text-xs break-keep text-white/50 light:text-slate-500">{hint}</p>
-      <div className={`mt-3 grid gap-2.5 ${cols}`}>{children}</div>
+      <div className={`mt-2 grid gap-1.5 ${cols}`}>{children}</div>
     </section>
   );
 }
@@ -235,27 +241,27 @@ export function SkinPicker() {
         <Tile selected={skin.back === DEFAULT_SKIN_ID} onClick={() => set({ back: DEFAULT_SKIN_ID })} label="게임 기본" kind="게임마다 달라요">
           <div className="flex h-16 w-11 items-center justify-center rounded-lg border-2 border-dashed border-white/25 text-lg light:border-slate-300">🂠</div>
         </Tile>
-        {CARD_BACK_SKINS.map((b) => (
+        {byReward(CARD_BACK_SKINS).map((b) => (
           <Tile key={b.id} selected={skin.back === b.id} onClick={() => set({ back: b.id })} label={`${b.emoji} ${b.name}`} kind={b.image ? "🖼️ 그림 뒷면" : `${PATTERN_LABEL[b.pattern]} · ${b.emblem}`} lock={lockOf(b.unlock, progress)} reward={b.unlock}>
             <SkinBackFace skin={b} className="h-16 w-11" emblemClassName="text-xl" />
           </Tile>
         ))}
       </Section>
-      <Section title="🎲 테이블 · 방 테마 (3D)" hint="내가 방장인 방에서는 모두의 3D 테이블 천·배경·조명색·의자가 이 테마로 바뀌고, 꽃잎·별빛 같은 효과가 흩날려요(저사양 모드에선 효과 꺼짐). 다른 사람 방에서는 방장의 테마가 보여요.">
+      <Section title="🎲 테이블 · 방 테마 (3D)" cols="grid-cols-3 sm:grid-cols-5 lg:grid-cols-7" hint="내가 방장인 방에서는 모두의 3D 테이블 천·배경·조명색·의자가 이 테마로 바뀌고, 꽃잎·별빛 같은 효과가 흩날려요(저사양 모드에선 효과 꺼짐). 다른 사람 방에서는 방장의 테마가 보여요.">
         <Tile selected={skin.table === DEFAULT_SKIN_ID} onClick={() => set({ table: DEFAULT_SKIN_ID })} label="게임 기본" kind="게임마다 달라요">
           <TableFace table={null} />
         </Tile>
-        {TABLE_SKINS.map((t) => (
+        {byReward(TABLE_SKINS).map((t) => (
           <Tile key={t.id} selected={skin.table === t.id} onClick={() => set({ table: t.id })} label={`${t.emoji} ${t.name}`} kind={t.particles ? PARTICLE_LABEL[t.particles] : PATTERN_LABEL[t.pattern]} lock={lockOf(t.unlock, progress)} reward={t.unlock}>
             <TableFace table={t} />
           </Tile>
         ))}
       </Section>
-      <Section title="🏷️ 3D 이름표" hint="3D 테이블에서 내 머리 위 이름표를 모두가 이 스킨으로 봐요. 안쪽 테두리는 자리 색 그대로라 누구 자리인지 헷갈리지 않아요." cols="grid-cols-2 sm:grid-cols-3">
+      <Section title="🏷️ 3D 이름표" hint="3D 테이블에서 내 머리 위 이름표를 모두가 이 스킨으로 봐요. 안쪽 테두리는 자리 색 그대로라 누구 자리인지 헷갈리지 않아요." cols="grid-cols-2 sm:grid-cols-4 lg:grid-cols-5">
         <Tile selected={skin.plate === DEFAULT_SKIN_ID} onClick={() => set({ plate: DEFAULT_SKIN_ID })} label="기본 이름표" kind="어두운 기본형">
           <PlateFace plate={null} name="이름" />
         </Tile>
-        {PLATE_SKINS.map((pl) => (
+        {byReward(PLATE_SKINS).map((pl) => (
           <Tile key={pl.id} selected={skin.plate === pl.id} onClick={() => set({ plate: pl.id })} label={`${pl.emoji} ${pl.name}`} kind={`${PATTERN_LABEL[pl.pattern]} · ${pl.emblem}`} lock={lockOf(pl.unlock, progress)} reward={pl.unlock}>
             <PlateFace plate={pl} name="이름" />
           </Tile>
@@ -306,7 +312,7 @@ export default function SkinButton({ compact = false }: { compact?: boolean }) {
         </button>
       )}
       {open && (
-        <Overlay title="🎨 내 스킨" onClose={() => setOpen(false)} wide>
+        <Overlay title="🎨 내 스킨" onClose={() => setOpen(false)} wide="xl">
           <SkinPicker />
         </Overlay>
       )}

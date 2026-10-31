@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.125.0",
+    releaseDate: "2026-11-01",
+    title: "🎁 보상 69종 — 몇 판마다 하나씩 촘촘하게",
+    changes: [
+      { game: "common", type: "FEAT", desc: "🎁 보상 목표 25 → 69개: 판수 3·10·20·35·50…처럼 간격을 좁혀 몇 판마다 하나씩 열려요 (🥉16 · 🥈17 · 🥇14 · 💎13 · 👑9)" },
+      { game: "common", type: "FEAT", desc: "🃏 새 보상 카드 뒷면 32종 · 🏷️ 이름표 12종 — 스킨 창이 넓어지고 칸이 촘촘해져 한눈에 더 많이 보이고, 보상은 등급 순으로 정렬돼요" },
+    ],
+  },
+  {
     version: "v1.124.0",
     releaseDate: "2026-11-01",
     title: "💥 쿠 — 모든 행동·방어·의심에 화려한 연출",

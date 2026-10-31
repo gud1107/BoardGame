@@ -76,4 +76,15 @@ describe("skin unlocks", () => {
     expect(next[1]).toBe("humanPlays5"); // 4/5
     expect(next).not.toContain(undefined);
   });
+
+  it("keeps every track a tight ladder of many steps", () => {
+    expect(UNLOCK_IDS.length).toBeGreaterThanOrEqual(60);
+    const tracks = new Set(UNLOCK_IDS.map((id) => UNLOCKS[id].of));
+    for (const of of tracks) {
+      const goals = UNLOCK_IDS.filter((id) => UNLOCKS[id].of === of).map((id) => UNLOCKS[id].goal).sort((a, b) => a - b);
+      expect(goals.length).toBeGreaterThanOrEqual(4);
+      // after the first step, the next goal is never more than 2.5x away
+      for (let i = 2; i < goals.length; i++) expect(goals[i] / goals[i - 1]).toBeLessThanOrEqual(2.5);
+    }
+  });
 });

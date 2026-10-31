@@ -19,32 +19,8 @@
 export type SkinPattern = "diag" | "diamond" | "dots" | "waves" | "grid" | "plain";
 
 /** Reward skins: what earns them lives in `unlocks.ts`. */
-export type UnlockId =
-  | "humanPlays5"
-  | "games8"
-  | "humanWins10"
-  | "achv20"
-  | "achv40"
-  | "humanWins30"
-  | "plays10"
-  | "plays50"
-  | "plays150"
-  | "humanWins3"
-  | "humanPlays25"
-  | "humanPlays75"
-  | "games20"
-  | "games35"
-  | "gamesWon5"
-  | "gamesWon15"
-  | "achv10"
-  | "achv80"
-  | "bot8Wins3"
-  | "bot8Wins15"
-  | "bot10Wins10"
-  | "mastery10"
-  | "mastery30"
-  | "solo10"
-  | "solo50";
+export type UnlockPrefix = "plays" | "humanPlays" | "humanWins" | "games" | "gamesWon" | "achv" | "bot8Wins" | "bot10Wins" | "mastery" | "solo";
+export type UnlockId = `${UnlockPrefix}${number}`;
 
 /** Drifting specks over a 3D table (off in low-detail mode). */
 export type SkinParticles = "petals" | "stars" | "snow" | "bubbles" | "embers" | "sparkles";
@@ -145,6 +121,39 @@ export const CARD_BACK_SKINS: readonly CardBackSkin[] = [
   { id: "obsidian", name: "흑요석", emoji: "🖤", colors: ["#0a0a0f", "#1f1f2e"], accent: "#c084fc", pattern: "grid", emblem: "✶", unlock: "bot8Wins15" },
   { id: "diamond", name: "다이아몬드", emoji: "💎", colors: ["#0c2f45", "#134e6f"], accent: "#e0f2fe", pattern: "diamond", emblem: "◆", unlock: "games35" },
   { id: "cosmos", name: "은하수", emoji: "🌠", colors: ["#05010f", "#1a0b3d"], accent: "#f0abfc", pattern: "dots", emblem: "✺", unlock: "achv80" },
+  // dense ladder rewards (2026-11-01)
+  { id: "first-step", name: "첫걸음", emoji: "👣", colors: ["#2d2a24", "#3a362e"], accent: "#e7d8b8", pattern: "dots", emblem: "♥", unlock: "plays3" },
+  { id: "tavern", name: "주막 등불", emoji: "🏮", colors: ["#4a1d0c", "#5e2812"], accent: "#fca5a5", pattern: "grid", emblem: "✪", unlock: "plays20" },
+  { id: "copper", name: "구리 톱니", emoji: "⚙️", colors: ["#3b2416", "#4e3220"], accent: "#e2a06b", pattern: "grid", emblem: "⚙", unlock: "plays35" },
+  { id: "harbor", name: "항구의 밤", emoji: "⛵", colors: ["#0b2238", "#12304d"], accent: "#93c5fd", pattern: "waves", emblem: "☸", unlock: "plays75" },
+  { id: "centurion", name: "백 번째 판", emoji: "💯", colors: ["#2a0e0e", "#3d1515"], accent: "#fca5a5", pattern: "diamond", emblem: "⚜", unlock: "plays100" },
+  { id: "titan", name: "거신", emoji: "🗿", colors: ["#1f1a17", "#2e2723"], accent: "#d6c3a5", pattern: "diag", emblem: "♜", unlock: "plays200" },
+  { id: "handshake", name: "첫 인사", emoji: "🤝", colors: ["#1d3a2f", "#24493a"], accent: "#bbf7d0", pattern: "dots", emblem: "✣", unlock: "humanPlays1" },
+  { id: "campfire", name: "모닥불", emoji: "🪵", colors: ["#2b1407", "#3d1d0a"], accent: "#fdba74", pattern: "waves", emblem: "❉", unlock: "humanPlays10" },
+  { id: "festival", name: "축제의 밤", emoji: "🎆", colors: ["#1a0b2e", "#2a1347"], accent: "#fbcfe8", pattern: "dots", emblem: "✤", unlock: "humanPlays50" },
+  { id: "laurel", name: "월계관", emoji: "🌿", colors: ["#21331a", "#2c4423"], accent: "#d9f99d", pattern: "diamond", emblem: "❋", unlock: "humanWins1" },
+  { id: "compass", name: "나침반", emoji: "🧭", colors: ["#2b2418", "#3a3020"], accent: "#e9d5a1", pattern: "diag", emblem: "✾", unlock: "games3" },
+  { id: "atlas", name: "지도책", emoji: "🗺️", colors: ["#14352e", "#1c463d"], accent: "#99f6e4", pattern: "grid", emblem: "❁", unlock: "games5" },
+  { id: "caravan", name: "대상 행렬", emoji: "🐫", colors: ["#4a3010", "#5e3d15"], accent: "#fde68a", pattern: "waves", emblem: "✥", unlock: "games12" },
+  { id: "lantern", name: "등롱 거리", emoji: "🎐", colors: ["#3b0d1f", "#4f132a"], accent: "#fda4af", pattern: "dots", emblem: "☄", unlock: "games16" },
+  { id: "navigator", name: "항해사", emoji: "⚓", colors: ["#0c2a3f", "#123a55"], accent: "#bae6fd", pattern: "diamond", emblem: "♞", unlock: "games25" },
+  { id: "voyager", name: "탐험선", emoji: "🚀", colors: ["#0f1028", "#191b3d"], accent: "#c4b5fd", pattern: "diag", emblem: "♝", unlock: "games30" },
+  { id: "spark", name: "첫 승리의 불꽃", emoji: "✨", colors: ["#3a2a05", "#4d3808"], accent: "#fde047", pattern: "diag", emblem: "⚘", unlock: "gamesWon1" },
+  { id: "triad", name: "삼관왕", emoji: "🔱", colors: ["#0d2e2a", "#134039"], accent: "#5eead4", pattern: "grid", emblem: "☯", unlock: "gamesWon3" },
+  { id: "crusader", name: "성기사", emoji: "🛡️", colors: ["#2f0c0c", "#431212"], accent: "#fecaca", pattern: "diamond", emblem: "✵", unlock: "gamesWon10" },
+  { id: "stamp", name: "도장 수집", emoji: "📮", colors: ["#3a1414", "#4d1c1c"], accent: "#fecdd3", pattern: "waves", emblem: "✎", unlock: "achv5" },
+  { id: "scholar", name: "학자의 서고", emoji: "📜", colors: ["#2a2015", "#382b1c"], accent: "#f5deb3", pattern: "diamond", emblem: "⚗", unlock: "achv30" },
+  { id: "circuit", name: "회로판", emoji: "🔌", colors: ["#06221a", "#0a3326"], accent: "#4ade80", pattern: "grid", emblem: "⌘", unlock: "bot8Wins1" },
+  { id: "android", name: "기계 심장", emoji: "🤖", colors: ["#111827", "#1f2937"], accent: "#60a5fa", pattern: "dots", emblem: "✹", unlock: "bot8Wins6" },
+  { id: "overclock", name: "오버클럭", emoji: "⚡", colors: ["#1a0f00", "#2a1800"], accent: "#fb923c", pattern: "diag", emblem: "✷", unlock: "bot10Wins1" },
+  { id: "singularity", name: "특이점", emoji: "🌀", colors: ["#0a0014", "#170029"], accent: "#e879f9", pattern: "diag", emblem: "❄", unlock: "bot10Wins3" },
+  { id: "apprentice", name: "견습생", emoji: "🔨", colors: ["#2b2116", "#3a2d1e"], accent: "#fcd34d", pattern: "waves", emblem: "♨", unlock: "mastery3" },
+  { id: "artisan", name: "장인", emoji: "🎻", colors: ["#3a1a0a", "#4d250f"], accent: "#fdba74", pattern: "dots", emblem: "♫", unlock: "mastery5" },
+  { id: "lone-wolf", name: "외로운 늑대", emoji: "🐺", colors: ["#1c1f26", "#272b35"], accent: "#cbd5e1", pattern: "waves", emblem: "☁", unlock: "solo3" },
+  { id: "deep-sea", name: "심해", emoji: "🐋", colors: ["#031a2e", "#062a47"], accent: "#38bdf8", pattern: "dots", emblem: "☂", unlock: "solo25" },
+  { id: "lighthouse", name: "등대지기", emoji: "🗼", colors: ["#14232e", "#1c313f"], accent: "#fde68a", pattern: "diamond", emblem: "⚖", unlock: "solo100" },
+  { id: "rival", name: "라이벌", emoji: "🥊", colors: ["#2a0a14", "#3d0f1e"], accent: "#fda4af", pattern: "grid", emblem: "☽", unlock: "humanWins5" },
+  { id: "firewall", name: "방화벽", emoji: "🧱", colors: ["#1c0a05", "#2e1208"], accent: "#fb7185", pattern: "dots", emblem: "⚛", unlock: "bot10Wins5" },
 ];
 
 /** `default` = the game's own table. */
@@ -183,6 +192,18 @@ export const PLATE_SKINS: readonly PlateSkin[] = [
   { id: "champion", name: "챔피언", emoji: "🥇", colors: ["#3a2205", "#56340a"], accent: "#fcd34d", pattern: "grid", emblem: "♔", fg: "#fffbeb", unlock: "mastery10" },
   { id: "conqueror", name: "정복자", emoji: "🚩", colors: ["#3b0a1e", "#55102c"], accent: "#fda4af", pattern: "diag", emblem: "⚑", fg: "#fff1f2", unlock: "gamesWon15" },
   { id: "grandmaster", name: "그랜드마스터", emoji: "♚", colors: ["#0f172a", "#1e2a47"], accent: "#e2e8f0", pattern: "diamond", emblem: "♚", fg: "#f8fafc", unlock: "humanPlays75" },
+  { id: "immortal", name: "불멸", emoji: "♾️", colors: ["#1a0a2e", "#2d1450"], accent: "#f0abfc", pattern: "diamond", emblem: "✪", fg: "#fdf4ff", unlock: "plays300" },
+  { id: "host", name: "모두의 호스트", emoji: "🎪", colors: ["#3b0a0a", "#5a1010"], accent: "#fde047", pattern: "dots", emblem: "♥", fg: "#fef9c3", unlock: "humanPlays100" },
+  { id: "duelist", name: "결투가", emoji: "🤺", colors: ["#1f2937", "#2b3747"], accent: "#fca5a5", pattern: "diag", emblem: "⚜", fg: "#fff1f2", unlock: "humanWins20" },
+  { id: "emperor", name: "황제", emoji: "🏯", colors: ["#3a1a00", "#5a2a00"], accent: "#fbbf24", pattern: "grid", emblem: "☀", fg: "#fffbeb", unlock: "humanWins50" },
+  { id: "worldwalker", name: "세계 여행자", emoji: "🌍", colors: ["#0c3a2e", "#11523f"], accent: "#6ee7b7", pattern: "waves", emblem: "♞", fg: "#ecfdf5", unlock: "games40" },
+  { id: "allrounder", name: "만능 해결사", emoji: "🧩", colors: ["#1e1b4b", "#2e2a6b"], accent: "#a5b4fc", pattern: "dots", emblem: "☯", fg: "#eef2ff", unlock: "gamesWon20" },
+  { id: "collector", name: "수집가", emoji: "🗃️", colors: ["#2a1f0a", "#3d2e10"], accent: "#facc15", pattern: "diamond", emblem: "♫", fg: "#fefce8", unlock: "achv60" },
+  { id: "hall", name: "명예의 전당", emoji: "🏛️", colors: ["#0f0f0f", "#1f1f1f"], accent: "#fde68a", pattern: "grid", emblem: "✺", fg: "#fffbeb", unlock: "achv100" },
+  { id: "hunter", name: "봇 사냥꾼", emoji: "🎯", colors: ["#1a1a1a", "#2a2a2a"], accent: "#4ade80", pattern: "diag", emblem: "◆", fg: "#f0fdf4", unlock: "bot8Wins25" },
+  { id: "machine-breaker", name: "기계 파괴자", emoji: "🔩", colors: ["#18090a", "#2a0f12"], accent: "#f87171", pattern: "waves", emblem: "✶", fg: "#fef2f2", unlock: "bot10Wins20" },
+  { id: "virtuoso", name: "거장", emoji: "🎼", colors: ["#1f1030", "#2e1847"], accent: "#d8b4fe", pattern: "grid", emblem: "❂", fg: "#faf5ff", unlock: "mastery20" },
+  { id: "living-legend", name: "살아있는 전설", emoji: "🐐", colors: ["#2b1600", "#452300"], accent: "#fcd34d", pattern: "dots", emblem: "☘", fg: "#fffbeb", unlock: "mastery50" },
 ];
 
 /** `default` = the game's own props. */

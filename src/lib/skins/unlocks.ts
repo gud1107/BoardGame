@@ -5,7 +5,7 @@ import type { StatTotalsRecord } from "@/lib/db/types";
 import { GAME_REGISTRY } from "@/games/registry";
 import { evaluateAchievements } from "@/lib/stats/achievements";
 import { listPlayerStats, STATS_CHANGED_EVENT } from "@/lib/stats/playerStats";
-import { CARD_BACK_SKINS, PLATE_SKINS, TABLE_SKINS, type UnlockId } from "./catalog";
+import { CARD_BACK_SKINS, PLATE_SKINS, TABLE_SKINS, type UnlockId, type UnlockPrefix } from "./catalog";
 
 /**
  * What earns a reward skin, read from the personal stat totals (/stats) — the
@@ -82,33 +82,57 @@ export interface UnlockGoal {
   tier: RewardTier;
 }
 
-export const UNLOCKS: Record<UnlockId, UnlockGoal> = {
-  plays10: { label: "아무 게임 10판", goal: 10, of: "plays", tier: "bronze" },
-  plays50: { label: "아무 게임 50판", goal: 50, of: "plays", tier: "silver" },
-  plays150: { label: "아무 게임 150판", goal: 150, of: "plays", tier: "gold" },
-  humanPlays5: { label: "사람과 함께 5판", goal: 5, of: "humanPlays", tier: "bronze" },
-  humanPlays25: { label: "사람과 함께 25판", goal: 25, of: "humanPlays", tier: "silver" },
-  humanPlays75: { label: "사람과 함께 75판", goal: 75, of: "humanPlays", tier: "diamond" },
-  humanWins3: { label: "사람과 함께 3승", goal: 3, of: "humanWins", tier: "bronze" },
-  humanWins10: { label: "사람과 함께 10승", goal: 10, of: "humanWins", tier: "gold" },
-  humanWins30: { label: "사람과 함께 30승", goal: 30, of: "humanWins", tier: "legend" },
-  games8: { label: "서로 다른 게임 8종 플레이", goal: 8, of: "gamesPlayed", tier: "silver" },
-  games20: { label: "서로 다른 게임 20종 플레이", goal: 20, of: "gamesPlayed", tier: "gold" },
-  games35: { label: "서로 다른 게임 35종 플레이", goal: 35, of: "gamesPlayed", tier: "diamond" },
-  gamesWon5: { label: "서로 다른 게임 5종에서 승리", goal: 5, of: "gamesWon", tier: "silver" },
-  gamesWon15: { label: "서로 다른 게임 15종에서 승리", goal: 15, of: "gamesWon", tier: "diamond" },
-  achv10: { label: "업적 10개 달성", goal: 10, of: "achievements", tier: "bronze" },
-  achv20: { label: "업적 20개 달성", goal: 20, of: "achievements", tier: "gold" },
-  achv40: { label: "업적 40개 달성", goal: 40, of: "achievements", tier: "diamond" },
-  achv80: { label: "업적 80개 달성", goal: 80, of: "achievements", tier: "legend" },
-  bot8Wins3: { label: "Lv.8+ 봇 판에서 3승", goal: 3, of: "bot8Wins", tier: "silver" },
-  bot8Wins15: { label: "Lv.8+ 봇 판에서 15승", goal: 15, of: "bot8Wins", tier: "gold" },
-  bot10Wins10: { label: "Lv.10 봇 판에서 10승", goal: 10, of: "bot10Wins", tier: "diamond" },
-  mastery10: { label: "한 게임에서 10승", goal: 10, of: "mastery", tier: "gold" },
-  mastery30: { label: "한 게임에서 30승", goal: 30, of: "mastery", tier: "legend" },
-  solo10: { label: "1인 게임 10판", goal: 10, of: "soloRuns", tier: "bronze" },
-  solo50: { label: "1인 게임 50판", goal: 50, of: "soloRuns", tier: "silver" },
+const PREFIX: Record<keyof SkinProgress, UnlockPrefix> = {
+  plays: "plays",
+  humanPlays: "humanPlays",
+  humanWins: "humanWins",
+  gamesPlayed: "games",
+  gamesWon: "gamesWon",
+  achievements: "achv",
+  bot8Wins: "bot8Wins",
+  bot10Wins: "bot10Wins",
+  mastery: "mastery",
+  soloRuns: "solo",
 };
+
+const LABEL: Record<keyof SkinProgress, (n: number) => string> = {
+  plays: (n) => `아무 게임 ${n}판`,
+  humanPlays: (n) => `사람과 함께 ${n}판`,
+  humanWins: (n) => `사람과 함께 ${n}승`,
+  gamesPlayed: (n) => `서로 다른 게임 ${n}종 플레이`,
+  gamesWon: (n) => `서로 다른 게임 ${n}종에서 승리`,
+  achievements: (n) => `업적 ${n}개 달성`,
+  bot8Wins: (n) => `Lv.8+ 봇 판에서 ${n}승`,
+  bot10Wins: (n) => `Lv.10 봇 판에서 ${n}승`,
+  mastery: (n) => `한 게임에서 ${n}승`,
+  soloRuns: (n) => `1인 게임 ${n}판`,
+};
+
+const B = "bronze", S = "silver", G = "gold", D = "diamond", L = "legend";
+
+/**
+ * Every track is a tight ladder (2026-11-01 "갭을 촘촘하게"): early steps come
+ * every few games so there's always a prize in reach. Id = prefix + goal, so the
+ * first 25 goals (plays10, humanPlays5, …) kept their ids.
+ */
+const LADDERS: Record<keyof SkinProgress, readonly (readonly [number, RewardTier])[]> = {
+  plays: [[3, B], [10, B], [20, B], [35, S], [50, S], [75, S], [100, G], [150, G], [200, D], [300, L]],
+  humanPlays: [[1, B], [5, B], [10, S], [25, S], [50, G], [75, D], [100, L]],
+  humanWins: [[1, B], [3, B], [5, S], [10, G], [20, D], [30, L], [50, L]],
+  gamesPlayed: [[3, B], [5, B], [8, S], [12, S], [16, G], [20, G], [25, D], [30, D], [35, D], [40, L]],
+  gamesWon: [[1, B], [3, S], [5, S], [10, G], [15, D], [20, L]],
+  achievements: [[5, B], [10, B], [20, S], [30, G], [40, G], [60, D], [80, D], [100, L]],
+  bot8Wins: [[1, B], [3, S], [6, S], [15, G], [25, D]],
+  bot10Wins: [[1, S], [3, G], [5, G], [10, D], [20, L]],
+  mastery: [[3, B], [5, S], [10, G], [20, D], [30, D], [50, L]],
+  soloRuns: [[3, B], [10, B], [25, S], [50, S], [100, G]],
+};
+
+export const UNLOCKS: Record<UnlockId, UnlockGoal> = Object.fromEntries(
+  (Object.keys(LADDERS) as (keyof SkinProgress)[]).flatMap((of) =>
+    LADDERS[of].map(([goal, tier]) => [`${PREFIX[of]}${goal}`, { label: LABEL[of](goal), goal, of, tier }]),
+  ),
+) as Record<UnlockId, UnlockGoal>;
 
 export interface RewardItem {
   kind: "back" | "table" | "plate";

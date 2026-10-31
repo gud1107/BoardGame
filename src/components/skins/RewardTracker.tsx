@@ -48,7 +48,7 @@ function GoalRow({ id, p, isNew }: { id: UnlockId; p: SkinProgress; isNew: boole
   const done = isUnlocked(id, p);
   return (
     <li
-      className={`flex flex-col gap-1 rounded-lg border px-2.5 py-2 ${
+      className={`flex flex-col gap-0.5 rounded-md border px-2 py-1 ${
         isNew ? "border-amber-300 bg-amber-300/15 light:bg-amber-50" : done ? "border-emerald-400/30 bg-emerald-400/5 light:border-emerald-200 light:bg-emerald-50/60" : "border-white/10 light:border-slate-200"
       }`}
     >
@@ -74,7 +74,7 @@ function GoalRow({ id, p, isNew }: { id: UnlockId; p: SkinProgress; isNew: boole
           <span className={`block h-full rounded-full ${tierBg}`} style={{ ...tierVars(u.tier), width: `${(value / u.goal) * 100}%` }} />
         </span>
       )}
-      <span className="text-[10px] break-keep text-white/50 light:text-slate-500">
+      <span className="truncate text-[10px] text-white/50 light:text-slate-500">
         🎁 {rewardsFor(id).map((r) => `${r.kindLabel} ${r.emoji} ${r.name}`).join(", ")}
       </span>
     </li>
@@ -143,7 +143,7 @@ export default function RewardTracker() {
       </button>
 
       {open && (
-        <div className="flex max-h-[min(70vh,560px)] w-[min(92vw,360px)] flex-col gap-3 overflow-y-auto rounded-2xl border border-white/15 bg-stone-950/95 p-3 text-white shadow-2xl backdrop-blur light:border-slate-200 light:bg-white/95 light:text-slate-900">
+        <div className="flex max-h-[min(72vh,600px)] w-[min(92vw,360px)] flex-col gap-2 overflow-y-auto rounded-2xl border border-white/15 bg-stone-950/95 p-2.5 text-white shadow-2xl backdrop-blur light:border-slate-200 light:bg-white/95 light:text-slate-900">
           <div className="flex items-baseline justify-between gap-2">
             <h2 className="text-sm font-bold">🎁 보상 도전</h2>
             <span className="text-[11px] text-white/60 tabular-nums light:text-slate-500">
@@ -157,7 +157,7 @@ export default function RewardTracker() {
           {fresh.length > 0 && (
             <section className="flex flex-col gap-1.5">
               <h3 className="text-xs font-bold text-amber-300 light:text-amber-700">✨ 새로 열린 보상</h3>
-              <ul className="flex flex-col gap-1.5">
+              <ul className="flex flex-col gap-1">
                 {fresh.map((id) => (
                   <GoalRow key={id} id={id} p={p} isNew />
                 ))}
@@ -168,7 +168,7 @@ export default function RewardTracker() {
           {next.length > 0 && (
             <section className="flex flex-col gap-1.5">
               <h3 className="text-xs font-bold text-white/80 light:text-slate-700">🎯 다음 목표</h3>
-              <ul className="flex flex-col gap-1.5">
+              <ul className="flex flex-col gap-1">
                 {next.slice(0, 3).map((id) => (
                   <GoalRow key={id} id={id} p={p} isNew={false} />
                 ))}
@@ -182,7 +182,7 @@ export default function RewardTracker() {
             const t = TIERS[tier];
             return (
               <details key={tier} className="group rounded-lg border border-white/10 light:border-slate-200">
-                <summary className="flex cursor-pointer list-none items-center gap-2 px-2.5 py-2 text-xs font-bold">
+                <summary className="flex cursor-pointer list-none items-center gap-2 px-2.5 py-1.5 text-xs font-bold">
                   <span className={tierText} style={tierVars(tier)}>
                     {t.emoji} {t.label}
                   </span>
@@ -191,7 +191,7 @@ export default function RewardTracker() {
                   </span>
                   <span className="ml-auto text-white/40 group-open:rotate-180 light:text-slate-400">▼</span>
                 </summary>
-                <ul className="flex flex-col gap-1.5 px-2 pb-2">
+                <ul className="flex flex-col gap-1 px-1.5 pb-1.5">
                   {ids.map((id) => (
                     <GoalRow key={id} id={id} p={p} isNew={fresh.includes(id)} />
                   ))}
