@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.122.0",
+    releaseDate: "2026-11-01",
+    title: "✓ 쿠 — 내 카드 능력 표시 · 진실 행동 하이라이트",
+    changes: [
+      { game: "coup", type: "IMPROVE", desc: "📜 내 손패 아래에 카드 능력(▶ 행동 · 🛡 방어) 요약 — 무엇을 할 수 있는지 바로 보여요" },
+      { game: "coup", type: "IMPROVE", desc: "✓ 내가 실제로 가진 카드의 행동·방어 버튼은 초록으로 빛나요 (의심받아도 안전한 진실 행동), 누르려 하면 해당 카드도 반짝" },
+    ],
+  },
+  {
     version: "v1.121.0",
     releaseDate: "2026-10-31",
     title: "🌸 방 테마 · 🖼️ 그림 뒷면 해금 · 🏺 소품 스킨 · ✨ 세트",

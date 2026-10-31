@@ -178,6 +178,10 @@ const BLOCK_CHARACTERS: Record<ActionKind, Character[]> = {
   exchange: [],
 };
 
+export function claimedCharacterFor(action: ActionKind): Character | null {
+  return CLAIMED_CHARACTER_FOR_ACTION[action];
+}
+
 export function blockCharactersFor(action: ActionKind): Character[] {
   return BLOCK_CHARACTERS[action];
 }

@@ -12,13 +12,14 @@ import TargetModal from "./TargetModal";
 import ResponseDock from "./ResponseDock";
 import ExchangeModal from "./ExchangeModal";
 import LoseInfluenceModal from "./LoseInfluenceModal";
-import { CardBack, CharacterCardFace, CoinStack } from "./CardArt";
+import { AbilityCaption, CardBack, CharacterCardFace, CoinStack } from "./CardArt";
 import { CardFlipWrapper, detectGameJustEnded, detectNewlyEliminated, EliminationToast, GameOverBanner } from "./CoupEffects";
 import {
   ACTION_NAMES,
   aliveSeats,
   ASSASSINATE_COST,
   CHARACTER_NAMES,
+  claimedCharacterFor,
   computeRankings,
   COUP_COST,
   currentResponders,
@@ -142,6 +143,8 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
   const { view: boardView, setView: setBoardView, canToggle } = useBoardView("coup-view");
   const [lowDetail] = useState(preferLowDetail);
   const [pendingTargetAction, setPendingTargetAction] = useState<ActionKind | null>(null);
+  /** Action button under the pointer/focus — lights up the hand card that backs it. */
+  const [hoverAction, setHoverAction] = useState<ActionKind | null>(null);
 
   const [trackedState, setTrackedState] = useState(state);
   const [eliminationToast, setEliminationToast] = useState<{ id: number; names: string[] } | null>(null);
@@ -258,6 +261,13 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
   const iAmResponding = responders.includes(viewerSeat) && state.phase !== "action" && state.phase !== "loseInfluence" && state.phase !== "exchange";
   const iAmLosingInfluence = state.phase === "loseInfluence" && state.pendingLoseInfluence?.seat === viewerSeat;
   const iAmExchanging = state.phase === "exchange" && view.pendingExchangeOptions !== null;
+  const myCharacters = new Set((myView.influence ?? []).map((c) => c.character));
+  /** 진실 행동 — the action's claimed character is actually in my hand (never a bluff). */
+  const isTruthful = (action: ActionKind) => {
+    const claim = claimedCharacterFor(action);
+    return claim !== null && myCharacters.has(claim);
+  };
+  const hoverClaim = isMyTurn && hoverAction ? claimedCharacterFor(hoverAction) : null;
 
   function declare(action: ActionKind, targetSeat?: SeatIndex) {
     onAction({ type: "declareAction", seat: viewerSeat, action, targetSeat });
@@ -407,8 +417,13 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
         <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-amber-200/90 uppercase">
           내 영향력 ({myView.influenceCount}장) · 🪙 {me.coins}코인
         </h3>
-        <div className="flex flex-wrap items-end gap-2">
-          {myView.influence?.map((c) => <CharacterCardFace key={c.id} card={c} size="md" />)}
+        <div className="flex flex-wrap items-start gap-2">
+          {myView.influence?.map((c) => (
+            <div key={c.id} className="flex flex-col items-center gap-1">
+              <CharacterCardFace card={c} size="md" highlight={hoverClaim === c.character} />
+              <AbilityCaption character={c.character} active={hoverClaim === c.character} />
+            </div>
+          ))}
           {me.revealed.map((c) => (
             <CharacterCardFace key={c.id} card={c} size="md" dead />
           ))}
@@ -421,17 +436,32 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
               {ACTIONS.map((action) => {
                 const cost = action === "coup" ? COUP_COST : action === "assassinate" ? ASSASSINATE_COST : 0;
                 const disabled = (forced && action !== "coup") || me.coins < cost || (needsDeclareTarget(action) && aliveSeats(state).filter((s) => s !== viewerSeat).length === 0);
+                const truthful = !disabled && isTruthful(action);
                 return (
                   <button
                     key={action}
                     disabled={disabled}
                     onClick={() => handleActionClick(action)}
-                    className={`rounded-xl border px-3 py-2 text-xs font-medium transition ${
-                      disabled ? "cursor-not-allowed border-white/10 text-white/25" : "border-amber-300/30 text-amber-100 hover:bg-amber-400/10"
+                    onPointerEnter={() => setHoverAction(action)}
+                    onPointerLeave={() => setHoverAction((a) => (a === action ? null : a))}
+                    onFocus={() => setHoverAction(action)}
+                    onBlur={() => setHoverAction((a) => (a === action ? null : a))}
+                    title={truthful ? `${CHARACTER_NAMES[claimedCharacterFor(action)!]} 보유 — 의심받아도 안전한 진실 행동` : undefined}
+                    className={`relative rounded-xl border px-3 py-2 text-xs font-medium transition ${
+                      disabled
+                        ? "cursor-not-allowed border-white/10 text-white/25"
+                        : truthful
+                          ? "border-emerald-300/80 bg-emerald-400/15 text-emerald-50 shadow-[0_0_14px_-2px_rgba(52,211,153,0.75)] hover:bg-emerald-400/25 light:border-emerald-500 light:bg-emerald-50 light:text-emerald-800"
+                          : "border-amber-300/30 text-amber-100 hover:bg-amber-400/10"
                     }`}
                   >
                     {ACTION_EMOJI[action]} {ACTION_NAMES[action]}
                     {cost > 0 && <span className="ml-1 opacity-60">({cost})</span>}
+                    {truthful && (
+                      <span className="ml-1.5 rounded-full bg-emerald-300 px-1.5 py-px text-[9px] font-bold text-emerald-950">
+                        ✓ {CHARACTER_NAMES[claimedCharacterFor(action)!]}
+                      </span>
+                    )}
                   </button>
                 );
               })}

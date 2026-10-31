@@ -152,15 +152,24 @@ export default function ResponseDock({
     hint = "막을 캐릭터를 주장하거나, 그냥 넘기세요.";
     choices = (
       <>
-        {blockCharactersFor(pending.action).map((character) => (
-          <button
-            key={character}
-            onClick={() => onAction({ type: "declareBlock", seat: viewerSeat, character })}
-            className="flex-1 rounded-xl border border-emerald-300/40 px-3 py-2.5 text-sm font-medium whitespace-nowrap text-emerald-100 hover:bg-emerald-400/10 light:bg-emerald-50 light:text-emerald-700"
-          >
-            🛡️ {CHARACTER_NAMES[character]}로 방어
-          </button>
-        ))}
+        {blockCharactersFor(pending.action).map((character) => {
+          // 진실 방어 — I actually hold the character, so a challenge can't cost me a card.
+          const truthful = myCards.some((c) => c.character === character);
+          return (
+            <button
+              key={character}
+              onClick={() => onAction({ type: "declareBlock", seat: viewerSeat, character })}
+              className={`flex-1 rounded-xl border px-3 py-2.5 text-sm font-medium whitespace-nowrap transition ${
+                truthful
+                  ? "border-emerald-300/90 bg-emerald-400/20 text-emerald-50 shadow-[0_0_16px_-2px_rgba(52,211,153,0.8)] hover:bg-emerald-400/30 light:border-emerald-500 light:bg-emerald-100 light:text-emerald-800"
+                  : "border-emerald-300/40 text-emerald-100 hover:bg-emerald-400/10 light:bg-emerald-50 light:text-emerald-700"
+              }`}
+            >
+              🛡️ {CHARACTER_NAMES[character]}로 방어
+              {truthful && <span className="ml-1.5 rounded-full bg-emerald-300 px-1.5 py-px text-[10px] font-bold text-emerald-950">✓ 보유</span>}
+            </button>
+          );
+        })}
         {passButton("막지 않기")}
       </>
     );
@@ -197,7 +206,12 @@ export default function ResponseDock({
           <div className="flex shrink-0 flex-col items-center gap-1">
             <div className="flex gap-1">
               {myCards.map((c) => (
-                <CharacterCardFace key={c.id} card={c} size="sm" />
+                <CharacterCardFace
+                  key={c.id}
+                  card={c}
+                  size="sm"
+                  highlight={state.phase === "blockWindow" && !!state.pendingAction && blockCharactersFor(state.pendingAction.action).includes(c.character)}
+                />
               ))}
               {myRevealed.map((c) => (
                 <CharacterCardFace key={c.id} card={c} size="sm" dead />

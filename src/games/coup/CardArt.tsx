@@ -106,6 +106,32 @@ export function CharacterCardFace({
   );
 }
 
+/** What holding this card lets you do *truthfully* — mirrors engine.ts CLAIMED_CHARACTER_FOR_ACTION / BLOCK_CHARACTERS. */
+export const CHARACTER_ABILITY: Record<Character, { act?: string; block?: string }> = {
+  duke: { act: "세금 +3", block: "외화 도입" },
+  assassin: { act: "암살 (3코인)" },
+  contessa: { block: "암살" },
+  captain: { act: "갈취 2코인", block: "갈취" },
+  ambassador: { act: "카드 교환", block: "갈취" },
+};
+
+/** Small "▶ 행동 / 🛡 방어" caption shown under the viewer's own face-up hand cards. */
+export function AbilityCaption({ character, active = false }: { character: Character; active?: boolean }) {
+  const a = CHARACTER_ABILITY[character];
+  return (
+    <div
+      className={`flex w-[4.75rem] flex-col gap-0.5 rounded-md border px-1 py-0.5 text-[9px] leading-tight transition ${
+        active
+          ? "border-emerald-300/70 bg-emerald-400/15 text-emerald-100 light:border-emerald-500 light:bg-emerald-50 light:text-emerald-800"
+          : "border-white/10 bg-black/30 text-white/70 light:border-slate-200 light:bg-white light:text-slate-600"
+      }`}
+    >
+      {a.act && <span>▶ {a.act}</span>}
+      {a.block && <span>🛡 {a.block} 방어</span>}
+    </div>
+  );
+}
+
 export function CoinStack({ coins }: { coins: number }) {
   return (
     <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-400/10 px-2 py-0.5 text-xs font-bold text-amber-200 light:border-amber-400 light:bg-amber-50 light:text-amber-700 light:shadow-sm">
