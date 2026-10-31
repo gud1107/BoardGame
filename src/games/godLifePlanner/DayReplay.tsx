@@ -7,6 +7,8 @@ import { cellArg, getGodLifePlannerSound } from "./godLifePlannerSound";
 import VlogStage, { type VlogClip } from "./VlogStage";
 import { narrate, setVoicePref, speechSupported, unlockVoice, useVoicePref } from "./vlogVoice";
 import { isSfxEffectivelyMuted, useAudioSettingsStore } from "@/lib/audio/audioSettings";
+import { characterVoice } from "@/lib/audio/characterVoice";
+import { useMyCharacter } from "@/lib/character/myCharacter";
 
 /**
  * 하루 재생 — 내가 짠 계획이 B1(0시)부터 B8(24시)까지 실행되며 체력·멘탈·트랙이 어떻게 변하는지
@@ -242,6 +244,9 @@ export default function DayReplay({ state, rec, endTracks, preview, autoPlay = t
   const [playing, setPlaying] = useState(autoPlay && !reduced);
   const [speed, setSpeed] = useState<1 | 2>(1);
   const last = frames.length - 1;
+  // it's my day — narrated in the voice of the character I picked (프로필 → 캐릭터)
+  const myCharacter = useMyCharacter((s) => s.character);
+  const voice = useMemo(() => characterVoice(0, myCharacter ?? undefined), [myCharacter]);
 
   // 계획이 바뀌면(미리보기) 처음부터 다시
   const sig = useMemo(() => JSON.stringify([rec.plan.cells, rec.plan.temptation, rec.endHp, rec.endMp]), [rec]);
@@ -285,13 +290,13 @@ export default function DayReplay({ state, rec, endTracks, preview, autoPlay = t
     const cancel = narrate(shotsRef.current[idx].speech, speed === 2 ? 1.5 : 1.08, () => {
       spoken = true;
       go();
-    });
+    }, voice);
     return () => {
       window.clearTimeout(t);
       window.clearTimeout(gap);
       cancel();
     };
-  }, [playing, idx, last, speed, voiceOn]);
+  }, [playing, idx, last, speed, voiceOn, voice]);
 
   function toggleVoice() {
     ui();

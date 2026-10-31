@@ -67,6 +67,7 @@ import ChatDrawer from "@/components/chat/ChatDrawer";
 import { selfResult } from "@/games/shared/selfResult";
 import { curlingStatDetails } from "./stats";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
+import { seatVoice } from "@/lib/audio/seatVoice";
 
 /**
  * Online-room entry point for 컬링 파티 — the same lockstep room pattern as
@@ -289,7 +290,7 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
     if (!force && now - liveInfoAtRef.current < 180) return;
     liveInfoAtRef.current = now;
     setLiveInfo((prev) => {
-      if (prev && prev.own < 0.5 && v.sweep.own >= 0.5) shout(SWEEP_SHOUTS[Math.floor(Math.random() * SWEEP_SHOUTS.length)]);
+      if (prev && prev.own < 0.5 && v.sweep.own >= 0.5) shout(SWEEP_SHOUTS[Math.floor(Math.random() * SWEEP_SHOUTS.length)], seatVoice(v.seat, namesRef.current[v.seat]));
       return { turn: v.turn, seat: v.seat, side: v.side, passedTee: v.passedTee, own: v.sweep.own, opp: v.sweep.opp, who: v.sweep.who };
     });
   }, []);

@@ -7,6 +7,7 @@ import { preferLowDetail, useBoardView } from "@/games/shared/three/viewPref";
 import type { CoyoteSeat3D } from "./three/CoyoteTable3D";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
+import { callAs } from "@/lib/audio/seatVoice";
 import RulebookModal from "./RulebookModal";
 import CoyoteHistoryModal from "./CoyoteHistory";
 import CoyoteSoundHud from "./CoyoteSoundHud";
@@ -118,6 +119,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
   if (trackedState !== state) {
     if (detectCoyoteCallEvent(trackedState, state) && state.lastResolution) {
       setHowl({ callerName: names[state.lastResolution.callerSeat] });
+      callAs(state.lastResolution.callerSeat, names[state.lastResolution.callerSeat], "코요테");
     }
     const plusOneSeat = detectPlusOneUsedEvent(trackedState, state);
     if (plusOneSeat !== null) setPlusOneFx({ seatName: names[plusOneSeat] });

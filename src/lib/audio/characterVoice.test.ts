@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { PERSONA_ORDER } from "@/games/shared/three/persona";
 import { CHARACTER_PRESETS } from "@/lib/character/avatar";
-import { characterVoice, CROSS_VOICE, introLine, isVoiced, PASS_STALE, PassQueue, voiceGender, passLine, PRESET_VOICES, spokenPhrases, VOICE_GAP, VoiceGate, voiceLine, voiceProfile, type VoicedMood } from "./characterVoice";
+import { ACTION_NAMES, CHARACTER_NAMES } from "@/games/coup/engine";
+import { callLine, characterVoice, CROSS_VOICE, introLine, isVoiced, PASS_STALE, PassQueue, voiceGender, passLine, PRESET_VOICES, spokenPhrases, VOICE_GAP, VoiceGate, voiceLine, voiceProfile, type VoicedMood } from "./characterVoice";
 
 const MOODS: VoicedMood[] = ["cheer", "shock", "laugh", "sad", "smug", "nervous", "point", "clap", "shrug", "slump", "raise"];
 
@@ -200,5 +201,23 @@ describe("pass queue", () => {
       for (const h of heard) expect(h.start - passAt[h.seat]).toBeLessThanOrEqual(PASS_STALE);
       expect(heard.length).toBeGreaterThanOrEqual(3);
     }
+  });
+});
+
+describe("game calls", () => {
+  const WORDS = ["페루도", "맞아", "코요테", "의심", "노땡스", ...Object.values(ACTION_NAMES), ...Object.values(CHARACTER_NAMES).map((c) => `${c}으로 막는다`)];
+
+  it("every persona says every game's call in words the engine can speak", () => {
+    for (const p of PERSONA_ORDER)
+      for (const w of WORDS) {
+        const phrases = spokenPhrases(callLine(p, w));
+        expect(phrases.length).toBeGreaterThan(0);
+        for (const ph of phrases) expect(ph.text).toMatch(/^[가-힣 ,.!?]+$/);
+        expect(phrases.map((ph) => ph.text).join(" ")).toContain(w);
+      }
+  });
+
+  it("sounds different per persona", () => {
+    expect(new Set(PERSONA_ORDER.map((p) => callLine(p, "코요테"))).size).toBeGreaterThanOrEqual(5);
   });
 });

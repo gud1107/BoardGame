@@ -64,6 +64,19 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.131.0",
+    releaseDate: "2026-11-01",
+    title: "🗣️ 여러 게임에서 내 캐릭터 목소리로 외치기",
+    changes: [
+      { game: "perudo", type: "FEAT", desc: "🗣️ \"페루도!\" · \"맞아!\"를 외친 사람의 캐릭터 목소리·말투로" },
+      { game: "coyote", type: "FEAT", desc: "🗣️ \"코요테!\" 호출을 부른 사람의 캐릭터 목소리로" },
+      { game: "coup", type: "FEAT", desc: "🗣️ 행동 선언(소득 제외)·방어·의심을 그 사람의 캐릭터 목소리로" },
+      { game: "no-thanks", type: "FEAT", desc: "🗣️ 칩을 내고 넘길 때 \"노땡스!\"를 그 사람의 캐릭터 목소리로" },
+      { game: "curling", type: "IMPROVE", desc: "🗣️ 스위핑 외침이 그 팀 투구자의 캐릭터 목소리로" },
+      { game: "god-life-planner", type: "IMPROVE", desc: "🎙️ 하루 다시 보기 내레이션을 내가 고른 캐릭터 목소리로" },
+    ],
+  },
+  {
     version: "v1.130.0",
     releaseDate: "2026-11-01",
     title: "🔒 잠긴 스킨 누르면 얻는 법 · 3D 카드에 자리 색 띠",

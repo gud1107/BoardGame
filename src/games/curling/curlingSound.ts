@@ -1,6 +1,7 @@
 import { defineSuite, fx, type SfxRecipe, type SuiteConfig } from "@/lib/audio/proceduralSuite";
 import { isSfxEffectivelyMuted, useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import { currentThrower, type CurlingState } from "./engine";
+import { utteranceVoice, type CharacterVoice } from "@/lib/audio/characterVoice";
 
 /**
  * 컬링 파티 "Ice Party" suite (rulebook §18) — a bright disco-house loop in
@@ -101,7 +102,8 @@ export function curlingCues(viewerSide: number | null, viewerSeat: number) {
 let lastShout = 0;
 export const SWEEP_SHOUTS = ["헐! 헐!", "쓸어!", "더 세게!", "헐 하드!", "가자 가자!"];
 
-export function shout(text: string, minGapMs = 1400): void {
+/** `voice` = the sweeping side's character (seatVoice) — their pitch and installed voice, shouted a bit higher. */
+export function shout(text: string, voice?: CharacterVoice, minGapMs = 1400): void {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
   if (isSfxEffectivelyMuted(useAudioSettingsStore.getState())) return;
   const now = Date.now();
@@ -110,8 +112,10 @@ export function shout(text: string, minGapMs = 1400): void {
   try {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = "ko-KR";
+    const own = voice ? utteranceVoice(voice) : null;
+    if (own?.voice) u.voice = own.voice;
     u.rate = 1.35;
-    u.pitch = 1.15;
+    u.pitch = Math.min(2, (own?.pitch ?? 1) * 1.15);
     u.volume = Math.min(1, useAudioSettingsStore.getState().sfxVolume ?? 0.7);
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(u);

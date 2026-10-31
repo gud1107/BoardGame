@@ -23,6 +23,7 @@ import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 const NoThanksTable3D = dynamic(() => import("./three/NoThanksTable3D"), { ssr: false, loading: () => <Loading3D /> });
 import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { getNoThanksSound, noThanksSoundCues } from "./noThanksSound";
+import { callAs } from "@/lib/audio/seatVoice";
 
 const REVEAL_CHIPS_STORAGE_KEY = "no-thanks-reveal-opponent-chips";
 
@@ -225,6 +226,7 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
       // own lastEvent animation plays instead.
       if (!is3D) setEffects((prev) => [...prev, { ...detected, id: (prev.at(-1)?.id ?? 0) + 1 }]);
       setLastEvent3D((prev) => ({ id: (prev?.id ?? 0) + 1, kind: detected.kind, seat: detected.seat }));
+      if (detected.kind === "pass") callAs(detected.seat, names[detected.seat], "노땡스");
     }
   }
   if (is3D && effects.length > 0) setEffects([]);

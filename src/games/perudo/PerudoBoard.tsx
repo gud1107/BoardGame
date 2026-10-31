@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
+import { callAs } from "@/lib/audio/seatVoice";
 import { preferLowDetail, useBoardView } from "@/games/shared/three/viewPref";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import RulebookModal from "./RulebookModal";
@@ -264,6 +265,8 @@ export default function PerudoBoard({
     const outcome = detectShowdownEvent(trackedFxState, state);
     if (outcome && state.lastResolution) {
       const res = state.lastResolution;
+      // the caller says it in their own character's voice
+      callAs(res.actorSeat, names[res.actorSeat], res.kind === "dudo" ? "페루도" : "맞아");
       setShowdownFx((prev) => ({
         token: (prev?.token ?? 0) + 1,
         outcome,

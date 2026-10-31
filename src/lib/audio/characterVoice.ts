@@ -267,6 +267,21 @@ const PASS_LINES: Record<Persona, string[]> = {
   fidget: ["패스 패스!", "아, 패스!"],
 };
 
+/**
+ * A game's big call ("페루도", "코요테", "의심" …) said the character's way: the starer states it,
+ * the shy one half-asks it, the fidget can't say it just once.
+ */
+export function callLine(persona: Persona, word: string): string {
+  return {
+    starer: `${word}.`,
+    shy: `저, ${word}…`,
+    scanner: `${word}!`,
+    focused: `${word}.`,
+    dreamer: `음~ ${word}.`,
+    fidget: `${word}, ${word}!`,
+  }[persona];
+}
+
 /** The `n`-th pass line for this character. */
 export function passLine(persona: Persona, seat: number, n: number): string {
   const lines = PASS_LINES[persona];
@@ -406,36 +421,53 @@ export function speakEmotion(o: { seat: number; mood: PersonMood; voice: Charact
   say(o.voice, o.text);
 }
 
-const passQueue = new PassQueue<{ seat: number; voice: CharacterVoice }>();
+const lineQueue = new PassQueue<{ voice: CharacterVoice; text: string }>();
 const passes = new Map<number, number>();
-let passTimer: number | null = null;
+let queueTimer: number | null = null;
 
-const sayPass = (p: { seat: number; voice: CharacterVoice }, pace: number) => {
-  const n = (passes.get(p.seat) ?? 0) + 1;
-  passes.set(p.seat, n);
-  say(p.voice, passLine(p.voice.persona, p.seat, n), pace);
-};
 const voiceBusy = () => window.speechSynthesis.speaking || window.speechSynthesis.pending;
 
 /**
- * A pass in this seat's character voice ("저, 패스할게요…" / "패스 패스!" …). Never cuts a
- * line that is playing — it waits its turn (see PassQueue) and, having waited, is said a bit
- * quicker to catch up with the table. Safe to call anywhere.
+ * Say a short table line (a pass, a game's call) in `voice` without cutting the line that is
+ * playing — it waits its turn (see PassQueue) and, having waited, is said a bit quicker to
+ * catch up with the table.
  */
-export function speakPass(seat: number, voice: CharacterVoice) {
+function speakQueued(voice: CharacterVoice, text: string) {
   if (!canSpeak()) return;
-  const now = performance.now() / 1000;
-  const ready = passQueue.offer({ seat, voice }, now, voiceBusy());
-  if (ready) return sayPass(ready, 1);
-  if (passTimer !== null) return;
-  passTimer = window.setInterval(() => {
-    const next = passQueue.take(performance.now() / 1000, voiceBusy());
-    if (next && canSpeak()) sayPass(next, 1.15);
-    if (!passQueue.pending && passTimer !== null) {
-      window.clearInterval(passTimer);
-      passTimer = null;
+  const ready = lineQueue.offer({ voice, text }, performance.now() / 1000, voiceBusy());
+  if (ready) return say(ready.voice, ready.text);
+  if (queueTimer !== null) return;
+  queueTimer = window.setInterval(() => {
+    const next = lineQueue.take(performance.now() / 1000, voiceBusy());
+    if (next && canSpeak()) say(next.voice, next.text, 1.15);
+    if (!lineQueue.pending && queueTimer !== null) {
+      window.clearInterval(queueTimer);
+      queueTimer = null;
     }
   }, 120);
+}
+
+/** A pass in this seat's character voice ("저, 패스할게요…" / "패스 패스!" …). Safe to call anywhere. */
+export function speakPass(seat: number, voice: CharacterVoice) {
+  const n = (passes.get(seat) ?? 0) + 1;
+  passes.set(seat, n);
+  speakQueued(voice, passLine(voice.persona, seat, n));
+}
+
+/** A game's call (`word`, e.g. "코요테") in this character's voice and manner. Safe to call anywhere. */
+export function speakCall(voice: CharacterVoice, word: string) {
+  speakQueued(voice, callLine(voice.persona, word));
+}
+
+/**
+ * For games that build their own utterance (a narration, a shout): the installed voice and the
+ * pitch/rate multipliers that make it this character. Null where speech isn't available.
+ */
+export function utteranceVoice(voice: CharacterVoice): { voice: SpeechSynthesisVoice | null; pitch: number; rate: number } | null {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
+  const { voice: v, cross } = pickVoice(voice.gender, voice.slot);
+  const shift = cross ? CROSS_VOICE[voice.gender] : { pitch: 1, rate: 1 };
+  return { voice: v, pitch: voice.pitch * shift.pitch, rate: voice.rate * shift.rate };
 }
 
 /** The picked cast character introduces themself in their own voice (profile preview). */

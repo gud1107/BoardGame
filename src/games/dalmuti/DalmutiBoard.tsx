@@ -6,8 +6,7 @@ import Avatar from "@/components/common/Avatar";
 import { preferLowDetail, useBoardView } from "@/games/shared/three/viewPref";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
-import { characterVoice, speakPass } from "@/lib/audio/characterVoice";
-import { roomCharacterOf, useRoomCharacters } from "@/lib/character/roomCharacters";
+import { passAs } from "@/lib/audio/seatVoice";
 import { isBgmEffectivelyMuted, useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import { getDalmutiSound } from "./audio/dalmutiSoundEngine";
 import RulebookModal from "./RulebookModal";
@@ -142,7 +141,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
   // each seat passes in the voice of the character its player chose (프로필 → 캐릭터) — the
   // same voice the 3D table gives them; bots and players without one get their seat's voice
   function sayPass(seat: SeatIndex) {
-    speakPass(seat, characterVoice(seat, roomCharacterOf(useRoomCharacters.getState().byName, names[seat])));
+    passAs(seat, names[seat]);
   }
   function dispatch(action: EngineAction) {
     const engine = getSoundEngine();

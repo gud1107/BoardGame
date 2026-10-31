@@ -7,6 +7,7 @@ import type { CoupBeat } from "./three/CoupTable3D";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { coupIntensity, coupSoundCues, getCoupSound } from "./coupSound";
+import { callAs } from "@/lib/audio/seatVoice";
 import RulebookModal from "./RulebookModal";
 import TargetModal from "./TargetModal";
 import ResponseDock from "./ResponseDock";
@@ -102,6 +103,25 @@ function describeLastEvent(event: LastEvent | null, names: Record<SeatIndex, str
   }
 }
 
+/**
+ * What the speaker says aloud for the last event, in their character's voice: the declared
+ * action, a block, a challenge. Income (every quiet turn) stays silent so the table isn't noise.
+ */
+export function coupCallOf(e: CoupState["lastEvent"]): { seat: SeatIndex; word: string } | null {
+  if (!e) return null;
+  switch (e.type) {
+    case "declare":
+      return e.action === "income" ? null : { seat: e.seat, word: ACTION_NAMES[e.action] };
+    case "block":
+      return { seat: e.blockerSeat, word: `${CHARACTER_NAMES[e.character]}으로 막는다` };
+    case "challengeAction":
+    case "challengeBlock":
+      return { seat: e.challengerSeat, word: "의심" };
+    default:
+      return null;
+  }
+}
+
 /** The last public event as a "beat" the 3D table acts out (bubbles + poses). */
 function beatOf(state: CoupState, names: Record<SeatIndex, string>): CoupBeat | null {
   const e = state.lastEvent;
@@ -166,6 +186,8 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
     setTrackedState(state);
     const spec = state.lastEvent !== trackedState.lastEvent ? burstOf(state.lastEvent, names) : null;
     if (spec) setBurst((b) => ({ id: (b?.id ?? 0) + 1, spec }));
+    const call = state.lastEvent !== trackedState.lastEvent ? coupCallOf(state.lastEvent) : null;
+    if (call) callAs(call.seat, names[call.seat], call.word);
     const passed = detectPassers(trackedState, state);
     if (passed.length > 0) setPassFx((p) => ({ id: (p?.id ?? 0) + 1, seats: passed }));
     if (newlyEliminated.length > 0) setEliminationToast({ id: state.eliminationOrder.length, names: newlyEliminated.map((s) => names[s] ?? "상대") });

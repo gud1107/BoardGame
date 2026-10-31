@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { isSfxEffectivelyMuted, useAudioSettingsStore } from "@/lib/audio/audioSettings";
+import { utteranceVoice, type CharacterVoice } from "@/lib/audio/characterVoice";
 
 /**
  * 하루 재생 브이로그 내레이션 — 브라우저 음성 합성(Web Speech, 음성 파일 없음)으로 자막을 읽는다.
@@ -75,7 +76,7 @@ function speakable(text: string): string {
  * `text`를 읽고 끝나면 `onEnd`. 반환값은 취소 함수. 목소리가 안 나는 상태면 바로 `onEnd`를
  * 다음 틱에 부른다. 일부 브라우저가 onend를 빼먹어서 글자 수로 계산한 안전 타이머도 건다.
  */
-export function narrate(text: string, rate: number, onEnd: () => void): () => void {
+export function narrate(text: string, rate: number, onEnd: () => void, voice?: CharacterVoice): () => void {
   let done = false;
   const finish = () => {
     if (done) return;
@@ -88,7 +89,9 @@ export function narrate(text: string, rate: number, onEnd: () => void): () => vo
     return () => window.clearTimeout(t);
   }
   const synth = window.speechSynthesis;
-  const v = koreanVoice();
+  // the player's own character narrates their vlog (그 캐릭터의 목소리·음높이), else the most natural voice
+  const own = voice ? utteranceVoice(voice) : null;
+  const v = own?.voice ?? koreanVoice();
   // 음성 목록은 받았는데 한국어가 없으면 외국어 음성으로 읽지 않는다
   if (!v && synth.getVoices().length > 0) {
     const t = window.setTimeout(finish, 0);
@@ -98,7 +101,7 @@ export function narrate(text: string, rate: number, onEnd: () => void): () => vo
   u.lang = "ko-KR";
   if (v) u.voice = v;
   u.rate = rate;
-  u.pitch = 1.08;
+  u.pitch = Math.min(2, own?.pitch ?? 1.08);
   u.volume = Math.min(1, useAudioSettingsStore.getState().sfxVolume ?? 0.7);
   u.onend = finish;
   u.onerror = finish;
