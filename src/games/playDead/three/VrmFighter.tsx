@@ -36,6 +36,8 @@ export interface VrmFighterProps {
   /** greyed out: death confirmed */
   out: boolean;
   lowDetail: boolean;
+  /** walking speed (m/s), default 3.2 */
+  speed?: number;
   onPick?: () => void;
   children?: ReactNode;
 }
@@ -249,7 +251,7 @@ const fE = new THREE.Euler();
 const tmpV = new THREE.Vector3();
 
 export default function VrmFighter(props: VrmFighterProps) {
-  const { look, seed, home, facing, pose, poseKey, moveTo, aimAt, out, lowDetail } = props;
+  const { look, seed, home, facing, pose, poseKey, moveTo, aimAt, out, lowDetail, speed = 3.2 } = props;
   const { vrm, morphs } = useVrmAvatar(look, seed, { out, lowDetail });
   const rootRef = useRef<THREE.Group>(null);
   const bodyRef = useRef<THREE.Group>(null);
@@ -282,7 +284,7 @@ export default function VrmFighter(props: VrmFighterProps) {
     const dx = dest.x - root.position.x;
     const dz = dest.z - root.position.z;
     const dist = Math.hypot(dx, dz);
-    const step = Math.min(dist, dt * 3.2);
+    const step = Math.min(dist, dt * speed);
     if (dist > 0.001) {
       root.position.x += (dx / dist) * step;
       root.position.z += (dz / dist) * step;

@@ -64,6 +64,17 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.140.0",
+    releaseDate: "2026-11-01",
+    title: "🧗 큐플레이 — 3D 무대와 문제 난이도",
+    changes: [
+      { game: "qplay", type: "FEAT", desc: "🧗 3D 올라올라는 자리마다 10층 탑 — 맞히면 폴짝 한 층 위로, 틀리면 미끄러져 한 층 아래로, 꼭대기에선 만세" },
+      { game: "qplay", type: "FEAT", desc: "🚀 3D 미사일은 반원 받침대 위에서 — 받침대 칸 = 하트, 미사일이 날아가 터지면 한 칸씩 꺼지고 0이면 쓰러져요" },
+      { game: "qplay", type: "FEAT", desc: "⭕❌ 3D OX는 광장 자체가 3D — 내 캐릭터가 눌러/끈 곳으로 달려가고, 오답 쪽 바닥이 꺼지며 털썩 (아래 원탁은 없앴어요)" },
+      { game: "qplay", type: "FEAT", desc: "🎚️ 방 만들 때 문제 난이도(쉬움/보통/어려움) — 보통부터는 쉬운 문제·한 자리 구구단 같은 쉬운 셈이 안 나와요" },
+    ],
+  },
+  {
     version: "v1.139.0",
     releaseDate: "2026-11-01",
     title: "🌌 새 게임: 별빛 러미",

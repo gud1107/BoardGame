@@ -16,6 +16,8 @@ export type Seat = number;
 export type Phase = "intro" | "question" | "aim" | "reveal" | "climb" | "miniEnd" | "ended";
 export type MiniId = "ox" | "proverb" | "idiom" | "nonsense" | "general" | "chosung" | "climb" | "missile";
 export type Length = "short" | "normal" | "long";
+/** 문제 난이도(방 만들 때). 쉬움이 아니면 쉬운(d=1) 문제는 어려운 문제를 다 쓴 뒤에만 나온다. */
+export type Level = "easy" | "normal" | "hard";
 
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 8;
@@ -25,6 +27,11 @@ export const LENGTH_OPTIONS: readonly { value: Length; label: string }[] = [
   { value: "short", label: "짧게" },
   { value: "normal", label: "보통" },
   { value: "long", label: "길게" },
+];
+export const LEVEL_OPTIONS: readonly { value: Level; label: string; hint: string }[] = [
+  { value: "easy", label: "쉬움", hint: "쉬운 문제도 골고루 · 올라올라는 두 자리 덧셈·구구단" },
+  { value: "normal", label: "보통", hint: "쉬운 문제는 빼고 · 올라올라는 세 자리 셈·나눗셈·섞어 셈" },
+  { value: "hard", label: "어려움", hint: "어려운 문제부터 · 올라올라는 두 자리 곱셈·괄호·퍼센트" },
 ];
 
 export const MINI_INFO: Record<MiniId, { emoji: string; name: string; short: string; color: string }> = {
@@ -79,6 +86,8 @@ const COUNTS: Record<Exclude<MiniId, "climb">, Record<Length, number>> = {
   missile: { short: 8, normal: 12, long: 16 },
 };
 const CLIMB_SECONDS: Record<Length, number> = { short: 45, normal: 60, long: 75 };
+/** 올라올라 시간 배율 — 어려운 셈일수록 한 문제에 더 오래 걸린다. */
+const CLIMB_TIME_SCALE: Record<Level, number> = { easy: 1, normal: 1.25, hard: 1.5 };
 
 export function rankPoints(rank: number, table: readonly number[], floor: number): number {
   return table[rank] ?? floor;
@@ -89,9 +98,15 @@ export interface GameOptions {
   readonly minis: readonly MiniId[];
   readonly rounds: number;
   readonly length: Length;
+  /** 문제 난이도(없으면 보통). */
+  readonly level?: Level;
 }
 
-export const DEFAULT_OPTIONS: GameOptions = { minis: MINI_IDS, rounds: 5, length: "normal" };
+export const DEFAULT_OPTIONS: GameOptions = { minis: MINI_IDS, rounds: 5, length: "normal", level: "normal" };
+
+export function levelOf(options: Pick<GameOptions, "level">): Level {
+  return options.level === "normal" || options.level === "hard" ? options.level : "easy";
+}
 
 // ---------------------------------------------------------------------------
 // 문제
@@ -161,12 +176,40 @@ function bankSize(bank: BankId): number {
   }
 }
 
-/** 시드별 은행 순서 — 커서로 앞에서부터 꺼내 같은 판에 같은 문제가 다시 나오지 않게 한다. */
-function bankOrder(seed: number, bank: BankId): number[] {
-  return shuffle(
+function bankDiff(bank: BankId, i: number): Diff {
+  switch (bank) {
+    case "ox":
+      return OX_BANK[i].d;
+    case "proverb":
+      return PROVERB_BANK[i].d;
+    case "idiom":
+      return IDIOM_BANK[i].d;
+    case "nonsense":
+      return NONSENSE_BANK[i].d;
+    case "general":
+      return GENERAL_BANK[i].d;
+    case "chosung": {
+      const n = CHOSUNG_POOL[i].word.length;
+      return n >= 4 ? 3 : n === 3 ? 2 : 1;
+    }
+  }
+}
+
+/**
+ * 시드별 은행 순서 — 커서로 앞에서부터 꺼내 같은 판에 같은 문제가 다시 나오지 않게 한다.
+ * 보통: 보통·어려움(섞어서) → 쉬움. 어려움: 어려움 → 보통 → 쉬움. 쉬운 문제는 앞 묶음을 다 쓴 뒤에만 나온다.
+ */
+export function bankOrder(seed: number, bank: BankId, level: Level = "easy"): number[] {
+  const all = shuffle(
     Array.from({ length: bankSize(bank) }, (_, i) => i),
     seededRng((seed ^ hashString(bank)) >>> 0),
   );
+  if (level === "easy") return all;
+  const tier = (i: number) => {
+    const d = bankDiff(bank, i);
+    return level === "normal" ? (d >= 2 ? 0 : 1) : 3 - d;
+  };
+  return [0, 1, 2].flatMap((t) => all.filter((i) => tier(i) === t));
 }
 
 function pickFrom<T>(rng: () => number, arr: readonly T[]): T {
@@ -244,8 +287,12 @@ export function buildQuestion(bank: BankId, index: number, n: number, rng: () =>
   }
 }
 
-/** 올라올라(§10) 3지선다 — 사칙연산·큰 수·짝수 찾기. 시드로 결정적으로 만든다. */
-export function buildClimbQuestions(seed: number, count = CLIMB_QUESTIONS): Question[] {
+/**
+ * 올라올라(§10) 3지선다 — 시드로 결정적으로 만든다.
+ * 쉬움: 두 자리 덧셈·뺄셈·구구단·큰 수·짝수 / 보통: 세 자리 셈·두 자리×한 자리·나눗셈·섞어 셈 /
+ * 어려움: 두 자리×두 자리·세 자리÷한 자리·괄호·제곱·퍼센트. 보통 이상은 끝자리가 같은 함정 보기를 섞는다.
+ */
+export function buildClimbQuestions(seed: number, count = CLIMB_QUESTIONS, level: Level = "easy"): Question[] {
   const rng = seededRng(seed);
   const int = (lo: number, hi: number) => lo + Math.floor(rng() * (hi - lo + 1));
   const nearby = (answer: number, spread: number) => {
@@ -256,12 +303,99 @@ export function buildClimbQuestions(seed: number, count = CLIMB_QUESTIONS): Ques
     }
     return [...out].map(String);
   };
+  // 끝자리만 보고 고를 수 없게: 하나는 ±10·±20(끝자리 같음), 하나는 가까운 수
+  const trap = (answer: number) => {
+    const out = new Set<number>();
+    const sign = answer >= 20 && rng() < 0.5 ? -1 : 1;
+    out.add(answer + sign * 10 * int(1, 2));
+    while (out.size < 2) {
+      const v = answer + (rng() < 0.5 ? -1 : 1) * int(1, 9);
+      if (v !== answer && v >= 0) out.add(v);
+    }
+    return [...out].map(String);
+  };
   const out: Question[] = [];
   for (let i = 0; i < count; i++) {
     const kind = int(0, 5);
     let prompt: string;
     let correct: number;
     let wrong: string[];
+    if (level === "normal") {
+      if (kind === 0) {
+        const a = int(120, 480);
+        const b = int(35, 99);
+        prompt = `${a} + ${b} = ?`;
+        correct = a + b;
+      } else if (kind === 1) {
+        const a = int(150, 500);
+        const b = int(36, 99);
+        prompt = `${a} − ${b} = ?`;
+        correct = a - b;
+      } else if (kind === 2) {
+        const a = int(12, 29);
+        const b = int(3, 9);
+        prompt = `${a} × ${b} = ?`;
+        correct = a * b;
+      } else if (kind === 3) {
+        const b = int(3, 9);
+        const q = int(11, 25);
+        prompt = `${b * q} ÷ ${b} = ?`;
+        correct = q;
+      } else if (kind === 4) {
+        const a = int(3, 9);
+        const b = int(4, 12);
+        const c = int(11, 49);
+        prompt = `${a} × ${b} + ${c} = ?`;
+        correct = a * b + c;
+      } else {
+        const a = int(25, 89);
+        const b = int(15, 69);
+        const c = int(10, a + b - 5);
+        prompt = `${a} + ${b} − ${c} = ?`;
+        correct = a + b - c;
+      }
+      wrong = kind === 3 ? nearby(correct, 3) : trap(correct);
+      out.push({ kind: "choice", prompt, ...arrange(rng, String(correct), wrong), d: 2 });
+      continue;
+    }
+    if (level === "hard") {
+      if (kind === 0) {
+        const a = int(13, 39);
+        const b = int(11, 19);
+        prompt = `${a} × ${b} = ?`;
+        correct = a * b;
+      } else if (kind === 1) {
+        const b = int(4, 9);
+        const q = int(26, 99);
+        prompt = `${b * q} ÷ ${b} = ?`;
+        correct = q;
+      } else if (kind === 2) {
+        const a = int(12, 39);
+        const b = int(7, 29);
+        const c = int(3, 8);
+        prompt = `(${a} + ${b}) × ${c} = ?`;
+        correct = (a + b) * c;
+      } else if (kind === 3) {
+        const a = int(6, 15);
+        const b = int(6, 12);
+        const c = int(2, 9);
+        const d = int(2, Math.min(9, Math.floor((a * b - 1) / c)));
+        prompt = `${a} × ${b} − ${c} × ${d} = ?`;
+        correct = a * b - c * d;
+      } else if (kind === 4) {
+        const n = int(11, 25);
+        prompt = `${n}² = ?`;
+        correct = n * n;
+      } else {
+        const p = pickFrom(rng, [15, 20, 25, 30, 40, 75]);
+        const base = 20 * int(2, 20);
+        prompt = `${base}의 ${p}% = ?`;
+        correct = (base * p) / 100;
+      }
+      wrong = trap(correct);
+      out.push({ kind: "choice", prompt, ...arrange(rng, String(correct), wrong), d: 3 });
+      continue;
+    }
     if (kind <= 1) {
       const a = int(11, 69);
       const b = int(5, 39);
@@ -422,7 +556,7 @@ export function phaseDurationMs(state: Pick<GameState, "phase" | "plan" | "miniI
       // OX는 광장(누가 어디 섰나)과 해설을 휴대폰에서 둘 다 읽을 시간
       return mini === "ox" ? 5000 : 3500;
     case "climb":
-      return CLIMB_SECONDS[state.options.length] * 1000;
+      return Math.round(CLIMB_SECONDS[state.options.length] * CLIMB_TIME_SCALE[levelOf(state.options)]) * 1000;
     case "miniEnd":
       return 7000;
     default:
@@ -486,7 +620,7 @@ function clampOptions(options: Partial<GameOptions> | undefined): GameOptions {
   const minis = (Array.isArray(options?.minis) ? options.minis : MINI_IDS).filter((m, i, arr): m is MiniId => MINI_IDS.includes(m as MiniId) && arr.indexOf(m) === i);
   const length: Length = options?.length === "short" || options?.length === "long" ? options.length : "normal";
   const rounds = Math.max(1, Math.min(12, Math.round(options?.rounds ?? DEFAULT_OPTIONS.rounds)));
-  return { minis: minis.length > 0 ? minis : MINI_IDS, rounds, length };
+  return { minis: minis.length > 0 ? minis : MINI_IDS, rounds, length, level: levelOf({ level: options?.level ?? DEFAULT_OPTIONS.level }) };
 }
 
 /** 고른 미니 게임을 섞고, 라운드가 더 많으면 다시 섞어 이어 붙인다(같은 종류가 연달아 나오지 않게). */
@@ -517,9 +651,9 @@ function setupMini(state: GameState, miniIndex: number): GameState {
   let cursors = state.cursors;
   const bank = bankOf(mini);
   if (bank === null) {
-    questions = buildClimbQuestions((state.seed ^ (miniIndex * 104729)) >>> 0);
+    questions = buildClimbQuestions((state.seed ^ (miniIndex * 104729)) >>> 0, CLIMB_QUESTIONS, levelOf(state.options));
   } else {
-    const order = bankOrder(state.seed, bank);
+    const order = bankOrder(state.seed, bank, levelOf(state.options));
     const count = mini === "missile" ? COUNTS.missile[state.options.length] : COUNTS[mini as Exclude<MiniId, "climb">][state.options.length];
     const start = state.cursors[bank];
     questions = Array.from({ length: count }, (_, k) => buildQuestion(bank, order[(start + k) % order.length], k, rng));
@@ -887,14 +1021,14 @@ export function botDelayMs(level: BotLevel, mini: MiniId, rng: () => number = Ma
   return Math.round(base * scale * (0.65 + rng() * 0.7));
 }
 
-/** 올라올라 한 문제(ms) — Lv.1 약 3초, Lv.10 약 1.1초. */
-export function botClimbDelayMs(level: BotLevel, rng: () => number = Math.random): number {
+/** 올라올라 한 문제(ms) — Lv.1 약 3초, Lv.10 약 1.1초(쉬움 기준, 보통 ×1.45 · 어려움 ×1.9). */
+export function botClimbDelayMs(level: BotLevel, rng: () => number = Math.random, d: Diff = 1): number {
   const base = 3000 - ((lv(level) - 1) * 1900) / 9;
-  return Math.round(base * (0.7 + rng() * 0.6));
+  return Math.round(base * (1 + (d - 1) * 0.45) * (0.7 + rng() * 0.6));
 }
 
-export function botClimbAccuracy(level: BotLevel): number {
-  return 0.6 + (0.37 * (lv(level) - 1)) / 9;
+export function botClimbAccuracy(level: BotLevel, d: Diff = 1): number {
+  return 0.6 + (0.37 * (lv(level) - 1)) / 9 - (d - 1) * 0.06;
 }
 
 /** 초성 퀴즈에서 봇이 "아는" 확률. */
@@ -944,7 +1078,7 @@ export function chooseBotClimb(state: GameState, seat: Seat, level: BotLevel, rn
   const idx = state.climbIdx[seat];
   const q = state.questions[idx];
   if (!q) return null;
-  if (rng() < botClimbAccuracy(level)) return { idx, choice: q.answer };
+  if (rng() < botClimbAccuracy(level, q.d)) return { idx, choice: q.answer };
   return { idx, choice: pickFrom(rng, q.choices.map((_, i) => i).filter((i) => i !== q.answer)) };
 }
 

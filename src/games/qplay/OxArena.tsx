@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { useProfilePhoto } from "@/components/profile/ProfilePhoto";
 import { eligibleSeats, type GameState, type Seat } from "./engine";
 import { slot, TOKEN_W, type Pos } from "./oxLayout";
@@ -33,6 +33,7 @@ export default function OxArena({
   locked = false,
   judging = false,
   late = null,
+  scene = null,
 }: {
   state: GameState;
   viewerSeat: Seat;
@@ -50,6 +51,8 @@ export default function OxArena({
   judging?: boolean;
   /** 공개 때: 내 화면의 마지막 쪽과 판정된 쪽이 다르면(마지막 이동이 늦게 닿음). */
   late?: { shown: number; judged: number | null } | null;
+  /** 3D 보기: 광장 칸 안에 그릴 3D 장면(내 자유 위치 % 를 받는다). 입력·판정은 이 컴포넌트 그대로. */
+  scene?: ((myPos: Pos | null) => ReactNode) | null;
 }) {
   const photo = useProfilePhoto();
   const field = useRef<HTMLDivElement>(null);
@@ -127,9 +130,23 @@ export default function OxArena({
         }}
         onPointerUp={() => setDragging(false)}
         onPointerCancel={() => setDragging(false)}
-        className={`relative h-72 overflow-hidden rounded-3xl border-2 border-white/15 select-none sm:h-80 light:border-slate-300 ${canMove ? "cursor-pointer touch-none" : ""}`}
+        className={`relative overflow-hidden rounded-3xl border-2 border-white/15 select-none light:border-slate-300 ${scene ? "h-80 sm:h-[26rem]" : "h-72 sm:h-80"} ${canMove ? "cursor-pointer touch-none" : ""}`}
       >
-        {[0, 1].map((z) => (
+        {scene && (
+          <>
+            <div className="absolute inset-0">{scene(mine && mine.q === state.qIndex && !reveal ? mine.pos : null)}</div>
+            {reveal &&
+              [0, 1].map((z) => (
+                <span
+                  key={z}
+                  className={`pointer-events-none absolute top-1.5 z-30 -translate-x-1/2 rounded-full px-2.5 py-0.5 text-xs font-black whitespace-nowrap shadow ${z === 0 ? "left-1/4" : "left-3/4"} ${z === answer ? "bg-emerald-500 text-white" : "bg-slate-800 text-slate-200"}`}
+                >
+                  {SIDE[z]} {z === answer ? "✔ 정답" : "✘ 오답"}
+                </span>
+              ))}
+          </>
+        )}
+        {!scene && [0, 1].map((z) => (
           <div key={z} className={`absolute inset-y-0 w-1/2 bg-gradient-to-b ${zoneTone(z)} ${z === 0 ? "left-0" : "right-0"}`}>
             {/* 오답 구역은 색(회색)만이 아니라 빗금으로도 — 색각 이상이어도 어느 쪽이 틀렸는지 보이게 */}
             {reveal && z !== answer && <span className="pointer-events-none absolute inset-0 bg-[repeating-linear-gradient(135deg,rgba(15,23,42,.35)_0_8px,transparent_8px_18px)]" />}
@@ -143,9 +160,9 @@ export default function OxArena({
             )}
           </div>
         ))}
-        <div className="pointer-events-none absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 bg-[repeating-linear-gradient(to_bottom,rgba(255,255,255,.7)_0_10px,transparent_10px_18px)]" />
+        {!scene && <div className="pointer-events-none absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 bg-[repeating-linear-gradient(to_bottom,rgba(255,255,255,.7)_0_10px,transparent_10px_18px)]" />}
 
-        {seats.map((s) => {
+        {!scene && seats.map((s) => {
           const me = s === viewerSeat;
           const ghost = isGhost(s);
           const zone = me ? picked : ghost ? (ghosts[s] ?? null) : (state.answers[s]?.choice ?? null);

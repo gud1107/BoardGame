@@ -28,6 +28,7 @@ import RulebookModal from "./RulebookModal";
 import { getQPlaySound, qplayCues } from "./qplaySound";
 
 const QPlayTable3D = dynamic(() => import("./three/QPlayTable3D"), { ssr: false, loading: () => <Loading3D /> });
+const QPlayStage3D = dynamic(() => import("./three/QPlayStage3D"), { ssr: false, loading: () => <Loading3D /> });
 
 export const SEAT_COLORS = ["#f43f5e", "#3b82f6", "#22c55e", "#f59e0b", "#a855f7", "#14b8a6", "#ec4899", "#84cc16"];
 const NUMS = ["①", "②", "③", "④"];
@@ -502,8 +503,11 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
   const scoreboard = Array.from({ length: state.seatCount }, (_, s) => s).sort((a, b) => state.scores[b] + state.miniScores[b] - (state.scores[a] + state.miniScores[a]) || a - b);
   const showQuestion = q && (state.phase === "question" || state.phase === "reveal" || state.phase === "aim") && mini !== "climb";
   const survival = mini === "ox" || mini === "missile";
-  // OX 문제·공개 중엔 광장이 주인공 — 3D 테이블은 아래로(같은 요소라 다시 그리지 않는다)
+  // OX 문제·공개 중엔 광장이 주인공 — 3D 보기면 광장 자체가 3D(캐릭터가 달려 다님), 원탁은 안 그린다
   const oxFocus = !!showQuestion && q?.kind === "ox";
+  const oxScene = board3d.view === "3d" && oxFocus;
+  // 올라올라·미사일은 원탁 대신 전용 무대(탑 / 받침대)
+  const stage3d = (mini === "climb" || mini === "missile") && state.phase !== "ended";
   // 막판 이동이 방장에게 닿을 시간을 남기려고 내 화면에선 마감 직전에 잠근다
   const oxLocked = oxFocus && state.phase === "question" && remainingMs !== null && remainingMs <= OX_LOCK_MS;
   // 공개 때 내 화면의 마지막 쪽(방금 문제 단계의 로컬 선택)과 판정이 다르면 알려 준다
@@ -568,20 +572,40 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
         </div>
       )}
 
-      {board3d.view === "3d" && (
-        <div style={{ order: oxFocus ? 1 : 0 }}>
-        <Frame3D hint={state.phase === "aim" && state.shooter === viewerSeat ? "🎯 노릴 사람의 자리를 눌러도 발사돼요" : "문제·보기는 아래에서 · 드래그로 둘러보기"}>
-          <QPlayTable3D
-            state={state}
-            viewerSeat={viewerSeat}
-            names={names}
-            connectedSeats={connectedSeats}
-            onFire={(target) => onAction({ type: "FIRE", seat: viewerSeat, target })}
-            overview={state.phase === "ended"}
-            lowDetail={lowDetail}
-          />
+      {board3d.view === "3d" && !oxScene && (
+        <Frame3D
+          tall={stage3d}
+          hint={
+            state.phase === "aim" && state.shooter === viewerSeat
+              ? "🎯 노릴 사람을 눌러도 발사돼요"
+              : mini === "climb"
+                ? "맞히면 한 층 위로 · 틀리면 한 층 아래로"
+                : stage3d
+                  ? "받침대 칸 = 남은 하트 · 문제는 아래에서"
+                  : "문제·보기는 아래에서 · 드래그로 둘러보기"
+          }
+        >
+          {stage3d ? (
+            <QPlayStage3D
+              state={state}
+              viewerSeat={viewerSeat}
+              names={names}
+              colors={SEAT_COLORS}
+              lowDetail={lowDetail}
+              onFire={(target) => onAction({ type: "FIRE", seat: viewerSeat, target })}
+            />
+          ) : (
+            <QPlayTable3D
+              state={state}
+              viewerSeat={viewerSeat}
+              names={names}
+              connectedSeats={connectedSeats}
+              onFire={(target) => onAction({ type: "FIRE", seat: viewerSeat, target })}
+              overview={state.phase === "ended"}
+              lowDetail={lowDetail}
+            />
+          )}
         </Frame3D>
-        </div>
       )}
 
       {/* 소개 */}
@@ -624,6 +648,20 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
               locked={oxLocked}
               judging={judging}
               late={oxLate}
+              scene={
+                oxScene
+                  ? (myPos) => (
+                      <QPlayStage3D
+                        state={state}
+                        viewerSeat={viewerSeat}
+                        names={names}
+                        colors={SEAT_COLORS}
+                        lowDetail={lowDetail}
+                        ox={{ picked, myPos, reveal: state.phase !== "question", ghostMe }}
+                      />
+                    )
+                  : null
+              }
             />
           )}
           {q.kind === "choice" && (

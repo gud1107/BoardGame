@@ -13,6 +13,8 @@ import {
   OX_CORRECT,
   OX_SURVIVE,
   allAnswered,
+  bankOrder,
+  phaseDurationMs,
   chooseBotOxPlan,
   applyAction,
   autoTarget,
@@ -434,5 +436,61 @@ describe("ranking & sound cues", () => {
     expect(qplayCues(1)(s, aim)).toEqual(["wrong", "aim"]);
     const hit = act(aim, { type: "FIRE", seat: 0, target: 1 });
     expect(qplayCues(1)(aim, hit)).toContain("fire");
+  });
+});
+
+describe("문제 난이도", () => {
+  /** 사칙연산 식을 그대로 계산(× ÷ 먼저, 괄호·제곱·퍼센트 포함). */
+  function evalPrompt(prompt: string): number {
+    const pct = prompt.match(/^(\d+)의 (\d+)% = \?$/);
+    if (pct) return (Number(pct[1]) * Number(pct[2])) / 100;
+    const expr = prompt.replace(" = ?", "").replace(/(\d+)²/g, "($1*$1)").replace(/×/g, "*").replace(/÷/g, "/").replace(/−/g, "-");
+    expect(expr).toMatch(/^[\d+\-*/() ]+$/);
+    return Function(`return (${expr})`)() as number;
+  }
+
+  it("보통·어려움 올라올라는 정답이 맞고, 두 자리 덧셈·구구단·짝수 같은 쉬운 셈이 없다", () => {
+    for (const level of ["normal", "hard"] as const) {
+      for (const seed of [1, 7, 42, 999]) {
+        const qs = buildClimbQuestions(seed, 80, level);
+        expect(qs).toEqual(buildClimbQuestions(seed, 80, level));
+        for (const q of qs) {
+          expect(q.choices.length).toBe(3);
+          expect(new Set(q.choices).size).toBe(3);
+          expect(q.choices.every((c) => Number.isInteger(Number(c)) && Number(c) >= 0)).toBe(true);
+          expect(Number(q.choices[q.answer])).toBe(evalPrompt(q.prompt));
+          expect(q.prompt).not.toMatch(/짝수|가장 큰/);
+          // 한 자리 × 한 자리(구구단) 금지
+          expect(q.prompt).not.toMatch(/^\d × \d = \?$/);
+          expect(q.d).toBe(level === "normal" ? 2 : 3);
+        }
+      }
+    }
+  });
+
+  it("쉬움은 예전 문제 그대로(기본값 호환)", () => {
+    expect(buildClimbQuestions(5, 80, "easy")).toEqual(buildClimbQuestions(5));
+    expect(bankOrder(3, "general", "easy")).toEqual(bankOrder(3, "general"));
+  });
+
+  it("보통은 쉬운(d=1) 문제를 어려운 문제 뒤로, 어려움은 d=3부터", () => {
+    const normal = bankOrder(11, "ox", "normal");
+    const hard = bankOrder(11, "general", "hard");
+    expect(new Set(normal).size).toBe(OX_BANK.length);
+    const firstEasy = normal.findIndex((i) => OX_BANK[i].d === 1);
+    expect(normal.slice(firstEasy).every((i) => OX_BANK[i].d === 1)).toBe(true);
+    expect(firstEasy).toBe(OX_BANK.filter((it) => it.d >= 2).length);
+    const ds = hard.map((i) => GENERAL_BANK[i].d);
+    expect([...ds].sort((a, b) => b - a)).toEqual(ds);
+  });
+
+  it("방 옵션: 기본 보통, 보통 판의 첫 OX 문제들엔 쉬운 문제가 없다, 올라올라 시간이 늘어난다", () => {
+    const s = startGame(4, 77, { minis: ["ox"], rounds: 1, length: "normal" });
+    expect(s.options.level).toBe("normal");
+    expect(s.questions.every((q) => q.d >= 2)).toBe(true);
+    const easy = startGame(4, 77, { minis: ["ox"], rounds: 1, length: "normal", level: "easy" });
+    expect(easy.options.level).toBe("easy");
+    const climb = (level: "easy" | "normal" | "hard") => phaseDurationMs({ ...startGame(2, 1, { minis: ["climb"], rounds: 1, length: "normal", level }), phase: "climb" });
+    expect([climb("easy"), climb("normal"), climb("hard")]).toEqual([60_000, 75_000, 90_000]);
   });
 });

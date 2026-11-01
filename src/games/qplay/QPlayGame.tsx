@@ -14,6 +14,7 @@ import type { PlayableGameProps } from "@/games/types";
 import {
   DEFAULT_OPTIONS,
   LENGTH_OPTIONS,
+  LEVEL_OPTIONS,
   MAX_PLAYERS,
   MINI_IDS,
   MINI_INFO,
@@ -34,12 +35,14 @@ import {
   currentQuestion,
   eligibleSeats,
   hasFinished,
+  levelOf,
   phaseDurationMs,
   startGame,
   winnerSeats,
   type EngineAction,
   type GameOptions,
   type GameState,
+  type Level,
   type MiniId,
   type Seat,
 } from "./engine";
@@ -95,6 +98,7 @@ type Occupant = {
   /** 방장이 고른 미니 게임·판 수 — 대기실에서 손님도 볼 수 있게 presence에 싣는다. */
   minis?: readonly MiniId[];
   rounds?: number;
+  level?: Level;
 };
 
 type Phase = "choose" | "enter-name" | "connecting" | "waiting" | "playing" | "post-game" | "room-full" | "supabase-missing" | "channel-error";
@@ -455,7 +459,7 @@ export default function QPlayGame({ onComplete }: PlayableGameProps) {
           seat,
           name: myName,
           playerId: myPlayerId,
-          ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, minis: optionsRef.current.minis, rounds: optionsRef.current.rounds } : {}),
+          ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, minis: optionsRef.current.minis, rounds: optionsRef.current.rounds, level: levelOf(optionsRef.current) } : {}),
         } satisfies Occupant);
         requestStateSync();
         setPhase((p) => (p === "connecting" ? "waiting" : p));
@@ -475,6 +479,7 @@ export default function QPlayGame({ onComplete }: PlayableGameProps) {
   const knownTargetPlayerCount = host?.targetPlayerCount ?? targetPlayerCount;
   const roomMinis = (isHost ? options.minis : host?.minis) ?? null;
   const roomRounds = (isHost ? options.rounds : host?.rounds) ?? null;
+  const roomLevel = isHost ? levelOf(options) : (host?.level ?? null);
   const reclaimAttemptsRef = useRef(0);
 
   useEffect(() => {
@@ -501,7 +506,7 @@ export default function QPlayGame({ onComplete }: PlayableGameProps) {
       seat: next,
       name: myName,
       playerId: myPlayerId,
-      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, minis: optionsRef.current.minis, rounds: optionsRef.current.rounds } : {}),
+      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, minis: optionsRef.current.minis, rounds: optionsRef.current.rounds, level: levelOf(optionsRef.current) } : {}),
     } satisfies Occupant);
   }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost]);
 
@@ -712,7 +717,7 @@ export default function QPlayGame({ onComplete }: PlayableGameProps) {
           const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
           const at = clock.next.get(seat);
           if (at === undefined) {
-            const first = state.phase === "aim" ? 900 + Math.random() * 1600 : state.phase === "climb" ? 700 + botClimbDelayMs(level) : botDelayMs(level, mini);
+            const first = state.phase === "aim" ? 900 + Math.random() * 1600 : state.phase === "climb" ? 700 + botClimbDelayMs(level, Math.random, state.questions[state.climbIdx[seat]]?.d) : botDelayMs(level, mini);
             clock.next.set(seat, now + first);
             continue;
           }
@@ -726,7 +731,7 @@ export default function QPlayGame({ onComplete }: PlayableGameProps) {
             if (!move) continue;
             // 틀리면 사람처럼 1초 멈춘다
             const right = move.choice === state.questions[move.idx]?.answer;
-            clock.next.set(seat, now + botClimbDelayMs(level) + (right ? 0 : 1000));
+            clock.next.set(seat, now + botClimbDelayMs(level, Math.random, state.questions[move.idx + 1]?.d) + (right ? 0 : 1000));
             handleAction({ type: "CLIMB", seat, ...move });
           } else if (isOx) {
             // OX — 계획대로 O ↔ X를 오가다 마지막 칸에 선다(마감 0.7초 전엔 바로 최종 칸으로).
@@ -1028,6 +1033,8 @@ export default function QPlayGame({ onComplete }: PlayableGameProps) {
             </div>
             <OptionRow label="미니 게임 수" value={options.rounds} options={ROUND_OPTIONS.map((r) => ({ value: r as number, label: `${r}개` }))} onChange={(v) => setOpt("rounds", v)} />
             <OptionRow label="길이 (게임당 문제 수)" value={options.length} options={LENGTH_OPTIONS.map((o) => ({ value: o.value, label: o.label }))} onChange={(v) => setOpt("length", v)} />
+            <OptionRow label="문제 난이도" value={levelOf(options)} options={LEVEL_OPTIONS.map((o) => ({ value: o.value, label: o.label }))} onChange={(v) => setOpt("level", v)} />
+            <span className="-mt-2 break-keep text-[11px] text-white/45 light:text-slate-400">{LEVEL_OPTIONS.find((o) => o.value === levelOf(options))?.hint}</span>
             {options.rounds > options.minis.length && <span className="text-[11px] text-amber-300 light:text-amber-700">고른 종류가 {options.minis.length}개라 같은 게임이 다시 나와요(문제는 겹치지 않아요)</span>}
           </>
         )}
@@ -1064,7 +1071,7 @@ export default function QPlayGame({ onComplete }: PlayableGameProps) {
                     {MINI_INFO[m].emoji} {MINI_INFO[m].name}
                   </span>
                 ))}
-                {roomRounds && <span className="w-full text-center text-[11px] text-white/50 light:text-slate-500">이 중 {roomRounds}게임{isHost ? ` · ${LENGTH_OPTIONS.find((o) => o.value === options.length)?.label}` : ""}</span>}
+                {roomRounds && <span className="w-full text-center text-[11px] text-white/50 light:text-slate-500">이 중 {roomRounds}게임{isHost ? ` · ${LENGTH_OPTIONS.find((o) => o.value === options.length)?.label}` : ""}{roomLevel ? ` · 난이도 ${LEVEL_OPTIONS.find((o) => o.value === roomLevel)?.label}` : ""}</span>}
               </div>
             )}
             <p className="text-xs text-white/50 light:text-slate-500">
