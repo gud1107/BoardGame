@@ -290,6 +290,21 @@ function Hearts({ hp }: { hp: number }) {
   );
 }
 
+/** 미사일: 틀리거나 안 골라 하트를 잃은 사람 / 그걸로 탈락한 사람 / 전원 동시 탈락 방지. */
+function MissedLine({ state, names }: { state: GameState; names: Record<Seat, string> }) {
+  const missed = state.missed ?? [];
+  if (currentMini(state) !== "missile" || missed.length === 0) return null;
+  const shotKill = state.shot?.kill ? state.shot.to : null;
+  const dead = state.eliminated.filter((s) => s !== shotKill);
+  return (
+    <div className="flex flex-col items-center gap-0.5 text-center">
+      <p className="text-sm font-bold text-rose-300 light:text-rose-600">💔 틀리거나 안 골라 하트 −1: {missed.map((s) => names[s]).join(", ")}</p>
+      {dead.length > 0 && <p className="text-sm font-bold text-rose-300 light:text-rose-600">💀 탈락: {dead.map((s) => names[s]).join(", ")}</p>}
+      {state.revived && <p className="text-xs font-bold text-amber-200 light:text-amber-700">😇 모두 쓰러질 뻔 — 마지막 하트 하나씩 남겨 줬어요</p>}
+    </div>
+  );
+}
+
 function AimPanel({ state, viewerSeat, names, onAction }: { state: GameState; viewerSeat: Seat; names: Record<Seat, string>; onAction: (a: EngineAction) => void }) {
   const shooter = state.shooter!;
   const q = currentQuestion(state)!;
@@ -298,6 +313,7 @@ function AimPanel({ state, viewerSeat, names, onAction }: { state: GameState; vi
       <div className={`${PANEL} flex flex-col items-center gap-2 text-center`}>
         <p className="text-sm text-white/70 light:text-slate-600">정답: <b className="text-emerald-300 light:text-emerald-700">{q.choices[q.answer]}</b></p>
         <p className="animate-pulse text-xl font-black text-orange-200 light:text-orange-700">🚀 {names[shooter]}님이 조준 중…</p>
+        <MissedLine state={state} names={names} />
         <p className="text-xs text-white/50 light:text-slate-500">누구를 노릴까요? 7초 안에 안 고르면 하트가 가장 많은 사람에게 자동 발사</p>
       </div>
     );
@@ -323,6 +339,7 @@ function AimPanel({ state, viewerSeat, names, onAction }: { state: GameState; vi
           </button>
         ))}
       </div>
+      <MissedLine state={state} names={names} />
     </div>
   );
 }
@@ -367,7 +384,8 @@ function RevealPanel({ state, viewerSeat, names }: { state: GameState; viewerSea
           🚀 {names[state.shot.from]} → {names[state.shot.to]} {state.shot.auto ? "(자동 조준)" : ""} · 하트 −1{state.shot.kill ? " · 💀 격추!" : ""}
         </p>
       )}
-      {mini === "missile" && !state.shot && <p className="text-center text-sm text-white/60 light:text-slate-500">아무도 맞히지 못해 미사일이 없어요</p>}
+      {mini === "missile" && !state.shot && <p className="text-center text-sm text-white/60 light:text-slate-500">{order.length === 0 ? "아무도 맞히지 못해 미사일이 없어요" : "쏠 상대가 남지 않아 미사일이 없어요"}</p>}
+      <MissedLine state={state} names={names} />
       {order.length > 0 && (
         <div className="flex flex-wrap justify-center gap-1.5">
           {order.map((s, rank) => (

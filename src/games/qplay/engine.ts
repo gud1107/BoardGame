@@ -42,7 +42,7 @@ export const MINI_INFO: Record<MiniId, { emoji: string; name: string; short: str
   general: { emoji: "🧠", name: "상식 퀴즈", short: "역사·과학·지리·생활 상식 4지선다", color: "#22c55e" },
   chosung: { emoji: "🔤", name: "초성 퀴즈", short: "주제와 초성을 보고 단어를 직접 입력", color: "#ec4899" },
   climb: { emoji: "🧗", name: "올라올라", short: "맞히면 한 층 위로, 틀리면 아래로 — 10층까지!", color: "#14b8a6" },
-  missile: { emoji: "🚀", name: "미사일", short: "먼저 맞히면 미사일 발사! 하트 0이면 탈락", color: "#f97316" },
+  missile: { emoji: "🚀", name: "미사일", short: "틀리거나 안 고르면 하트 −1, 먼저 맞히면 미사일 발사!", color: "#f97316" },
 };
 
 // ---------------------------------------------------------------------------
@@ -501,6 +501,8 @@ export interface GameState {
   /** OX: 직전 문제에서 탈락한 좌석 · 전원 오답 구제 여부. */
   readonly eliminated: readonly Seat[];
   readonly revived: boolean;
+  /** 미사일: 이번 문제에서 틀리거나 안 골라 하트를 잃은 사람(공개 화면 표시용, 다음 문제에서 비움). */
+  readonly missed?: readonly Seat[];
   /** 올라올라 */
   readonly climbIdx: readonly number[];
   readonly floor: readonly number[];
@@ -677,6 +679,7 @@ function setupMini(state: GameState, miniIndex: number): GameState {
     gained: zeros(n),
     eliminated: [],
     revived: false,
+    missed: [],
     climbIdx: zeros(n),
     floor: zeros(n),
     finishOrder: [],
@@ -767,6 +770,8 @@ function resolveQuestion(state: GameState): GameState {
   let ghostTries = state.ghostTries ?? zeros(n);
   let revived = false;
   let shooter: Seat | null = null;
+  let hp = state.hp;
+  let missed: Seat[] = [];
 
   switch (mini) {
     case "ox": {
@@ -789,10 +794,24 @@ function resolveQuestion(state: GameState): GameState {
       order.forEach((s, rank) => (gained[s] = rankPoints(rank, CHOSUNG_POINTS, CHOSUNG_FLOOR)));
       if (order[0] !== undefined) stats = { ...stats, chosungFirst: bump(stats.chosungFirst, order[0]) };
       break;
-    case "missile":
+    case "missile": {
       order.slice(1).forEach((s) => (gained[s] = MISSILE_DEFEND));
-      shooter = order[0] ?? null;
+      // 틀리거나 안 고르면 하트 −1(§11). 남은 사람이 한꺼번에 다 쓰러지면 마지막 하트 하나씩 남겨 둔다.
+      missed = eligible.filter((s) => !state.answers[s]?.correct);
+      hp = hp.map((h, s) => (missed.includes(s) ? Math.max(0, h - 1) : h));
+      let dead = missed.filter((s) => hp[s] === 0);
+      if (dead.length > 0 && eligible.every((s) => dead.includes(s))) {
+        hp = hp.map((h, s) => (dead.includes(s) ? 1 : h));
+        dead = [];
+        revived = true;
+      }
+      eliminated = dead;
+      alive = alive.map((a, s) => a && !dead.includes(s));
+      // 쏠 사람이 남아 있을 때만 조준
+      const first = order[0];
+      shooter = first !== undefined && alive.some((a, s) => a && s !== first) ? first : null;
       break;
+    }
     default:
       order.forEach((s, rank) => (gained[s] = rankPoints(rank, CHOICE_POINTS, CHOICE_FLOOR)));
   }
@@ -808,6 +827,8 @@ function resolveQuestion(state: GameState): GameState {
     revived,
     shooter,
     shot: null,
+    hp,
+    missed,
     idle,
     stats,
     ghostHits,
@@ -838,7 +859,7 @@ function fire(state: GameState, target: Seat, auto: boolean): GameState {
     gained,
     miniScores: state.miniScores.map((v, s) => (s === from ? v + pts : v)),
     shot: { from, to: target, kill, auto },
-    eliminated: kill ? [target] : [],
+    eliminated: kill ? [...state.eliminated, target] : state.eliminated,
     stats: { ...state.stats, hits: bump(state.stats.hits, from), kills: kill ? bump(state.stats.kills, from) : state.stats.kills },
   };
 }
@@ -894,7 +915,7 @@ function finishMini(state: GameState): GameState {
 
 function nextQuestion(state: GameState): GameState {
   if (miniOver(state)) return finishMini(state);
-  return { ...state, phase: "question", stage: state.stage + 1, qIndex: state.qIndex + 1, answers: {}, arrivals: 0, ghosts: {}, shooter: null, shot: null, gained: zeros(state.seatCount), eliminated: [], revived: false };
+  return { ...state, phase: "question", stage: state.stage + 1, qIndex: state.qIndex + 1, answers: {}, arrivals: 0, ghosts: {}, shooter: null, shot: null, gained: zeros(state.seatCount), eliminated: [], revived: false, missed: [] };
 }
 
 function advanceMini(state: GameState): GameState {

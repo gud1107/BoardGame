@@ -9,7 +9,6 @@ import {
   MISSILE_HIT,
   MISSILE_HP,
   MISSILE_HP_POINTS,
-  MISSILE_KILL,
   OX_CORRECT,
   OX_SURVIVE,
   allAnswered,
@@ -338,30 +337,55 @@ describe("missile (§11)", () => {
     s = timeout(s);
     expect(s.phase).toBe("aim");
     expect(s.shooter).toBe(1);
+    expect(s.hp).toEqual([2, 3, 3]); // 틀린 0번은 바로 하트 −1
+    expect(s.missed).toEqual([0]);
     expect(act(s, { type: "FIRE", seat: 2, target: 0 })).toBe(s); // 쏠 사람이 아님
     expect(act(s, { type: "FIRE", seat: 1, target: 1 })).toBe(s); // 자기 자신
     s = act(s, { type: "FIRE", seat: 1, target: 0 });
     expect(s.phase).toBe("reveal");
-    expect(s.hp).toEqual([2, 3, 3]);
+    expect(s.hp).toEqual([1, 3, 3]);
     expect(s.gained).toEqual([0, MISSILE_HIT, MISSILE_DEFEND]);
   });
 
-  it("auto-targets the most hearts on timeout and pays the last survivor", () => {
+  it("안 고르면 틀린 것 — 하트 −1, 자동 조준, 0이 되면 탈락하고 최후의 생존자 보너스", () => {
     let s = startGame(2, 5, { minis: ["missile"], rounds: 1 });
     s = timeout(s);
-    for (let i = 0; i < MISSILE_HP; i++) {
-      s = act(s, { type: "ANSWER", seat: 0, q: s.qIndex, choice: currentQuestion(s)!.answer });
-      s = timeout(s);
-      expect(s.phase).toBe("aim");
-      expect(autoTarget(s, 0)).toBe(1);
-      s = timeout(s);
-      expect(s.shot?.auto).toBe(true);
-      s = timeout(s);
-    }
+    // 1번: 0번만 맞힘, 1번 무응답 → 1번 하트 −1, 0번 조준
+    s = act(s, { type: "ANSWER", seat: 0, q: s.qIndex, choice: currentQuestion(s)!.answer });
+    s = timeout(s);
+    expect(s.phase).toBe("aim");
+    expect(s.hp).toEqual([MISSILE_HP, MISSILE_HP - 1]);
+    expect(s.missed).toEqual([1]);
+    expect(autoTarget(s, 0)).toBe(1);
+    s = timeout(s);
+    expect(s.shot?.auto).toBe(true);
+    expect(s.hp).toEqual([MISSILE_HP, MISSILE_HP - 2]);
+    s = timeout(s);
+    // 2번: 또 무응답 → 하트 0 탈락, 쏠 상대가 없어 조준 없이 공개
+    s = act(s, { type: "ANSWER", seat: 0, q: s.qIndex, choice: currentQuestion(s)!.answer });
+    s = timeout(s);
+    expect(s.phase).toBe("reveal");
+    expect(s.shooter).toBeNull();
+    expect(s.eliminated).toEqual([1]);
+    s = timeout(s);
     expect(s.phase).toBe("miniEnd");
     expect(s.alive).toEqual([true, false]);
-    expect(s.miniScores[0]).toBe(MISSILE_HIT * 3 + MISSILE_KILL + MISSILE_HP * MISSILE_HP_POINTS + LAST_SURVIVOR);
-    expect(s.stats.kills).toEqual([1, 0]);
+    expect(s.miniScores[0]).toBe(MISSILE_HIT + MISSILE_HP * MISSILE_HP_POINTS + LAST_SURVIVOR);
+  });
+
+  it("남은 사람이 모두 틀려 한꺼번에 쓰러질 땐 마지막 하트 하나씩 남긴다", () => {
+    let s = only("missile", 2);
+    for (let i = 0; i < MISSILE_HP - 1; i++) {
+      s = answerAll(s, (_, a) => wrongOf(s, a));
+      s = timeout(s);
+      s = timeout(s);
+    }
+    expect(s.hp).toEqual([1, 1]);
+    s = answerAll(s, (_, a) => wrongOf(s, a));
+    s = timeout(s);
+    expect(s.revived).toBe(true);
+    expect(s.hp).toEqual([1, 1]);
+    expect(s.alive).toEqual([true, true]);
   });
 
   it("goes straight to reveal when nobody is right", () => {
@@ -370,6 +394,7 @@ describe("missile (§11)", () => {
     s = timeout(s);
     expect(s.phase).toBe("reveal");
     expect(s.shot).toBeNull();
+    expect(s.hp).toEqual([MISSILE_HP - 1, MISSILE_HP - 1]);
   });
 });
 

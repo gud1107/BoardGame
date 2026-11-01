@@ -83,6 +83,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       { game: "qplay", type: "FEAT", desc: "🎚️ 방 만들 때 문제 난이도(쉬움/보통/어려움) — 보통부터는 쉬운 문제·한 자리 구구단 같은 쉬운 셈이 안 나와요" },
       { game: "qplay", type: "IMPROVE", desc: "🎲 미니 게임 고르기는 기본 랜덤, 하나를 누르면 그 게임만 — 원하는 게임 하나를 한 번에 골라요" },
       { game: "qplay", type: "IMPROVE", desc: "✏️ 정답 공개 전엔 답을 바꿀 수 있어요 — 바꾸면 선착순 순서는 맨 뒤로, 모두 답하면 2초 뒤 공개" },
+      { game: "qplay", type: "FIX", desc: "💔 미사일에서 틀리거나 안 고르면 하트 −1 — 예전엔 틀려도 하트가 그대로였어요 (모두 한꺼번에 쓰러질 땐 1개씩 남겨 줘요)" },
       { game: "qplay", type: "IMPROVE", desc: "🚀 미사일이 하늘로 솟았다가 표적 머리 위로 떨어져요 — 표적은 머리를 감싸고 웅크리고, 발밑엔 붉은 조준 원" },
     ],
   },
