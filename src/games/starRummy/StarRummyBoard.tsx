@@ -19,6 +19,7 @@ import {
   type StarRummyState,
   type TileId,
 } from "./engine";
+import { openingScore, solve } from "./bot";
 
 const StarRummyTable3D = dynamic(() => import("./three/StarRummyTable3D"), { ssr: false, loading: () => <Loading3D /> });
 
@@ -44,6 +45,7 @@ export function StarTile({
   selected = false,
   fresh = false,
   glow = false,
+  hint = false,
   onClick,
 }: {
   id: TileId;
@@ -51,6 +53,8 @@ export function StarTile({
   selected?: boolean;
   fresh?: boolean;
   glow?: boolean;
+  /** Pulsing gold ring — "this tile is part of a playable first meld". */
+  hint?: boolean;
   onClick?: () => void;
 }) {
   const t = tileOf(id);
@@ -71,6 +75,7 @@ export function StarTile({
         glow ? "shadow-[0_0_10px_3px_rgba(251,191,36,0.75)]" : ""
       } ${onClick ? "cursor-pointer hover:brightness-105" : "cursor-default"}`}
     >
+      {hint && <span aria-hidden className="pointer-events-none absolute -inset-[3px] animate-pulse rounded-[8px] ring-2 ring-amber-300 shadow-[0_0_14px_4px_rgba(251,191,36,0.85)]" />}
       {wild ? (
         <>
           <span className={size === "md" ? "text-[20px]" : "text-[15px]"}>☄️</span>
@@ -133,6 +138,14 @@ export default function StarRummyBoard({ state, viewerSeat, names, connectedSeat
   const dirty = draft !== null && !sameTable(draft, state.table);
   const check = myTurn && dirty ? checkCommit(state, viewerSeat, draft!) : null;
   const invalid = new Set(check && !check.ok ? check.invalidMelds : []);
+  // First-meld hint: only when a 24+ meld set really exists in my hand.
+  const handKey = myHand.join(",");
+  const opening = useMemo(() => {
+    if (!myTurn || opened || !handKey) return null;
+    const sol = solve([], handKey.split(",").map(Number), 4000, openingScore);
+    return sol && sol.score >= OPENING_MIN ? sol : null;
+  }, [myTurn, opened, handKey]);
+  const hintTiles = new Set(opening?.used ?? []);
   const lastPlayed = new Set(state.lastEvent && (state.lastEvent.kind === "meld" || state.lastEvent.kind === "out") ? state.lastEvent.played : []);
   const remaining = useTurnClock(state.turn);
   const seconds = Math.max(0, Math.ceil(remaining / 1000));
@@ -354,7 +367,9 @@ export default function StarRummyBoard({ state, viewerSeat, names, connectedSeat
                 ? `✔ 내려놓을 수 있어요 (${check.played.length}장${!opened ? ` · 첫 관측 ${check.openingValue}점` : ""})`
                 : check.reason
               : !opened
-                ? `내 차례 — 첫 관측은 손의 조합만으로 ${OPENING_MIN}점 이상. 아니면 관측소/더미에서 한 장`
+                ? opening
+                  ? `✨ 빛나는 타일로 첫 관측을 할 수 있어요 (${opening.score}점) — 골라서 조합을 만들어 보세요`
+                  : `아직 ${OPENING_MIN}점 조합이 없어요 — 관측소나 더미에서 한 장 가져오세요`
                 : "내 차례 — 타일을 골라 조합에 놓거나, 한 장 뽑으세요"}
           </p>
           <div className="grid grid-cols-3 gap-1.5">
@@ -391,7 +406,7 @@ export default function StarRummyBoard({ state, viewerSeat, names, connectedSeat
         </div>
         <div className="flex flex-wrap gap-1">
           {rack.map((id) => (
-            <StarTile key={id} id={id} selected={selected.includes(id)} onClick={myTurn ? () => toggle(id) : undefined} />
+            <StarTile key={id} id={id} selected={selected.includes(id)} hint={hintTiles.has(id)} onClick={myTurn ? () => toggle(id) : undefined} />
           ))}
           {rack.length === 0 && <p className="text-xs text-white/40">모두 내려놓았어요!</p>}
         </div>
