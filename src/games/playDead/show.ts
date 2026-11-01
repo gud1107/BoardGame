@@ -1,4 +1,4 @@
-import { MAX_LIE, type GameState, type Hit, type MoveKind, type RoundEvent, type Seat, type SeatState } from "./engine";
+import { type GameState, type Hit, type MoveKind, type RoundEvent, type Seat, type SeatState } from "./engine";
 import type { ArenaFighter, ArenaFx } from "./three/PlayDeadArena3D";
 import type { FighterPose } from "./three/VrmFighter";
 
@@ -36,10 +36,13 @@ export function dmgText(hit: Hit, target: Seat, viewer: Seat): string {
   return hit.lo === hit.hi ? `−${hit.lo}` : `−${hit.lo}~${hit.hi}`;
 }
 
+/**
+ * 머리 위 표시: 룰상 공개된 사망 확인만. 누가 쓰러져 있는지는 장면에 쓰지 않는다 — 전장에선
+ * 평소 모두 엎드려 있어서(엄폐) 맞은 사람·연기하는 사람·진짜 시체가 겉으로 같아 보인다.
+ * 쓰러짐/누운 라운드는 보드의 참가자 표에만 있다.
+ */
 export function statusOf(s: SeatState): string | null {
-  if (s.confirmed) return "☠ 사망 확인";
-  if (s.down) return s.lie >= MAX_LIE ? "쓰러짐 · 미동도 없음…" : `쓰러짐 · 누운 지 ${s.lie}/${MAX_LIE}`;
-  return null;
+  return s.confirmed ? "☠ 사망 확인" : null;
 }
 
 function hitTargets(events: RoundEvent[]): Set<Seat> {
@@ -60,10 +63,12 @@ export function fightersAt(state: GameState, prev: SeatState[] | null, viewer: S
     const base = { seat, name: names[seat] ?? `${seat + 1}번` };
     if (!showing) {
       const waiting = state.phase === "choosing" && !s.confirmed;
+      // 평소엔 모두 엎드려 엄폐 — 끝난 판의 생존자만 일어나 환호
+      const pose: FighterPose = state.phase === "ended" && !s.dead ? "win" : "down";
       return {
         ...base,
-        pose: s.down ? "down" : "idle",
-        poseKey: `${state.stage}:${s.down ? "down" : "idle"}`,
+        pose,
+        poseKey: `${state.stage}:${pose}`,
         moveToSeat: null,
         aimSeat: null,
         out: s.confirmed,
@@ -72,7 +77,8 @@ export function fightersAt(state: GameState, prev: SeatState[] | null, viewer: S
       };
     }
     const p = prev![seat];
-    let pose: FighterPose = p.down ? "down" : "idle";
+    // 공개 전·후엔 모두 엎드려 있고, 행동하는 순간에만 몸을 일으킨다
+    let pose: FighterPose = "down";
     let moveToSeat: number | null = null;
     let aimSeat: number | null = null;
     const m = state.lastMoves[seat];
@@ -96,9 +102,9 @@ export function fightersAt(state: GameState, prev: SeatState[] | null, viewer: S
     }
     if (e >= SHOW.fall) {
       const breath = state.events.some((ev) => ev.t === "rise" && ev.seat === seat && ev.reason === "breath");
-      if (s.down) pose = hits.has(seat) && e < SHOW.end ? "hit" : "down";
+      if (hits.has(seat) && e < SHOW.end) pose = "hit";
       else if (breath && e < SHOW.end) pose = "rise";
-      else if (e >= SHOW.end) pose = state.phase === "ended" && !s.dead ? "win" : "idle";
+      else if (e >= SHOW.end) pose = state.phase === "ended" && !s.dead ? "win" : "down";
     }
     const after = e >= SHOW.impact;
     return {

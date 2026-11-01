@@ -6,7 +6,8 @@ import * as THREE from "three";
 import { resolveLook } from "@/games/shared/three/SeatedPerson";
 import ScreenSprite from "@/games/shared/three/ScreenSprite";
 import { AdaptiveResolution } from "@/games/shared/three/sceneFx";
-import { labelTexture, polar, seatAngle } from "@/games/shared/three/tableKit";
+import { labelTexture } from "@/games/shared/three/tableKit";
+import Battlefield, { fieldPos } from "./Battlefield";
 import { roomCharacterOf, useRoomCharacters } from "@/lib/character/roomCharacters";
 import VrmFighter, { fallSide, type FighterPose } from "./VrmFighter";
 
@@ -56,113 +57,8 @@ export interface PlayDeadArena3DProps {
 export const SEAT_COLORS = ["#38bdf8", "#f472b6", "#a3e635", "#fb923c", "#c084fc", "#facc15"];
 const TIER_COLOR = ["#ffffff", "#7dd3fc", "#f0abfc", "#fde047"];
 
-export function arenaRadius(n: number): number {
-  return 1.9 + n * 0.28;
-}
 function seatPos(seat: number, viewer: number, n: number): THREE.Vector3 {
-  return polar(seatAngle(seat, viewer, n), arenaRadius(n));
-}
-
-// ---------------------------------------------------------------------------
-// 무대
-
-function Stage({ n, lowDetail }: { n: number; lowDetail: boolean }) {
-  const r = arenaRadius(n) + 1.4;
-  const torches = useRef<THREE.PointLight[]>([]);
-  const flames = useRef<THREE.Mesh[]>([]);
-  useFrame(({ clock }) => {
-    const t = clock.elapsedTime;
-    torches.current.forEach((l, i) => {
-      if (l) l.intensity = 9 * (1 + Math.sin(t * 13 + i * 2) * 0.08 + Math.sin(t * 7.3 + i) * 0.06);
-    });
-    flames.current.forEach((f, i) => {
-      if (f) f.scale.y = 1 + Math.sin(t * 15 + i * 3) * 0.12;
-    });
-  });
-  const stars = useMemo(() => {
-    const g = new THREE.BufferGeometry();
-    const pts: number[] = [];
-    let seed = 7;
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    for (let i = 0; i < 260; i++) {
-      const a = rnd() * Math.PI * 2;
-      const p = 0.12 + rnd() * 0.4 * Math.PI;
-      pts.push(Math.cos(p) * Math.sin(a) * 45, Math.sin(p) * 45, -Math.abs(Math.cos(p) * Math.cos(a) * 45));
-    }
-    g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
-    return g;
-  }, []);
-  const seg = lowDetail ? 32 : 64;
-  const torchSpots: [number, number][] = [
-    [-r, -0.6],
-    [r, -0.6],
-  ];
-  return (
-    <>
-      <mesh rotation-x={-Math.PI / 2}>
-        <circleGeometry args={[40, 24]} />
-        <meshStandardMaterial color="#20291f" roughness={1} />
-      </mesh>
-      <mesh position-y={0.06}>
-        <cylinderGeometry args={[r, r + 0.25, 0.12, seg]} />
-        <meshStandardMaterial color="#4a4352" roughness={0.95} />
-      </mesh>
-      {[r - 0.35, 1.0].map((rr, i) => (
-        <mesh key={rr} rotation-x={-Math.PI / 2} position-y={0.125}>
-          <ringGeometry args={[rr - 0.03, rr + 0.03, seg]} />
-          <meshBasicMaterial color="#f2b544" transparent opacity={i === 0 ? 0.45 : 0.25} />
-        </mesh>
-      ))}
-      {[
-        [-r - 1.5, -3.2, 2.6],
-        [-2.2, -r - 2.4, 1.7],
-        [2.6, -r - 2.6, 2.3],
-        [r + 1.7, -2.6, 1.3],
-      ].map(([x, z, h]) => (
-        <group key={`${x}${z}`} position={[x, 0, z]}>
-          <mesh position-y={h / 2}>
-            <cylinderGeometry args={[0.34, 0.4, h, 10]} />
-            <meshStandardMaterial color="#6b6574" roughness={0.9} />
-          </mesh>
-          <mesh position-y={0.11}>
-            <boxGeometry args={[0.95, 0.22, 0.95]} />
-            <meshStandardMaterial color="#5b5564" roughness={0.9} />
-          </mesh>
-        </group>
-      ))}
-      {[
-        [-1.2, -r - 1.2, 0.12],
-        [0.5, -r - 1.6, -0.1],
-        [-r - 0.8, 0.6, 0.18],
-        [r + 0.9, 0.9, -0.16],
-      ].map(([x, z, tilt]) => (
-        <mesh key={`g${x}${z}`} position={[x, 0.4, z]} rotation-z={tilt}>
-          <boxGeometry args={[0.55, 0.8, 0.14]} />
-          <meshStandardMaterial color="#2e2934" roughness={0.9} />
-        </mesh>
-      ))}
-      {torchSpots.map(([x, z], i) => (
-        <group key={i} position={[x, 0, z]}>
-          <mesh position-y={1.0}>
-            <cylinderGeometry args={[0.05, 0.07, 2, 8]} />
-            <meshStandardMaterial color="#3a2a1c" />
-          </mesh>
-          <mesh ref={(m) => void (m && (flames.current[i] = m))} position-y={2.25}>
-            <coneGeometry args={[0.13, 0.4, 8]} />
-            <meshBasicMaterial color="#ffa648" />
-          </mesh>
-          {!lowDetail && <pointLight ref={(l) => void (l && (torches.current[i] = l))} position-y={2.4} color="#ff9a40" intensity={9} distance={9} decay={2} />}
-        </group>
-      ))}
-      <mesh position={[10, 12, -28]}>
-        <sphereGeometry args={[1.5, 20, 14]} />
-        <meshBasicMaterial color="#ece3cc" fog={false} />
-      </mesh>
-      <points geometry={stars}>
-        <pointsMaterial color="#ece3cc" size={0.16} fog={false} />
-      </points>
-    </>
-  );
+  return fieldPos(seat, viewer, n);
 }
 
 // ---------------------------------------------------------------------------
@@ -341,11 +237,11 @@ function Aura({ pose, color }: { pose: FighterPose; color: string }) {
 function CameraRig({ n }: { n: number }) {
   const { camera, size } = useThree();
   useEffect(() => {
-    const r = arenaRadius(n);
+    // behind and above my own foxhole, looking across the field
     const aspect = size.width / Math.max(1, size.height);
-    const k = Math.max(1, 1.5 / aspect);
-    camera.position.set(0, (2.9 + n * 0.22) * k, (r + 3.1) * k);
-    camera.lookAt(0, 0.7, -0.4);
+    const k = Math.max(1, 1.45 / aspect) * (1 + Math.max(0, n - 4) * 0.08);
+    camera.position.set(0, 3.6 * k, 6.6 * k);
+    camera.lookAt(0, 0.3, -1.2);
     camera.updateProjectionMatrix();
   }, [camera, size, n]);
   return null;
@@ -379,12 +275,13 @@ function SceneContents(props: PlayDeadArena3DProps) {
   );
   return (
     <>
-      <color attach="background" args={["#15111f"]} />
-      <fog attach="fog" args={["#15111f", 12, 34]} />
-      <hemisphereLight args={["#8b92d0", "#2a281e", 1.1]} />
-      <ambientLight intensity={0.35} color="#c4b5fd" />
-      <directionalLight position={[-5, 10, 5]} intensity={1.5} color="#c4ceff" />
-      <Stage n={n} lowDetail={lowDetail} />
+      <color attach="background" args={["#2b211d"]} />
+      <fog attach="fog" args={["#2b211d", 8, 28]} />
+      <hemisphereLight args={["#c9a58a", "#1a1714", 0.75]} />
+      <ambientLight intensity={0.3} color="#d8cfc6" />
+      <directionalLight position={[-8, 6, -10]} intensity={1.3} color="#ffab6e" />
+      <directionalLight position={[4, 8, 6]} intensity={0.7} color="#aab8d8" />
+      <Battlefield n={n} lowDetail={lowDetail} avoid={pos} />
       {fighters.map((f) => {
         const home = pos[f.seat];
         const color = SEAT_COLORS[f.seat % SEAT_COLORS.length];

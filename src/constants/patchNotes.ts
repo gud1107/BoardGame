@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.138.0",
+    releaseDate: "2026-11-01",
+    title: "🪖 죽은척 기싸움 — 원형 무대 대신 포연 자욱한 전장",
+    changes: [
+      { game: "play-dead", type: "IMPROVE", desc: "🪖 해 질 녘 진흙 전장 — 포탄 구덩이·모래주머니·대전차 장애물·불타는 잔해·연기·먼 포격 섬광, 곳곳에 쓰러진 병사들 사이에 흩어져 싸워요" },
+      { game: "play-dead", type: "IMPROVE", desc: "🫥 평소엔 모두 엎드려 엄폐 — 행동하는 순간에만 몸을 일으켜요. 맞은 사람·죽은 척·진짜 시체가 겉으로 똑같아 보이고, 머리 위엔 ☠ 사망 확인만 떠요" },
+    ],
+  },
+  {
     version: "v1.137.0",
     releaseDate: "2026-11-01",
     title: "👻 큐플레이 OX — 탈락해도 유령으로 계속 놀기",

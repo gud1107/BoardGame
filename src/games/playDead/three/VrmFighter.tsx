@@ -117,10 +117,11 @@ function thrust(o: Float32Array, power: number) {
 
 function lying(o: Float32Array) {
   o.fill(0);
-  set3(o, B.rightUpperArm, 0, 0, 0.55);
-  set3(o, B.leftUpperArm, 0, 0, -0.55);
-  set3(o, B.rightLowerArm, 0, 0.2, 0);
-  set3(o, B.leftLowerArm, 0, -0.2, 0);
+  // arms along the body — nothing sticks up out of a lying silhouette
+  set3(o, B.rightUpperArm, 0.1, 0, 1.4);
+  set3(o, B.leftUpperArm, 0.1, 0, -1.4);
+  set3(o, B.rightLowerArm, 0, 0.15, 0);
+  set3(o, B.leftLowerArm, 0, -0.15, 0);
   set3(o, B.rightUpperLeg, 0, 0, 0.1);
   set3(o, B.leftUpperLeg, 0, 0, -0.1);
   set3(o, B.head, 0, 0.35, 0);
