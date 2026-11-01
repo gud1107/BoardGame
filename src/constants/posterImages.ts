@@ -26,6 +26,7 @@ const POSTER_IDS: ReadonlySet<GameId> = new Set<GameId>([
   "dalmuti",
   "destiny-war-39",
   "doodle-phone",
+  "era-march",
   "five-cucumbers",
   "for-sale",
   "god-life-planner",
