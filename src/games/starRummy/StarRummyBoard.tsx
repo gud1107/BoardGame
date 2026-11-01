@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Frame3D, Loading3D, preferLowDetail, useBoardView, ViewToggle } from "@/games/shared/three/viewPref";
 import {
   checkCommit,
@@ -46,7 +46,9 @@ export function StarTile({
   fresh = false,
   glow = false,
   hint = false,
+  dimmed = false,
   onClick,
+  onDragStart,
 }: {
   id: TileId;
   size?: TileSize;
@@ -55,7 +57,11 @@ export function StarTile({
   glow?: boolean;
   /** Pulsing gold ring — "this tile is part of a playable first meld". */
   hint?: boolean;
+  /** Faded while it's being dragged elsewhere. */
+  dimmed?: boolean;
   onClick?: () => void;
+  /** Pointer down on a draggable tile (mouse or touch). */
+  onDragStart?: (e: ReactPointerEvent<HTMLButtonElement>) => void;
 }) {
   const t = tileOf(id);
   const dims = size === "md" ? "h-[50px] w-[36px] text-[19px]" : "h-[38px] w-[27px] text-[14px]";
@@ -68,8 +74,9 @@ export function StarTile({
       aria-pressed={selected}
       title={label}
       onClick={onClick}
+      onPointerDown={onDragStart}
       disabled={!onClick}
-      className={`relative flex shrink-0 flex-col items-center justify-center rounded-[6px] border font-black leading-none shadow-[0_2px_0_rgba(0,0,0,0.35)] transition ${dims} ${
+      className={`relative flex ${onDragStart ? "touch-none select-none" : ""} ${dimmed ? "opacity-30" : ""} shrink-0 flex-col items-center justify-center rounded-[6px] border font-black leading-none shadow-[0_2px_0_rgba(0,0,0,0.35)] transition ${dims} ${
         wild ? "border-violet-300 bg-gradient-to-b from-violet-200 to-fuchsia-300" : "border-amber-200/80 bg-gradient-to-b from-[#fffaf0] to-[#efe2c4]"
       } ${selected ? "-translate-y-1.5 ring-2 ring-sky-400 ring-offset-1 ring-offset-black/40" : ""} ${fresh ? "outline-2 outline-dashed outline-sky-300 outline-offset-1" : ""} ${
         glow ? "shadow-[0_0_10px_3px_rgba(251,191,36,0.75)]" : ""
@@ -117,12 +124,16 @@ export default function StarRummyBoard({ state, viewerSeat, names, connectedSeat
   const [draft, setDraft] = useState<TileId[][] | null>(null);
   const [selected, setSelected] = useState<TileId[]>([]);
   const [draftTurn, setDraftTurn] = useState(state.turn);
+  const [drag, setDrag] = useState<{ ids: TileId[]; x: number; y: number; over: DropTarget | null } | null>(null);
+  // a drag ends in pointerup → the browser still fires click on the tile; swallow it
+  const suppressClickRef = useRef(false);
 
   // A new turn (mine or anyone's) throws the local draft away.
   if (draftTurn !== state.turn) {
     setDraftTurn(state.turn);
     setDraft(null);
     setSelected([]);
+    setDrag(null);
   }
 
   const myTurn = state.phase === "playing" && state.active === viewerSeat;
@@ -168,23 +179,65 @@ export default function StarRummyBoard({ state, viewerSeat, names, connectedSeat
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
   }
 
-  function moveSelected(target: number | "new") {
-    if (!myTurn || selected.length === 0) return;
-    const sel = new Set(selected);
-    const base = (draft ?? state.table).map((m) => m.filter((id) => !sel.has(id)));
-    const moving = sortHand(selected);
-    if (target === "new") base.push(moving);
-    else base[target] = [...base[target], ...moving];
+  /** Move tiles onto a meld, into a new meld, or (this turn's own tiles only) back to the rack. */
+  function moveTiles(ids: TileId[], target: DropTarget) {
+    if (!myTurn) return;
+    const moving = ids.filter(canPick);
+    if (moving.length === 0) return;
+    const current = draft ?? state.table;
+    if (target === "rack") {
+      const back = new Set(moving.filter((id) => !onTableBefore.has(id)));
+      if (back.size > 0) setDraft(current.map((m) => m.filter((id) => !back.has(id))).filter((m) => m.length > 0).map((m) => orderMeld(m)));
+      setSelected([]);
+      return;
+    }
+    const sel = new Set(moving);
+    if (typeof target === "number" && current[target]?.every((id) => sel.has(id))) return; // dropped on its own meld
+    const base = current.map((m) => m.filter((id) => !sel.has(id)));
+    if (target === "new" || base[target] === undefined) base.push(sortHand(moving));
+    else base[target] = [...base[target], ...sortHand(moving)];
     setDraft(base.filter((m) => m.length > 0).map((m) => orderMeld(m)));
     setSelected([]);
   }
 
-  function returnToHand() {
-    const back = new Set(selected.filter((id) => !onTableBefore.has(id)));
-    if (back.size === 0 || !draft) return;
-    setDraft(draft.map((m) => m.filter((id) => !back.has(id))).filter((m) => m.length > 0).map((m) => orderMeld(m)));
-    setSelected([]);
+  const moveSelected = (target: number | "new") => moveTiles(selected, target);
+  const returnToHand = () => moveTiles(selected, "rack");
+
+  /** Pointer drag (mouse + touch): past 6 px it becomes a drag of this tile, or of the whole selection if the tile is selected. */
+  function startDrag(id: TileId, e: ReactPointerEvent<HTMLButtonElement>) {
+    if (!canPick(id) || e.button > 0) return;
+    const sx = e.clientX;
+    const sy = e.clientY;
+    const ids = selected.includes(id) ? selected : [id];
+    let dragging = false;
+    let over: DropTarget | null = null;
+    const move = (ev: PointerEvent) => {
+      if (!dragging && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
+      dragging = true;
+      ev.preventDefault();
+      over = dropTargetAt(ev.clientX, ev.clientY);
+      setDrag({ ids, x: ev.clientX, y: ev.clientY, over });
+    };
+    const end = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      if (!dragging) return;
+      suppressClickRef.current = true;
+      window.setTimeout(() => (suppressClickRef.current = false), 0);
+      setDrag(null);
+      if (ev.type === "pointerup" && over !== null) moveTiles(ids, over);
+    };
+    window.addEventListener("pointermove", move, { passive: false });
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
   }
+
+  /** onClick that ignores the click a finished drag leaves behind. */
+  const tap = (fn: () => void) => () => {
+    if (suppressClickRef.current) return;
+    fn();
+  };
 
   function reset() {
     setDraft(null);
@@ -296,15 +349,16 @@ export default function StarRummyBoard({ state, viewerSeat, names, connectedSeat
           {myTurn && selected.length > 0 && <span className="text-sky-300 light:text-sky-700">놓을 조합을 누르세요</span>}
         </div>
         <div className="flex min-h-[64px] flex-wrap gap-1.5">
-          {table.length === 0 && !(myTurn && selected.length > 0) && <p className="m-auto text-xs text-white/35 light:text-slate-400">아직 테이블이 비어 있어요</p>}
+          {table.length === 0 && !myTurn && <p className="m-auto text-xs text-white/35 light:text-slate-400">아직 테이블이 비어 있어요</p>}
           {table.map((meld, i) => (
             <div
               key={`${i}:${meld[0]}`}
+              data-drop={i}
               role={myTurn && selected.length > 0 ? "button" : undefined}
-              onClick={() => moveSelected(i)}
-              className={`flex items-center gap-0.5 rounded-lg border p-1 ${
+              onClick={tap(() => moveSelected(i))}
+              className={`flex items-center gap-0.5 rounded-lg border p-1 transition ${
                 invalid.has(i) ? "border-rose-400 bg-rose-500/15" : "border-white/10 bg-black/20 light:border-slate-200 light:bg-slate-50"
-              } ${myTurn && selected.length > 0 ? "cursor-pointer hover:border-sky-300" : ""}`}
+              } ${myTurn && selected.length > 0 ? "cursor-pointer hover:border-sky-300" : ""} ${drag?.over === i ? "scale-105 ring-2 ring-sky-400" : ""}`}
             >
               {invalid.has(i) && <span className="px-0.5 text-[10px] font-bold text-rose-300 light:text-rose-600">✕</span>}
               {meld.map((id) => (
@@ -315,26 +369,36 @@ export default function StarRummyBoard({ state, viewerSeat, names, connectedSeat
                   selected={selected.includes(id)}
                   fresh={myTurn && dirty && !onTableBefore.has(id)}
                   glow={!dirty && lastPlayed.has(id)}
+                  dimmed={!!drag?.ids.includes(id)}
+                  onDragStart={canPick(id) ? (e) => startDrag(id, e) : undefined}
                   onClick={
                     canPick(id)
-                      ? () => {
+                      ? tap(() => {
                           // tapping a tile while others are selected drops them into this meld
                           if (selected.length > 0 && !selected.includes(id)) moveSelected(i);
                           else toggle(id);
-                        }
+                        })
                       : undefined
                   }
                 />
               ))}
             </div>
           ))}
-          {myTurn && selected.length > 0 && (
+          {myTurn && (
             <button
               type="button"
-              onClick={() => moveSelected("new")}
-              className="flex h-[48px] items-center rounded-lg border-2 border-dashed border-sky-400/70 px-3 text-xs font-semibold text-sky-200 hover:bg-sky-400/10 light:text-sky-700"
+              data-drop="new"
+              onClick={tap(() => moveSelected("new"))}
+              disabled={selected.length === 0 && !drag}
+              className={`flex h-[48px] min-w-[96px] flex-1 items-center justify-center rounded-lg border-2 border-dashed px-3 text-xs font-semibold transition disabled:cursor-default ${
+                drag?.over === "new"
+                  ? "border-sky-300 bg-sky-400/20 text-sky-100 light:text-sky-800"
+                  : selected.length > 0 || drag
+                    ? "border-sky-400/70 text-sky-200 hover:bg-sky-400/10 light:text-sky-700"
+                    : "border-white/15 text-white/35 light:border-slate-300 light:text-slate-400"
+              }`}
             >
-              ＋ 새 조합
+              {selected.length > 0 || drag ? "＋ 새 조합 (여기에 놓기)" : "＋ 새 조합 — 타일을 끌어다 놓으세요"}
             </button>
           )}
         </div>
@@ -357,6 +421,8 @@ export default function StarRummyBoard({ state, viewerSeat, names, connectedSeat
           {nothingLeft ? "넘기기" : `🎴 뽑기 (${state.pool.length})`}
         </button>
       </section>
+
+      {state.phase === "playing" && !opened && <OpeningBanner value={myTurn && dirty ? (check?.openingValue ?? 0) : null} />}
 
       {/* status + actions */}
       {myTurn && (
@@ -391,7 +457,7 @@ export default function StarRummyBoard({ state, viewerSeat, names, connectedSeat
       )}
 
       {/* my rack */}
-      <section className={`${panel} flex flex-col gap-2 p-2.5`}>
+      <section data-drop="rack" className={`${panel} flex flex-col gap-2 p-2.5 transition ${drag?.over === "rack" ? "ring-2 ring-sky-400" : ""}`}>
         <div className="flex items-center justify-between text-[11px] text-white/50 light:text-slate-500">
           <span>
             🪵 내 타일 {rack.length}장 · 남으면 −{handValue(rack)}점
@@ -406,11 +472,27 @@ export default function StarRummyBoard({ state, viewerSeat, names, connectedSeat
         </div>
         <div className="flex flex-wrap gap-1">
           {rack.map((id) => (
-            <StarTile key={id} id={id} selected={selected.includes(id)} hint={hintTiles.has(id)} onClick={myTurn ? () => toggle(id) : undefined} />
+            <StarTile
+              key={id}
+              id={id}
+              selected={selected.includes(id)}
+              hint={hintTiles.has(id)}
+              dimmed={!!drag?.ids.includes(id)}
+              onDragStart={myTurn ? (e) => startDrag(id, e) : undefined}
+              onClick={myTurn ? tap(() => toggle(id)) : undefined}
+            />
           ))}
           {rack.length === 0 && <p className="text-xs text-white/40">모두 내려놓았어요!</p>}
         </div>
       </section>
+
+      {drag && (
+        <div className="pointer-events-none fixed z-50 flex gap-0.5 drop-shadow-[0_8px_12px_rgba(0,0,0,0.5)]" style={{ left: drag.x, top: drag.y, transform: "translate(-50%, -75%) rotate(-3deg)" }}>
+          {drag.ids.map((id) => (
+            <StarTile key={id} id={id} />
+          ))}
+        </div>
+      )}
 
       {(state.phase === "roundEnd" || state.phase === "gameOver") && <RoundResultPanel state={state} nameOf={nameOf} viewerSeat={viewerSeat} onNext={() => onAction({ type: "nextRound", round: state.round })} onGameEnd={onGameEnd} />}
     </div>
@@ -483,6 +565,37 @@ function RoundResultPanel({
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+type DropTarget = number | "new" | "rack";
+
+function dropTargetAt(x: number, y: number): DropTarget | null {
+  const el = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-drop]");
+  const v = el?.dataset.drop;
+  if (v === undefined) return null;
+  return v === "new" || v === "rack" ? v : Number(v);
+}
+
+/** Always-on reminder of the first-meld rule, with a live total while drafting. */
+function OpeningBanner({ value }: { value: number | null }) {
+  const pct = value === null ? 0 : Math.min(100, (value / OPENING_MIN) * 100);
+  const done = value !== null && value >= OPENING_MIN;
+  return (
+    <div className="rounded-xl border border-amber-300/40 bg-amber-300/10 px-3 py-2 text-xs text-amber-100 light:border-amber-300 light:bg-amber-50 light:text-amber-900">
+      <p className="font-semibold">🔰 첫 관측(첫 등록) 조건: 내 손의 타일로만 만든 조합의 숫자 합계 {OPENING_MIN}점 이상</p>
+      <p className="mt-0.5 text-[11px] opacity-80">예) 7+8+9 = 24 · 8+8+8 = 24 · 혜성은 대신하는 숫자로 계산 · 테이블에 있는 조합은 이번엔 못 건드려요</p>
+      {value !== null && (
+        <div className="mt-1.5 flex items-center gap-2">
+          <div className="h-2 flex-1 overflow-hidden rounded-full bg-black/30 light:bg-amber-200">
+            <div className={`h-full rounded-full transition-all ${done ? "bg-emerald-400" : "bg-amber-400"}`} style={{ width: `${pct}%` }} />
+          </div>
+          <span className={`font-bold ${done ? "text-emerald-300 light:text-emerald-700" : ""}`}>
+            지금 {value} / {OPENING_MIN}점{done ? " ✔" : ""}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
