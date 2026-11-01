@@ -543,6 +543,8 @@ export const GAME_REGISTRY: GameMeta[] = [
     tags: ["타일게임"],
     genres: ["strategy", "family"],
     playable: false,
+    // 타일 러미는 오리지널 '별빛 러미'(star-rummy)로 출시돼 이 준비중 자리는 허브에서 뺀다.
+    hiddenFromLobby: true,
     supportsAutoRanking: false,
   },
   {
