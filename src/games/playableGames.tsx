@@ -61,4 +61,5 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   "memory-feast": dynamic(() => import("./memoryFeast/MemoryFeastGame"), { ssr: false }),
   mafia: dynamic(() => import("./mafia/MafiaGame"), { ssr: false }),
   "play-dead": dynamic(() => import("./playDead/PlayDeadGame"), { ssr: false }),
+  "star-rummy": dynamic(() => import("./starRummy/StarRummyGame"), { ssr: false }),
 };

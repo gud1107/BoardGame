@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.139.0",
+    releaseDate: "2026-11-01",
+    title: "🌌 새 게임: 별빛 러미",
+    changes: [
+      { game: "star-rummy", type: "FEAT", desc: "🌌 새 게임 — 1~12 숫자 타일 4색 98장으로 런·그룹 별자리를 만드는 2~4인 타일 러미. 첫 관측 24점, 그다음엔 테이블을 마음껏 재배치!" },
+      { game: "star-rummy", type: "FEAT", desc: "🔭 앞면 3장 관측소에서 필요한 타일을 골라 오거나 더미에서 뒷면으로 — 1~3라운드 점수 합으로 승부" },
+      { game: "star-rummy", type: "FEAT", desc: "🧊 밤의 천문대 3D 테이블 + 🤖 AI 봇 Lv.1~10 (Lv.8부터 테이블 전체 재배치) · 색마다 모양이 달라 색 구분 없이도 OK" },
+    ],
+  },
+  {
     version: "v1.138.0",
     releaseDate: "2026-11-01",
     title: "🪖 죽은척 기싸움 — 원형 무대 대신 포연 자욱한 전장",

@@ -301,6 +301,14 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["all-clear", "🦈", "미션 올클리어", "한 잠수에서 미션 모두 달성", 1, k("missionAllClears")],
     ["streak-5", "🔥", "연속 올클리어", "5연속 미션 올클리어", 5, k("maxMissionStreak")],
   ],
+  "star-rummy": [
+    ["rummy-1", "🎉", "첫 러미", "손의 타일을 모두 내려놓아 라운드 끝내기", 1, k("rummyOuts")],
+    ["rummy-10", "🌌", "별자리 장인", "러미 누적 10번", 10, k("rummyOuts")],
+    ["big-turn", "✨", "유성우", "한 차례에 타일 8장 이상 내려놓기", 8, k("maxTurnTiles")],
+    ["rearrange-20", "🔀", "재배치의 달인", "테이블을 재배치한 차례 누적 20", 20, k("rearranges")],
+    ["tiles-200", "🀄", "타일 200장", "내려놓은 타일 누적 200장", 200, k("tilesPlayed")],
+    ["comet-10", "☄️", "혜성 사냥꾼", "혜성 누적 10장 내려놓기", 10, k("wildsPlayed")],
+  ],
   "play-dead": [
     ["survive-1", "🧍", "최후의 생존자", "마지막까지 살아남아 승리", 1, k("survived")],
     ["kills-10", "💥", "에네르기파 장인", "상대를 쓰러뜨려 진짜로 끝내기 누적 10번", 10, k("kills")],

@@ -210,6 +210,15 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "받은 투표 (점수 모드)", value: (d) => n(d.votesReceived) },
     { label: "시간 초과로 자동 제출", value: (d) => n(d.autoFilled) },
   ],
+  "star-rummy": [
+    { label: "최종 우승 / 라운드 승리", value: (d) => `${n(d.gamesWon)} / ${n(d.roundsWon)}` },
+    { label: "러미 (손 다 비우기)", value: (d) => n(d.rummyOuts) },
+    { label: "내려놓은 타일 (한 차례 최다)", value: (d) => `${n(d.tilesPlayed)} (${n(d.maxTurnTiles)})` },
+    { label: "테이블 재배치한 차례", value: (d) => n(d.rearranges) },
+    { label: "관측소에서 가져온 타일 / 전체 뽑기", value: (d) => `${n(d.observatoryPicks)} / ${n(d.draws)}` },
+    { label: "혜성 내려놓기", value: (d) => n(d.wildsPlayed) },
+    { label: "최고 합계 점수", value: (d) => n(d.maxTotal) },
+  ],
   "play-dead": [
     { label: "최후의 생존", value: (d) => n(d.survived) },
     { label: "끝내기 (한 판 최다)", value: (d) => `${n(d.kills)} (${n(d.maxKills)})` },

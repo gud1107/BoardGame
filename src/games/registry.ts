@@ -933,6 +933,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "star-rummy",
+    name: "별빛 러미",
+    nameEn: "Star Rummy",
+    description:
+      "1~12 숫자 타일 4색 98장으로 별자리(같은 색 연속 런·같은 숫자 그룹)를 만들어 내려놓는 2~4인 타일 러미. 첫 관측은 내 손의 조합만으로 24점 이상! 그다음부턴 테이블의 조합을 쪼개고 합쳐 마음껏 재배치하고, 앞면으로 펼쳐진 관측소에서 필요한 타일을 골라 오세요. 손을 가장 먼저 비우면 러미! 1~3라운드 점수 합으로 승부하고, 밤의 천문대 3D 테이블에서 내 캐릭터와 함께 플레이해요.",
+    players: { min: 2, max: 4 },
+    playTime: { minMinutes: 15, maxMinutes: 40 },
+    category: "family",
+    thumbnail: { emoji: "🌌", gradient: ["#6366f1", "#0b0b2a"] },
+    tags: ["타일", "러미", "숫자", "재배치", "가족", "3D", "AI봇"],
+    genres: ["strategy", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "prism-five",
     name: "섬광전대 프리즘파이브",
     nameEn: "Prism Five: Flash Squadron",
