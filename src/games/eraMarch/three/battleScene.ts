@@ -28,14 +28,17 @@
 import * as THREE from "three";
 import { ERAS, LANE, ROLE_ICON, TICK_MS, UNITS, type Era, type Fx, type TurretKind, type UnitKind } from "../data";
 import { frontProgress, fromProgress, progress, wallX, type EraMarchState, type FxEvent, type Side } from "../engine";
-import { airshipTemplate, baseTemplate, mammothTemplate, rockTemplate, shipTemplate, treeTemplate, turretTemplate, TURRET_SLOTS, unitTemplate, type Template } from "./models";
+import { airshipTemplate, baseTemplate, mammothTemplate, rockTemplate, shipTemplate, treeTemplate, turretTemplate, TURRET_SLOTS, type Template } from "./models";
+import { TEAM_HEX, unitHeight, unitRig, type Rig } from "./rigs";
+import { computePose, deathPose, newPose, type Pose } from "./anim";
 
-export const TEAM_HEX: [string, string] = ["#3b82f6", "#ef4444"];
+export { TEAM_HEX };
 const TEAM = TEAM_HEX.map((h) => new THREE.Color(h)) as [THREE.Color, THREE.Color];
 
 const W = (laneX: number) => laneX / 10 - LANE / 20;
 const BASE_OFFSET = 2.4; // base origin sits this far behind its wall
 const VEHICLES = new Set<UnitKind>(["chariot", "armored", "steamtank", "hovertank", "drone", "colossus"]);
+const UNIT_CAP = 40;
 const HOVER = new Set<UnitKind>(["hovertank", "drone"]);
 
 export interface Frame {
@@ -48,63 +51,114 @@ export interface Frame {
   reduceShake: boolean;
 }
 
-/* ── instanced pool for one template ─────────────────────────────────── */
+/* ── instanced pools for one unit rig ────────────────────────────────── */
 
-class LookPool {
-  main: THREE.InstancedMesh;
-  team: THREE.InstancedMesh | null;
-  glow: THREE.InstancedMesh | null;
-  n = 0;
-  constructor(t: Template, cap: number, mats: Mats, scene: THREE.Scene, shadow = true) {
-    this.main = new THREE.InstancedMesh(t.main, mats.body, cap);
-    this.main.castShadow = shadow;
-    this.team = t.team ? new THREE.InstancedMesh(t.team, mats.team, cap) : null;
-    if (this.team) this.team.castShadow = shadow;
-    this.glow = t.glow ? new THREE.InstancedMesh(t.glow, mats.glow, cap) : null;
-    for (const m of this.meshes()) {
-      m.frustumCulled = false;
-      m.count = 0;
-      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      scene.add(m);
-    }
-    // instanceColor buffers exist from the start
+const _B = new THREE.Matrix4();
+const _UB = new THREE.Matrix4();
+const _P = new THREE.Matrix4();
+const _R = new THREE.Matrix4();
+const _T = new THREE.Matrix4();
+
+/**
+ * Every part of one kind × side rig is an InstancedMesh (plus a glow mesh
+ * where it has lit-up bits). `push` composes unit → body lean → joint for
+ * every part of one soldier.
+ */
+class RigPool {
+  parts: { key: Rig["parts"][number]["key"]; pivots: THREE.Vector3[]; main: THREE.InstancedMesh | null; glow: THREE.InstancedMesh | null; n: number }[];
+  constructor(readonly rig: Rig, mats: Mats, scene: THREE.Scene) {
     const white = new THREE.Color(1, 1, 1);
-    for (let i = 0; i < cap; i++) {
-      this.main.setColorAt(i, white);
-      this.team?.setColorAt(i, white);
-    }
-  }
-  meshes() {
-    return [this.main, this.team, this.glow].filter((m): m is THREE.InstancedMesh => !!m);
+    this.parts = rig.parts.map((part) => {
+      const cap = UNIT_CAP * part.pivots.length;
+      const mk = (g: THREE.BufferGeometry | null, mat: THREE.Material, shadow: boolean) => {
+        if (!g) return null;
+        const m = new THREE.InstancedMesh(g, mat, cap);
+        m.castShadow = shadow;
+        m.frustumCulled = false;
+        m.count = 0;
+        m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        scene.add(m);
+        return m;
+      };
+      const main = mk(part.main, mats.body, true);
+      if (main) for (let i = 0; i < cap; i++) main.setColorAt(i, white);
+      return { key: part.key, pivots: part.pivots, main, glow: mk(part.glow, mats.glow, false), n: 0 };
+    });
   }
   begin() {
-    this.n = 0;
+    for (const p of this.parts) p.n = 0;
   }
-  push(m: THREE.Matrix4, team: THREE.Color, flash: number) {
-    if (this.n >= this.main.instanceMatrix.count) return;
-    const i = this.n++;
-    this.main.setMatrixAt(i, m);
+  push(U: THREE.Matrix4, pose: Pose, flash: number) {
+    const hip = this.rig.hipY;
+    // body lean around the hips, then the step forward/back and the bob
+    _q.setFromEuler(_e.set(pose.roll, pose.twist, -pose.pitch, "YZX"));
+    _B.makeTranslation(pose.lunge, pose.bob + hip, 0).multiply(_R.makeRotationFromQuaternion(_q)).multiply(_T.makeTranslation(0, -hip, 0));
+    _UB.multiplyMatrices(U, _B);
     _c.setScalar(flash);
-    this.main.setColorAt(i, _c);
-    if (this.team) {
-      this.team.setMatrixAt(i, m);
-      _c.copy(team).multiplyScalar(flash > 1 ? 1.6 : 1);
-      this.team.setColorAt(i, _c);
+    for (const p of this.parts) {
+      for (let i = 0; i < p.pivots.length; i++) {
+        const pv = p.pivots[i];
+        switch (p.key) {
+          case "body":
+            _P.copy(_UB);
+            break;
+          case "armL":
+          case "armR": {
+            const rot = p.key === "armL" ? pose.armL : pose.armR;
+            const off = p.key === "armL" ? pose.armLx : pose.armRx;
+            _P.copy(_UB).multiply(_T.makeTranslation(pv.x + off, pv.y, pv.z)).multiply(_R.makeRotationZ(rot));
+            break;
+          }
+          case "barrel":
+            _P.copy(_UB).multiply(_T.makeTranslation(pv.x + pose.barrel, pv.y, pv.z));
+            break;
+          case "rotor":
+            _P.copy(_UB).multiply(_T.makeTranslation(pv.x, pv.y, pv.z)).multiply(_R.makeRotationY(pose.rotor + i));
+            break;
+          default: {
+            const rot = p.key === "legs" ? pose.legs[i] : p.key === "fleg" ? pose.fleg[i] : p.key === "bleg" ? pose.bleg[i] : p.key === "wheel" ? pose.wheel : p.key === "cape" ? pose.cape : 0;
+            _P.copy(_UB).multiply(_T.makeTranslation(pv.x, pv.y, pv.z)).multiply(_R.makeRotationZ(rot ?? 0));
+          }
+        }
+        const idx = p.n++;
+        if (p.main && idx < p.main.instanceMatrix.count) {
+          p.main.setMatrixAt(idx, _P);
+          p.main.setColorAt(idx, _c);
+        }
+        if (p.glow && idx < p.glow.instanceMatrix.count) p.glow.setMatrixAt(idx, _P);
+      }
     }
-    this.glow?.setMatrixAt(i, m);
   }
   end() {
-    for (const m of this.meshes()) {
-      m.count = this.n;
-      m.visible = this.n > 0;
-      m.instanceMatrix.needsUpdate = true;
-      if (m.instanceColor) m.instanceColor.needsUpdate = true;
+    for (const p of this.parts) {
+      for (const m of [p.main, p.glow]) {
+        if (!m) continue;
+        m.count = Math.min(p.n, m.instanceMatrix.count);
+        m.visible = m.count > 0;
+        m.instanceMatrix.needsUpdate = true;
+        if (m.instanceColor) m.instanceColor.needsUpdate = true;
+      }
     }
   }
   dispose() {
-    for (const m of this.meshes()) m.dispose();
+    for (const p of this.parts) {
+      p.main?.dispose();
+      p.glow?.dispose();
+    }
   }
 }
+
+/** Per-unit animation memory (not part of the simulation). */
+interface UnitView {
+  lastX: number;
+  stride: number;
+  move: number;
+  spawnAt: number;
+  hitAt: number;
+  hitPow: number;
+}
+
+const POSE = newPose();
 
 interface Mats {
   body: THREE.MeshStandardMaterial;
@@ -115,7 +169,6 @@ interface Mats {
 const _c = new THREE.Color();
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
-const _q2 = new THREE.Quaternion();
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _s = new THREE.Vector3();
@@ -234,6 +287,7 @@ interface Corpse {
   z: number;
   t0: number;
   dir: number;
+  seed: number;
 }
 
 interface FloatText {
@@ -265,7 +319,9 @@ export class BattleScene {
   private camera = new THREE.PerspectiveCamera(36, 1, 0.5, 600);
   private overlay: CanvasRenderingContext2D;
   private mats: Mats;
-  private looks = new Map<string, LookPool>();
+  private rigs = new Map<string, RigPool>();
+  private uview = new Map<number, UnitView>();
+  private blobs!: THREE.InstancedMesh;
   private sparks: ParticlePool;
   private debris: ParticlePool;
   private smoke: ParticlePool;
@@ -327,6 +383,13 @@ export class BattleScene {
       body: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0.05 }),
       team: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, metalness: 0.05, emissive: 0x111111 }),
       glow: new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
+    };
+    // warm rim light: silhouettes read crisply against the ground at any zoom
+    this.mats.body.onBeforeCompile = (sh) => {
+      sh.fragmentShader = sh.fragmentShader.replace(
+        "#include <emissivemap_fragment>",
+        "#include <emissivemap_fragment>\n  float emRim = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);\n  totalEmissiveRadiance += vec3(1.0, 0.92, 0.78) * emRim * 0.3;",
+      );
     };
 
     // sky dome
@@ -397,6 +460,10 @@ export class BattleScene {
     this.feet.count = 0;
     this.feet.setColorAt(0, TEAM[0]);
     this.scene.add(this.feet);
+    this.blobs = new THREE.InstancedMesh(new THREE.CircleGeometry(0.85, 18).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false }), UNIT_CAP * 2);
+    this.blobs.frustumCulled = false;
+    this.blobs.count = 0;
+    this.scene.add(this.blobs);
 
     // special props
     for (let i = 0; i < 4; i++) this.mammoths.push(this.propGroup(mammothTemplate(), 0));
@@ -577,14 +644,25 @@ export class BattleScene {
     return g;
   }
 
-  private look(key: string, t: () => Template, cap: number): LookPool {
-    let p = this.looks.get(key);
+  private rigPool(kind: UnitKind, side: Side): RigPool {
+    const key = `${kind}:${side}`;
+    let p = this.rigs.get(key);
     if (!p) {
-      p = new LookPool(t(), cap, this.mats, this.scene);
-      this.looks.set(key, p);
+      p = new RigPool(unitRig(kind, side), this.mats, this.scene);
+      this.rigs.set(key, p);
     }
     return p;
   }
+
+  private unitView(id: number, x: number): UnitView {
+    let v = this.uview.get(id);
+    if (!v) {
+      v = { lastX: x, stride: (id * 0.37) % 2, move: 0, spawnAt: -10, hitAt: -10, hitPow: 0 };
+      this.uview.set(id, v);
+    }
+    return v;
+  }
+
 
   /* ── public controls ───────────────────────────────────────────────── */
 
@@ -647,6 +725,7 @@ export class BattleScene {
       switch (e.t) {
         case "spawn": {
           const x = W(fromProgress(e.side, 40));
+          this.unitView(e.id, fromProgress(e.side, 40)).spawnAt = now;
           this.ring(x, 0.1, laneZ(e.id), 0.4, 2.2, 0.35, TEAM_HEX[e.side], 0.9);
           this.burst(this.debris, x, 0.2, laneZ(e.id), 8, 2.5, 3, 0.15, 0.6, "#a07a4a", 6);
           break;
@@ -679,7 +758,14 @@ export class BattleScene {
             this.burst(this.debris, W(e.x), 0.3, 0, 5, 2, 6, 0.12, 0.5, "#a07a4a", 4);
             break;
           }
-          if (e.id > 0) this.flashAt.set(e.id, now);
+          if (e.id > 0) {
+            this.flashAt.set(e.id, now);
+            const v = this.uview.get(e.id);
+            if (v) {
+              v.hitAt = now;
+              v.hitPow = e.mul > 1 ? 1.4 : e.mul < 1 ? 0.6 : 1;
+            }
+          }
           const x = W(e.x);
           const z = e.base ? 0 : e.id > 0 ? laneZ(e.id) : 0;
           const y = e.base ? 2 + Math.random() * 3 : 1.2;
@@ -703,7 +789,8 @@ export class BattleScene {
           const def = UNITS[e.kind];
           const x = W(e.x);
           const z = laneZ(e.id);
-          this.corpses.push({ kind: e.kind, side: e.side, x, z, t0: now, dir: e.id % 2 ? 1 : -1 });
+          this.corpses.push({ kind: e.kind, side: e.side, x, z, t0: now, dir: e.id % 2 ? 1 : -1, seed: e.id * 7 + Math.floor(Math.random() * 3) });
+          this.uview.delete(e.id);
           if (VEHICLES.has(e.kind)) this.explosion(x, 1, z, 1 + def.size * 0.4, false);
           else {
             this.burst(this.sparks, x, 1.4, z, 10, 2.5, -2, 0.18, 0.7, "#ffffff", 3);
@@ -990,65 +1077,81 @@ export class BattleScene {
     this.sun.position.set(this.camX + 25, 60, 45);
     this.sun.target.position.set(this.camX, 0, 0);
 
-    // units
-    for (const p of this.looks.values()) p.begin();
+    // units: jointed rigs posed from the engine's attack timing
+    for (const p of this.rigs.values()) p.begin();
     let feet = 0;
+    const cheer = s.winner === 0 || s.winner === 1 ? s.winner : -1;
     for (const u of s.units) {
       const def = UNITS[u.kind];
       const px = prevX.get(u.id) ?? u.x;
       const lx = px + (u.x - px) * alpha;
-      const pool = this.look(u.kind, () => unitTemplate(u.kind), 40);
-      const dir = u.side === 0 ? 1 : -1;
-      const phase = now * (def.speed / 7) + u.id * 1.7;
-      let y = 0;
-      let tilt = 0;
-      let lunge = 0;
-      let yaw = u.side === 0 ? 0 : Math.PI;
-      const atkK = (tickF - u.lastAtk) / 7;
-      if (atkK >= 0 && atkK < 1) {
-        const sw = Math.sin(atkK * Math.PI);
-        if (def.range > 30) lunge = -sw * 0.22;
-        else {
-          lunge = sw * (VEHICLES.has(u.kind) ? 0.6 : 0.45);
-          tilt = -sw * 0.28;
-        }
-      } else if (u.moving) {
-        y = Math.abs(Math.sin(phase)) * (def.role === "charge" ? 0.22 : 0.12);
-        tilt = Math.sin(phase) * 0.06 * (VEHICLES.has(u.kind) ? 0.3 : 1);
-      }
-      if (HOVER.has(u.kind)) y = 0.35 + Math.sin(now * 3 + u.id) * 0.15;
-      if (u.stun > 0) yaw += Math.sin(now * 18) * 0.25;
+      const pool = this.rigPool(u.kind, u.side);
+      const v = this.unitView(u.id, lx);
+      const step = Math.abs(lx - v.lastX) / 10;
+      v.lastX = lx;
+      if (step < 2) v.stride += step;
+      v.move += ((u.moving ? 1 : 0) - v.move) * Math.min(1, dt * 9);
+      const cdSec = (def.cdTicks * TICK_MS) / 1000;
+      const since = ((tickF - u.lastAtk) * TICK_MS) / 1000;
+      const engaged = since < cdSec * 1.6 + 0.25;
+      const z = laneZ(u.id);
+      computePose(
+        {
+          rig: pool.rig,
+          t: now,
+          stride: v.stride,
+          move: v.move,
+          since: Math.max(0, since),
+          cd: cdSec,
+          engaged,
+          hit: Math.max(0, 1 - (now - v.hitAt) / 0.26) * v.hitPow,
+          stunned: u.stun > 0,
+          spawn: Math.min(1, (now - v.spawnAt) / 0.38),
+          cheer: cheer === u.side,
+          seed: u.id,
+        },
+        POSE,
+      );
+      if (HOVER.has(u.kind)) POSE.bob += 0.35;
       const fl = this.flashAt.get(u.id);
-      const flash = fl !== undefined && now - fl < 0.11 ? 2.6 : 1;
-      _q.setFromEuler(_e.set(0, yaw, tilt * dir, "YXZ"));
-      _m.compose(_v.set(W(lx) + lunge * dir, y, laneZ(u.id)), _q, _s.setScalar(1));
-      pool.push(_m, TEAM[u.side], flash);
-      if (feet < 40) {
+      const flash = fl !== undefined && now - fl < 0.1 ? 2.4 : 1;
+      _q.setFromAxisAngle(AXIS_Y, u.side === 0 ? 0 : Math.PI);
+      _m.compose(_v.set(W(lx), 0, z), _q, _s.setScalar(POSE.scale));
+      pool.push(_m, POSE, flash);
+      if (feet < UNIT_CAP) {
         const r = def.size > 1.3 ? 1.6 : 1;
-        this.feet.setMatrixAt(feet, _m.compose(_v.set(W(lx), 0.07, laneZ(u.id)), _q.identity(), _s.set(r, 1, r)));
-        this.feet.setColorAt(feet++, TEAM[u.side]);
+        this.feet.setMatrixAt(feet, _m.compose(_v.set(W(lx), 0.07, z), _q.identity(), _s.set(r, 1, r)));
+        this.feet.setColorAt(feet, TEAM[u.side]);
+        this.blobs.setMatrixAt(feet, _m.compose(_v.set(W(lx) + 0.15, 0.05, z - 0.1), _q, _s.set(r * 1.1, 1, r * 0.8)));
+        feet++;
       }
-      if (def.role === "charge" && u.moving && Math.random() < dt * 14) this.burst(this.smoke, W(lx) - dir, 0.2, laneZ(u.id), 1, 0.6, -0.4, 0.25, 0.6, "#c8b48c", 0.5);
-      if (u.kind === "steamtank" && Math.random() < dt * 6) this.burst(this.smoke, W(lx) - dir * 0.9, 3.2, laneZ(u.id), 1, 0.4, -1.5, 0.35, 1.5, "#57534e", 1);
+      const dir = u.side === 0 ? 1 : -1;
+      if (def.role === "charge" && u.moving && Math.random() < dt * 14) this.burst(this.smoke, W(lx) - dir, 0.2, z, 1, 0.6, -0.4, 0.25, 0.6, "#c8b48c", 0.5);
+      if (u.kind === "steamtank" && Math.random() < dt * 6) this.burst(this.smoke, W(lx) - dir * 1.0, 3.4, z, 1, 0.4, -1.5, 0.35, 1.5, "#57534e", 1);
+      if (u.moving && !VEHICLES.has(u.kind) && def.role !== "charge" && Math.random() < dt * 2.5) this.burst(this.debris, W(lx) - dir * 0.2, 0.08, z, 1, 0.5, 4, 0.05, 0.35, "#a07a4a", 0.6);
     }
     this.feet.count = feet;
     this.feet.instanceMatrix.needsUpdate = true;
     if (this.feet.instanceColor) this.feet.instanceColor.needsUpdate = true;
-    // corpses
-    this.corpses = this.corpses.filter((c) => now - c.t0 < 1.6);
+    // corpses: fall, flail, sink
+    this.corpses = this.corpses.filter((c) => now - c.t0 < 2.1);
+    let blobN = feet;
     for (const c of this.corpses) {
       const el = now - c.t0;
-      const pool = this.look(c.kind, () => unitTemplate(c.kind), 40);
-      const veh = VEHICLES.has(c.kind);
-      const fall = Math.min(1, el / 0.35) * (veh ? 0.25 : Math.PI / 2) * c.dir;
-      const sink = el > 0.7 ? -(el - 0.7) * 2.2 : 0;
+      const pool = this.rigPool(c.kind, c.side);
+      deathPose(pool.rig, el, c.dir, c.seed, POSE);
       _q.setFromAxisAngle(AXIS_Y, c.side === 0 ? 0 : Math.PI);
-      _q2.setFromAxisAngle(AXIS_X, fall);
-      _q.multiply(_q2);
-      _m.compose(_v.set(c.x, sink, c.z), _q, _s.setScalar(1));
-      pool.push(_m, TEAM[c.side], veh ? 0.35 : 0.8);
+      _m.compose(_v.set(c.x, 0, c.z), _q, _s.setScalar(1));
+      pool.push(_m, POSE, el < 0.08 ? 2.2 : 0.75);
+      if (blobN < UNIT_CAP * 2 && el < 1.2) this.blobs.setMatrixAt(blobN++, _m.compose(_v.set(c.x, 0.05, c.z), _q.identity(), _s.set(1.2, 1, 0.9)));
     }
-    for (const p of this.looks.values()) p.end();
+    this.blobs.count = blobN;
+    this.blobs.instanceMatrix.needsUpdate = true;
+    for (const p of this.rigs.values()) p.end();
+    if (s.tick % 100 === 0 && this.uview.size > s.units.length + 20) {
+      const alive = new Set(s.units.map((u) => u.id));
+      for (const id of this.uview.keys()) if (!alive.has(id)) this.uview.delete(id);
+    }
 
     // bases, turrets
     for (const side of [0, 1] as const) this.updateBase(side, s, now, dt, tickF);
@@ -1273,8 +1376,7 @@ export class BattleScene {
     for (const u of s.units) {
       const px = prevX.get(u.id) ?? u.x;
       const lx = px + (u.x - px) * alpha;
-      const t = unitTemplate(u.kind);
-      const p = this.project(W(lx), t.height + 0.45 + (HOVER.has(u.kind) ? 0.4 : 0), laneZ(u.id));
+      const p = this.project(W(lx), unitHeight(u.kind) + 0.45 + (HOVER.has(u.kind) ? 0.4 : 0), laneZ(u.id));
       if (!p.ok) continue;
       const def = UNITS[u.kind];
       const w = barW * (def.size > 1.3 ? 1.35 : 1);
@@ -1388,7 +1490,7 @@ export class BattleScene {
   }
 
   dispose() {
-    for (const p of this.looks.values()) p.dispose();
+    for (const p of this.rigs.values()) p.dispose();
     this.scene.traverse((o) => {
       const m = o as THREE.Mesh;
       if (m.geometry) m.geometry.dispose();

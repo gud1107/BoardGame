@@ -1,6 +1,7 @@
 /**
- * 시대의 진격 low-poly models, all built from primitives in code (no asset
- * files). Every unit look is a template of up to three merged geometries:
+ * 시대의 진격 low-poly bases, turrets and special props, built from primitives
+ * in code (no asset files); units are jointed rigs in rigs.ts. Every look here
+ * is a template of up to three merged geometries:
  *
  * - `main`: vertex-coloured body (lit, flat-shaded)
  * - `team`: white parts the scene tints with the side colour (tabard, plume,
@@ -13,7 +14,7 @@
 
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import type { Era, TurretKind, UnitKind } from "../data";
+import type { Era, TurretKind } from "../data";
 
 export interface Template {
   main: THREE.BufferGeometry;
@@ -84,152 +85,7 @@ class Builder {
 
 /* ── humanoids ───────────────────────────────────────────────────────── */
 
-const SKIN = ["#d9a066", "#c68a5a", "#e0b083", "#b97f55"];
 const WHITE = "#ffffff";
-
-interface HumanOpt {
-  skin?: string;
-  top: string;
-  legs: string;
-  head?: "hair" | "band" | "helm" | "crest" | "hood" | "tricorn" | "bearskin" | "bandana" | "brodie" | "cap" | "visor" | "robot";
-  weapon?: "club" | "sling" | "sword" | "bow" | "spear" | "cutlass" | "musket" | "bomb" | "rifle" | "blade" | "rail" | "none";
-  shield?: "round" | "tower" | "scutum";
-  y?: number;
-  scale?: number;
-  /** Arms raised for throwing. */
-  raise?: boolean;
-}
-
-function human(b: Builder, o: HumanOpt) {
-  const y = o.y ?? 0;
-  const k = o.scale ?? 1;
-  const P = (x: number, yy: number, z: number): [number, number, number] => [x * k, y + yy * k, z * k];
-  const skin = o.skin ?? SKIN[0];
-  const S = (n: number) => n * k;
-  // legs + boots
-  b.box(S(0.24), S(0.78), S(0.24), o.legs, P(0, 0.39, -0.16));
-  b.box(S(0.24), S(0.78), S(0.24), o.legs, P(0, 0.39, 0.16));
-  b.box(S(0.3), S(0.14), S(0.28), "#3b2a1d", P(0.04, 0.07, -0.16));
-  b.box(S(0.3), S(0.14), S(0.28), "#3b2a1d", P(0.04, 0.07, 0.16));
-  // torso + tabard (team)
-  b.box(S(0.42), S(0.66), S(0.6), o.top, P(0, 1.1, 0));
-  b.box(S(0.48), S(0.56), S(0.64), WHITE, P(0, 1.08, 0), { layer: "team" });
-  b.box(S(0.22), S(0.14), S(0.22), WHITE, P(0.02, 1.44, -0.4), { layer: "team" });
-  b.box(S(0.22), S(0.14), S(0.22), WHITE, P(0.06, 1.44, 0.4), { layer: "team" });
-  b.box(S(0.46), S(0.06), S(0.64), "#3b2a1d", P(0, 0.8, 0));
-  // arms
-  const armRot: [number, number, number] = o.raise ? [0, 0, 2.4] : [0, 0, 0.5];
-  b.box(S(0.17), S(0.56), S(0.17), o.top, P(0.08, 1.12, -0.4), { rot: o.raise ? [0, 0, 0.3] : [0, 0, 0] });
-  b.box(S(0.17), S(0.56), S(0.17), o.top, P(0.2, 1.15, 0.4), { rot: armRot });
-  b.ball(S(0.1), skin, o.raise ? P(0.0, 1.62, 0.42) : P(0.36, 0.95, 0.42), undefined, 0);
-  // head
-  b.ball(S(0.22), skin, P(0.02, 1.66, 0), undefined, 1);
-  b.box(S(0.05), S(0.05), S(0.05), "#1a1a1a", P(0.2, 1.7, -0.08));
-  b.box(S(0.05), S(0.05), S(0.05), "#1a1a1a", P(0.2, 1.7, 0.08));
-  switch (o.head ?? "hair") {
-    case "hair":
-      b.ball(S(0.23), "#3a2414", P(-0.04, 1.75, 0), { scale: [1, 0.7, 1] }, 0);
-      break;
-    case "band":
-      b.ball(S(0.23), "#2b1a0f", P(-0.04, 1.76, 0), { scale: [1, 0.7, 1] }, 0);
-      b.cyl(S(0.235), S(0.235), S(0.08), WHITE, P(0.02, 1.72, 0), { layer: "team" }, 8);
-      b.cone(S(0.05), S(0.3), WHITE, P(-0.18, 1.98, 0), { layer: "team", rot: [0, 0, 0.5] }, 4);
-      break;
-    case "helm":
-    case "crest":
-      b.ball(S(0.25), "#9ca3af", P(0, 1.74, 0), { scale: [1, 0.8, 1] }, 1);
-      b.box(S(0.06), S(0.2), S(0.5), "#6b7280", P(0.18, 1.6, 0));
-      if (o.head === "crest") b.box(S(0.42), S(0.16), S(0.07), WHITE, P(-0.04, 2.0, 0), { layer: "team" });
-      break;
-    case "hood":
-      b.cone(S(0.27), S(0.5), "#5b4a2f", P(-0.02, 1.82, 0), undefined, 6);
-      break;
-    case "tricorn":
-      b.cyl(S(0.34), S(0.34), S(0.06), "#1f2937", P(0, 1.84, 0), undefined, 3);
-      b.cyl(S(0.18), S(0.22), S(0.16), "#1f2937", P(0, 1.92, 0), undefined, 6);
-      b.ball(S(0.06), WHITE, P(0.18, 1.9, 0), { layer: "team" }, 0);
-      break;
-    case "bearskin":
-      b.cyl(S(0.22), S(0.24), S(0.62), "#111827", P(0, 2.0, 0), undefined, 7);
-      b.box(S(0.05), S(0.1), S(0.3), WHITE, P(0.2, 1.85, 0), { layer: "team" });
-      break;
-    case "bandana":
-      b.ball(S(0.235), WHITE, P(-0.02, 1.76, 0), { scale: [1, 0.65, 1], layer: "team" }, 0);
-      b.box(S(0.04), S(0.06), S(0.12), "#111", P(0.22, 1.71, -0.08));
-      break;
-    case "brodie":
-      b.cyl(S(0.4), S(0.4), S(0.05), "#4d5a3a", P(0, 1.84, 0), undefined, 9);
-      b.ball(S(0.22), "#4d5a3a", P(0, 1.85, 0), { scale: [1, 0.55, 1] }, 1);
-      b.box(S(0.3), S(0.06), S(0.3), WHITE, P(0, 1.89, 0), { layer: "team", scale: [0.6, 1, 0.6] });
-      break;
-    case "cap":
-      b.cyl(S(0.24), S(0.24), S(0.14), "#3f4a2e", P(0, 1.86, 0), undefined, 8);
-      b.box(S(0.16), S(0.03), S(0.3), "#222", P(0.2, 1.8, 0));
-      b.box(S(0.05), S(0.08), S(0.2), WHITE, P(0.23, 1.87, 0), { layer: "team" });
-      break;
-    case "visor":
-      b.ball(S(0.27), "#e5e7eb", P(0, 1.7, 0), { scale: [1, 0.95, 1] }, 1);
-      b.box(S(0.08), S(0.1), S(0.4), "#22d3ee", P(0.22, 1.7, 0), { layer: "glow" });
-      b.box(S(0.3), S(0.06), S(0.08), WHITE, P(-0.04, 1.96, 0), { layer: "team" });
-      break;
-    case "robot":
-      b.box(S(0.42), S(0.38), S(0.4), "#b08d57", P(0.02, 1.7, 0));
-      b.box(S(0.06), S(0.08), S(0.3), "#fde047", P(0.24, 1.72, 0), { layer: "glow" });
-      b.cyl(S(0.03), S(0.03), S(0.3), "#6b4f2a", P(0, 2.0, 0));
-      b.ball(S(0.06), WHITE, P(0, 2.16, 0), { layer: "team" }, 0);
-      break;
-  }
-  const hand = o.raise ? P(0.0, 1.62, 0.42) : P(0.36, 0.95, 0.42);
-  switch (o.weapon ?? "none") {
-    case "club":
-      b.cyl(S(0.05), S(0.07), S(0.8), "#7c5a35", [hand[0] + S(0.15), hand[1] + S(0.25), hand[2]], { rot: [0, 0, -0.5] });
-      b.ball(S(0.16), "#8b8b8b", [hand[0] + S(0.38), hand[1] + S(0.58), hand[2]], undefined, 0);
-      break;
-    case "sling":
-      b.cyl(S(0.02), S(0.02), S(0.5), "#a16207", [hand[0], hand[1] + S(0.25), hand[2]]);
-      b.ball(S(0.09), "#9ca3af", [hand[0], hand[1] + S(0.5), hand[2]], undefined, 0);
-      break;
-    case "sword":
-    case "cutlass":
-      b.box(S(0.07), S(0.12), S(0.2), "#7c5a35", [hand[0], hand[1], hand[2]]);
-      b.box(S(0.08), S(0.68), S(0.04), "#d1d5db", [hand[0] + S(0.2), hand[1] + S(0.28), hand[2]], { rot: [0, 0, o.weapon === "cutlass" ? -0.9 : -0.7] });
-      break;
-    case "spear":
-      b.cyl(S(0.035), S(0.035), S(2.0), "#7c5a35", [hand[0] + S(0.3), hand[1] + S(0.15), hand[2]], { rot: [0, 0, -1.2] });
-      b.cone(S(0.07), S(0.26), "#d1d5db", [hand[0] + S(1.25), hand[1] + S(0.55), hand[2]], { rot: [0, 0, -1.2] }, 4);
-      break;
-    case "bow":
-      b.add(new THREE.TorusGeometry(S(0.5), S(0.035), 4, 10, Math.PI), "#7c4a1e", [hand[0] + S(0.05), hand[1] + S(0.2), hand[2] - S(0.4)], { rot: [0, Math.PI / 2, -Math.PI / 2] });
-      b.cyl(S(0.01), S(0.01), S(1.0), "#e5e7eb", [hand[0] - S(0.05), hand[1] + S(0.2), hand[2] - S(0.4)]);
-      break;
-    case "musket":
-    case "rifle":
-      b.box(S(1.25), S(0.08), S(0.08), o.weapon === "musket" ? "#5b3a1e" : "#3f3f46", [hand[0] + S(0.3), hand[1] + S(0.25), hand[2] - S(0.3)], { rot: [0, 0, 0.12] });
-      b.box(S(0.4), S(0.14), S(0.1), "#7c4a1e", [hand[0] - S(0.2), hand[1] + S(0.18), hand[2] - S(0.3)], { rot: [0, 0, 0.12] });
-      if (o.weapon === "rifle") b.cone(S(0.03), S(0.22), "#d1d5db", [hand[0] + S(1.0), hand[1] + S(0.33), hand[2] - S(0.3)], { rot: [0, 0, -Math.PI / 2 + 0.12] }, 4);
-      break;
-    case "bomb":
-      b.ball(S(0.17), "#111827", [hand[0], hand[1] + S(0.15), hand[2]], undefined, 1);
-      b.box(S(0.03), S(0.12), S(0.03), "#f59e0b", [hand[0], hand[1] + S(0.35), hand[2]], { layer: "glow" });
-      break;
-    case "blade":
-      b.box(S(0.08), S(0.16), S(0.16), "#374151", [hand[0], hand[1], hand[2]]);
-      b.box(S(0.07), S(0.95), S(0.05), "#67e8f9", [hand[0] + S(0.26), hand[1] + S(0.38), hand[2]], { rot: [0, 0, -0.7], layer: "glow" });
-      break;
-    case "rail":
-      b.box(S(1.2), S(0.16), S(0.16), "#4b5563", [hand[0] + S(0.25), hand[1] + S(0.3), hand[2] - S(0.3)]);
-      b.box(S(1.0), S(0.05), S(0.05), "#a78bfa", [hand[0] + S(0.3), hand[1] + S(0.42), hand[2] - S(0.3)], { layer: "glow" });
-      break;
-  }
-  if (o.shield) {
-    const [w, h] = o.shield === "tower" ? [1.0, 1.35] : o.shield === "scutum" ? [0.62, 0.9] : [0.62, 0.62];
-    if (o.shield === "round") b.cyl(S(0.34), S(0.34), S(0.08), WHITE, P(0.3, 1.1, -0.48), { rot: [Math.PI / 2, 0, Math.PI / 2], layer: "team" }, 9);
-    else {
-      b.box(S(0.1), S(h), S(w), WHITE, P(0.32, o.shield === "tower" ? 0.85 : 1.05, -0.42), { layer: "team" });
-      b.box(S(0.12), S(h * 0.2), S(w * 0.2), "#d4a017", P(0.36, o.shield === "tower" ? 0.85 : 1.05, -0.42));
-    }
-  }
-}
 
 /* ── mounts / vehicles ───────────────────────────────────────────────── */
 
@@ -247,120 +103,12 @@ function quadruped(b: Builder, body: string, opt: { len: number; h: number; w: n
   b.box(len * 0.42, 0.06, w * 1.05, WHITE, [-0.05, h + 0.02, 0], { layer: "team" });
 }
 
-function wheels(b: Builder, xs: number[], z: number, r: number, color = "#1f2937") {
-  for (const x of xs)
-    for (const zz of [z, -z]) b.cyl(r, r, 0.2, color, [x, r, zz], { rot: [Math.PI / 2, 0, 0] }, 9);
-}
-
 function flag(b: Builder, x: number, y: number, z: number, h = 1.4) {
   b.cyl(0.03, 0.03, h, "#4b3621", [x, y + h / 2, z]);
   b.box(0.5, 0.32, 0.03, WHITE, [x - 0.26, y + h - 0.18, z], { layer: "team" });
 }
 
-const UNIT_BUILD: Record<UnitKind, (b: Builder) => number> = {
-  club: (b) => (human(b, { top: "#7c5530", legs: "#5a3d22", head: "band", weapon: "club", skin: SKIN[1] }), 2.1),
-  sling: (b) => (human(b, { top: "#8a6a3f", legs: "#5a3d22", head: "band", weapon: "sling", raise: true, skin: SKIN[2], scale: 0.95 }), 2.0),
-  boar: (b) => {
-    quadruped(b, "#5b3b22", { len: 1.6, h: 1.0, w: 0.8, tusk: true, mane: "#2b1a0f", head: 0.6 });
-    human(b, { top: "#7c5530", legs: "#5a3d22", head: "band", weapon: "club", y: 0.75, scale: 0.85 });
-    return 2.6;
-  },
-  legion: (b) => (human(b, { top: "#9ca3af", legs: "#7f1d1d", head: "crest", weapon: "sword", shield: "scutum" }), 2.1),
-  archer: (b) => (human(b, { top: "#6b4f2a", legs: "#3f3f2a", head: "hood", weapon: "bow" }), 2.1),
-  cavalry: (b) => {
-    quadruped(b, "#6b4226", { len: 1.8, h: 1.25, w: 0.6, mane: "#1c1917", head: 0.5 });
-    human(b, { top: "#9ca3af", legs: "#7f1d1d", head: "helm", weapon: "spear", y: 0.95, scale: 0.85 });
-    return 2.9;
-  },
-  shieldwall: (b) => (human(b, { top: "#6b7280", legs: "#374151", head: "helm", weapon: "sword", shield: "tower", scale: 1.1 }), 2.3),
-  chariot: (b) => {
-    b.box(1.0, 0.5, 1.2, "#7c5a35", [-0.4, 0.75, 0]);
-    b.box(1.02, 0.12, 1.22, WHITE, [-0.4, 1.0, 0], { layer: "team" });
-    wheels(b, [-0.4], 0.68, 0.45, "#5b3a1e");
-    b.cone(0.08, 0.7, "#d1d5db", [-0.4, 0.45, 0.95], { rot: [Math.PI / 2, 0, 0] }, 4);
-    b.cone(0.08, 0.7, "#d1d5db", [-0.4, 0.45, -0.95], { rot: [-Math.PI / 2, 0, 0] }, 4);
-    b.box(1.2, 0.06, 0.06, "#5b3a1e", [0.5, 0.75, 0]);
-    b.box(1.1, 0.55, 0.45, "#8b5a2b", [1.4, 1.0, 0]);
-    for (const lx of [1.0, 1.8]) for (const lz of [0.12, -0.12]) b.box(0.13, 0.75, 0.13, "#8b5a2b", [lx, 0.37, lz]);
-    b.box(0.4, 0.35, 0.3, "#8b5a2b", [2.0, 1.3, 0], { rot: [0, 0, -0.4] });
-    human(b, { top: "#9ca3af", legs: "#7f1d1d", head: "crest", weapon: "spear", y: 0.5, scale: 0.85 });
-    return 2.4;
-  },
-  marine: (b) => (human(b, { top: "#1e3a5f", legs: "#e5e7eb", head: "tricorn", weapon: "cutlass" }), 2.1),
-  musket: (b) => (human(b, { top: "#1e3a5f", legs: "#e5e7eb", head: "tricorn", weapon: "musket" }), 2.1),
-  dragoon: (b) => {
-    quadruped(b, "#3f2a1a", { len: 1.8, h: 1.25, w: 0.6, mane: "#111", head: 0.5 });
-    human(b, { top: "#1e3a5f", legs: "#e5e7eb", head: "helm", weapon: "musket", y: 0.95, scale: 0.85 });
-    return 2.9;
-  },
-  grenadier: (b) => (human(b, { top: "#1e3a5f", legs: "#e5e7eb", head: "bearskin", weapon: "bomb", raise: true }), 2.4),
-  corsair: (b) => (human(b, { top: "#7f1d1d", legs: "#1f2937", head: "bandana", weapon: "cutlass", skin: SKIN[3] }), 2.1),
-  trooper: (b) => (human(b, { top: "#556b2f", legs: "#4a5a2a", head: "brodie", weapon: "rifle" }), 2.1),
-  rifle: (b) => (human(b, { top: "#5f6b3a", legs: "#4a5a2a", head: "cap", weapon: "rifle" }), 2.1),
-  armored: (b) => {
-    b.box(2.6, 0.9, 1.4, "#5b6b3a", [0, 0.95, 0]);
-    b.box(1.2, 0.6, 1.1, "#4d5a30", [-0.2, 1.7, 0]);
-    b.box(2.62, 0.18, 1.42, WHITE, [0, 1.15, 0], { layer: "team" });
-    b.box(0.9, 0.12, 0.12, "#27272a", [0.7, 1.75, 0]);
-    wheels(b, [-0.8, 0.8], 0.72, 0.42);
-    b.box(0.1, 0.25, 0.9, "#fde047", [1.31, 1.05, 0], { layer: "glow", scale: [1, 0.4, 0.4] });
-    flag(b, -1.0, 2.0, 0.4, 0.9);
-    return 2.6;
-  },
-  automaton: (b) => (human(b, { top: "#b08d57", legs: "#8a6d3b", head: "robot", weapon: "rifle", skin: "#a3a3a3", scale: 0.95 }), 2.3),
-  steamtank: (b) => {
-    b.box(3.4, 1.3, 1.9, "#57534e", [0, 1.3, 0]);
-    b.box(3.6, 0.6, 2.1, "#292524", [0, 0.45, 0]);
-    b.box(3.42, 0.2, 1.92, WHITE, [0, 1.6, 0], { layer: "team" });
-    b.cyl(0.28, 0.32, 1.2, "#44403c", [-0.9, 2.5, 0], undefined, 8);
-    b.cyl(0.18, 0.18, 1.6, "#3f3f46", [1.9, 1.5, 0], { rot: [0, 0, Math.PI / 2] }, 8);
-    b.box(1.4, 0.8, 1.3, "#6b5e52", [0.4, 2.3, 0]);
-    for (const x of [-1.3, -0.45, 0.45, 1.3]) b.cyl(0.32, 0.32, 2.15, "#1c1917", [x, 0.35, 0], { rot: [Math.PI / 2, 0, 0] }, 8);
-    b.box(0.12, 0.3, 0.3, "#f97316", [-0.9, 3.12, 0], { layer: "glow" });
-    return 3.3;
-  },
-  plasma: (b) => (human(b, { top: "#e5e7eb", legs: "#334155", head: "visor", weapon: "blade", skin: "#cbd5e1", shield: "round" }), 2.2),
-  railgun: (b) => (human(b, { top: "#cbd5e1", legs: "#334155", head: "visor", weapon: "rail", skin: "#cbd5e1" }), 2.2),
-  hovertank: (b) => {
-    b.box(2.8, 0.7, 1.6, "#cbd5e1", [0, 1.15, 0], { rot: [0, 0, 0.04] });
-    b.box(1.5, 0.5, 1.1, "#94a3b8", [-0.2, 1.7, 0]);
-    b.box(1.6, 0.1, 0.1, "#475569", [0.9, 1.75, 0]);
-    b.box(2.82, 0.14, 1.62, WHITE, [0, 1.35, 0], { layer: "team" });
-    b.box(2.2, 0.1, 1.3, "#22d3ee", [0, 0.72, 0], { layer: "glow" });
-    b.box(0.08, 0.1, 0.8, "#a78bfa", [1.72, 1.75, 0], { layer: "glow" });
-    return 2.4;
-  },
-  drone: (b) => {
-    b.ball(0.5, "#e2e8f0", [0, 2.0, 0], { scale: [1.2, 0.7, 1.2] }, 1);
-    b.ball(0.2, "#4ade80", [0.4, 1.95, 0], { layer: "glow" }, 0);
-    for (const [x, z] of [[0.7, 0.7], [0.7, -0.7], [-0.7, 0.7], [-0.7, -0.7]]) {
-      b.box(0.9, 0.06, 0.08, "#475569", [x * 0.55, 2.15, z * 0.55], { rot: [0, Math.atan2(z, x), 0] });
-      b.cyl(0.32, 0.32, 0.03, "#94a3b8", [x, 2.22, z], undefined, 8);
-    }
-    b.cyl(0.52, 0.52, 0.1, WHITE, [0, 2.1, 0], { layer: "team" }, 10);
-    return 2.6;
-  },
-  colossus: (b) => {
-    human(b, { top: "#64748b", legs: "#334155", head: "visor", weapon: "blade", skin: "#94a3b8", scale: 2.0 });
-    b.cyl(0.28, 0.28, 1.6, "#78350f", [-0.8, 3.0, 0], undefined, 8);
-    for (let i = 0; i < 4; i++) b.cyl(0.42, 0.42, 0.1, "#a78bfa", [-0.8, 2.4 + i * 0.4, 0], { layer: "glow" }, 10);
-    b.ball(0.32, "#c4b5fd", [-0.8, 4.0, 0], { layer: "glow" }, 1);
-    return 4.4;
-  },
-};
-
 const cache = new Map<string, Template>();
-
-export function unitTemplate(kind: UnitKind): Template {
-  let t = cache.get(kind);
-  if (!t) {
-    const b = new Builder();
-    const h = UNIT_BUILD[kind](b);
-    t = b.template(h);
-    cache.set(kind, t);
-  }
-  return t;
-}
 
 /* ── bases ───────────────────────────────────────────────────────────── */
 

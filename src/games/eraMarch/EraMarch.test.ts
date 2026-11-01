@@ -167,3 +167,27 @@ describe("era march online replay", async () => {
     void host;
   });
 });
+
+describe("era march rigs + combat motion", async () => {
+  const { unitRig } = await import("./three/rigs");
+  const { computePose, deathPose, newPose } = await import("./three/anim");
+  it("every unit builds a jointed rig for both sides", () => {
+    for (const kind of Object.keys(UNITS) as (keyof typeof UNITS)[]) {
+      for (const side of [0, 1] as const) {
+        const rig = unitRig(kind, side);
+        expect(rig.parts.find((p) => p.key === "body"), kind).toBeDefined();
+        if (rig.frame === "human") expect(rig.parts.map((p) => p.key)).toEqual(expect.arrayContaining(["legs", "armR"]));
+      }
+    }
+  });
+  it("a swing winds up overhead, then chops down on the hit", () => {
+    const rig = unitRig("legion", 0);
+    const base = { rig, t: 1, stride: 0, move: 0, cd: 1, engaged: true, hit: 0, stunned: false, spawn: 1, cheer: false, seed: 1 };
+    const windup = computePose({ ...base, since: 0.97 }, newPose()).armR;
+    const strike = computePose({ ...base, since: 0.13 }, newPose()).armR;
+    expect(windup).toBeGreaterThan(2.5);
+    expect(strike).toBeLessThan(0.5);
+    const dead = deathPose(rig, 0.8, 1, 0, newPose());
+    expect(dead.bob).toBeLessThan(-0.5); // lies on the ground, not floating
+  });
+});
