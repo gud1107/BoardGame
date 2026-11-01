@@ -572,7 +572,8 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
         </div>
       )}
 
-      {board3d.view === "3d" && !oxScene && (
+      {/* 소개 화면엔 원탁을 띄우지 않는다 — 곧 무대/광장으로 바뀌며 3D를 두 번 불러와 렉이 걸렸다 */}
+      {board3d.view === "3d" && !oxScene && (stage3d || state.phase !== "intro") && (
         <Frame3D
           tall={stage3d}
           hint={

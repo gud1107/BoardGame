@@ -41,6 +41,12 @@ const SEG = 0.3; // 미사일 받침대 하트 한 칸 높이
 const PAD_BASE = 0.14;
 
 const ORIGIN = new THREE.Vector3();
+/** 얼굴이 보이게 무대마다 캐릭터를 키운다(1 = 머리까지 1.52m). */
+const CLIMB_SIZE = 1.2;
+const MISSILE_SIZE = 1.25;
+const OX_SIZE = 1.35;
+/** 미사일 캐릭터가 바라보는 앞쪽(카메라 쪽) — 옆모습 대신 얼굴이 보이게. 조준·발사 땐 상대를 본다. */
+const FACE_Z = 9;
 
 const shortName = (name: string) => name.replace(/^🤖\s*/, "").replace(/^\[Lv\.\d+\]\s*/, "").replace(/^AI\s*/, "");
 
@@ -216,7 +222,7 @@ function ClimbScene({ state, viewerSeat, names, colors, lowDetail }: QPlayStage3
   const xs = useMemo(() => Array.from({ length: n }, (_, s) => (s - (n - 1) / 2) * gap), [n]);
   const homes = useMemo(() => xs.map((x) => new THREE.Vector3(x, 0, 0)), [xs]);
   const myFloor = state.floor[viewerSeat] ?? 0;
-  const lookY = Math.min(CLIMB_TOP * H - 0.6, Math.max(1.5, myFloor * H + 0.9));
+  const lookY = Math.min(CLIMB_TOP * H + 0.6, Math.max(1.3, myFloor * H + 1.3));
   const ended = state.phase === "miniEnd";
   return (
     <>
@@ -246,7 +252,8 @@ function ClimbScene({ state, viewerSeat, names, colors, lowDetail }: QPlayStage3
       {homes.map((home, s) => (
         <Climber key={s} seat={s} home={home} state={state} me={s === viewerSeat} name={shortName(names[s] ?? `플레이어 ${s + 1}`)} look={looks[s]} color={colors[s % colors.length]} lowDetail={lowDetail} ended={ended} />
       ))}
-      <FitCamera width={(n - 1) * gap + 2.6} height={6.2} look={[0, lookY, 0]} from={[0.35, 1]} />
+      <directionalLight position={[0, 3, 10]} intensity={0.9} color="#ffffff" />
+      <FitCamera width={(n - 1) * gap + 2.2} height={4.2} look={[0, lookY, 0]} from={[0.22, 1]} />
       <AdaptiveResolution max={lowDetail ? 1.5 : 2} />
     </>
   );
@@ -270,10 +277,10 @@ function Climber({ seat, home, state, me, name, look, color, lowDetail, ended }:
             <meshStandardMaterial color={color} roughness={0.5} />
           </mesh>
         )}
-        <VrmFighter look={look} seed={seat * 7 + 1} home={ORIGIN} facing={0} pose={pose} poseKey={`${pose}-${tries}`} moveTo={null} aimAt={null} out={false} lowDetail={lowDetail}>
+        <VrmFighter look={look} seed={seat * 7 + 1} home={ORIGIN} facing={0} pose={pose} poseKey={`${pose}-${tries}`} moveTo={null} aimAt={null} out={false} size={CLIMB_SIZE} lowDetail={lowDetail}>
           {me && <FootRing color="#fbbf24" r={0.36} />}
-          <NameTag text={name} sub={`${medal}${top ? " 도착!" : `${floor}층`}`} color={color} me={me} y={2.0} />
-          {tries > 0 && <RiseText key={tries} text={last ? "⬆️ +1층" : "❌ 미끄러짐"} color={last ? "#4ade80" : "#f87171"} y={2.45} />}
+          <NameTag text={name} sub={`${medal}${top ? " 도착!" : `${floor}층`}`} color={color} me={me} y={2.0 * CLIMB_SIZE} />
+          {tries > 0 && <RiseText key={tries} text={last ? "⬆️ +1층" : "❌ 미끄러짐"} color={last ? "#4ade80" : "#f87171"} y={2.45 * CLIMB_SIZE} />}
         </VrmFighter>
       </Lift>
     </group>
@@ -479,18 +486,19 @@ function MissileScene({ state, viewerSeat, names, colors, lowDetail, onFire }: Q
                 look={looks[s]}
                 seed={s * 5 + 3}
                 home={ORIGIN}
-                facing={Math.atan2(centre.x - spot.x, centre.z - spot.z)}
+                facing={Math.atan2(-spot.x * 0.4, FACE_Z - spot.z)}
                 pose={pose}
                 poseKey={`${pose}-${state.stage}-${impact}`}
                 moveTo={null}
                 aimAt={aimAt ? tmpLocal(aimAt, spot) : null}
                 out={out}
+                size={MISSILE_SIZE}
                 lowDetail={lowDetail}
                 onPick={fireable ? () => onFire!(s) : undefined}
               >
                 {s === viewerSeat && <FootRing color="#fbbf24" r={0.42} />}
                 {fireable && <FootRing color="#fb923c" pulse r={0.55} />}
-                <NameTag text={shortName(names[s] ?? `플레이어 ${s + 1}`)} sub={fireable ? `🎯 ${state.hp[s] === 1 ? "격추 가능!" : "눌러서 발사"}` : out ? "💀 탈락" : sub} color={color} me={s === viewerSeat} y={pose === "down" ? 0.9 : 2.0} />
+                <NameTag text={shortName(names[s] ?? `플레이어 ${s + 1}`)} sub={fireable ? `🎯 ${state.hp[s] === 1 ? "격추 가능!" : "눌러서 발사"}` : out ? "💀 탈락" : sub} color={color} me={s === viewerSeat} y={pose === "down" ? 0.9 : 2.0 * MISSILE_SIZE} />
                 {shot?.to === s && impact && <RiseText text={shot.kill ? "💥 격추!" : "💥 하트 −1"} color="#fca5a5" y={2.4} />}
                 {phase === "reveal" && state.gained[s] > 0 && <RiseText key={`g${state.stage}`} text={`+${state.gained[s]}`} color="#4ade80" y={2.6} />}
               </VrmFighter>
@@ -507,7 +515,8 @@ function MissileScene({ state, viewerSeat, names, colors, lowDetail, onFire }: Q
           dur={ROCKET_DUR}
         />
       )}
-      <FitCamera width={span + 2.4} height={5.4} look={[0, 1.25, centre.z - 2.2]} from={[0.55, 1]} />
+      <directionalLight position={[0, 3, 12]} intensity={0.9} color="#ffffff" />
+      <FitCamera width={span + 2.2} height={4.8} look={[0, 1.35, centre.z - 2.2]} from={[0.38, 1]} />
       <AdaptiveResolution max={lowDetail ? 1.5 : 2} />
     </>
   );
@@ -660,17 +669,19 @@ function OxScene({ state, viewerSeat, names, colors, lowDetail, ox }: QPlayStage
                 aimAt={null}
                 out={ghost || dead}
                 speed={4.6}
+                size={OX_SIZE}
                 lowDetail={lowDetail}
               >
                 {ghost && <GhostBob />}
                 {me && <FootRing color="#fbbf24" r={0.36} />}
-                <NameTag text={me ? "나" : shortName(names[s] ?? `플레이어 ${s + 1}`)} sub={tag} color={color} me={false} y={dead ? 0.9 : 2.0} />
+                <NameTag text={me ? "나" : shortName(names[s] ?? `플레이어 ${s + 1}`)} sub={tag} color={color} me={false} y={dead ? 0.9 : 2.0 * OX_SIZE} />
               </VrmFighter>
             </group>
           </group>
         );
       })}
-      <FitCamera width={PLAZA_W + 0.2} height={PLAZA_D} look={[0, 0.3, 0.2]} from={[1.2, 1]} />
+      <directionalLight position={[0, 3, 12]} intensity={0.8} color="#ffffff" />
+      <FitCamera width={PLAZA_W + 0.2} height={PLAZA_D - 0.4} look={[0, 0.6, 0.3]} from={[0.8, 1]} />
       <AdaptiveResolution max={lowDetail ? 1.5 : 2} />
     </>
   );
@@ -681,7 +692,7 @@ function GhostBob() {
   const ref = useRef<THREE.Group>(null);
   const map = useMemo(() => labelTexture("👻", "#c4b5fd", { bg: "rgba(0,0,0,0)", fg: "#ffffff" }), []);
   useFrame(({ clock }) => {
-    if (ref.current) ref.current.position.y = 1.85 + Math.sin(clock.elapsedTime * 2.6) * 0.08;
+    if (ref.current) ref.current.position.y = 1.85 * OX_SIZE + Math.sin(clock.elapsedTime * 2.6) * 0.08;
   });
   return (
     <group ref={ref}>

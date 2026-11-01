@@ -38,6 +38,8 @@ export interface VrmFighterProps {
   lowDetail: boolean;
   /** walking speed (m/s), default 3.2 */
   speed?: number;
+  /** body scale on top of the fitted height (1 = 1.52 m to the head) */
+  size?: number;
   onPick?: () => void;
   children?: ReactNode;
 }
@@ -251,7 +253,7 @@ const fE = new THREE.Euler();
 const tmpV = new THREE.Vector3();
 
 export default function VrmFighter(props: VrmFighterProps) {
-  const { look, seed, home, facing, pose, poseKey, moveTo, aimAt, out, lowDetail, speed = 3.2 } = props;
+  const { look, seed, home, facing, pose, poseKey, moveTo, aimAt, out, lowDetail, speed = 3.2, size = 1 } = props;
   const { vrm, morphs } = useVrmAvatar(look, seed, { out, lowDetail });
   const rootRef = useRef<THREE.Group>(null);
   const bodyRef = useRef<THREE.Group>(null);
@@ -344,7 +346,7 @@ export default function VrmFighter(props: VrmFighterProps) {
         <circleGeometry args={[0.42, 20]} />
         <meshBasicMaterial color="#000000" transparent opacity={0.35} depthWrite={false} />
       </mesh>
-      <group ref={bodyRef}>{vrm && fit && <primitive object={vrm.scene} scale={fit} />}</group>
+      <group ref={bodyRef}>{vrm && fit && <primitive object={vrm.scene} scale={fit * size} />}</group>
       {props.onPick && (
         <mesh
           position-y={0.9}
