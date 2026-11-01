@@ -9,6 +9,7 @@ import {
   CHOSUNG_TRIES,
   CLIMB_TOP,
   MINI_INFO,
+  MISSILE_FLIGHT_MS,
   MISSILE_HP,
   OX_LOCK_MS,
   allAnswered,
@@ -286,14 +287,15 @@ function ClimbPanel({ state, viewerSeat, nowMs, onAction }: { state: GameState; 
  * 미사일 — 내 하트를 크게(라이프 바). 방금 잃은 칸은 깨지는 효과, 0이면 탈락 띠.
  * 하트는 틀리거나 안 고르면 −1, 미사일에 맞으면 −1(§11).
  */
-function MyLife({ state, viewerSeat }: { state: GameState; viewerSeat: Seat }) {
-  const hp = state.hp[viewerSeat] ?? 0;
+function MyLife({ state, hp, alive }: { state: GameState; hp: number; alive: boolean }) {
   const left = state.alive.filter(Boolean).length;
-  if (!state.alive[viewerSeat]) {
+  if (!alive) {
     return (
       <div role="status" className="qplay-in flex items-center justify-center gap-2 rounded-2xl border-2 border-rose-500/60 bg-rose-950/60 px-4 py-2 text-center light:bg-rose-50">
         <span className="text-2xl">💀</span>
-        <span className="text-sm font-black text-rose-200 light:text-rose-700">하트를 모두 잃어 탈락! 남은 {left}명의 대결을 구경해요</span>
+        <span className="text-sm font-black text-rose-200 light:text-rose-700">
+          하트 0/{MISSILE_HP} — 탈락! 남은 {left}명의 대결 중에도 👻 유령으로 정답 예측은 계속할 수 있어요
+        </span>
       </div>
     );
   }
@@ -307,6 +309,10 @@ function MyLife({ state, viewerSeat }: { state: GameState; viewerSeat: Seat }) {
           </span>
         ))}
       </span>
+      {/* 색이 잘 구분되지 않아도 읽히게 숫자로도 */}
+      <span className="shrink-0 text-lg font-black tabular-nums text-white light:text-slate-900">
+        {hp}/{MISSILE_HP}
+      </span>
       <span className={`ml-auto min-w-0 text-right whitespace-pre-line text-[11px] leading-tight font-bold break-keep ${hp === 1 ? "text-rose-300 light:text-rose-600" : "text-white/55 light:text-slate-500"}`}>
         {hp === 1 ? "마지막 하트!\n틀리면 탈락" : `틀리면 −1\n생존 ${left}명`}
       </span>
@@ -318,7 +324,8 @@ function Hearts({ hp }: { hp: number }) {
   return (
     <span className="tracking-tighter" aria-label={`하트 ${hp}개`}>
       {"❤️".repeat(hp)}
-      {"🖤".repeat(Math.max(0, 3 - hp))}
+      {"🖤".repeat(Math.max(0, MISSILE_HP - hp))}
+      <span className="ml-0.5 text-[10px] font-black tabular-nums opacity-80">{hp}/{MISSILE_HP}</span>
     </span>
   );
 }
@@ -442,7 +449,7 @@ function RevealPanel({ state, viewerSeat, names }: { state: GameState; viewerSea
 function GhostKing({ state, names, mini }: { state: GameState; names: Record<Seat, string>; mini: MiniId }) {
   const tries = state.ghostTries ?? [];
   const hits = state.ghostHits ?? [];
-  if (mini !== "ox" || !tries.some((t) => t > 0)) return null;
+  if ((mini !== "ox" && mini !== "missile") || !tries.some((t) => t > 0)) return null;
   const best = Math.max(...hits);
   const kings = tries.map((t, s) => (t > 0 && hits[s] === best ? s : -1)).filter((s) => s >= 0);
   return (
@@ -546,7 +553,18 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
   const [localPick, setLocalPick] = useState<{ stage: number; choice: number } | null>(null);
   const myAnswer = state.answers[viewerSeat];
   // OX에서 이미 탈락한 나 = 👻 유령(점수 없이 예측 놀이). 이번 문제에 탈락한 사람은 다음 문제부터 유령.
-  const ghostMe = mini === "ox" && !state.alive[viewerSeat] && !state.eliminated.includes(viewerSeat);
+  // OX·미사일에서 이미 탈락한 나 = 👻 유령(점수 없이 예측 놀이). 이번 문제에 탈락한 사람은 다음 문제부터 유령.
+  const ghostMe = (mini === "ox" || mini === "missile") && !state.alive[viewerSeat] && !state.eliminated.includes(viewerSeat);
+  // 미사일: 라이프는 로켓이 떨어져 터지는 순간에 깎는다(3D·2D 같은 시각)
+  const shotTo = state.phase === "reveal" && state.shot ? state.shot.to : null;
+  const [landedStage, setLandedStage] = useState<number | null>(null);
+  useEffect(() => {
+    if (shotTo === null) return;
+    const id = setTimeout(() => setLandedStage(state.stage), MISSILE_FLIGHT_MS);
+    return () => clearTimeout(id);
+  }, [shotTo, state.stage]);
+  const inFlight = (s: Seat) => shotTo === s && landedStage !== state.stage;
+  const shownHp = (s: Seat) => (inFlight(s) ? Math.min(MISSILE_HP, state.hp[s] + 1) : state.hp[s]);
   const myJudged = ghostMe ? (state.ghosts?.[viewerSeat] ?? null) : (myAnswer?.choice ?? null);
   const picked = localPick && localPick.stage === state.stage ? localPick.choice : myJudged;
   const eligible = eligibleSeats(state).includes(viewerSeat);
@@ -626,7 +644,7 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
         </div>
       )}
 
-      {mini === "missile" && (state.phase === "question" || state.phase === "aim" || state.phase === "reveal") && <MyLife state={state} viewerSeat={viewerSeat} />}
+      {mini === "missile" && (state.phase === "question" || state.phase === "aim" || state.phase === "reveal") && <MyLife state={state} hp={shownHp(viewerSeat)} alive={state.alive[viewerSeat] || inFlight(viewerSeat)} />}
 
       {/* 소개 화면엔 원탁을 띄우지 않는다 — 곧 무대/광장으로 바뀌며 3D를 두 번 불러와 렉이 걸렸다 */}
       {board3d.view === "3d" && !oxScene && (stage3d || state.phase !== "intro") && (
@@ -727,13 +745,13 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
               names={names}
               picked={picked}
               reveal={state.phase !== "question"}
-              disabled={state.phase !== "question" || !eligible}
+              disabled={state.phase !== "question" || !(eligible || ghostMe)}
               onPick={(i) => {
                 if (i === picked) return;
                 getQPlaySound().unlock();
                 getQPlaySound().play("pick");
                 setLocalPick({ stage: state.stage, choice: i });
-                onAction({ type: "ANSWER", seat: viewerSeat, q: state.qIndex, choice: i });
+                onAction({ type: ghostMe ? "GHOST" : "ANSWER", seat: viewerSeat, q: state.qIndex, choice: i });
               }}
             />
           )}
@@ -743,7 +761,16 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
               ✅ 정답자: {correctOrder(state).map((s, i) => `${i + 1}등 ${names[s]}`).join(" · ")}
             </p>
           )}
-          {state.phase === "question" && !eligible && q.kind !== "ox" && <p className="text-center text-sm font-bold text-white/60 light:text-slate-500">💀 탈락 — 남은 사람들의 대결을 구경해요</p>}
+          {state.phase === "question" && !eligible && q.kind !== "ox" && (
+            <p className="text-center text-sm font-bold text-white/60 light:text-slate-500">
+              {ghostMe ? "👻 유령 예측 — 정답이라고 생각하는 보기를 골라 보세요 (점수엔 영향 없고, 끝나면 유령 예측왕 발표)" : "💀 탈락 — 남은 사람들의 대결을 구경해요"}
+            </p>
+          )}
+          {state.phase === "reveal" && ghostMe && q.kind === "choice" && state.ghosts?.[viewerSeat] !== undefined && (
+            <p role="status" className="text-center text-sm font-black text-violet-200 light:text-violet-700">
+              {state.ghosts[viewerSeat] === q.answer ? "✨ 유령 예측 적중!" : "💨 유령 예측 빗나감"} · {state.ghostHits?.[viewerSeat] ?? 0}/{state.ghostTries?.[viewerSeat] ?? 0}
+            </p>
+          )}
           {state.phase === "question" && eligible && picked !== null && q.kind === "choice" && (
             <p className="text-center text-xs text-white/60 light:text-slate-500">
               {allAnswered(state) ? "모두 답했어요 — 곧 정답 공개!" : `답변 완료! 다른 사람을 기다리는 중 (${answeredSeats.size}/${eligibleSeats(state).length})`} · 공개 전엔 다른 보기를 눌러 바꿀 수 있어요(바꾸면 순서는 맨 뒤로)
@@ -777,7 +804,7 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
                   {out && "💀"}
                   {names[s]}
                 </span>
-                {mini === "missile" && state.phase !== "intro" && state.phase !== "miniEnd" && <Hearts hp={state.hp[s]} />}
+                {mini === "missile" && state.phase !== "intro" && state.phase !== "miniEnd" && <Hearts hp={shownHp(s)} />}
                 {state.phase === "question" && answeredSeats.has(s) && <span title="답변 완료">✔️</span>}
                 {state.phase === "reveal" && state.gained[s] > 0 && <span className="qplay-in font-black text-emerald-300 light:text-emerald-700">+{state.gained[s]}</span>}
                 <span className="font-bold text-sky-200 tabular-nums light:text-sky-700">{state.scores[s] + (state.phase === "miniEnd" ? 0 : state.miniScores[s])}</span>

@@ -72,6 +72,8 @@ export const CLIMB_FINISH = [40, 25, 15] as const;
 export const CLIMB_FINISH_FLOOR = 10;
 export const CLIMB_QUESTIONS = 80;
 export const MISSILE_HP = 3;
+/** 3D 로켓이 솟았다 떨어져 터지기까지(ms) — 라이프 줄도 이 순간에 깎인다. */
+export const MISSILE_FLIGHT_MS = 1300;
 export const MISSILE_HIT = 10;
 export const MISSILE_KILL = 10;
 export const MISSILE_DEFEND = 5;
@@ -773,15 +775,17 @@ function resolveQuestion(state: GameState): GameState {
   let hp = state.hp;
   let missed: Seat[] = [];
 
+  // 유령 예측(OX·미사일 탈락자) — 점수와 무관, 적중/시도만 센다
+  const q = currentQuestion(state);
+  for (const [k, choice] of Object.entries(state.ghosts ?? {})) {
+    const s = Number(k);
+    ghostTries = bump(ghostTries, s);
+    if (q && choice === q.answer) ghostHits = bump(ghostHits, s);
+  }
+
   switch (mini) {
     case "ox": {
       for (const s of order) gained[s] = OX_CORRECT;
-      const q = currentQuestion(state);
-      for (const [k, choice] of Object.entries(state.ghosts ?? {})) {
-        const s = Number(k);
-        ghostTries = bump(ghostTries, s);
-        if (q && choice === q.answer) ghostHits = bump(ghostHits, s);
-      }
       const out = eligible.filter((s) => !state.answers[s]?.correct);
       if (out.length === eligible.length && eligible.length > 0) revived = true;
       else {
@@ -950,11 +954,12 @@ export function applyAction(state: GameState, action: EngineAction): GameState {
       return { ...state, answers: { ...state.answers, [action.seat]: answer }, arrivals: requeue ? state.arrivals + 1 : state.arrivals };
     }
     case "GHOST": {
-      // 탈락자의 유령 예측 — OX 문제 동안 살아 있는 사람처럼 몇 번이든 옮겨 다닌다
+      // 탈락자의 유령 예측 — OX(광장 이동)·미사일(4지선다) 문제 동안 살아 있는 사람처럼 몇 번이든 바꾼다
       if (state.phase !== "question" || action.q !== state.qIndex) return state;
-      if (currentQuestion(state)?.kind !== "ox") return state;
+      const gq = currentQuestion(state);
+      if (!gq || (gq.kind !== "ox" && currentMini(state) !== "missile") || gq.kind === "chosung") return state;
       if (action.seat < 0 || action.seat >= state.seatCount || eligibleSeats(state).includes(action.seat)) return state;
-      if (action.choice !== 0 && action.choice !== 1) return state;
+      if (!Number.isInteger(action.choice) || action.choice < 0 || action.choice >= gq.choices.length) return state;
       const ghosts = state.ghosts ?? {};
       if (ghosts[action.seat] === action.choice) return state;
       return { ...state, ghosts: { ...ghosts, [action.seat]: action.choice } };

@@ -388,6 +388,34 @@ describe("missile (§11)", () => {
     expect(s.alive).toEqual([true, true]);
   });
 
+  it("탈락자는 👻 유령으로 4지선다를 예측한다 — 점수·하트와 무관, 적중/시도만", () => {
+    let s = startGame(3, 9, { minis: ["missile"], rounds: 1 });
+    s = timeout(s);
+    // 1번을 하트 0까지 몰아 탈락시킨다(무응답 −1 + 미사일 −1, 반복)
+    while (s.alive[1] && s.phase !== "miniEnd") {
+      const q = currentQuestion(s)!;
+      s = act(s, { type: "ANSWER", seat: 0, q: s.qIndex, choice: q.answer });
+      s = act(s, { type: "ANSWER", seat: 2, q: s.qIndex, choice: q.answer });
+      s = timeout(s);
+      if (s.phase === "aim") s = act(s, { type: "FIRE", seat: s.shooter!, target: 1 });
+      s = timeout(s);
+    }
+    expect(s.alive[1]).toBe(false);
+    while (s.phase === "aim" || s.phase === "reveal") s = timeout(s); // 다음 문제로
+    expect(s.phase).toBe("question");
+    const q = currentQuestion(s)!;
+    expect(act(s, { type: "GHOST", seat: 0, q: s.qIndex, choice: 0 })).toBe(s); // 살아 있는 사람은 유령 불가
+    s = act(s, { type: "GHOST", seat: 1, q: s.qIndex, choice: wrongOf(s, q.answer) });
+    s = act(s, { type: "GHOST", seat: 1, q: s.qIndex, choice: q.answer }); // 바꿀 수 있다
+    expect(allAnswered(s)).toBe(false); // 유령은 답한 사람으로 안 센다
+    const before = s.hp[1];
+    s = timeout(s);
+    expect(s.ghostTries[1]).toBe(1);
+    expect(s.ghostHits[1]).toBe(1);
+    expect(s.hp[1]).toBe(before);
+    expect(s.gained[1]).toBe(0);
+  });
+
   it("goes straight to reveal when nobody is right", () => {
     let s = only("missile", 2);
     s = answerAll(s, (_, a) => wrongOf(s, a));

@@ -9,7 +9,7 @@ import { AdaptiveResolution } from "@/games/shared/three/sceneFx";
 import { labelTexture } from "@/games/shared/three/tableKit";
 import { roomCharacterOf, useRoomCharacters } from "@/lib/character/roomCharacters";
 import VrmFighter, { type FighterPose } from "./QPlayFighter";
-import { CLIMB_TOP, MISSILE_HP, currentMini, currentQuestion, eligibleSeats, hasFinished, type GameState, type Seat } from "../engine";
+import { CLIMB_TOP, MISSILE_FLIGHT_MS, MISSILE_HP, currentMini, currentQuestion, eligibleSeats, hasFinished, type GameState, type Seat } from "../engine";
 
 /**
  * 큐플레이 무대 3D — 원탁을 떠나 미니 게임마다 진짜 쇼 무대에 선 VRM 캐릭터들.
@@ -429,7 +429,7 @@ function Rocket({ from, to, kill, dur }: { from: THREE.Vector3; to: THREE.Vector
   );
 }
 
-const ROCKET_DUR = 1.3;
+const ROCKET_DUR = MISSILE_FLIGHT_MS / 1000;
 
 function MissileScene({ state, viewerSeat, names, colors, lowDetail, onFire }: QPlayStage3DProps) {
   const n = state.seatCount;
@@ -476,8 +476,8 @@ function MissileScene({ state, viewerSeat, names, colors, lowDetail, onFire }: Q
         // 공개 중 맞은 사람: 충돌 전엔 잃기 전 하트로
         const hp = shot?.to === s && !impact ? Math.min(MISSILE_HP, state.hp[s] + 1) : state.hp[s];
         let pose: FighterPose = "idle";
-        let sub: string | null = "❤️".repeat(Math.max(0, state.hp[s])) + "🖤".repeat(Math.max(0, MISSILE_HP - state.hp[s]));
-        if (shot?.to === s && !impact) sub = "❤️".repeat(hp) + "🖤".repeat(Math.max(0, MISSILE_HP - hp));
+        // 색이 잘 구분되지 않아도 읽히게 하트 옆에 숫자(2/3)
+        let sub: string | null = `${"❤️".repeat(Math.max(0, hp))}${"🖤".repeat(Math.max(0, MISSILE_HP - hp))} ${hp}/${MISSILE_HP}`;
         if (phase === "question" && eligible.has(s) && q && hasFinished(state, s)) sub = `✔️ 답변 완료 · ${sub}`;
         if (phase === "aim" && state.shooter === s) sub = "🚀 조준 중";
         // 주고받는 동작 없이: 쏜 사람은 발사 버튼을 누른 듯 만세, 맞을 사람은 하늘을 보고 머리를 감싸고 웅크린다
@@ -511,7 +511,7 @@ function MissileScene({ state, viewerSeat, names, colors, lowDetail, onFire }: Q
               >
                 {s === viewerSeat && <FootRing color="#fbbf24" r={0.42} />}
                 {fireable && <FootRing color="#fb923c" pulse r={0.55} />}
-                <NameTag text={shortName(names[s] ?? `플레이어 ${s + 1}`)} sub={fireable ? `🎯 ${state.hp[s] === 1 ? "격추 가능!" : "눌러서 발사"}` : out ? "💀 탈락" : sub} color={color} me={s === viewerSeat} y={pose === "down" || pose === "hit" ? 0.9 : 2.0 * MISSILE_SIZE} />
+                <NameTag text={shortName(names[s] ?? `플레이어 ${s + 1}`)} sub={fireable ? `🎯 ${state.hp[s] === 1 ? "격추 가능!" : "눌러서 발사"}` : out ? (phase === "question" && state.ghosts?.[s] !== undefined ? "👻 예측 완료" : out && !state.eliminated.includes(s) && phase === "question" ? "👻 유령" : "💀 탈락") : sub} color={color} me={s === viewerSeat} y={pose === "down" || pose === "hit" ? 0.9 : 2.0 * MISSILE_SIZE} />
                 {shot?.to === s && impact && <RiseText text={shot.kill ? "💥 격추!" : "💥 하트 −1"} color="#fca5a5" y={2.4} />}
                 {(state.missed ?? []).includes(s) && (phase === "aim" || (phase === "reveal" && !shot)) && <RiseText key={`m${state.stage}`} text={state.eliminated.includes(s) ? "💔 오답 · 탈락" : "💔 오답 −1"} color="#fda4af" y={2.6 * MISSILE_SIZE} />}
                 {phase === "reveal" && state.gained[s] > 0 && <RiseText key={`g${state.stage}`} text={`+${state.gained[s]}`} color="#4ade80" y={2.6} />}

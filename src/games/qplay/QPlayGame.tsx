@@ -713,8 +713,8 @@ export default function QPlayGame({ onComplete }: PlayableGameProps) {
         for (const seat of allBotSeatsRef.current) {
           if (seat >= state.seatCount) continue;
           if (state.phase === "aim" && seat !== state.shooter) continue;
-          // OX에선 탈락한 봇도 유령으로 예측 놀이에 낀다(점수 무관)
-          const ghost = isOx && !eligibleSeats(state).includes(seat);
+          // OX·미사일에선 탈락한 봇도 유령으로 예측 놀이에 낀다(점수 무관)
+          const ghost = (isOx || (state.phase === "question" && mini === "missile")) && !eligibleSeats(state).includes(seat);
           if (state.phase === "question" && !ghost && !eligibleSeats(state).includes(seat)) continue;
           const placed = ghost ? state.ghosts?.[seat] !== undefined : hasFinished(state, seat);
           if (state.phase === "question" && placed && !(isOx && clock.ox.get(seat)?.length)) continue;
@@ -754,7 +754,7 @@ export default function QPlayGame({ onComplete }: PlayableGameProps) {
           } else {
             clock.next.set(seat, now + 60_000);
             const choice = chooseBotChoice(state, level);
-            if (choice !== null) handleAction({ type: "ANSWER", seat, q: state.qIndex, choice });
+            if (choice !== null) handleAction({ type: ghost ? "GHOST" : "ANSWER", seat, q: state.qIndex, choice });
           }
         }
       }

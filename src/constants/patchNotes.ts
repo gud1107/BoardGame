@@ -74,6 +74,19 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     ],
   },
   {
+    version: "v1.141.1",
+    releaseDate: "2026-11-01",
+    title: "⚔️ 새 게임: 시대의 진격",
+    changes: [
+      { game: "era-march", type: "FEAT", desc: "⚔️ 새 게임 — 3D 디오라마 한 줄 전장의 1:1 레인 전쟁. 유닛을 뽑아 보내고 부족→제국→항해→증기→전격 시대로 진화, AI 지휘관 Lv.1~10" },
+      { game: "era-march", type: "FEAT", desc: "📜 진화할 때마다 교리 둘 중 하나 — 전용 유닛·패시브로 판마다 다른 빌드. 앞선 시대 유닛 처치 ×1.5, 뒤처지면 진화 골드 30% 할인" },
+      { game: "era-march", type: "FEAT", desc: "🌐 초대 코드로 친구와 실시간 1:1 온라인 대전 — 두 화면이 같은 전투를 그대로 재생하고, 끊기면 봇이 이어받아요" },
+      { game: "era-march", type: "FEAT", desc: "✚ 시대마다 치유 지원병·🎯 공성병이 더해져 유닛 5종 + 🛒 전투 전 전략 상점(지휘 노선 1개 + ★5 준비물, 상대 선택은 카운트다운 때 공개)" },
+      { game: "era-march", type: "IMPROVE", desc: "🦾 팔다리가 움직이는 유닛 — 휘두르기·활시위·포신 반동, 공격이 닿는 순간에 피해 숫자" },
+      { game: "era-march", type: "IMPROVE", desc: "🔊 시대마다 다른 배경음 5곡 + 전투 효과음 — 처음 들어오면 소리가 켜져 있어요" },
+    ],
+  },
+  {
     version: "v1.141.0",
     releaseDate: "2026-11-01",
     title: "🔫 죽은척 대작전 — 이름·무기를 총격전으로, 게임 방법 패널",
@@ -93,6 +106,8 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       { game: "qplay", type: "FEAT", desc: "🎚️ 방 만들 때 문제 난이도(쉬움/보통/어려움) — 보통부터는 쉬운 문제·한 자리 구구단 같은 쉬운 셈이 안 나와요" },
       { game: "qplay", type: "IMPROVE", desc: "🎲 미니 게임 고르기는 기본 랜덤, 하나를 누르면 그 게임만 — 원하는 게임 하나를 한 번에 골라요" },
       { game: "qplay", type: "IMPROVE", desc: "✏️ 정답 공개 전엔 답을 바꿀 수 있어요 — 바꾸면 선착순 순서는 맨 뒤로, 모두 답하면 2초 뒤 공개" },
+      { game: "qplay", type: "FEAT", desc: "👻 미사일에서 탈락해도 유령으로 남은 문제의 정답을 계속 예측해요 — 점수와 무관, 끝나면 ‘유령 예측왕’ 발표" },
+      { game: "qplay", type: "IMPROVE", desc: "❤️ 하트 옆에 ‘2/3’ 숫자도 함께, 미사일에 맞은 하트는 로켓이 터지는 순간 깎여요 (3D와 같은 타이밍)" },
       { game: "qplay", type: "IMPROVE", desc: "❤️ 미사일 중엔 ‘내 라이프’가 크게 보여요 — 잃은 하트는 깨지고, 마지막 하트면 빨갛게 깜빡, 다 닳으면 캐릭터가 털썩 쓰러지며 탈락" },
       { game: "qplay", type: "FIX", desc: "💔 미사일에서 틀리거나 안 고르면 하트 −1 — 예전엔 틀려도 하트가 그대로였어요 (모두 한꺼번에 쓰러질 땐 1개씩 남겨 줘요)" },
       { game: "qplay", type: "IMPROVE", desc: "🚀 미사일이 하늘로 솟았다가 표적 머리 위로 떨어져요 — 표적은 머리를 감싸고 웅크리고, 발밑엔 붉은 조준 원" },
