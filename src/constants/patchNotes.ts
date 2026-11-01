@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.141.0",
+    releaseDate: "2026-11-01",
+    title: "🔫 죽은척 대작전 — 이름·무기를 총격전으로, 게임 방법 패널",
+    changes: [
+      { game: "play-dead", type: "IMPROVE", desc: "🔫 기 모으기·파 대신 장전·엄폐·사격·연사·수류탄 — 예광탄·포물선 수류탄·총구 섬광, 구호는 “준비! 조준! 발사!” (게임 이름도 죽은척 대작전으로)" },
+      { game: "play-dead", type: "IMPROVE", desc: "📖 게임 화면에 ‘게임 방법’ 패널 — 목표, 한 라운드 흐름, 서 있을 때·누워 있을 때 행동, 쓰러진 사람을 추리하는 법을 한눈에" },
+    ],
+  },
+  {
     version: "v1.140.0",
     releaseDate: "2026-11-01",
     title: "🧗 큐플레이 — 3D 무대와 문제 난이도",
@@ -89,7 +98,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.138.0",
     releaseDate: "2026-11-01",
-    title: "🪖 죽은척 기싸움 — 원형 무대 대신 포연 자욱한 전장",
+    title: "🪖 죽은척 대작전 — 원형 무대 대신 포연 자욱한 전장",
     changes: [
       { game: "play-dead", type: "IMPROVE", desc: "🪖 해 질 녘 진흙 전장 — 포탄 구덩이·모래주머니·대전차 장애물·불타는 잔해·연기·먼 포격 섬광, 곳곳에 쓰러진 병사들 사이에 흩어져 싸워요" },
       { game: "play-dead", type: "IMPROVE", desc: "🫥 평소엔 모두 엎드려 엄폐 — 행동하는 순간에만 몸을 일으켜요. 맞은 사람·죽은 척·진짜 시체가 겉으로 똑같아 보이고, 머리 위엔 ☠ 사망 확인만 떠요" },
@@ -108,11 +117,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.136.0",
     releaseDate: "2026-11-01",
-    title: "💀 새 게임: 죽은척 기싸움",
+    title: "💀 새 게임: 죽은척 대작전",
     changes: [
-      { game: "play-dead", type: "FEAT", desc: "💀 새 게임 — “기! 기! 파!” 기 모으기 손놀이에 죽은 척을 더한 2~6인 동시 행동 게임. 맞으면 무조건 털썩, 피해량은 맞은 사람만 알아서 진짜 죽었는지 아무도 몰라요" },
-      { game: "play-dead", type: "FEAT", desc: "🧊 내 VRM 캐릭터가 달밤 결투장에서 기를 모으고 파·장풍·에네르기파를 쏴요 — 쓰러진 몸에서 기 뺏기, 확인사살, 벌떡 기습까지" },
-      { game: "play-dead", type: "FEAT", desc: "🤖 AI 봇 Lv.1~10 (공개 정보만으로 추리) · 📊 참가자 표에 ‘살아 있을 확률’ · 🔥 8라운드부터 기 폭주" },
+      { game: "play-dead", type: "FEAT", desc: "💀 새 게임 죽은척 대작전 — 2~6인이 몰래 고른 행동을 동시에 공개하는 블러프 총격전. 맞으면 무조건 털썩, 피해량은 맞은 사람만 알아서 진짜 죽었는지 아무도 몰라요" },
+      { game: "play-dead", type: "FEAT", desc: "🧊 내 VRM 캐릭터가 직접 싸워요 — 쓰러진 몸에서 탄약 뺏기, 확인사살, 벌떡 기습까지" },
+      { game: "play-dead", type: "FEAT", desc: "🤖 AI 봇 Lv.1~10 (공개 정보만으로 추리) · 📊 참가자 표에 ‘살아 있을 확률’ · 🔥 8라운드부터 총공세" },
     ],
   },
   {

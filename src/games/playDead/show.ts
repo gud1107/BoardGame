@@ -3,7 +3,7 @@ import type { ArenaFighter, ArenaFx } from "./three/PlayDeadArena3D";
 import type { FighterPose } from "./three/VrmFighter";
 
 /**
- * 판정 연출 — 엔진의 라운드 이벤트를 "기! 기! 파!" 구호 → 동시 동작 → 명중 → 털썩 타임라인으로
+ * 판정 연출 — 엔진의 라운드 이벤트를 "준비! 조준! 발사!" 구호 → 동시 동작 → 명중 → 털썩 타임라인으로
  * 풀어 낸다(React/three 없이 순수 함수라 테스트 가능). 숨은 정보는 여기서 걸러진다:
  * 남의 실제 피해량은 공개 범위로만, 쓰러진 사람의 선택은 실제로 일어난 일로만 보인다.
  */
@@ -14,16 +14,16 @@ export const RESOLVED_MS = 6500;
 
 export function chantAt(e: number): string | null {
   if (e < 0 || e >= SHOW.chant) return null;
-  return e < 0.5 ? "기!" : e < 1.0 ? "기!" : "파!";
+  return e < 0.5 ? "준비!" : e < 1.0 ? "조준!" : "발사!";
 }
 
 export const MOVE_LABEL: Record<MoveKind, { icon: string; label: string }> = {
-  charge: { icon: "⚡", label: "기 모으기" },
-  block: { icon: "🛡️", label: "막기" },
-  pa: { icon: "👊", label: "파" },
-  jangpung: { icon: "🌀", label: "장풍" },
-  energy: { icon: "💥", label: "에네르기파" },
-  loot: { icon: "💰", label: "기 뺏기" },
+  reload: { icon: "🔄", label: "장전" },
+  cover: { icon: "🪖", label: "엄폐" },
+  shot: { icon: "🔫", label: "사격" },
+  burst: { icon: "💥", label: "연사" },
+  grenade: { icon: "💣", label: "수류탄" },
+  loot: { icon: "🎒", label: "탄약 뺏기" },
   finish: { icon: "🔪", label: "확인사살" },
   hold: { icon: "🤫", label: "숨죽이기" },
   rise: { icon: "🧍", label: "일어나기" },
@@ -72,7 +72,7 @@ export function fightersAt(state: GameState, prev: SeatState[] | null, viewer: S
         moveToSeat: null,
         aimSeat: null,
         out: s.confirmed,
-        ki: s.ki,
+        ammo: s.ammo,
         status: statusOf(s) ?? (waiting ? (committed[seat] ? "✅ 결정 완료" : "🤔 고민 중…") : null),
       };
     }
@@ -84,7 +84,7 @@ export function fightersAt(state: GameState, prev: SeatState[] | null, viewer: S
     const m = state.lastMoves[seat];
     if (e >= SHOW.act && e < SHOW.end) {
       if (m) {
-        if (m.kind === "charge" || m.kind === "block" || m.kind === "pa" || m.kind === "jangpung" || m.kind === "energy") pose = m.kind;
+        if (m.kind === "reload" || m.kind === "cover" || m.kind === "shot" || m.kind === "burst" || m.kind === "grenade") pose = m.kind;
         if (m.kind === "loot" || m.kind === "finish") {
           pose = m.kind;
           moveToSeat = e < SHOW.end - 0.5 ? m.target! : null;
@@ -114,13 +114,13 @@ export function fightersAt(state: GameState, prev: SeatState[] | null, viewer: S
       moveToSeat,
       aimSeat,
       out: after ? s.confirmed : p.confirmed,
-      ki: after ? s.ki : p.ki,
+      ammo: after ? s.ammo : p.ammo,
       status: e >= SHOW.fall ? statusOf(s) : statusOf(p),
     };
   });
 }
 
-/** 이번 라운드의 시각 효과(구슬·폭발·글자) */
+/** 이번 라운드의 시각 효과(탄환·수류탄·폭발·글자) */
 export function buildFx(state: GameState, viewer: Seat): ArenaFx[] {
   const fx: ArenaFx[] = [];
   const tag = `${state.stage}`;
@@ -128,26 +128,26 @@ export function buildFx(state: GameState, viewer: Seat): ArenaFx[] {
   state.events.forEach((ev, i) => {
     const key = `${tag}:${i}`;
     switch (ev.t) {
-      case "charge":
-        fx.push({ key, kind: "text", seat: ev.seat, text: "+1 기", color: "#fde047", at: SHOW.impact });
+      case "reload":
+        fx.push({ key, kind: "text", seat: ev.seat, text: "🔄 +1발", color: "#fde047", at: SHOW.impact });
         break;
       case "blast": {
-        const wind = ev.tier >= 3 ? 0.45 : 0.3;
+        const wind = ev.tier >= 3 ? 0.4 : 0.3;
         const start = SHOW.act + wind;
         const dur = SHOW.impact - start;
         if (ev.result === "clash") {
           fx.push({ key: `${key}a`, kind: "orb", from: ev.seat, to: ev.target, tier: ev.tier, at: start, dur, stop: "clash" });
           fx.push({ key: `${key}b`, kind: "orb", from: ev.target, to: ev.seat, tier: ev.tier, at: start, dur, stop: "clash" });
           fx.push({ key: `${key}c`, kind: "midBurst", a: ev.seat, b: ev.target, at: start + dur * 0.5 });
-          fx.push({ key: `${key}t`, kind: "text", seat: ev.seat, text: "기 충돌! 상쇄", color: "#e2e8f0", at: SHOW.impact });
+          fx.push({ key: `${key}t`, kind: "text", seat: ev.seat, text: "맞사격! 둘 다 빗나감", color: "#e2e8f0", at: SHOW.impact });
         } else if (ev.result === "overpowered") {
           fx.push({ key: `${key}a`, kind: "orb", from: ev.seat, to: ev.target, tier: ev.tier, at: start, dur, stop: "clash" });
-          fx.push({ key: `${key}t`, kind: "text", seat: ev.seat, text: "밀렸다!", color: "#e2e8f0", at: SHOW.impact });
+          fx.push({ key: `${key}t`, kind: "text", seat: ev.seat, text: "화력에 제압당했다!", color: "#e2e8f0", at: SHOW.impact });
         } else {
-          fx.push({ key: `${key}a`, kind: "orb", from: ev.seat, to: ev.target, tier: ev.tier, at: start, dur, stop: ev.result === "blocked" ? "block" : "hit" });
-          if (ev.result === "blocked") fx.push({ key: `${key}t`, kind: "text", seat: ev.target, text: "🛡️ 막음!", color: "#93c5fd", at: SHOW.impact });
+          fx.push({ key: `${key}a`, kind: "orb", from: ev.seat, to: ev.target, tier: ev.tier, at: start, dur, stop: ev.result === "blocked" ? "cover" : "hit" });
+          if (ev.result === "blocked") fx.push({ key: `${key}t`, kind: "text", seat: ev.target, text: "🪖 엄폐로 피함!", color: "#93c5fd", at: SHOW.impact });
           else {
-            fx.push({ key: `${key}b`, kind: "burst", seat: ev.target, color: ev.tier >= 3 ? "#fde047" : "#f0abfc", at: SHOW.impact, big: ev.tier >= 3 });
+            fx.push({ key: `${key}b`, kind: "burst", seat: ev.target, color: ev.tier >= 3 ? "#ff8c2a" : "#ffd27a", at: SHOW.impact, big: ev.tier >= 3 });
             fx.push({ key: `${key}t`, kind: "text", seat: ev.target, text: `${ev.result === "pierce" ? "관통! " : ""}${dmgText(ev.hit!, ev.target, viewer)}`, color: RED, at: SHOW.impact });
           }
         }
@@ -155,8 +155,8 @@ export function buildFx(state: GameState, viewer: Seat): ArenaFx[] {
       }
       case "ambush": {
         const start = SHOW.act + 0.55;
-        fx.push({ key: `${key}a`, kind: "orb", from: ev.seat, to: ev.target, tier: 2, at: start, dur: SHOW.impact - start, stop: ev.result === "blocked" ? "block" : "hit" });
-        if (ev.result === "blocked") fx.push({ key: `${key}t`, kind: "text", seat: ev.target, text: "🛡️ 기습 막음!", color: "#93c5fd", at: SHOW.impact });
+        fx.push({ key: `${key}a`, kind: "orb", from: ev.seat, to: ev.target, tier: 2, at: start, dur: SHOW.impact - start, stop: ev.result === "blocked" ? "cover" : "hit" });
+        if (ev.result === "blocked") fx.push({ key: `${key}t`, kind: "text", seat: ev.target, text: "🪖 기습을 엄폐로 피함!", color: "#93c5fd", at: SHOW.impact });
         else {
           fx.push({ key: `${key}b`, kind: "burst", seat: ev.target, color: "#fb923c", at: SHOW.impact, big: true });
           fx.push({ key: `${key}t`, kind: "text", seat: ev.target, text: `⚡기습! ${dmgText(ev.hit!, ev.target, viewer)}`, color: RED, at: SHOW.impact });
@@ -172,8 +172,8 @@ export function buildFx(state: GameState, viewer: Seat): ArenaFx[] {
         break;
       case "loot":
         if (ev.took > 0) {
-          fx.push({ key: `${key}f`, kind: "kiFlow", from: ev.target, to: ev.seat, at: SHOW.act + 0.8 });
-          fx.push({ key, kind: "text", seat: ev.seat, text: `💰 +${ev.took} 기`, color: "#fde047", at: SHOW.impact });
+          fx.push({ key: `${key}f`, kind: "ammoFlow", from: ev.target, to: ev.seat, at: SHOW.act + 0.8 });
+          fx.push({ key, kind: "text", seat: ev.seat, text: `🎒 +${ev.took}발`, color: "#fde047", at: SHOW.impact });
         } else fx.push({ key, kind: "text", seat: ev.seat, text: ev.foiled ? "헛탕!" : "빈털터리…", color: "#cbd5e1", at: SHOW.impact });
         break;
       case "rise":
@@ -196,11 +196,11 @@ export function describeEvents(state: GameState, names: Record<Seat, string>, vi
   for (const ev of state.events) {
     switch (ev.t) {
       case "blast": {
-        const tech = ev.tier === 1 ? "👊 파" : ev.tier === 2 ? "🌀 장풍" : "💥 에네르기파";
-        if (ev.result === "clash") out.push({ text: `${nm(ev.seat)} ↔ ${nm(ev.target)} ${tech} 충돌! 서로 상쇄` });
-        else if (ev.result === "overpowered") out.push({ text: `${nm(ev.seat)}의 ${tech}, ${nm(ev.target)}의 더 센 기술에 밀렸다` });
-        else if (ev.result === "blocked") out.push({ text: `${nm(ev.seat)} ${tech} → ${nm(ev.target)} 🛡️ 막음` });
-        else out.push({ text: `${nm(ev.seat)} ${tech} → ${nm(ev.target)} ${ev.result === "pierce" ? "막기 관통 " : ""}${dmgText(ev.hit!, ev.target, viewer)}`, mine: ev.target === viewer });
+        const tech = ev.tier === 1 ? "🔫 사격" : ev.tier === 2 ? "💥 연사" : "💣 수류탄";
+        if (ev.result === "clash") out.push({ text: `${nm(ev.seat)} ↔ ${nm(ev.target)} ${tech} 맞사격! 둘 다 빗나감` });
+        else if (ev.result === "overpowered") out.push({ text: `${nm(ev.seat)}의 ${tech}, ${nm(ev.target)}의 더 센 화력에 제압당했다` });
+        else if (ev.result === "blocked") out.push({ text: `${nm(ev.seat)} ${tech} → ${nm(ev.target)} 🪖 엄폐로 피함` });
+        else out.push({ text: `${nm(ev.seat)} ${tech} → ${nm(ev.target)} ${ev.result === "pierce" ? "엄폐 관통 " : ""}${dmgText(ev.hit!, ev.target, viewer)}`, mine: ev.target === viewer });
         break;
       }
       case "ambush":
@@ -221,7 +221,7 @@ export function describeEvents(state: GameState, names: Record<Seat, string>, vi
         });
         break;
       case "loot":
-        out.push({ text: ev.took > 0 ? `💰 ${nm(ev.seat)}이(가) ${nm(ev.target)}의 몸에서 기 ${ev.took}개를 뺏었다` : `💰 ${nm(ev.seat)}의 기 뺏기 — ${ev.foiled ? "헛탕!" : "빈털터리였다"}` });
+        out.push({ text: ev.took > 0 ? `🎒 ${nm(ev.seat)}이(가) ${nm(ev.target)}의 몸에서 탄약 ${ev.took}발을 챙겼다` : `🎒 ${nm(ev.seat)}의 탄약 뺏기 — ${ev.foiled ? "헛탕!" : "탄약이 없었다"}` });
         break;
       case "rise":
         out.push({ text: ev.reason === "breath" ? `😮‍💨 ${nm(ev.seat)}이(가) 숨이 차서 벌떡 일어났다 (살아 있었다!)` : `🧍 ${nm(ev.seat)}이(가) 털고 일어났다` });
@@ -233,10 +233,10 @@ export function describeEvents(state: GameState, names: Record<Seat, string>, vi
         break;
     }
   }
-  const charged = state.events.filter((e) => e.t === "charge").map((e) => nm((e as { seat: Seat }).seat));
-  const blocked = state.events.filter((e) => e.t === "block").map((e) => nm((e as { seat: Seat }).seat));
-  if (charged.length) out.unshift({ text: `⚡ 기 모으기: ${charged.join(", ")}` });
-  if (blocked.length) out.unshift({ text: `🛡️ 막기: ${blocked.join(", ")}` });
+  const charged = state.events.filter((e) => e.t === "reload").map((e) => nm((e as { seat: Seat }).seat));
+  const blocked = state.events.filter((e) => e.t === "cover").map((e) => nm((e as { seat: Seat }).seat));
+  if (charged.length) out.unshift({ text: `🔄 장전: ${charged.join(", ")}` });
+  if (blocked.length) out.unshift({ text: `🪖 엄폐: ${blocked.join(", ")}` });
   if (state.seats[viewer]?.dead && state.events.some((e) => e.t === "fall" && e.seats.includes(viewer))) out.push({ text: "🔒 당신은 진짜로 쓰러졌습니다. 남들은 아직 모르니 끝까지 연기하세요!", mine: true });
   return out;
 }

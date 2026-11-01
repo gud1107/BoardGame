@@ -9,7 +9,7 @@ import { tickVrm, useVrmAvatar } from "@/games/shared/three/VrmPerson";
 import { toVrm0 } from "@/games/shared/three/vrmPose";
 
 /**
- * A standing VRM fighter for 죽은척 기싸움 — the player's own character (same look as at
+ * A standing VRM fighter for 죽은척 대작전 — the player's own character (same look as at
  * every 3D table, via `useVrmAvatar`) posed procedurally on the normalized humanoid bones.
  *
  * Poses are target joint angles blended per frame (no per-frame allocation); timed poses
@@ -18,7 +18,7 @@ import { toVrm0 } from "@/games/shared/three/vrmPose";
  * same pose, same closed eyes, no breathing — the hidden state never reaches this file.
  */
 
-export type FighterPose = "idle" | "charge" | "block" | "pa" | "jangpung" | "energy" | "loot" | "finish" | "hit" | "down" | "rise" | "ambush" | "win";
+export type FighterPose = "idle" | "reload" | "cover" | "shot" | "burst" | "grenade" | "loot" | "finish" | "hit" | "down" | "rise" | "ambush" | "win";
 
 export interface VrmFighterProps {
   look: PersonLook;
@@ -89,8 +89,8 @@ function idle(o: Float32Array, t: number, seed: number) {
   set3(o, B.leftUpperLeg, 0, 0, -0.05);
 }
 
-function chargePose(o: Float32Array, t: number) {
-  // fists pulled to the belly, knees bent — 기를 모으는 자세
+function reloadPose(o: Float32Array, t: number) {
+  // kneeling, hands at the chest working the magazine — 장전
   const pulse = Math.sin(t * 9) * 0.04;
   set3(o, B.rightUpperArm, 0.35, 0, 1.0);
   set3(o, B.leftUpperArm, 0.35, 0, -1.0);
@@ -105,18 +105,33 @@ function chargePose(o: Float32Array, t: number) {
   o[CROUCH] = 0.1;
 }
 
-function thrust(o: Float32Array, power: number) {
-  // both palms pushed at the target
-  set3(o, B.rightUpperArm, -1.5, 0.15, 1.3);
-  set3(o, B.leftUpperArm, -1.5, -0.15, -1.3);
-  set3(o, B.rightLowerArm, 0, 0.1, 0);
-  set3(o, B.leftLowerArm, 0, -0.1, 0);
-  set3(o, B.spine, 0.1 + power * 0.05, 0, 0);
-  set3(o, B.head, -0.05, 0, 0);
-  set3(o, B.rightUpperLeg, 0.3, 0, 0.12);
-  set3(o, B.leftUpperLeg, -0.55, 0, -0.12);
-  set3(o, B.leftLowerLeg, 0.6, 0, 0);
-  o[CROUCH] = 0.05 + power * 0.02;
+function aim(o: Float32Array, recoil: number) {
+  // shouldered rifle: right hand at the grip, left hand forward under the barrel
+  set3(o, B.rightUpperArm, -1.25 + recoil * 0.12, 0.35, 1.25);
+  set3(o, B.leftUpperArm, -1.45 + recoil * 0.12, -0.45, -1.15);
+  set3(o, B.rightLowerArm, 0, 1.2, 0);
+  set3(o, B.leftLowerArm, 0, -0.35, 0);
+  set3(o, B.spine, 0.12 - recoil * 0.06, 0, 0);
+  set3(o, B.head, 0.12, 0.15, 0);
+  set3(o, B.rightUpperLeg, -0.35, 0, 0.15);
+  set3(o, B.leftUpperLeg, -0.75, 0, -0.1);
+  set3(o, B.rightLowerLeg, 1.1, 0, 0);
+  set3(o, B.leftLowerLeg, 0.8, 0, 0);
+  o[CROUCH] = 0.16;
+}
+
+function throwing(o: Float32Array, u: number) {
+  // wind the right arm back over the shoulder, then hurl
+  const out = u > 0.75;
+  set3(o, B.rightUpperArm, out ? -1.6 : 0.5, 0, out ? 1.2 : -0.6);
+  set3(o, B.rightLowerArm, 0, out ? 0.2 : 1.4, 0);
+  set3(o, B.leftUpperArm, -1.2, 0, -1.2);
+  set3(o, B.leftLowerArm, 0, -0.2, 0);
+  set3(o, B.spine, out ? 0.25 : -0.2, out ? -0.3 : 0.35, 0);
+  set3(o, B.rightUpperLeg, out ? -0.5 : 0.25, 0, 0.12);
+  set3(o, B.leftUpperLeg, out ? 0.2 : -0.45, 0, -0.12);
+  set3(o, B.leftLowerLeg, 0.4, 0, 0);
+  o[CROUCH] = 0.08;
 }
 
 function lying(o: Float32Array) {
@@ -138,27 +153,29 @@ function poseTarget(o: Float32Array, pose: FighterPose, u: number, t: number, se
   switch (pose) {
     case "idle":
       return;
-    case "charge":
-      return chargePose(o, t);
-    case "block":
-      // forearms crossed in front of the face
-      set3(o, B.rightUpperArm, -1.2, 0.55, 0.95);
-      set3(o, B.leftUpperArm, -1.2, -0.55, -0.95);
-      set3(o, B.rightLowerArm, 0, 1.75, 0);
-      set3(o, B.leftLowerArm, 0, -1.75, 0);
-      set3(o, B.spine, 0.08, 0, 0);
-      set3(o, B.rightUpperLeg, -0.25, 0, 0.15);
-      set3(o, B.leftUpperLeg, -0.25, 0, -0.15);
-      set3(o, B.rightLowerLeg, 0.45, 0, 0);
-      set3(o, B.leftLowerLeg, 0.45, 0, 0);
-      o[CROUCH] = 0.05;
+    case "reload":
+      return reloadPose(o, t);
+    case "cover":
+      // duck low, hands over the head
+      set3(o, B.rightUpperArm, -2.3, 0.4, 1.0);
+      set3(o, B.leftUpperArm, -2.3, -0.4, -1.0);
+      set3(o, B.rightLowerArm, 0, 1.9, 0);
+      set3(o, B.leftLowerArm, 0, -1.9, 0);
+      set3(o, B.spine, 0.6, 0, 0);
+      set3(o, B.head, 0.45, 0, 0);
+      set3(o, B.rightUpperLeg, -1.0, 0, 0.2);
+      set3(o, B.leftUpperLeg, -1.0, 0, -0.2);
+      set3(o, B.rightLowerLeg, 1.7, 0, 0);
+      set3(o, B.leftLowerLeg, 1.7, 0, 0);
+      o[CROUCH] = 0.38;
       return;
-    case "pa":
-    case "jangpung":
-    case "energy": {
-      const wind = pose === "energy" ? 0.45 : 0.3;
-      if (u < wind) chargePose(o, t);
-      else thrust(o, pose === "energy" ? 2 : pose === "jangpung" ? 1 : 0);
+    case "shot":
+    case "burst":
+    case "grenade": {
+      if (pose === "grenade") return throwing(o, u);
+      // raise the rifle, then fire (burst kicks three times)
+      const kick = pose === "burst" ? Math.max(0, Math.sin((u - 0.3) * 35)) : u > 0.3 && u < 0.4 ? 1 : 0;
+      aim(o, u < 0.3 ? 0 : kick);
       return;
     }
     case "hit":
@@ -176,8 +193,8 @@ function poseTarget(o: Float32Array, pose: FighterPose, u: number, t: number, se
     case "ambush": {
       // spring up from the floor, then (ambush) strike
       if (u < 0.15) lying(o);
-      else if (pose === "ambush" && u > 0.55) thrust(o, 1);
-      else chargePose(o, t);
+      else if (pose === "ambush" && u > 0.55) aim(o, u < 0.7 ? 1 : 0);
+      else reloadPose(o, t);
       o[FALL] = u < 0.15 ? 1 : Math.max(0, 1 - (u - 0.15) / 0.2);
       o[HOP] = u > 0.15 && u < 0.6 ? Math.sin(((u - 0.15) / 0.45) * Math.PI) * 0.35 : 0;
       return;
@@ -223,13 +240,13 @@ function poseTarget(o: Float32Array, pose: FighterPose, u: number, t: number, se
 /** Facial preset weights per pose; a body on the floor always shows the same shut eyes. */
 function face(pose: FighterPose, u: number): { angry: number; sad: number; surprised: number; happy: number; aa: number; shut: boolean } {
   switch (pose) {
-    case "charge":
+    case "reload":
       return { angry: 0.45, sad: 0, surprised: 0, happy: 0, aa: 0, shut: false };
-    case "block":
+    case "cover":
       return { angry: 0.3, sad: 0, surprised: 0, happy: 0, aa: 0, shut: false };
-    case "pa":
-    case "jangpung":
-    case "energy":
+    case "shot":
+    case "burst":
+    case "grenade":
     case "finish":
       return { angry: 1, sad: 0, surprised: 0, happy: 0, aa: u > 0.3 ? 0.75 : 0.2, shut: false };
     case "ambush":
@@ -257,6 +274,8 @@ export default function VrmFighter(props: VrmFighterProps) {
   const { vrm, morphs } = useVrmAvatar(look, seed, { out, lowDetail });
   const rootRef = useRef<THREE.Group>(null);
   const bodyRef = useRef<THREE.Group>(null);
+  const rifleRef = useRef<THREE.Group>(null);
+  const flashRef = useRef<THREE.Mesh>(null);
   const state = useRef<{ key: string; start: number; yaw: number | null; walk: number; springs: { current: number }; cur: Float32Array; want: Float32Array } | null>(null);
   const fit = useMemo(() => {
     if (!vrm) return null;
@@ -317,6 +336,14 @@ export default function VrmFighter(props: VrmFighterProps) {
     const fall = cur[FALL];
     body.rotation.z = fallSide(seed) * fall * (Math.PI / 2);
     body.position.y = fall * 0.14 + cur[HOP] - cur[CROUCH] * (1 - fall);
+    // the rifle comes out only while firing — lying bodies all look alike
+    const firing = pose === "shot" || pose === "burst" || (pose === "ambush" && u > 0.55);
+    if (rifleRef.current) rifleRef.current.visible = firing && u > 0.12 && fall < 0.3;
+    if (flashRef.current) {
+      const burstKick = pose === "burst" && Math.sin((u - 0.3) * 35) > 0.85 && u < 0.7;
+      const singleKick = (pose === "shot" && u > 0.3 && u < 0.37) || (pose === "ambush" && u > 0.55 && u < 0.62);
+      flashRef.current.visible = firing && (burstKick || singleKick);
+    }
 
     if (!vrm || !fit) return;
     const vrm0 = vrm.meta.metaVersion === "0";
@@ -346,7 +373,31 @@ export default function VrmFighter(props: VrmFighterProps) {
         <circleGeometry args={[0.42, 20]} />
         <meshBasicMaterial color="#000000" transparent opacity={0.35} depthWrite={false} />
       </mesh>
-      <group ref={bodyRef}>{vrm && fit && <primitive object={vrm.scene} scale={fit * size} />}</group>
+      <group ref={bodyRef}>
+        {vrm && fit && <primitive object={vrm.scene} scale={fit * size} />}
+        <group ref={rifleRef} position={[0.1, 1.18 * size, 0.12]} visible={false}>
+          <mesh position={[0, 0, 0.42]}>
+            <boxGeometry args={[0.05, 0.08, 0.5]} />
+            <meshStandardMaterial color="#26282a" metalness={0.6} roughness={0.45} />
+          </mesh>
+          <mesh position={[0, 0.01, 0.82]} rotation-x={Math.PI / 2}>
+            <cylinderGeometry args={[0.014, 0.014, 0.32, 8]} />
+            <meshStandardMaterial color="#1b1c1e" metalness={0.7} roughness={0.4} />
+          </mesh>
+          <mesh position={[0, -0.02, 0.05]}>
+            <boxGeometry args={[0.05, 0.1, 0.28]} />
+            <meshStandardMaterial color="#5a3b22" roughness={0.8} />
+          </mesh>
+          <mesh position={[0, -0.1, 0.4]} rotation-x={0.25}>
+            <boxGeometry args={[0.04, 0.14, 0.06]} />
+            <meshStandardMaterial color="#26282a" metalness={0.6} roughness={0.45} />
+          </mesh>
+          <mesh ref={flashRef} position={[0, 0.01, 1.02]} visible={false}>
+            <sphereGeometry args={[0.09, 8, 6]} />
+            <meshBasicMaterial color="#ffd27a" transparent opacity={0.9} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+          </mesh>
+        </group>
+      </group>
       {props.onPick && (
         <mesh
           position-y={0.9}

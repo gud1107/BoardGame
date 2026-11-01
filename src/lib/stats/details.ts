@@ -222,9 +222,9 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
   "play-dead": [
     { label: "최후의 생존", value: (d) => n(d.survived) },
     { label: "끝내기 (한 판 최다)", value: (d) => `${n(d.kills)} (${n(d.maxKills)})` },
-    { label: "기술 명중 / 벌떡 기습 명중", value: (d) => `${n(d.blastHits)} / ${n(d.ambushHits)}` },
+    { label: "사격 명중 / 벌떡 기습 명중", value: (d) => `${n(d.blastHits)} / ${n(d.ambushHits)}` },
     { label: "죽은 척 폭로", value: (d) => n(d.exposes) },
-    { label: "기 뺏기로 가져온 기", value: (d) => n(d.kiLooted) },
+    { label: "탄약 뺏기로 챙긴 탄약", value: (d) => n(d.ammoLooted) },
     { label: "살아서 죽은 척한 라운드", value: (d) => n(d.fakeRounds) },
     { label: "죽은 척하는 채로 승리", value: (d) => n(d.fakeWins) },
   ],

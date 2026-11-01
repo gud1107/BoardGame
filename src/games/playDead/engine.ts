@@ -1,13 +1,13 @@
 import { seededRng } from "@/lib/rng";
 
 /**
- * 죽은척 기싸움 — 기 모으기(에너지파) 손놀이에 "죽은 척"을 얹은 2~6인 동시 행동 게임.
- * 룰 원전: boardGameRule/죽은척기싸움/죽은척기싸움.md (자체 창작 룰).
+ * 죽은척 대작전 — 전장에서 동시에 장전·엄폐·사격을 내는 2~6인 게임에 "죽은 척"을 얹었다.
+ * 룰 원전: boardGameRule/죽은척대작전/죽은척대작전.md (자체 창작 룰).
  *
  * 핵심
  * - 매 라운드 모두 비공개로 행동을 고르고(커밋) 동시에 공개(리빌)한다.
- * - 서 있으면: 기 모으기 / 막기 / 파(1기) / 장풍(2기) / 에네르기파(3기) / 쓰러진 사람에게 기 뺏기·확인사살.
- * - 피해를 받으면 살았든 죽었든 **무조건 쓰러진다**. 목숨은 모두 3(공개)이지만 장풍·에네르기파
+ * - 서 있으면: 장전 / 엄폐 / 사격(1발) / 연사(2발) / 수류탄(3발) / 쓰러진 사람에게 탄약 뺏기·확인사살.
+ * - 피해를 받으면 살았든 죽었든 **무조건 쓰러진다**. 목숨은 모두 3(공개)이지만 연사·수류탄
  *   등의 피해량은 범위(예: 1~2)만 공개되고 실제 값은 맞은 사람만 안다 — 쓰러진 사람이 진짜
  *   죽었는지는 공개된 피해 범위로 추리할 수밖에 없다. (처음엔 목숨 카드 2/3을 비공개로 나눴지만
  *   셀프플레이에서 목숨 3 카드의 승률 비중이 4인 83%로 운 의존이 커서, 운을 매 타격에 나눴다.)
@@ -23,12 +23,12 @@ import { seededRng } from "@/lib/rng";
 export type Seat = number;
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 6;
-export const MAX_KI = 5;
-export const MAX_BLOCK_STREAK = 1;
+export const MAX_AMMO = 5;
+export const MAX_COVER_STREAK = 1;
 export const MAX_LIE = 3;
 /**
- * "기 폭주": 8라운드부터 모든 피해 범위 +1, 이후 4라운드마다 +1 더. 판이 늘어지지 않게 —
- * 셀프플레이(레벨 7 봇)에서 폭주 없이는 6인전 99%가 최대 라운드까지 갔다.
+ * "총공세": 8라운드부터 모든 피해 범위 +1, 이후 4라운드마다 +1 더. 판이 늘어지지 않게 —
+ * 셀프플레이(레벨 7 봇)에서 총공세 없이는 6인전 99%가 최대 라운드까지 갔다.
  */
 export const SURGE_ROUND = 8;
 export const SURGE_STEP = 4;
@@ -36,29 +36,29 @@ export function surgeAt(round: number): number {
   return round < SURGE_ROUND ? 0 : 1 + Math.floor((round - SURGE_ROUND) / SURGE_STEP);
 }
 
-export type MoveKind = "charge" | "block" | "pa" | "jangpung" | "energy" | "loot" | "finish" | "hold" | "rise" | "ambush";
+export type MoveKind = "reload" | "cover" | "shot" | "burst" | "grenade" | "loot" | "finish" | "hold" | "rise" | "ambush";
 export interface Move {
   kind: MoveKind;
   target?: Seat;
 }
 
 export const START_HP = 3;
-/** 공격 기술: 비용 = 등급(서로 쏘면 높은 등급이 이긴다) */
-export const BLAST_TIER: Partial<Record<MoveKind, number>> = { pa: 1, jangpung: 2, energy: 3 };
+/** 공격: 탄약 비용 = 화력 등급 (서로 쏘면 화력이 센 쪽이 제압, 같으면 맞사격으로 둘 다 빗나감) */
+export const BLAST_TIER: Partial<Record<MoveKind, number>> = { shot: 1, burst: 2, grenade: 3 };
 export const FINISH_COST = 1;
 export const LOOT_TAKE = 2;
 /** 피해 범위 [최소, 최대] — 범위는 공개, 실제 값은 맞은 사람만 안다 */
 export type DmgRange = readonly [number, number];
-export const DMG: Record<"pa" | "jangpung" | "energy" | "pierce" | "ambush" | "ambushLooter" | "finish", DmgRange> = {
-  pa: [1, 1],
-  jangpung: [1, 2],
-  energy: [2, 3],
+export const DMG: Record<"shot" | "burst" | "grenade" | "pierce" | "ambush" | "ambushLooter" | "finish", DmgRange> = {
+  shot: [1, 1],
+  burst: [1, 2],
+  grenade: [2, 3],
   pierce: [1, 1],
   ambush: [1, 2],
   ambushLooter: [2, 3],
   finish: [1, 2],
 };
-const BLAST_DMG: Record<number, DmgRange> = { 1: DMG.pa, 2: DMG.jangpung, 3: DMG.energy };
+const BLAST_DMG: Record<number, DmgRange> = { 1: DMG.shot, 2: DMG.burst, 3: DMG.grenade };
 
 export interface GameOptions {
   /** 행동 고르기 제한 시간(초). 0 = 무제한 */
@@ -76,14 +76,14 @@ export function maxRoundsFor(seatCount: number): number {
 export interface SeatState {
   /** 비공개: 남은 목숨 */
   hp: number;
-  ki: number;
+  ammo: number;
   down: boolean;
   dead: boolean;
   /** 확인사살로 사망이 공개됨 — 더 이상 행동하지 않는다 */
   confirmed: boolean;
   /** 연달아 누워 있은 라운드 수(공개) */
   lie: number;
-  blockStreak: number;
+  coverStreak: number;
   /** 공개 정보: 지금까지 맞은 타격들의 피해 범위 */
   hits: DmgRange[];
   diedRound: number | null;
@@ -98,16 +98,16 @@ export interface Tally {
   ambushHits: number;
   /** 확인사살로 죽은 척을 폭로 */
   exposes: number;
-  /** 기 뺏기로 가져온 기 */
-  kiLooted: number;
+  /** 탄약 뺏기로 챙긴 탄약 */
+  ammoLooted: number;
   /** 살아서 누워 있던(연기한) 라운드 */
   fakeRounds: number;
 }
-const EMPTY_TALLY: Tally = { kills: 0, blastHits: 0, ambushHits: 0, exposes: 0, kiLooted: 0, fakeRounds: 0 };
+const EMPTY_TALLY: Tally = { kills: 0, blastHits: 0, ambushHits: 0, exposes: 0, ammoLooted: 0, fakeRounds: 0 };
 
 export type RoundEvent =
-  | { t: "charge"; seat: Seat }
-  | { t: "block"; seat: Seat }
+  | { t: "reload"; seat: Seat }
+  | { t: "cover"; seat: Seat }
   | { t: "blast"; seat: Seat; target: Seat; tier: number; result: "hit" | "blocked" | "pierce" | "clash" | "overpowered"; hit?: Hit }
   | { t: "ambush"; seat: Seat; target: Seat; result: "hit" | "blocked" | "looter"; hit?: Hit }
   | { t: "loot"; seat: Seat; target: Seat; took: number; foiled: boolean }
@@ -178,7 +178,7 @@ export function startGame(seatCount: number, seed: number, options: GameOptions 
     seed,
     seatCount: n,
     options: { ...options, maxRounds: options.maxRounds > 0 ? options.maxRounds : maxRoundsFor(n) },
-    seats: Array.from({ length: n }, () => ({ hp: START_HP, ki: 0, down: false, dead: false, confirmed: false, lie: 0, blockStreak: 0, hits: [], diedRound: null, tally: { ...EMPTY_TALLY } })),
+    seats: Array.from({ length: n }, () => ({ hp: START_HP, ammo: 0, down: false, dead: false, confirmed: false, lie: 0, coverStreak: 0, hits: [], diedRound: null, tally: { ...EMPTY_TALLY } })),
     round: 1,
     phase: "choosing",
     stage: 0,
@@ -207,14 +207,14 @@ export function legalMoves(state: GameState, seat: Seat): Move[] {
   const standing = others.filter((i) => !state.seats[i].down);
   const bodies = others.filter((i) => state.seats[i].down && !state.seats[i].confirmed);
   if (me.down) return [{ kind: "hold" }, { kind: "rise" }, ...standing.map((target) => ({ kind: "ambush" as const, target }))];
-  const out: Move[] = [{ kind: "charge" }];
-  if (me.blockStreak < MAX_BLOCK_STREAK) out.push({ kind: "block" });
-  for (const kind of ["pa", "jangpung", "energy"] as const) {
-    if (me.ki >= BLAST_TIER[kind]!) for (const target of standing) out.push({ kind, target });
+  const out: Move[] = [{ kind: "reload" }];
+  if (me.coverStreak < MAX_COVER_STREAK) out.push({ kind: "cover" });
+  for (const kind of ["shot", "burst", "grenade"] as const) {
+    if (me.ammo >= BLAST_TIER[kind]!) for (const target of standing) out.push({ kind, target });
   }
   for (const target of bodies) {
     out.push({ kind: "loot", target });
-    if (me.ki >= FINISH_COST) out.push({ kind: "finish", target });
+    if (me.ammo >= FINISH_COST) out.push({ kind: "finish", target });
   }
   return out;
 }
@@ -225,7 +225,7 @@ export function isLegal(state: GameState, seat: Seat, move: Move): boolean {
 
 /** 시간 초과/무효 제출의 기본 행동 */
 export function defaultMove(state: GameState, seat: Seat): Move {
-  return state.seats[seat].down ? { kind: "hold" } : { kind: "charge" };
+  return state.seats[seat].down ? { kind: "hold" } : { kind: "reload" };
 }
 
 // ---------------------------------------------------------------------------
@@ -258,7 +258,7 @@ function resolveRound(state: GameState): GameState {
     return { lo, hi, dmg: value };
   };
   const rose = Array(n).fill(false);
-  const blocking = moves.map((m, i) => !startDown[i] && m.kind === "block");
+  const blocking = moves.map((m, i) => !startDown[i] && m.kind === "cover");
   // 진짜 죽은 사람(미공개)은 무엇을 골랐든 가만히 누워 있다
   const eff = moves.map((m, i) => (seats[i].dead ? ({ kind: "hold" } as Move) : m));
 
@@ -266,8 +266,8 @@ function resolveRound(state: GameState): GameState {
   moves.forEach((m, i) => {
     if (startDown[i]) return;
     const tier = BLAST_TIER[m.kind];
-    if (tier) seats[i].ki -= tier;
-    if (m.kind === "finish") seats[i].ki -= FINISH_COST;
+    if (tier) seats[i].ammo -= tier;
+    if (m.kind === "finish") seats[i].ammo -= FINISH_COST;
   });
 
   // 1) 쓰러진 사람을 둘러싼 일
@@ -322,7 +322,7 @@ function resolveRound(state: GameState): GameState {
     }
   }
 
-  // 2) 서 있는 사람들의 기술
+  // 2) 서 있는 사람들의 사격
   const blasts = moves.map((m, i) => (!startDown[i] && BLAST_TIER[m.kind] ? { seat: i, target: m.target!, tier: BLAST_TIER[m.kind]! } : null));
   const cancelled = Array(n).fill(false);
   for (const b of blasts) {
@@ -346,15 +346,15 @@ function resolveRound(state: GameState): GameState {
     if (!blocking[b.target] || b.tier >= 3) seats[b.seat].tally.blastHits++;
   }
 
-  // 3) 기 모으기 / 막기 기록
+  // 3) 장전 / 엄폐 기록
   moves.forEach((m, i) => {
     if (startDown[i]) return;
-    if (m.kind === "charge") {
-      seats[i].ki = Math.min(MAX_KI, seats[i].ki + 1);
-      events.push({ t: "charge", seat: i });
+    if (m.kind === "reload") {
+      seats[i].ammo = Math.min(MAX_AMMO, seats[i].ammo + 1);
+      events.push({ t: "reload", seat: i });
     }
-    seats[i].blockStreak = m.kind === "block" ? seats[i].blockStreak + 1 : 0;
-    if (m.kind === "block") events.push({ t: "block", seat: i });
+    seats[i].coverStreak = m.kind === "cover" ? seats[i].coverStreak + 1 : 0;
+    if (m.kind === "cover") events.push({ t: "cover", seat: i });
   });
 
   // 4) 일어나기·숨 참기
@@ -410,10 +410,10 @@ function resolveRound(state: GameState): GameState {
 
 function lootBody(seats: SeatState[], k: Seat, looters: Seat[], events: RoundEvent[]) {
   for (const l of looters) {
-    const took = Math.min(LOOT_TAKE, seats[k].ki, MAX_KI - seats[l].ki);
-    seats[k].ki -= took;
-    seats[l].ki += took;
-    seats[l].tally.kiLooted += took;
+    const took = Math.min(LOOT_TAKE, seats[k].ammo, MAX_AMMO - seats[l].ammo);
+    seats[k].ammo -= took;
+    seats[l].ammo += took;
+    seats[l].tally.ammoLooted += took;
     events.push({ t: "loot", seat: l, target: k, took, foiled: false });
   }
 }
@@ -539,11 +539,11 @@ export interface Ranking {
   rank: number;
 }
 
-/** 생존자 1위(여럿이면 남은 목숨 → 기 순), 사망자는 늦게 죽을수록 위 */
+/** 생존자 1위(여럿이면 남은 목숨 → 탄약 순), 사망자는 늦게 죽을수록 위 */
 export function computeRankings(state: GameState): Ranking[] {
   const key = (i: Seat) => {
     const s = state.seats[i];
-    return s.dead ? -1000 + (s.diedRound ?? 0) : s.hp * 10 + s.ki;
+    return s.dead ? -1000 + (s.diedRound ?? 0) : s.hp * 10 + s.ammo;
   };
   const order = state.seats.map((_, i) => i).sort((a, b) => key(b) - key(a));
   const out: Ranking[] = [];

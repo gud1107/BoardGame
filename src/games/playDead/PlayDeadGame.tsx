@@ -50,7 +50,7 @@ import { selfResult } from "@/games/shared/selfResult";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 
 /**
- * 죽은척 기싸움 온라인 대전 진입점 — 갓생 플래너와 같은 락스텝 + 커밋-공개 패턴
+ * 죽은척 대작전 온라인 대전 진입점 — 갓생 플래너와 같은 락스텝 + 커밋-공개 패턴
  * (docs/cloud-sync.md). 방장이 시드+옵션을 브로드캐스트하면 모든 기기가 `startGame`을
  * 재현하고, 이후 `EngineAction`만 주고받는다.
  *
@@ -749,7 +749,7 @@ export default function PlayDeadGame({ onComplete }: PlayableGameProps) {
           blastHits: st.tally.blastHits,
           ambushHits: st.tally.ambushHits,
           exposes: st.tally.exposes,
-          kiLooted: st.tally.kiLooted,
+          ammoLooted: st.tally.ammoLooted,
           fakeRounds: st.tally.fakeRounds,
           fakeWins: !st.dead && st.down ? 1 : 0,
         };
@@ -815,7 +815,7 @@ export default function PlayDeadGame({ onComplete }: PlayableGameProps) {
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-8 text-center light:shadow-sm">
         <span className="text-3xl">⚠️</span>
         <h2 className="break-keep text-lg font-bold text-white light:text-slate-900">온라인 방을 사용할 수 없어요</h2>
-        <p className="max-w-sm break-keep text-sm text-amber-100/80 light:text-amber-800">죽은척 기싸움은 온라인 방 기반이라 Supabase 설정이 필요합니다.</p>
+        <p className="max-w-sm break-keep text-sm text-amber-100/80 light:text-amber-800">죽은척 대작전은 온라인 방 기반이라 Supabase 설정이 필요합니다.</p>
       </div>,
     );
   }
@@ -849,10 +849,10 @@ export default function PlayDeadGame({ onComplete }: PlayableGameProps) {
       <RulebookGate
         gameId="play-dead"
         icon="💀"
-        title="죽은척 기싸움"
+        title="죽은척 대작전"
         description={
           <p className="break-keep text-sm text-white/50 light:text-slate-500">
-            2~6명이 “기! 기! 파!”에 맞춰 기를 모으고 쏘는 동시 행동 게임. 맞으면 무조건 쓰러지는데, 진짜 죽었는지는 본인만 알아요. 모자란 자리는 AI 봇으로 채울 수 있어요.
+            2~6명이 전장에 엎드려 매 라운드 몰래 장전·엄폐·사격을 고르고 “준비! 조준! 발사!”에 동시에 공개해요. 맞으면 무조건 쓰러지는데 피해량은 맞은 사람만 알아서, 쓰러진 사람이 진짜 죽었는지 죽은 척인지 아무도 몰라요. 마지막 생존자가 승리! 모자란 자리는 AI 봇으로 채울 수 있어요.
           </p>
         }
         actions={
