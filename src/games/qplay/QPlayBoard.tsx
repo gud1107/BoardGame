@@ -299,16 +299,16 @@ function MyLife({ state, viewerSeat }: { state: GameState; viewerSeat: Seat }) {
   }
   return (
     <div className={`flex items-center gap-3 rounded-2xl border-2 px-4 py-2 ${hp === 1 ? "animate-pulse border-rose-500/70 bg-rose-500/10" : "border-white/15 bg-white/[0.04] light:border-slate-200 light:bg-white"}`}>
-      <span className="text-xs font-black text-white/70 light:text-slate-600">내 라이프</span>
-      <span className="flex gap-1 text-3xl leading-none" aria-label={`하트 ${hp}개 남음`}>
+      <span className="shrink-0 text-xs font-black whitespace-nowrap text-white/70 light:text-slate-600">내 라이프</span>
+      <span className="flex shrink-0 gap-1 text-3xl leading-none" aria-label={`하트 ${hp}개 남음`}>
         {Array.from({ length: MISSILE_HP }, (_, i) => (
           <span key={i === hp ? `lost-${hp}-${state.stage}` : i} className={i === hp ? "qplay-break" : ""}>
             {i < hp ? "❤️" : "🖤"}
           </span>
         ))}
       </span>
-      <span className={`ml-auto text-xs font-bold ${hp === 1 ? "text-rose-300 light:text-rose-600" : "text-white/55 light:text-slate-500"}`}>
-        {hp === 1 ? "마지막 하트! 틀리면 탈락" : `틀리거나 안 고르면 −1 · 생존 ${left}명`}
+      <span className={`ml-auto min-w-0 text-right whitespace-pre-line text-[11px] leading-tight font-bold break-keep ${hp === 1 ? "text-rose-300 light:text-rose-600" : "text-white/55 light:text-slate-500"}`}>
+        {hp === 1 ? "마지막 하트!\n틀리면 탈락" : `틀리면 −1\n생존 ${left}명`}
       </span>
     </div>
   );
