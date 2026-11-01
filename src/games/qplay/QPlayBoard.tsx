@@ -9,6 +9,7 @@ import {
   CHOSUNG_TRIES,
   CLIMB_TOP,
   MINI_INFO,
+  OX_LOCK_MS,
   computeRankings,
   correctOrder,
   currentMini,
@@ -483,6 +484,13 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
   const survival = mini === "ox" || mini === "missile";
   // OX 문제·공개 중엔 광장이 주인공 — 3D 테이블은 아래로(같은 요소라 다시 그리지 않는다)
   const oxFocus = !!showQuestion && q?.kind === "ox";
+  // 막판 이동이 방장에게 닿을 시간을 남기려고 내 화면에선 마감 직전에 잠근다
+  const oxLocked = oxFocus && state.phase === "question" && remainingMs !== null && remainingMs <= OX_LOCK_MS;
+  // 공개 때 내 화면의 마지막 쪽(방금 문제 단계의 로컬 선택)과 판정이 다르면 알려 준다
+  const oxLate =
+    oxFocus && state.phase === "reveal" && localPick && localPick.stage === state.stage - 1 && localPick.choice !== (myAnswer?.choice ?? null)
+      ? { shown: localPick.choice, judged: myAnswer?.choice ?? null }
+      : null;
 
   return (
     <div className="relative flex flex-col gap-3">
@@ -584,6 +592,8 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
                     }
                   : null
               }
+              locked={oxLocked}
+              late={oxLate}
             />
           )}
           {q.kind === "choice" && (

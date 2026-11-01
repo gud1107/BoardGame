@@ -18,6 +18,7 @@ import {
   MINI_IDS,
   MINI_INFO,
   MIN_PLAYERS,
+  OX_GRACE_MS,
   ROUND_OPTIONS,
   allAnswered,
   applyAction,
@@ -683,7 +684,9 @@ export default function QPlayGame({ onComplete }: PlayableGameProps) {
       };
       const duration = phaseDurationMs(state);
       const amHost = actingHostRef.current === getDeviceId();
-      if (amHost && duration > 0 && now - seen.at >= duration) sendTimeout();
+      // OX는 느린 사람의 막판 이동이 닿을 때까지 조금 더 기다린다(engine OX_GRACE_MS)
+      const grace = state.phase === "question" && currentQuestion(state)?.kind === "ox" ? OX_GRACE_MS : 0;
+      if (amHost && duration > 0 && now - seen.at >= duration + grace) sendTimeout();
       // 모두 답했으면 잠깐(답한 표시가 보이게) 뒤에 바로 정답 공개
       if (amHost && state.phase === "question" && allAnswered(state) && now - seen.at >= 700) sendTimeout();
 

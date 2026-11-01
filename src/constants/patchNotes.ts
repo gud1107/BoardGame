@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.135.0",
+    releaseDate: "2026-11-01",
+    title: "⭕❌ 큐플레이 OX — 막판 이동 보호 · 8명도 안 겹치는 광장",
+    changes: [
+      { game: "qplay", type: "FIX", desc: "🔒 OX 마감 0.6초 전엔 이동이 잠기고 방장은 0.5초 더 기다려요 — 인터넷이 느려도 화면엔 ❌인데 ⭕로 판정되는 일이 없게. 그래도 늦으면 공개 때 알려 줘요" },
+      { game: "qplay", type: "IMPROVE", desc: "👥 8명이 한쪽에 몰려도 말·이름표가 안 겹쳐요 (광장 조금 더 높게, 봇 이름표는 ‘봇 1’처럼 짧게)" },
+      { game: "qplay", type: "IMPROVE", desc: "🎨 정답 공개 때 오답 구역은 빗금 + ‘✘ 오답’ 표시 — 색이 잘 안 구분돼도 어느 쪽이 맞았는지 보여요" },
+    ],
+  },
+  {
     version: "v1.133.0",
     releaseDate: "2026-11-01",
     title: "⭕❌ 큐플레이 OX — 광장을 뛰어다니며 고르기",

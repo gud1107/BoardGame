@@ -48,6 +48,14 @@ export const CHOSUNG_POINTS = [40, 32, 26, 20] as const;
 export const CHOSUNG_FLOOR = 15;
 export const CHOSUNG_TRIES = 3;
 export const OX_CORRECT = 10;
+/**
+ * OX 막판 이동이 방장에게 늦게 닿아 "화면엔 ❌인데 ⭕로 판정"되는 일을 막는 여유(§4).
+ * 각 화면은 자기가 문제를 받은 순간부터 시간을 재므로 느린 사람은 방장보다 늦게 시작하고,
+ * 그 이동이 다시 방장에게 가는 데도 같은 만큼 걸린다(왕복). 그래서 내 화면에선 마감
+ * `OX_LOCK_MS` 전에 이동을 잠그고, 방장은 마감 뒤 `OX_GRACE_MS`를 더 기다렸다 판정한다.
+ */
+export const OX_LOCK_MS = 600;
+export const OX_GRACE_MS = 500;
 export const OX_SURVIVE = 30;
 export const CLIMB_TOP = 10;
 export const CLIMB_FLOOR_POINTS = 5;
