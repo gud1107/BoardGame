@@ -1007,35 +1007,34 @@ export default function QPlayGame({ onComplete }: PlayableGameProps) {
               </div>
             </label>
             <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
-              미니 게임 고르기 <span className="text-[11px] text-white/45 light:text-slate-400">고른 것 중에서 무작위 순서로 나와요 · 최소 1개</span>
+              미니 게임 고르기 <span className="text-[11px] text-white/45 light:text-slate-400">안 고르면 🎲 랜덤 · 누르면 그 게임만</span>
               <div className="grid grid-cols-2 gap-1.5">
-                {MINI_IDS.map((m) => {
-                  const on = options.minis.includes(m);
+                {[null, ...MINI_IDS].map((m) => {
+                  // 하나만 고른다 — 다시 누르거나 🎲를 누르면 랜덤(8종 전부에서 무작위 순서)
+                  const random = options.minis.length !== 1;
+                  const on = m === null ? random : !random && options.minis[0] === m;
                   return (
                     <button
-                      key={m}
+                      key={m ?? "random"}
                       type="button"
                       aria-pressed={on}
-                      onClick={() => setOpt("minis", on ? (options.minis.length > 1 ? options.minis.filter((x) => x !== m) : options.minis) : MINI_IDS.filter((x) => x === m || options.minis.includes(x)))}
-                      className={`flex flex-col items-start rounded-xl border-2 px-3 py-2 text-left transition ${on ? "border-fuchsia-400/60 bg-fuchsia-400/10" : "border-white/10 opacity-60 hover:border-white/30 light:border-slate-200"}`}
+                      onClick={() => setOpt("minis", m === null || on ? MINI_IDS : [m])}
+                      className={`flex flex-col items-start rounded-xl border-2 px-3 py-2 text-left transition ${m === null ? "col-span-2" : ""} ${on ? "border-fuchsia-400/60 bg-fuchsia-400/10" : "border-white/10 opacity-60 hover:border-white/30 light:border-slate-200"}`}
                     >
                       <span className="text-sm font-black text-white light:text-slate-900">
-                        {MINI_INFO[m].emoji} {MINI_INFO[m].name} {on && "✓"}
+                        {m === null ? "🎲 랜덤" : `${MINI_INFO[m].emoji} ${MINI_INFO[m].name}`} {on && "✓"}
                       </span>
-                      <span className="break-keep text-[11px] leading-snug text-white/55 light:text-slate-500">{MINI_INFO[m].short}</span>
+                      <span className="break-keep text-[11px] leading-snug text-white/55 light:text-slate-500">{m === null ? "8가지 게임이 무작위 순서로 나와요" : MINI_INFO[m].short}</span>
                     </button>
                   );
                 })}
               </div>
-              <button type="button" onClick={() => setOpt("minis", MINI_IDS)} className="self-start text-[11px] font-semibold text-sky-300 underline light:text-sky-700">
-                전부 고르기
-              </button>
             </div>
             <OptionRow label="미니 게임 수" value={options.rounds} options={ROUND_OPTIONS.map((r) => ({ value: r as number, label: `${r}개` }))} onChange={(v) => setOpt("rounds", v)} />
             <OptionRow label="길이 (게임당 문제 수)" value={options.length} options={LENGTH_OPTIONS.map((o) => ({ value: o.value, label: o.label }))} onChange={(v) => setOpt("length", v)} />
             <OptionRow label="문제 난이도" value={levelOf(options)} options={LEVEL_OPTIONS.map((o) => ({ value: o.value, label: o.label }))} onChange={(v) => setOpt("level", v)} />
             <span className="-mt-2 break-keep text-[11px] text-white/45 light:text-slate-400">{LEVEL_OPTIONS.find((o) => o.value === levelOf(options))?.hint}</span>
-            {options.rounds > options.minis.length && <span className="text-[11px] text-amber-300 light:text-amber-700">고른 종류가 {options.minis.length}개라 같은 게임이 다시 나와요(문제는 겹치지 않아요)</span>}
+            {options.minis.length === 1 && options.rounds > 1 && <span className="text-[11px] text-amber-300 light:text-amber-700">{MINI_INFO[options.minis[0]].name}만 {options.rounds}번 이어서 해요(문제는 겹치지 않아요)</span>}
           </>
         )}
         {formError && <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300 light:bg-rose-50 light:text-rose-700">{formError}</p>}
@@ -1066,7 +1065,10 @@ export default function QPlayGame({ onComplete }: PlayableGameProps) {
             </button>
             {roomMinis && (
               <div className="flex max-w-sm flex-wrap justify-center gap-1 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 light:border-slate-200 light:bg-slate-50">
-                {roomMinis.map((m) => (
+                {roomMinis.length === MINI_IDS.length && (
+                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-bold text-white/80 light:bg-white light:text-slate-700">🎲 랜덤 (8종)</span>
+                )}
+                {roomMinis.length !== MINI_IDS.length && roomMinis.map((m) => (
                   <span key={m} className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-bold text-white/80 light:bg-white light:text-slate-700">
                     {MINI_INFO[m].emoji} {MINI_INFO[m].name}
                   </span>
