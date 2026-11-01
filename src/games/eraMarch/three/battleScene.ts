@@ -247,7 +247,7 @@ class ParticlePool {
 
 /* ── projectiles ─────────────────────────────────────────────────────── */
 
-type ProjStyle = "stone" | "arrow" | "bullet" | "bomb" | "orb" | "heal" | "beam" | "zapbeam" | "rock" | "shell";
+type ProjStyle = "stone" | "arrow" | "bullet" | "bomb" | "orb" | "heal" | "beam" | "zapbeam" | "rock" | "shell" | "boulder";
 
 interface Proj {
   style: ProjStyle;
@@ -269,6 +269,7 @@ const FX_STYLE: Partial<Record<Fx, ProjStyle>> = {
   heal: "heal",
   rail: "beam",
   zap: "zapbeam",
+  boulder: "boulder",
 };
 
 interface Ring {
@@ -582,6 +583,7 @@ export class BattleScene {
     add("beam", new THREE.BoxGeometry(1, 0.12, 0.12), glow("#c4b5fd"), 30);
     add("zapbeam", new THREE.BoxGeometry(1, 0.1, 0.1), glow("#a5f3fc"), 60);
     add("rock", new THREE.DodecahedronGeometry(1.0, 0), new THREE.MeshLambertMaterial({ color: "#78716c", flatShading: true }), 20);
+    add("boulder", new THREE.DodecahedronGeometry(0.42, 0), new THREE.MeshLambertMaterial({ color: "#8b8f86", flatShading: true }), 30);
     add("shell", new THREE.IcosahedronGeometry(0.45, 1), new THREE.MeshStandardMaterial({ color: "#111827", roughness: 0.3, metalness: 0.6 }), 20);
   }
 
@@ -739,7 +741,7 @@ export class BattleScene {
           const b = new THREE.Vector3(W(e.to), toY, e.base ? 0 : fromZ * 0.5);
           if (style) {
             const dur = (e.ticks * TICK_MS) / 1000;
-            const arc = style === "stone" || style === "bomb" ? Math.abs(a.x - b.x) * 0.22 + 1 : style === "arrow" ? Math.abs(a.x - b.x) * 0.1 : 0;
+            const arc = style === "stone" || style === "bomb" || style === "boulder" ? Math.abs(a.x - b.x) * 0.22 + 1 : style === "arrow" ? Math.abs(a.x - b.x) * 0.1 : 0;
             if (style === "beam" || style === "zapbeam") this.projs.push({ style, a, b, t0: now, dur: 0.16, arc: 0 });
             else this.projs.push({ style, a, b, t0: now, dur, arc });
           }
@@ -899,6 +901,12 @@ export class BattleScene {
       case "rail":
         this.burst(this.sparks, x, y, z, 10, 5, 0, 0.1, 0.3, fx === "rail" ? "#c4b5fd" : "#67e8f9", 4);
         this.ring(x, y, z, 0.2, 1.4, 0.25, fx === "rail" ? "#a78bfa" : "#22d3ee", 0.9, true);
+        break;
+      case "boulder":
+        this.burst(this.debris, x, 0.5, z, 12, 5, 12, 0.16, 0.9, "#8b8f86", 6);
+        this.burst(this.smoke, x, 0.6, z, 7, 2.2, -0.8, 0.6, 1.3, "#b8a98a", 1.4);
+        this.ring(x, 0.15, z, 0.4, 3.2, 0.4, "#e7d8b0", 0.8);
+        this.kick(0.12);
         break;
       case "heal":
         break;

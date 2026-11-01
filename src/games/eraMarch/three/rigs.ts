@@ -28,7 +28,7 @@ const TEAM_DARK: [string, string] = ["#1e40af", "#991b1b"];
 
 export type PartKey = "body" | "legs" | "armL" | "armR" | "cape" | "fleg" | "bleg" | "wheel" | "rotor" | "barrel";
 /** How the arms fight. */
-export type Weapon = "swing" | "thrust" | "bow" | "gun" | "sling" | "throw" | "heal" | "none";
+export type Weapon = "swing" | "thrust" | "bow" | "gun" | "sling" | "throw" | "heal" | "drum" | "none";
 /** How the whole body moves. */
 export type Frame = "human" | "mount" | "vehicle" | "drone";
 
@@ -51,6 +51,8 @@ export interface Rig {
   heavy: number;
   /** Hand to swing a shield with. */
   shield: boolean;
+  /** A vehicle that rams in melee (lunges on its blows); ranged ones only recoil. */
+  ram: boolean;
 }
 
 type V3 = [number, number, number];
@@ -172,7 +174,7 @@ const LEATHER = "#4a3424";
 const WOOD = "#7c5a35";
 
 type Head = "band" | "helm" | "crest" | "hood" | "tricorn" | "bearskin" | "bandana" | "brodie" | "cap" | "visor" | "robot" | "fur";
-type Gear = "club" | "sling" | "sword" | "cutlass" | "spear" | "bow" | "musket" | "rifle" | "bayonet" | "bomb" | "blade" | "rail" | "none";
+type Gear = "club" | "sling" | "sword" | "cutlass" | "spear" | "bow" | "musket" | "rifle" | "bayonet" | "bomb" | "blade" | "rail" | "staff" | "holy" | "stick" | "kit" | "nano" | "boulder" | "none";
 
 interface HumanOpt {
   skin?: string;
@@ -252,12 +254,23 @@ function human(b: RigBuilder, o: HumanOpt) {
       b.box(S(th + 0.01), S(h + 0.02), S(0.05), "#d4a017", [HL[0] + S(0.14), HL[1] + S(0.06), HL[2] - S(0.04) - S(w / 2)], { flat: true });
     }
   }
+  if (o.gear === "stick") weapon(b, "stick", HL, S);
   if (o.gear === "bow") {
     b.add(new THREE.TorusGeometry(S(0.52), S(0.028), 4, 14, Math.PI), "#7c4a1e", [HL[0], HL[1] + S(0.5), HL[2]], { rot: [0, 0, Math.PI] });
     b.box(S(1.04), S(0.012), S(0.012), "#f5f5f4", [HL[0], HL[1] + S(0.5), HL[2]], { flat: true });
   }
   b.part("body");
 
+  if (o.gear === "stick") {
+    b.cyl(S(0.3), S(0.3), S(0.34), "#b45309", P(0.36, 0.98, 0), { rot: [Math.PI / 2, 0, 0] }, 14);
+    b.cyl(S(0.31), S(0.31), S(0.05), "", P(0.36, 0.98, 0.16), { rot: [Math.PI / 2, 0, 0], team: true }, 14);
+    b.cyl(S(0.31), S(0.31), S(0.05), "", P(0.36, 0.98, -0.16), { rot: [Math.PI / 2, 0, 0], team: true }, 14);
+    b.cyl(S(0.29), S(0.29), S(0.36), "#f5f5f4", P(0.37, 0.98, 0), { rot: [Math.PI / 2, 0, 0], flat: true }, 14);
+  }
+  if (o.gear === "kit") {
+    b.box(S(0.04), S(0.14), S(0.04), "#16a34a", P(0.23, 1.22, 0), { flat: true });
+    b.box(S(0.04), S(0.04), S(0.14), "#16a34a", P(0.23, 1.22, 0), { flat: true });
+  }
   // right arm + weapon
   b.part("armR", [P(0, 1.42, 0.39)]);
   arm(b, P, S, 0.39, o.top, skin, false);
@@ -400,9 +413,84 @@ function weapon(b: RigBuilder, gear: Gear, H: V3, S: (n: number) => number) {
       b.box(S(0.05), S(0.9), S(0.05), "#a78bfa", at(-0.42, 0.09), { glow: true });
       b.rbox(S(0.22), S(0.22), S(0.22), "#64748b", at(0.1), undefined, S(0.05));
       break;
+    case "staff":
+      b.cyl(S(0.035), S(0.045), S(1.6), WOOD, at(-0.15));
+      b.ball(S(0.12), "#e7e5e4", at(-0.98), undefined, 1);
+      b.ball(S(0.09), "#4ade80", at(-1.08), { glow: true }, 1);
+      b.cone(S(0.03), S(0.25), "", at(-0.9, 0.08), { rot: [0, 0, 2.4], team: true }, 4);
+      break;
+    case "holy":
+      b.cyl(S(0.03), S(0.03), S(1.55), "#d4a017", at(-0.15), { flat: true });
+      b.add(new THREE.TorusGeometry(S(0.14), S(0.025), 5, 12), "#d4a017", at(-1.02), { flat: true });
+      b.ball(S(0.08), "#fef08a", at(-1.02), { glow: true }, 1);
+      break;
+    case "stick":
+      b.cyl(S(0.02), S(0.025), S(0.4), WOOD, at(-0.18));
+      b.ball(S(0.045), "#f5f5f4", at(-0.38), { flat: true }, 1);
+      break;
+    case "kit":
+      b.rbox(S(0.16), S(0.3), S(0.26), "#f5f5f4", at(-0.16), undefined, S(0.03));
+      b.box(S(0.17), S(0.16), S(0.05), "#16a34a", at(-0.16), { flat: true });
+      b.box(S(0.17), S(0.05), S(0.16), "#16a34a", at(-0.16), { flat: true });
+      break;
+    case "nano":
+      b.rbox(S(0.07), S(0.5), S(0.07), "#e2e8f0", at(-0.2), undefined, S(0.02));
+      b.add(new THREE.TorusGeometry(S(0.12), S(0.02), 5, 12), "#4ade80", at(-0.5), { glow: true });
+      b.ball(S(0.06), "#86efac", at(-0.5), { glow: true }, 1);
+      break;
+    case "boulder":
+      b.add(new THREE.DodecahedronGeometry(S(0.32), 0), "#8b8f86", at(-0.22));
+      b.add(new THREE.DodecahedronGeometry(S(0.14), 0), "#7a7d74", at(-0.28, 0.16, 0.08));
+      break;
     case "none":
       break;
   }
+}
+
+/** Wheeled or hovering artillery; the barrel part recoils. */
+function artillery(b: RigBuilder, kind: "ballista" | "fieldgun" | "howitzer" | "plasmagun") {
+  b.part("body");
+  if (kind === "ballista") {
+    b.rbox(1.7, 0.36, 1.1, WOOD, [0, 0.72, 0], undefined, 0.05);
+    b.rbox(1.74, 0.08, 1.14, "", [0, 0.92, 0], { team: true }, 0.02);
+    for (const z of [-0.45, 0.45]) b.box(0.12, 0.5, 0.12, WOOD, [0.2, 1.1, z]);
+    flag(b, -0.75, 0.9, 0.4, 0.8);
+    wheels(b, [-0.5, 0.5], 0.62, 0.4, "#5b3a1e", "#d4a017", true);
+    b.part("barrel", [[0.1, 1.36, 0]]);
+    b.rbox(1.7, 0.13, 0.16, "#8b6b45", [0.1, 1.36, 0], undefined, 0.03);
+    for (const z of [-1, 1]) b.cyl(0.04, 0.05, 0.85, "#6b4423", [0.75, 1.38, z * 0.38], { rot: [z * 1.1, 0, 0] });
+    b.box(0.02, 0.02, 1.4, "#f5f5f4", [0.45, 1.38, 0], { flat: true });
+    b.cyl(0.03, 0.03, 1.2, WOOD, [0.45, 1.46, 0], { rot: [0, 0, Math.PI / 2] });
+    b.cone(0.06, 0.2, STEEL, [1.12, 1.46, 0], { rot: [0, 0, -Math.PI / 2] }, 4);
+  } else if (kind === "fieldgun") {
+    b.rbox(1.5, 0.22, 0.42, "#5b3a1e", [-0.55, 0.52, 0], { rot: [0, 0, 0.32] }, 0.04);
+    b.rbox(0.5, 0.36, 0.9, "#6b4423", [0.05, 0.92, 0], undefined, 0.05);
+    b.rbox(0.52, 0.08, 0.92, "", [0.05, 1.12, 0], { team: true }, 0.02);
+    wheels(b, [0.05], 0.62, 0.62, "#5b3a1e", "#d4a017", true);
+    b.part("barrel", [[0.1, 1.2, 0]]);
+    b.cyl(0.13, 0.17, 1.6, "#1f2937", [0.55, 1.22, 0], { rot: [0, 0, -Math.PI / 2] }, 12);
+    b.cyl(0.19, 0.19, 0.1, "#d4a017", [1.33, 1.22, 0], { rot: [0, 0, Math.PI / 2], flat: true }, 12);
+    b.ball(0.18, "#1f2937", [-0.25, 1.22, 0], undefined, 1);
+  } else if (kind === "howitzer") {
+    b.rbox(2.2, 0.5, 1.4, "#57534e", [0, 0.8, 0], undefined, 0.1);
+    b.rbox(2.24, 0.12, 1.44, "", [0, 1.08, 0], { team: true }, 0.04);
+    b.rbox(0.12, 0.9, 1.3, "#6b7280", [0.75, 1.45, 0], { rot: [0, 0, -0.2] }, 0.04);
+    wheels(b, [-0.7, 0.7], 0.72, 0.4, "#1c1917", "#44403c");
+    b.part("barrel", [[0.0, 1.5, 0]]);
+    b.rbox(0.8, 0.5, 0.7, "#6b7280", [0.0, 1.5, 0], undefined, 0.08);
+    b.cyl(0.14, 0.17, 2.2, "#3f3f46", [0.95, 2.0, 0], { rot: [0, 0, -Math.PI / 2 + 0.45] }, 12);
+    b.cyl(0.2, 0.2, 0.18, "#27272a", [1.95, 2.48, 0], { rot: [0, 0, -Math.PI / 2 + 0.45] }, 12);
+  } else {
+    b.rbox(2.4, 0.55, 1.6, "#cbd5e1", [0, 1.0, 0], undefined, 0.22);
+    b.rbox(2.44, 0.12, 1.64, "", [0, 1.2, 0], { team: true }, 0.05);
+    b.rbox(2.0, 0.1, 1.3, "#a78bfa", [0, 0.68, 0], { glow: true }, 0.05);
+    b.part("barrel", [[-0.1, 1.6, 0]]);
+    b.rbox(1.0, 0.55, 0.9, "#94a3b8", [-0.1, 1.6, 0], undefined, 0.15);
+    b.cyl(0.12, 0.16, 2.0, "#475569", [1.0, 1.66, 0], { rot: [0, 0, -Math.PI / 2] }, 12);
+    for (let i = 0; i < 3; i++) b.cyl(0.2, 0.2, 0.07, "#c4b5fd", [0.55 + i * 0.45, 1.66, 0], { rot: [0, 0, Math.PI / 2], glow: true }, 12);
+    b.ball(0.12, "#e9d5ff", [2.02, 1.66, 0], { glow: true }, 1);
+  }
+  b.part("body");
 }
 
 /* ── mounts / vehicles ───────────────────────────────────────────────── */
@@ -452,7 +540,9 @@ function flag(b: RigBuilder, x: number, y: number, z: number, h = 1.2) {
 
 /* ── the roster ──────────────────────────────────────────────────────── */
 
-type Spec = { build: (b: RigBuilder) => void; height: number; frame: Frame; weapon: Weapon; hipY: number; heavy?: number; shield?: boolean };
+type Spec = { build: (b: RigBuilder) => void; height: number; frame: Frame; weapon: Weapon; hipY: number; heavy?: number; shield?: boolean; ram?: boolean };
+
+const ART = (kind: "ballista" | "fieldgun" | "howitzer" | "plasmagun", height: number): Spec => ({ build: (b) => artillery(b, kind), height, frame: "vehicle", weapon: "none", hipY: 1.0, heavy: 1.2 });
 
 const H = (o: HumanOpt, weaponStyle: Weapon, height = 2.15, extra?: Partial<Spec>): Spec => ({
   build: (b) => human(b, o),
@@ -541,6 +631,7 @@ const SPECS: Record<UnitKind, Spec> = {
     frame: "vehicle",
     weapon: "none",
     hipY: 1.0,
+    ram: true,
   },
   automaton: H({ top: "#b08d57", legs: "#8a6d3b", head: "robot", gear: "bayonet", skin: "#a3a3a3", pads: "brass", scale: 0.95 }, "thrust"),
   steamtank: {
@@ -585,6 +676,7 @@ const SPECS: Record<UnitKind, Spec> = {
     frame: "vehicle",
     weapon: "none",
     hipY: 1.0,
+    ram: true,
   },
   drone: {
     build: (b) => {
@@ -603,6 +695,16 @@ const SPECS: Record<UnitKind, Spec> = {
     weapon: "heal",
     hipY: 2.0,
   },
+  shaman: H({ top: "#6b4a2b", legs: "#4a3424", head: "fur", gear: "staff", skin: SKIN[3], pads: "fur", cape: true }, "heal"),
+  ogre: H({ top: "#6b5a3a", legs: "#4a3424", head: "band", gear: "boulder", skin: "#a3b18a", pads: "fur", scale: 1.42 }, "throw", 2.15, { heavy: 1.3 }),
+  priest: H({ top: "#f5f5f4", legs: "#e7e5e4", head: "hood", gear: "holy", pads: "team", cape: true }, "heal"),
+  ballista: ART("ballista", 2.0),
+  drummer: H({ top: "#1e3a5f", legs: "#e5e7eb", head: "tricorn", gear: "stick", pads: "brass" }, "drum"),
+  fieldgun: ART("fieldgun", 2.0),
+  medic: H({ top: "#f5f5f4", legs: "#4a5a2a", head: "cap", gear: "kit", pads: "team" }, "heal"),
+  howitzer: ART("howitzer", 2.8),
+  android: H({ top: "#e2e8f0", legs: "#64748b", head: "robot", gear: "nano", skin: "#cbd5e1", pads: "steel" }, "heal", 2.3),
+  plasmagun: ART("plasmagun", 2.4),
   colossus: {
     build: (b) => {
       human(b, { top: "#64748b", legs: "#334155", head: "visor", gear: "blade", skin: "#94a3b8", scale: 2.0, pads: "steel", cape: true });
@@ -629,7 +731,7 @@ export function unitRig(kind: UnitKind, side: 0 | 1): Rig {
     const spec = SPECS[kind];
     const b = new RigBuilder(side);
     spec.build(b);
-    rig = b.build({ height: spec.height, frame: spec.frame, weapon: spec.weapon, hipY: spec.hipY, heavy: spec.heavy ?? 1, shield: !!spec.shield });
+    rig = b.build({ height: spec.height, frame: spec.frame, weapon: spec.weapon, hipY: spec.hipY, heavy: spec.heavy ?? 1, shield: !!spec.shield, ram: !!spec.ram });
     cache.set(key, rig);
   }
   return rig;

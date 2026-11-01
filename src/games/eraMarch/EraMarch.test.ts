@@ -191,3 +191,30 @@ describe("era march rigs + combat motion", async () => {
     expect(dead.bob).toBeLessThan(-0.5); // lies on the ground, not floating
   });
 });
+
+describe("era march strategy shop", async () => {
+  const data = await import("./data");
+  it("plans and items apply at the start", () => {
+    const s = startGame(9, [{ plan: "fortress", items: ["tower", "veterans", "vault"] }, { plan: "blitz", items: ["warmup"] }]);
+    const [a, b] = s.players;
+    expect(a.slots).toBe(2);
+    expect(a.turrets[0]?.kind).toBe("rock");
+    expect(a.queue.filter((q) => q.free).length).toBe(3);
+    expect(a.gold).toBe(175 + 90);
+    expect(a.baseMax).toBeGreaterThan(ERAS[0].baseHp);
+    expect(b.gold).toBe(175 + 150);
+    expect(b.specialCd).toBe(0);
+  });
+  it("a free vanguard gives no refund when cancelled", () => {
+    const s = startGame(9, [{ plan: "merchant", items: ["veterans"] }, data.DEFAULT_LOADOUT]);
+    const before = s.players[0].gold;
+    stepGame(s, [{ side: 0, cmd: { t: "cancel", index: 2 } }]);
+    expect(s.players[0].gold).toBe(before);
+  });
+  it("sanitizes shop input to the budget", () => {
+    const l = data.sanitizeLoadout({ plan: "nope", items: ["bonds", "armor", "drill", "vault", "vault", "hack"] });
+    expect(l.plan).toBe(data.DEFAULT_LOADOUT.plan);
+    expect(data.loadoutCost(l.items)).toBeLessThanOrEqual(data.SHOP_BUDGET);
+    expect(new Set(l.items).size).toBe(l.items.length);
+  });
+});

@@ -13,7 +13,7 @@
  * Its own rng lives in BotMemory so bots never consume `state.rng`.
  */
 
-import { BEATS, DOCTRINES, ERA_DOCTRINES, ERA_TURRETS, ERAS, LANE, POP_CAP, SLOT_COST, TURRETS, UNITS, type DoctrineId, type Role, type UnitKind } from "./data";
+import { BEATS, DOCTRINES, ERA_DOCTRINES, ERA_TURRETS, ERAS, ITEM_IDS, ITEMS, LANE, PLAN_COMBOS, PLAN_IDS, POP_CAP, SHOP_BUDGET, SLOT_COST, TURRETS, UNITS, type DoctrineId, type ItemId, type Loadout, type Role, type UnitKind } from "./data";
 import { commandError, evolveCost, nextEra, popOf, progress, rosterOf, type Command, type EraMarchState, type Side } from "./engine";
 
 export type AiLevel = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
@@ -53,6 +53,23 @@ function rand(m: BotMemory): number {
 }
 
 const ROLES: Role[] = ["melee", "ranged", "charge"];
+
+/** The bot's shop pick: a random plan; Lv.5+ buys that plan's suggested combo, lower levels shop at random. */
+export function botLoadout(level: AiLevel, seed: number): Loadout {
+  const m = newBotMemory(seed ^ 0x2545f491);
+  const plan = PLAN_IDS[Math.floor(rand(m) * PLAN_IDS.length)];
+  if (level >= 5) return { plan, items: [...PLAN_COMBOS[plan]] };
+  const pool = [...ITEM_IDS].sort(() => rand(m) - 0.5);
+  const items: ItemId[] = [];
+  let left = SHOP_BUDGET;
+  for (const i of pool) {
+    if (ITEMS[i].cost <= left && rand(m) < 0.7) {
+      items.push(i);
+      left -= ITEMS[i].cost;
+    }
+  }
+  return { plan, items };
+}
 
 /** Which role answers `r` (the one that beats it). */
 function counterOf(r: Role): Role {

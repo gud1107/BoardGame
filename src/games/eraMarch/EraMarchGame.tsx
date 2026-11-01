@@ -5,8 +5,9 @@ import type { PlayableGameProps } from "../types";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import { recordMatchStat } from "@/lib/stats/playerStats";
 import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
-import { AI_LEVEL_INFO, sanitizeAiLevel, type AiLevel } from "./ai";
-import { DOCTRINES, ERAS, SPECIALS } from "./data";
+import { AI_LEVEL_INFO, botLoadout, sanitizeAiLevel, type AiLevel } from "./ai";
+import { DOCTRINES, ERAS, SPECIALS, type Loadout } from "./data";
+import ShopPhase from "./ShopPhase";
 import EraMarchBoard, { type MatchSummary } from "./EraMarchBoard";
 import EraMarchOnline, { type OnlineResult } from "./EraMarchOnline";
 import { SoloDriver } from "./driver";
@@ -62,7 +63,8 @@ export default function EraMarchGame({ participants, onComplete }: PlayableGameP
     const code = roomFromUrl();
     return code ? { intent: "join", code } : null;
   });
-  const [screen, setScreen] = useState<"menu" | "playing" | "results">("menu");
+  const [screen, setScreen] = useState<"menu" | "shop" | "playing" | "results">("menu");
+  const [shopLevel, setShopLevel] = useState<AiLevel>(3);
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   const [wins, setWins] = useState<Record<number, number>>(loadWins);
   const [run, setRun] = useState<{ n: number; level: AiLevel; driver: SoloDriver | null }>({ n: 0, level: 3, driver: null });
@@ -92,13 +94,20 @@ export default function EraMarchGame({ participants, onComplete }: PlayableGameP
     } catch {}
   };
 
-  const start = (level: AiLevel = prefs.level) => {
+  /** Every match starts in the 🛒 strategy shop. */
+  const openShop = (level: AiLevel = prefs.level) => {
     unlockAudio();
     if (level !== prefs.level) savePrefs({ ...prefs, level });
+    setShopLevel(level);
+    setScreen("shop");
+  };
+
+  const start = (level: AiLevel, mine: Loadout) => {
     trackGameEvent(GAME_ID, "game_start", { isHost: true });
     const seed = Math.floor(Math.random() * 2_000_000_000);
     const me = participants[0]?.name || "나";
-    setRun((r) => ({ n: r.n + 1, level, driver: new SoloDriver(seed, level, me, AI_LEVEL_INFO[level].label) }));
+    const bot = botLoadout(level, seed);
+    setRun((r) => ({ n: r.n + 1, level, driver: new SoloDriver(seed, level, me, AI_LEVEL_INFO[level].label, [mine, bot]) }));
     setScreen("playing");
   };
 
@@ -157,6 +166,14 @@ export default function EraMarchGame({ participants, onComplete }: PlayableGameP
     );
   }
 
+  if (screen === "shop") {
+    return (
+      <div className="mx-auto w-full max-w-3xl">
+        <ShopPhase opponent={AI_LEVEL_INFO[shopLevel].label} onConfirm={(l) => start(shopLevel, l)} onBack={() => setScreen("menu")} />
+      </div>
+    );
+  }
+
   if (screen === "playing" && run.driver) {
     return (
       <>
@@ -183,9 +200,9 @@ export default function EraMarchGame({ participants, onComplete }: PlayableGameP
           </div>
           {result.doctrines.length > 0 && <div className="mt-3 text-sm text-white/70">교리: {result.doctrines.map((d) => `${DOCTRINES[d].emoji} ${DOCTRINES[d].name}`).join(" · ")}</div>}
           <div className="mt-4 flex flex-wrap justify-center gap-2">
-            <button onClick={() => start(result.level)} className="rounded-xl bg-amber-500 px-5 py-2 font-black text-black">재대결</button>
+            <button onClick={() => openShop(result.level)} className="rounded-xl bg-amber-500 px-5 py-2 font-black text-black">재대결</button>
             {result.won && result.level < 10 && (
-              <button onClick={() => start((result.level + 1) as AiLevel)} className="rounded-xl bg-emerald-500 px-5 py-2 font-black text-black">다음 레벨 ▶ Lv.{result.level + 1}</button>
+              <button onClick={() => openShop((result.level + 1) as AiLevel)} className="rounded-xl bg-emerald-500 px-5 py-2 font-black text-black">다음 레벨 ▶ Lv.{result.level + 1}</button>
             )}
             <button onClick={() => setScreen("menu")} className="rounded-xl bg-white/10 px-5 py-2 font-bold">메뉴</button>
             <button onClick={finish} className="rounded-xl bg-white/10 px-5 py-2 font-bold">나가기</button>
@@ -241,7 +258,7 @@ export default function EraMarchGame({ participants, onComplete }: PlayableGameP
               </label>
               <button onClick={() => setRules(true)} className="rounded-lg bg-white/10 px-3 py-1.5 font-bold light:bg-slate-100">📖 룰북</button>
             </div>
-            <button onClick={() => start()} className="mt-4 w-full rounded-xl bg-gradient-to-b from-amber-300 to-amber-500 py-3 text-lg font-black text-black shadow-lg active:scale-[0.99]">
+            <button onClick={() => openShop()} className="mt-4 w-full rounded-xl bg-gradient-to-b from-amber-300 to-amber-500 py-3 text-lg font-black text-black shadow-lg active:scale-[0.99]">
               ⚔️ {AI_LEVEL_INFO[prefs.level].label}와 전투 시작
             </button>
             <div className="mt-2 grid grid-cols-2 gap-2">
@@ -255,7 +272,7 @@ export default function EraMarchGame({ participants, onComplete }: PlayableGameP
           </div>
 
           <div className="grid gap-2 text-sm sm:grid-cols-3">
-            <Tip title="상성 삼각형" body="⚔ 근접 ▶ 🐎 돌격 ▶ 🏹 원거리 ▶ ⚔ 근접. 유리하면 피해 ×1.5, 불리하면 ×0.75. 버튼의 ‘상성 추천’ 표시를 보세요." />
+            <Tip title="🛒 전략 상점" body="매 판 시작 전 지휘 노선(철벽·돌격·학자·상인) 1개와 ★5 준비물을 골라요. 상대 전략은 카운트다운에 공개!" />
             <Tip title="전선 수입" body="내 최전방이 중앙선을 넘어 100 전진할 때마다 초당 골드 +1 (최대 +4). 밀어붙일수록 부자가 됩니다." />
             <Tip title="역전 장치" body="나보다 높은 시대 유닛을 잡으면 보상 ×1.5, 뒤처진 시대는 진화 비용 30% 할인, 기지 근처에선 포탑 +30%." />
           </div>

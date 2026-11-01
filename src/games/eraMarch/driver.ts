@@ -11,7 +11,7 @@
  */
 
 import { botThink, newBotMemory, type AiLevel, type BotMemory } from "./ai";
-import { TICK_MS } from "./data";
+import { TICK_MS, type Loadout } from "./data";
 import { startGame, stepGame, type Command, type EraMarchState, type SeatCommand, type Side } from "./engine";
 
 export interface TickHooks {
@@ -41,8 +41,8 @@ export class SoloDriver implements MatchDriver {
   private pending: Command[] = [];
   private mem: BotMemory;
 
-  constructor(seed: number, private level: AiLevel, myName: string, foeName: string) {
-    this.s = startGame(seed);
+  constructor(seed: number, private level: AiLevel, myName: string, foeName: string, loadouts?: readonly [Loadout, Loadout]) {
+    this.s = startGame(seed, loadouts);
     this.mem = newBotMemory(seed);
     this.names = [myName, foeName];
   }

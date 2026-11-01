@@ -184,8 +184,8 @@ export function unlockAudio() {
 /* ── event → cue mapping ─────────────────────────────────────────────── */
 
 const MELEE: Partial<Record<Fx, string>> = { club: "hit_blunt", gore: "hit_trample", trample: "hit_trample", ram: "hit_trample", sword: "hit_blade", blade: "hit_blade", bayonet: "hit_metal", zap: "hit_zap" };
-const FIRE: Partial<Record<Fx, string>> = { stone: "fire_sling", arrow: "fire_bow", musket: "fire_musket", rifle: "fire_rifle", shell: "fire_cannon", bomb: "fire_throw", plasma: "fire_plasma", rail: "fire_rail", heal: "heal", zap: "fire_tesla" };
-const IMPACT: Partial<Record<Fx, string>> = { arrow: "imp_arrow", stone: "imp_stone", musket: "imp_bullet", rifle: "imp_bullet", bomb: "boom", shell: "boom", plasma: "hit_zap", rail: "hit_zap", zap: "hit_zap" };
+const FIRE: Partial<Record<Fx, string>> = { stone: "fire_sling", arrow: "fire_bow", musket: "fire_musket", rifle: "fire_rifle", shell: "fire_cannon", bomb: "fire_throw", plasma: "fire_plasma", rail: "fire_rail", heal: "heal", zap: "fire_tesla", boulder: "fire_throw" };
+const IMPACT: Partial<Record<Fx, string>> = { arrow: "imp_arrow", stone: "imp_stone", musket: "imp_bullet", rifle: "imp_bullet", bomb: "boom", shell: "boom", plasma: "hit_zap", rail: "hit_zap", zap: "hit_zap", boulder: "boom" };
 
 /** Min ms between two plays of a cue. */
 const GAP: Record<string, number> = { hit: 55, fire: 60, impact: 70, death: 90, gold: 80, base_hit: 140, boom: 110, counter: 160, alarm: 6000, heal: 300 };

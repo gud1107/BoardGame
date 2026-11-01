@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
-import { BEATS, DOCTRINES, ERA_DOCTRINES, ERA_TURRETS, ERAS, LANE, POP_CAP, QUEUE_CAP, ROLE_ICON, ROLE_NAME, SELL_REFUND, SLOT_COST, SPECIALS, TICK_MS, TURRETS, UNITS, type DoctrineId, type Era, type Role, type TurretKind } from "./data";
+import { BEATS, DOCTRINES, ERA_DOCTRINES, ITEMS, PLANS, ERA_TURRETS, ERAS, LANE, POP_CAP, QUEUE_CAP, ROLE_ICON, ROLE_NAME, SELL_REFUND, SLOT_COST, SPECIALS, TICK_MS, TURRETS, UNITS, type DoctrineId, type Era, type Role, type TurretKind } from "./data";
 import { commandError, evolveCost, frontProgress, incomeOf, nextEra, popOf, progress, rosterOf, secondsLeft, specialCdMax, type Command, type EraMarchState, type FxEvent, type Side } from "./engine";
 import { EraMarchSound, eraSuite, playCue, unlockAudio } from "./eraMarchAudio";
 import type { MatchDriver } from "./driver";
@@ -74,11 +74,11 @@ export default function EraMarchBoard({ driver, reduceShake, subtitle, onEnd, on
   const [turretOpen, setTurretOpen] = useState(false);
   const [doctrinePick, setDoctrinePick] = useState<Era | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [countdown, setCountdown] = useState(3);
+  const [countdown, setCountdown] = useState(4);
   const [banner, setBanner] = useState<{ title: string; sub: string; color: string } | null>(null);
   const toastId = useRef(0);
   const endedRef = useRef(false);
-  const countRef = useRef(3);
+  const countRef = useRef(4);
   const audio = useAudioSettingsStore();
   const soundOn = !audio.masterMuted && !(audio.bgmMuted && audio.sfxMuted);
 
@@ -301,7 +301,7 @@ export default function EraMarchBoard({ driver, reduceShake, subtitle, onEnd, on
         }
         return;
       }
-      if (/^[1-5]$/.test(e.key)) {
+      if (/^[1-6]$/.test(e.key)) {
         const k = list[Number(e.key) - 1];
         if (k) send({ t: "train", kind: k });
       } else if (e.key === "q" || e.key === "Q") setTurretOpen((v) => !v);
@@ -421,8 +421,24 @@ export default function EraMarchBoard({ driver, reduceShake, subtitle, onEnd, on
           {banner.sub && <div className="mt-1 rounded-full bg-black/60 px-3 py-1 text-xs font-semibold sm:text-sm">{banner.sub}</div>}
         </div>
       )}
+      {countdown > 0 && (me.plan || foe.plan) && (
+        <div className="pointer-events-none absolute inset-x-0 top-[30%] flex items-stretch justify-center gap-2 px-3 sm:gap-4">
+          {[ME, FOE].map((side, i) => {
+            const pl = s.players[side];
+            const plan = pl.plan ? PLANS[pl.plan] : null;
+            return (
+              <div key={side} className={`em-reveal w-40 rounded-2xl border-2 bg-black/75 p-3 text-center shadow-2xl sm:w-56 ${i === 1 ? "[animation-delay:.35s]" : ""}`} style={{ borderColor: TEAM_HEX[side] }}>
+                <div className="truncate text-xs font-bold text-white/70">{driver.names[side]}</div>
+                <div className="text-4xl">{plan?.emoji ?? "⚔️"}</div>
+                <div className="font-black" style={{ color: plan?.color ? "#fde68a" : undefined }}>{plan?.name ?? "기본 전략"}</div>
+                <div className="mt-1 flex flex-wrap justify-center gap-1 text-lg">{pl.items.map((it) => <span key={it} title={ITEMS[it].name}>{ITEMS[it].emoji}</span>)}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
       {countdown > 0 && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div className="pointer-events-none absolute inset-x-0 top-[50%] flex items-center justify-center">
           <div key={countdown} className="em-count text-7xl font-black text-amber-200 drop-shadow-[0_4px_0_rgba(0,0,0,0.6)]">{countdown}</div>
         </div>
       )}
@@ -492,7 +508,7 @@ export default function EraMarchBoard({ driver, reduceShake, subtitle, onEnd, on
           </div>
 
           {/* unit + turret buttons */}
-          <div className="mt-1.5 grid grid-cols-5 gap-1.5">
+          <div className="mt-1.5 grid grid-cols-4 gap-1.5 sm:grid-cols-7">
             {roster.map((k, i) => {
               const d = UNITS[k];
               const afford = me.gold >= d.cost;
@@ -516,7 +532,7 @@ export default function EraMarchBoard({ driver, reduceShake, subtitle, onEnd, on
                 </button>
               );
             })}
-            {Array.from({ length: Math.max(0, 4 - roster.length) }, (_, i) => (
+            {Array.from({ length: Math.max(0, 6 - roster.length) }, (_, i) => (
               <div key={`e${i}`} className="flex flex-col items-center justify-center rounded-xl border border-dashed border-white/10 text-[9px] text-white/30">교리 유닛</div>
             ))}
             <button onClick={() => { setTurretOpen((v) => !v); playCue("click"); }} className={`flex flex-col items-center justify-center rounded-xl border px-1 py-1.5 ${turretOpen ? "border-amber-300 bg-amber-500/20" : "border-white/20 bg-white/10"}`} title="포탑 [Q]">
@@ -544,6 +560,8 @@ export default function EraMarchBoard({ driver, reduceShake, subtitle, onEnd, on
         .em-banner{animation:emBanner 2.3s ease-out both}
         @keyframes emBanner{0%{opacity:0;transform:scale(1.6)}12%{opacity:1;transform:scale(1)}80%{opacity:1}100%{opacity:0;transform:translateY(-16px)}}
         .em-count{animation:emCount .8s ease-out both}
+        .em-reveal{animation:emReveal .5s cubic-bezier(.2,1.4,.4,1) both}
+        @keyframes emReveal{0%{opacity:0;transform:translateY(24px) scale(.8) rotateY(80deg)}100%{opacity:1;transform:none}}
         @keyframes emCount{0%{opacity:0;transform:scale(2.2)}30%{opacity:1;transform:scale(1)}100%{opacity:.2;transform:scale(.8)}}
       `}</style>
     </div>
@@ -567,7 +585,7 @@ function BaseCard({ side, p, label, right }: { side: Side; p: EraMarchState["pla
         <span className="inline-block h-2.5 w-2.5 shrink-0" style={{ background: TEAM_HEX[side], clipPath: side === 0 ? "polygon(50% 0,100% 100%,0 100%)" : undefined }} />
         <span className="truncate">{label}</span>
         <span className="shrink-0 text-white/70">{era.emoji} <span className="hidden sm:inline">{era.name}</span></span>
-        <span className="shrink-0">{p.doctrines.map((d) => DOCTRINES[d].emoji).join("")}</span>
+        <span className="shrink-0" title={p.plan ? PLANS[p.plan].name : undefined}>{p.plan ? PLANS[p.plan].emoji : ""}{p.doctrines.map((d) => DOCTRINES[d].emoji).join("")}</span>
       </div>
       <div className="relative mt-1 h-3 overflow-hidden rounded-full bg-white/10">
         <div className={`absolute inset-y-0 rounded-full transition-[width] duration-200 ${right ? "right-0" : "left-0"}`} style={{ width: `${k * 100}%`, background: k > 0.5 ? TEAM_HEX[side] : k > 0.25 ? "#f59e0b" : "#dc2626" }} />

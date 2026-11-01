@@ -14,6 +14,12 @@
  * Within a tick every attack is decided first and all damage lands together,
  * so neither side wins simultaneous trades just by being processed first.
  *
+ * Pre-battle shop: each side's `Loadout` (a command plan + items, data.ts)
+ * is part of `startGame`, so it rides inside the state like everything else
+ * and the online replay stays deterministic. Plan/item effects are applied
+ * at start (gold, slots, turret, free vanguard) and through the modifier
+ * helpers below (speed, training, range, HP, income, XP, kill gold).
+ *
  * `stepGame` mutates the state in place (the board steps 20×/s and keeps
  * one live object); clone with `structuredClone` when a copy is needed.
  * `state.events` holds what happened in the last step — the 3D scene, the
@@ -56,6 +62,9 @@ import {
   UNITS,
   type DoctrineId,
   type Era,
+  type ItemId,
+  type Loadout,
+  type PlanId,
   type Fx,
   type Role,
   type TurretKind,
@@ -83,6 +92,8 @@ export interface QueueItem {
   kind: UnitKind;
   left: number;
   total: number;
+  /** Shop vanguard: no refund on cancel. */
+  free?: boolean;
 }
 
 export interface TurretSlot {
@@ -101,6 +112,9 @@ export interface PlayerStats {
 }
 
 export interface PlayerState {
+  /** Shop pick (null in tests / old states = no plan). */
+  plan: PlanId | null;
+  items: ItemId[];
   gold: number;
   xp: number;
   era: Era;
@@ -220,8 +234,10 @@ export function nextRandom(s: { rng: number }): number {
 
 /* ── setup ───────────────────────────────────────────────────────────── */
 
-function newPlayer(): PlayerState {
-  return {
+function newPlayer(loadout?: Loadout): PlayerState {
+  const p: PlayerState = {
+    plan: loadout?.plan ?? null,
+    items: loadout ? [...loadout.items] : [],
     gold: START_GOLD,
     xp: 0,
     era: 0,
@@ -231,18 +247,28 @@ function newPlayer(): PlayerState {
     slots: 1,
     specialCd: Math.round(SPECIAL_CD / 2),
     jammed: 0,
-    baseHp: ERAS[0].baseHp,
-    baseMax: ERAS[0].baseHp,
+    baseHp: 0,
+    baseMax: 0,
     stats: { trained: 0, kills: 0, lost: 0, goldEarned: 0, damage: 0, specials: 0 },
   };
+  p.baseMax = p.baseHp = baseHpFor(p, 0);
+  if (p.plan === "blitz") p.gold += 150;
+  if (p.plan === "scholar") p.gold -= 20;
+  if (p.plan === "fortress") p.slots = 2;
+  if (hasItem(p, "vault")) p.gold += 90;
+  if (hasItem(p, "warmup")) p.specialCd = 0;
+  if (hasItem(p, "tower")) p.turrets[0] = { kind: "rock", cd: 20, lastShot: -99 };
+  if (hasItem(p, "veterans")) for (let i = 0; i < 3; i++) p.queue.push({ kind: "club", left: 4 + i * 8, total: 4 + i * 8, free: true });
+  return p;
 }
 
-export function startGame(seed: number): EraMarchState {
+/** `loadouts` = the shop picks by side; omitted = no plan, no items. */
+export function startGame(seed: number, loadouts?: readonly [Loadout, Loadout]): EraMarchState {
   return {
     tick: 0,
     rng: seed | 0,
     nextId: 1,
-    players: [newPlayer(), newPlayer()],
+    players: [newPlayer(loadouts?.[0]), newPlayer(loadouts?.[1])],
     units: [],
     hits: [],
     strikes: [],
@@ -263,20 +289,44 @@ export const fromProgress = (side: Side, p: number) => (side === 0 ? p : LANE - 
 export const wallX = (side: Side) => (side === 0 ? BASE_FRONT : LANE - BASE_FRONT);
 
 export const has = (p: PlayerState, d: DoctrineId) => p.doctrines.includes(d);
+export const hasItem = (p: PlayerState, i: ItemId) => (p.items ?? []).includes(i);
+
+export function baseHpFor(p: PlayerState, era: Era): number {
+  const m = p.plan === "fortress" ? 1.15 : 1;
+  return Math.round(ERAS[era].baseHp * m);
+}
+
+/** Unit attack multiplier (plan). */
+export const atkMul = (p: PlayerState) => (p.plan === "blitz" ? 1.15 : 1);
+
+/** XP multiplier (plan). */
+export const xpMul = (p: PlayerState) => (p.plan === "scholar" ? 1.35 : 1);
+
+/** Spawn HP multiplier for this unit (doctrine + plan + items). */
+export function hpMul(p: PlayerState, kind: UnitKind): number {
+  let m = UNITS[kind].role === "charge" && has(p, "iron") ? 1.3 : 1;
+  if (hasItem(p, "armor")) m *= 1.08;
+  if (p.plan === "merchant") m *= 0.92;
+  return m;
+}
 
 export function unitRange(p: PlayerState, kind: UnitKind): number {
   const def = UNITS[kind];
-  return (def.role === "ranged" || def.role === "support") && has(p, "aim") ? def.range * 1.2 : def.range;
+  if (def.role !== "ranged" && def.role !== "support") return def.range;
+  return def.range * (has(p, "aim") ? 1.2 : 1) * (hasItem(p, "sharp") ? 1.1 : 1);
 }
 
 export function unitSpeed(p: PlayerState, kind: UnitKind): number {
   const def = UNITS[kind];
-  return def.role === "charge" && has(p, "chariot") ? def.speed * 1.25 : def.speed;
+  return def.speed * (def.role === "charge" && has(p, "chariot") ? 1.25 : 1) * (p.plan === "blitz" ? 1.15 : 1);
 }
 
 export function trainTicks(p: PlayerState, kind: UnitKind): number {
-  const t = UNITS[kind].trainTicks;
-  return has(p, "mass") ? Math.max(1, Math.round(t * 0.75)) : t;
+  let m = has(p, "mass") ? 0.75 : 1;
+  if (p.plan === "fortress") m *= 1.15;
+  if (p.plan === "blitz") m *= 0.8;
+  if (hasItem(p, "drill")) m *= 0.9;
+  return Math.max(1, Math.round(UNITS[kind].trainTicks * m));
 }
 
 export function specialCdMax(p: PlayerState): number {
@@ -303,7 +353,9 @@ export function frontIncome(s: EraMarchState, side: Side): number {
 }
 
 export function incomeOf(s: EraMarchState, side: Side): number {
-  return ERAS[s.players[side].era].income + frontIncome(s, side);
+  const p = s.players[side];
+  const m = 1 + (p.plan === "merchant" ? 0.15 : 0) + (hasItem(p, "bonds") ? 0.15 : 0);
+  return Math.round((ERAS[p.era].income + frontIncome(s, side)) * m * 10) / 10;
 }
 
 export function popOf(s: EraMarchState, side: Side): number {
@@ -322,7 +374,7 @@ export function evolveCost(s: EraMarchState, side: Side): number {
   const n = nextEra(p);
   if (n === null) return 0;
   const behind = s.players[side === 0 ? 1 : 0].era > p.era;
-  return Math.round(ERAS[n].goldCost * (behind ? CATCH_UP_DISCOUNT : 1));
+  return Math.round(ERAS[n].goldCost * (behind ? CATCH_UP_DISCOUNT : 1) * (p.plan === "scholar" ? 0.8 : p.plan === "blitz" ? 1.1 : 1));
 }
 
 /* ── command validation ──────────────────────────────────────────────── */
@@ -383,14 +435,16 @@ function applyCommand(s: EraMarchState, side: Side, c: Command) {
       p.gold -= UNITS[c.kind].cost;
       const total = trainTicks(p, c.kind);
       p.queue.push({ kind: c.kind, left: total, total });
-      p.xp += Math.round(UNITS[c.kind].cost * TRAIN_XP);
+      p.xp += Math.round(UNITS[c.kind].cost * TRAIN_XP * xpMul(p));
       s.events.push({ t: "train", side, kind: c.kind });
       return;
     }
     case "cancel": {
       const [q] = p.queue.splice(c.index, 1);
-      p.gold += UNITS[q.kind].cost;
-      p.xp = Math.max(0, p.xp - Math.round(UNITS[q.kind].cost * TRAIN_XP));
+      if (!q.free) {
+        p.gold += UNITS[q.kind].cost;
+        p.xp = Math.max(0, p.xp - Math.round(UNITS[q.kind].cost * TRAIN_XP * xpMul(p)));
+      }
       s.events.push({ t: "cancel", side });
       return;
     }
@@ -404,8 +458,8 @@ function applyCommand(s: EraMarchState, side: Side, c: Command) {
         doctrine = c.doctrine && pair.includes(c.doctrine) ? c.doctrine : pair[0];
         p.doctrines.push(doctrine);
       }
-      const gain = ERAS[n].baseHp - p.baseMax;
-      p.baseMax = ERAS[n].baseHp;
+      const gain = baseHpFor(p, n) - p.baseMax;
+      p.baseMax = baseHpFor(p, n);
       p.baseHp = Math.min(p.baseMax, p.baseHp + gain);
       p.specialCd = 0;
       // Queued old-era units still come out — they were paid for.
@@ -551,7 +605,7 @@ export function stepGame(s: EraMarchState, cmds: readonly SeatCommand[]): void {
     if (s.units.some((u) => u.side === side && progress(side, u.x) < SPAWN_X + ALLY_GAP)) continue;
     p.queue.shift();
     const def = UNITS[q.kind];
-    const hp = def.role === "charge" && has(p, "iron") ? Math.round(def.hp * 1.3) : def.hp;
+    const hp = Math.round(def.hp * hpMul(p, q.kind));
     const u: Unit = { id: s.nextId++, side, kind: q.kind, x: spawnX, hp, maxHp: hp, cd: Math.round(def.cdTicks * 0.4), stun: 0, lastAtk: -99, moving: false };
     s.units.push(u);
     p.stats.trained++;
@@ -612,14 +666,14 @@ export function stepGame(s: EraMarchState, cmds: readonly SeatCommand[]): void {
     const ranged = def.range > 30;
     if (ranged) {
       const ticks = Math.max(2, Math.ceil(Math.abs(tx - u.x) / PROJ_SPEED));
-      s.hits.push({ due: s.tick + ticks, side: u.side, target: target === "base" ? -1 : target.id, x: tx, dmg: def.atk, role: def.role, fx: def.fx, splash: def.splash ?? 0, siege: def.siege ?? 1, steal: def.steal ?? 0, kind: u.kind });
+      s.hits.push({ due: s.tick + ticks, side: u.side, target: target === "base" ? -1 : target.id, x: tx, dmg: Math.round(def.atk * atkMul(p)), role: def.role, fx: def.fx, splash: def.splash ?? 0, siege: def.siege ?? 1, steal: def.steal ?? 0, kind: u.kind });
       s.events.push({ t: "shot", side: u.side, from: u.x, to: tx, fx: def.fx, ticks, turret: -1, id: u.id, base: target === "base" });
     } else {
       s.events.push({ t: "swing", side: u.side, id: u.id, kind: u.kind });
-      if (target === "base") damageBase(s, foe, def.atk * (def.siege ?? 1), def.fx, u.side);
+      if (target === "base") damageBase(s, foe, def.atk * atkMul(p) * (def.siege ?? 1), def.fx, u.side);
       else {
-        hitUnit(s, dmgs, target, def.atk, def.role, u.side, def.fx);
-        if (def.splash) splashAround(s, dmgs, u.side, target.x, def.splash, def.atk * 0.5, def.role, def.fx, target);
+        hitUnit(s, dmgs, target, def.atk * atkMul(p), def.role, u.side, def.fx);
+        if (def.splash) splashAround(s, dmgs, u.side, target.x, def.splash, def.atk * atkMul(p) * 0.5, def.role, def.fx, target);
         if (def.steal) stealGold(s, u.side, def.steal, target.x);
       }
     }
@@ -643,7 +697,7 @@ export function stepGame(s: EraMarchState, cmds: readonly SeatCommand[]): void {
       const stand = dist <= LAST_STAND_RANGE ? LAST_STAND_MUL : 1;
       const from = fromProgress(side, 12);
       const ticks = Math.max(3, Math.ceil(Math.abs(nearest.x - from) / PROJ_SPEED));
-      s.hits.push({ due: s.tick + ticks, side, target: nearest.id, x: nearest.x, dmg: Math.round(def.dmg * stand), role: "turret", fx: def.fx, splash: def.splash ?? 0, siege: 1, steal: 0, kind: null });
+      s.hits.push({ due: s.tick + ticks, side, target: nearest.id, x: nearest.x, dmg: Math.round(def.dmg * stand * (p.plan === "fortress" ? 1.15 : 1)), role: "turret", fx: def.fx, splash: def.splash ?? 0, siege: 1, steal: 0, kind: null });
       s.events.push({ t: "shot", side, from, to: nearest.x, fx: def.fx, ticks, turret: slot, id: -1, base: false });
     });
   }
@@ -741,7 +795,7 @@ export function stepGame(s: EraMarchState, cmds: readonly SeatCommand[]): void {
       const inc = incomeOf(s, side);
       p.gold += inc;
       p.stats.goldEarned += inc;
-      p.xp += ERAS[p.era].income * PASSIVE_XP;
+      p.xp += Math.round(ERAS[p.era].income * PASSIVE_XP * xpMul(p));
     }
   }
   if (s.tick >= MATCH_TICKS) {
@@ -799,10 +853,10 @@ function kill(s: EraMarchState, u: Unit, by: Side) {
   const def = UNITS[u.kind];
   const killer = s.players[by];
   const bonus = def.era > killer.era;
-  const gm = (bonus ? ERA_GAP_BONUS : 1) * (has(killer, "plunder") ? PLUNDER_GOLD : 1);
+  const gm = (bonus ? ERA_GAP_BONUS : 1) * (has(killer, "plunder") ? PLUNDER_GOLD : 1) * (killer.plan === "merchant" ? 1.1 : 1);
   const gold = Math.max(1, Math.round(def.cost * KILL_GOLD * gm));
   killer.gold += gold;
-  killer.xp += Math.round(def.cost * KILL_XP * (bonus ? ERA_GAP_BONUS : 1));
+  killer.xp += Math.round(def.cost * KILL_XP * (bonus ? ERA_GAP_BONUS : 1) * xpMul(killer));
   killer.stats.kills++;
   killer.stats.goldEarned += gold;
   s.players[u.side].stats.lost++;

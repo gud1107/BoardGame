@@ -1,7 +1,7 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { DOCTRINES, ERA_DOCTRINES, ERA_TURRETS, ERA_UNITS, ERAS, ROLE_ICON, SPECIALS, TICKS_PER_SEC, TURRETS, UNITS, type Era } from "./data";
+import { DOCTRINES, ERA_DOCTRINES, ERA_TURRETS, ERA_UNITS, ERAS, ITEMS, PLANS, ROLE_ICON, SHOP_BUDGET, SPECIALS, TICKS_PER_SEC, TURRETS, UNITS, type Era } from "./data";
 
 const H3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
 const P = "text-white/70 light:text-slate-600";
@@ -17,6 +17,20 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
             한 줄 전장의 양 끝에 기지가 있습니다. 골드로 유닛을 생산하면 유닛이 스스로 전진해 싸웁니다. <b>상대 기지 HP를 0으로</b> 만들면 승리.
             12분이 지나면 <b>서든데스</b> — 양쪽 기지가 매초 최대 HP의 1.5%씩 무너집니다. 같은 순간 둘 다 무너지면 남은 HP 비율이 높은 쪽이 이깁니다.
           </p>
+        </section>
+        <section>
+          <h3 className={H3}>🛒 전략 상점 (매 판 시작 전)</h3>
+          <p className={P}>지휘 노선 1개를 고르고 ★{SHOP_BUDGET} 안에서 준비물을 삽니다. 상대의 선택은 전투 직전 카운트다운에 공개됩니다. 온라인은 40초 안에 고르지 않으면 그때 선택이 자동 확정됩니다.</p>
+          <ul className={`mt-1 list-disc space-y-1 pl-4 ${P}`}>
+            {Object.values(PLANS).map((pl) => (
+              <li key={pl.id}>{pl.emoji} <b>{pl.name}</b>: {pl.pros.join(" · ")} / <span className="text-rose-300">{pl.cons}</span></li>
+            ))}
+          </ul>
+          <ul className={`mt-2 list-disc space-y-1 pl-4 ${P}`}>
+            {Object.values(ITEMS).map((it) => (
+              <li key={it.id}>{it.emoji} <b>{it.name}</b> ({"★".repeat(it.cost)}): {it.desc}</li>
+            ))}
+          </ul>
         </section>
         <section>
           <h3 className={H3}>자원</h3>
@@ -51,6 +65,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         <section>
           <h3 className={H3}>상성</h3>
           <p className={P}>⚔ 근접 ▶ 🐎 돌격 ▶ 🏹 원거리 ▶ ⚔ 근접 — 유리하면 피해 ×1.5(주황 숫자), 불리하면 ×0.75(회색 숫자). ✚ 지원은 상성 없음.</p>
+          <p className={`mt-1 ${P}`}>시대마다 5종: 근접 · 원거리 · 돌격 · <b>✚ 지원</b>(가장 앞의 다친 아군을 치유, 최대 3명) · <b>🎯 공성</b>(느리고 약하지만 사거리가 길고 범위 공격, 기지에 2.5배 피해). 교리를 고르면 전용 유닛이 1종 더 생깁니다.</p>
         </section>
         <section>
           <h3 className={H3}>교리</h3>

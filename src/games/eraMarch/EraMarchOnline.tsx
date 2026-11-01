@@ -16,6 +16,8 @@ import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/
 import { activeVoteFor, INITIAL_BOT_TAKEOVER_STATE, isSeatTakenOver, reduceBotTakeover, voteThresholdMet, voteYesCount, type BotTakeoverEvent, type BotTakeoverState } from "@/games/shared/bot/botTakeover";
 import type { EraMarchState, Side } from "./engine";
 import { OnlineDriver, type Batch } from "./online";
+import { DEFAULT_LOADOUT, sanitizeLoadout, SHOP_SECONDS, type Loadout } from "./data";
+import ShopPhase from "./ShopPhase";
 import EraMarchBoard, { type MatchSummary } from "./EraMarchBoard";
 import { unlockAudio } from "./eraMarchAudio";
 
@@ -25,14 +27,20 @@ import { unlockAudio } from "./eraMarchAudio";
  * command replay in online.ts: the authority (host, or the guest once the
  * host's seat is taken over) broadcasts `batch`es, everyone else replays them.
  *
- * Messages: `game-start {seed, authority}` · `input {side, cmd}` → authority ·
+ * Before every match both players visit the 🛒 strategy shop: whoever opens
+ * it (`shop-open {seed}`) collects the picks (`shop-pick {side, loadout}`),
+ * fills a missing one with the default after the timer, and starts with
+ * `game-start {seed, authority, loadouts}` — the picks are part of the
+ * initial state, so the replay stays deterministic.
+ *
+ * Messages: `game-start {seed, authority, loadouts}` · `input {side, cmd}` → authority ·
  * `batch` → followers · `state-request` / `state-sync {state, botTakeover,
  * authority, names}` for joins and reconnects · `bot-takeover-event` (the
  * shared vote flow; a converted seat is played by the authority's bot).
  */
 
 type Occupant = { deviceId: string; seat: number; name: string; playerId?: string; isHost?: boolean };
-type Phase = "enter-name" | "connecting" | "waiting" | "playing" | "post-game" | "room-full" | "supabase-missing" | "channel-error";
+type Phase = "enter-name" | "connecting" | "waiting" | "shop" | "playing" | "post-game" | "room-full" | "supabase-missing" | "channel-error";
 
 const GAME_ID = "era-march";
 const PING_MS = 5000;
@@ -79,6 +87,12 @@ export default function EraMarchOnline({ intent, initialCode, reduceShake, onExi
   const [botTakeover, setBotTakeover] = useState<BotTakeoverState>(INITIAL_BOT_TAKEOVER_STATE);
   const [dismissedVote, setDismissedVote] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [shopRound, setShopRound] = useState(0);
+  const [picked, setPicked] = useState(false);
+  const shopSeedRef = useRef(0);
+  const shopLeadRef = useRef(false);
+  const picksRef = useRef<Partial<Record<0 | 1, Loadout>>>({});
+  const shopTimerRef = useRef<number | null>(null);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const driverRef = useRef<OnlineDriver | null>(null);
@@ -122,11 +136,19 @@ export default function EraMarchOnline({ intent, initialCode, reduceShake, onExi
     }
   }
 
-  function makeDriver(seat: number, seed: number, authoritySeat: number, names: [string, string]) {
+  function makeDriver(seat: number, seed: number, authoritySeat: number, names: [string, string], loadouts?: [Loadout, Loadout]) {
     const ch = channelRef.current;
-    const d = new OnlineDriver(seat as Side, seed, seat === authoritySeat, names, (event, payload) => {
-      ch?.send({ type: "broadcast", event, payload });
-    });
+    const d = new OnlineDriver(
+      seat as Side,
+      seed,
+      seat === authoritySeat,
+      names,
+      (event, payload) => {
+        ch?.send({ type: "broadcast", event, payload });
+      },
+      () => Date.now(),
+      loadouts,
+    );
     for (const k of Object.keys(takeoverRef.current.takeovers)) if (d.authority) d.setBot(Number(k) as Side, true);
     driverRef.current = d;
     setDriver(d);
@@ -172,7 +194,18 @@ export default function EraMarchOnline({ intent, initialCode, reduceShake, onExi
     channel.on("broadcast", { event: "game-start" }, ({ payload }) => {
       const seat = mySeatRef.current;
       if (seat === null || seat > 1) return;
-      startMatch(seat, Number(payload?.seed) | 0, Number(payload?.authority) | 0);
+      const raw = Array.isArray(payload?.loadouts) ? payload.loadouts : [];
+      startMatch(seat, Number(payload?.seed) | 0, Number(payload?.authority) | 0, [sanitizeLoadout(raw[0]), sanitizeLoadout(raw[1])]);
+    });
+    channel.on("broadcast", { event: "shop-open" }, ({ payload }) => {
+      shopLeadRef.current = false;
+      openShopLocal(Number(payload?.seed) | 0);
+    });
+    channel.on("broadcast", { event: "shop-pick" }, ({ payload }) => {
+      const side = Number(payload?.side);
+      if (!shopLeadRef.current || (side !== 0 && side !== 1)) return;
+      picksRef.current[side as 0 | 1] = sanitizeLoadout(payload?.loadout);
+      tryStartFromShop();
     });
     channel.on("broadcast", { event: "input" }, ({ payload }) => {
       const side = Number(payload?.side);
@@ -185,7 +218,7 @@ export default function EraMarchOnline({ intent, initialCode, reduceShake, onExi
     });
     channel.on("broadcast", { event: "state-request" }, () => {
       const d = driverRef.current;
-      if (!d?.authority) return;
+      if (!d?.authority || phaseRef.current === "shop") return;
       channel.send({ type: "broadcast", event: "state-sync", payload: { state: d.snapshot(), botTakeover: takeoverRef.current, authority: d.mySide, names: d.names } });
     });
     channel.on("broadcast", { event: "state-sync" }, ({ payload }) => {
@@ -268,30 +301,69 @@ export default function EraMarchOnline({ intent, initialCode, reduceShake, onExi
     applyTakeover(event);
   }
 
-  function startMatch(seat: number, seed: number, authority: number) {
+  function startMatch(seat: number, seed: number, authority: number, loadouts: [Loadout, Loadout]) {
+    if (shopTimerRef.current !== null) window.clearTimeout(shopTimerRef.current);
+    shopTimerRef.current = null;
     takeoverRef.current = INITIAL_BOT_TAKEOVER_STATE;
     setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
     hadBotRef.current = false;
     lastInputRef.current = {};
     startedAtRef.current = Date.now();
-    makeDriver(seat, seed, authority, namesNow());
+    makeDriver(seat, seed, authority, namesNow(), loadouts);
     setResult(null);
     setPhase("playing");
   }
 
-  function sendStart() {
+  function openShopLocal(seed: number) {
+    shopSeedRef.current = seed;
+    picksRef.current = {};
+    setPicked(false);
+    setShopRound((r) => r + 1);
+    setResult(null);
+    setPhase("shop");
+  }
+
+  /** Opens the strategy shop for both players; this client collects the picks and starts the match. */
+  function sendShopOpen() {
     const seat = mySeatRef.current;
     if (seat === null) return;
     startSentRef.current = true;
     const seed = Math.floor(Math.random() * 2_000_000_000);
-    channelRef.current?.send({ type: "broadcast", event: "game-start", payload: { seed, authority: seat } });
-    startMatch(seat, seed, seat);
+    shopLeadRef.current = true;
+    channelRef.current?.send({ type: "broadcast", event: "shop-open", payload: { seed } });
+    openShopLocal(seed);
+    if (shopTimerRef.current !== null) window.clearTimeout(shopTimerRef.current);
+    shopTimerRef.current = window.setTimeout(() => {
+      picksRef.current[0] ??= DEFAULT_LOADOUT;
+      picksRef.current[1] ??= DEFAULT_LOADOUT;
+      tryStartFromShop();
+    }, (SHOP_SECONDS + 6) * 1000);
+  }
+
+  function tryStartFromShop() {
+    const seat = mySeatRef.current;
+    const { 0: a, 1: b } = picksRef.current;
+    if (seat === null || !a || !b || phaseRef.current !== "shop") return;
+    const loadouts: [Loadout, Loadout] = [a, b];
+    const seed = shopSeedRef.current;
+    channelRef.current?.send({ type: "broadcast", event: "game-start", payload: { seed, authority: seat, loadouts } });
+    startMatch(seat, seed, seat, loadouts);
+  }
+
+  function confirmShop(l: Loadout) {
+    const seat = mySeatRef.current;
+    if (seat === null || seat > 1) return;
+    setPicked(true);
+    if (shopLeadRef.current) {
+      picksRef.current[seat as 0 | 1] = l;
+      tryStartFromShop();
+    } else channelRef.current?.send({ type: "broadcast", event: "shop-pick", payload: { side: seat, loadout: l } });
   }
 
   // host: start as soon as both seats are filled
   useEffect(() => {
     if (phase !== "waiting" || !isHost || startSentRef.current || mySeat === null) return;
-    if (occupants.filter((o) => o.seat <= 1).length >= 2) sendStart();
+    if (occupants.filter((o) => o.seat <= 1).length >= 2) sendShopOpen();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [occupants, phase, isHost, mySeat]);
 
@@ -387,6 +459,16 @@ export default function EraMarchOnline({ intent, initialCode, reduceShake, onExi
           <button onClick={enter} className="flex-1 rounded-xl bg-orange-600 py-2.5 text-sm font-semibold text-white">{isHost ? "방 만들기" : "참여하기"}</button>
         </div>
       </div>
+    );
+  }
+
+  if (phase === "shop") {
+    const opp = occupants.find((o) => o.seat !== mySeat && o.seat <= 1)?.name ?? "상대";
+    return (
+      <>
+        <ShopPhase key={shopRound} opponent={opp} seconds={SHOP_SECONDS} waiting={picked} onConfirm={confirmShop} />
+        {guard}
+      </>
     );
   }
 
@@ -489,7 +571,7 @@ export default function EraMarchOnline({ intent, initialCode, reduceShake, onExi
             </div>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
               {canRematch ? (
-                <button onClick={sendStart} className="rounded-xl bg-amber-500 px-5 py-2 font-black text-black">재대결</button>
+                <button onClick={sendShopOpen} className="rounded-xl bg-amber-500 px-5 py-2 font-black text-black">재대결</button>
               ) : (
                 <span className="rounded-xl bg-white/5 px-4 py-2 text-sm text-white/60">{occupants.filter((o) => o.seat <= 1).length < 2 ? "상대가 나갔어요" : "상대의 재대결을 기다리는 중…"}</span>
               )}

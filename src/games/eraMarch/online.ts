@@ -24,7 +24,7 @@
  */
 
 import { botThink, newBotMemory, type BotMemory } from "./ai";
-import { TICK_MS } from "./data";
+import { TICK_MS, type Loadout } from "./data";
 import { startGame, stepGame, type Command, type EraMarchState, type SeatCommand, type Side } from "./engine";
 import type { MatchDriver, TickHooks } from "./driver";
 
@@ -113,8 +113,9 @@ export class OnlineDriver implements MatchDriver {
     names: [string, string],
     private emit: OnlineEmit,
     private now: () => number = () => Date.now(),
+    loadouts?: readonly [Loadout, Loadout],
   ) {
-    this.s = startGame(seed);
+    this.s = startGame(seed, loadouts);
     this.authority = authority;
     this.names = names;
     this.botMem = [newBotMemory(seed + 11), newBotMemory(seed + 23)];

@@ -55,10 +55,11 @@ export type UnitKind =
   | "legion" | "archer" | "cavalry" | "shieldwall" | "chariot"
   | "marine" | "musket" | "dragoon" | "grenadier" | "corsair"
   | "trooper" | "rifle" | "armored" | "automaton" | "steamtank"
-  | "plasma" | "railgun" | "hovertank" | "drone" | "colossus";
+  | "plasma" | "railgun" | "hovertank" | "drone" | "colossus"
+  | "shaman" | "ogre" | "priest" | "ballista" | "drummer" | "fieldgun" | "medic" | "howitzer" | "android" | "plasmagun";
 
 /** Projectile / swing look, also picks the hit SFX. */
-export type Fx = "club" | "stone" | "sword" | "arrow" | "blade" | "musket" | "bomb" | "bayonet" | "rifle" | "shell" | "plasma" | "rail" | "heal" | "gore" | "trample" | "ram" | "zap";
+export type Fx = "club" | "stone" | "sword" | "arrow" | "blade" | "musket" | "bomb" | "bayonet" | "rifle" | "shell" | "plasma" | "rail" | "heal" | "gore" | "trample" | "ram" | "zap" | "boulder";
 
 export interface UnitDef {
   kind: UnitKind;
@@ -119,16 +120,27 @@ export const UNITS: Record<UnitKind, UnitDef> = {
   railgun: { kind: "railgun", era: 4, role: "ranged", name: "레일건병", emoji: "🔋", cost: 620, trainTicks: s(1.8), hp: 1350, atk: 265, cdTicks: s(1.2), range: 210, speed: 38, fx: "rail", size: 1, desc: "관통 레일 사격" },
   hovertank: { kind: "hovertank", era: 4, role: "charge", name: "호버 전차", emoji: "🛸", cost: 1400, trainTicks: s(3.2), hp: 6000, atk: 700, cdTicks: s(1.4), range: 18, speed: 62, fx: "ram", size: 1.45, desc: "떠서 질주하는 전차" },
   drone: { kind: "drone", era: 4, role: "support", name: "수리 드론", emoji: "🛰️", cost: 900, trainTicks: s(2.4), hp: 1500, atk: 260, cdTicks: s(1), range: 120, speed: 40, fx: "heal", doctrine: "network", size: 0.9, desc: "가장 앞의 아군을 계속 수리" },
+  // ✚ support (heals the frontmost hurt ally) and 🎯 siege (slow, fragile, ×2.5 on bases) for every era
+  shaman: { kind: "shaman", era: 0, role: "support", name: "주술사", emoji: "🪶", cost: 45, trainTicks: s(2), hp: 75, atk: 14, cdTicks: s(1.2), range: 110, speed: 36, fx: "heal", limit: 3, size: 0.95, desc: "앞선 아군을 치유 (최대 3명)" },
+  ogre: { kind: "ogre", era: 0, role: "ranged", name: "바위 투척 거인", emoji: "🗿", cost: 95, trainTicks: s(3.5), hp: 280, atk: 32, cdTicks: s(2.6), range: 165, speed: 26, fx: "boulder", splash: 26, siege: 2.5, size: 1.4, desc: "느리지만 바위로 기지에 2.5배 피해" },
+  priest: { kind: "priest", era: 1, role: "support", name: "사제", emoji: "📿", cost: 100, trainTicks: s(2), hp: 170, atk: 32, cdTicks: s(1.2), range: 120, speed: 36, fx: "heal", limit: 3, size: 1, desc: "앞선 아군을 치유 (최대 3명)" },
+  ballista: { kind: "ballista", era: 1, role: "ranged", name: "발리스타 수레", emoji: "🏹", cost: 210, trainTicks: s(3.5), hp: 600, atk: 72, cdTicks: s(2.6), range: 190, speed: 26, fx: "arrow", splash: 20, siege: 2.5, size: 1.35, desc: "긴 사거리 공성 노포" },
+  drummer: { kind: "drummer", era: 2, role: "support", name: "북 고수", emoji: "🥁", cost: 220, trainTicks: s(2), hp: 380, atk: 74, cdTicks: s(1.2), range: 120, speed: 36, fx: "heal", limit: 3, size: 1, desc: "북소리로 앞선 아군을 회복 (최대 3명)" },
+  fieldgun: { kind: "fieldgun", era: 2, role: "ranged", name: "야포", emoji: "💥", cost: 460, trainTicks: s(3.5), hp: 1300, atk: 165, cdTicks: s(2.6), range: 200, speed: 26, fx: "shell", splash: 30, siege: 2.5, size: 1.35, desc: "포탄으로 뭉친 적과 기지를 강타" },
+  medic: { kind: "medic", era: 3, role: "support", name: "위생병", emoji: "🩹", cost: 480, trainTicks: s(2), hp: 820, atk: 160, cdTicks: s(1.2), range: 125, speed: 38, fx: "heal", limit: 3, size: 1, desc: "앞선 아군을 치료 (최대 3명)" },
+  howitzer: { kind: "howitzer", era: 3, role: "ranged", name: "곡사포", emoji: "🧨", cost: 1020, trainTicks: s(3.5), hp: 2800, atk: 370, cdTicks: s(2.6), range: 210, speed: 24, fx: "shell", splash: 35, siege: 2.5, size: 1.45, desc: "가장 먼 곳까지 닿는 공성포" },
+  android: { kind: "android", era: 4, role: "support", name: "수복 안드로이드", emoji: "🤖", cost: 1050, trainTicks: s(2), hp: 1850, atk: 350, cdTicks: s(1.2), range: 130, speed: 38, fx: "heal", limit: 3, size: 1.05, desc: "나노 수복 광선 (최대 3명)" },
+  plasmagun: { kind: "plasmagun", era: 4, role: "ranged", name: "플라즈마 포대", emoji: "🔆", cost: 2250, trainTicks: s(3.5), hp: 5800, atk: 820, cdTicks: s(2.6), range: 220, speed: 24, fx: "plasma", splash: 40, siege: 2.5, size: 1.45, desc: "떠다니는 공성 포대" },
   colossus: { kind: "colossus", era: 4, role: "charge", name: "코일 거신", emoji: "🗿", cost: 2800, trainTicks: s(6), hp: 16000, atk: 1100, cdTicks: s(1.8), range: 30, speed: 24, fx: "zap", splash: 50, limit: 1, doctrine: "overload", size: 2.1, desc: "전장에 1기만. 주변을 전격으로 지짐" },
 };
 
-/** Base roster per era, in button order (melee, ranged, charge). */
+/** Base roster per era, in button order (melee, ranged, charge, support, siege). */
 export const ERA_UNITS: readonly (readonly UnitKind[])[] = [
-  ["club", "sling", "boar"],
-  ["legion", "archer", "cavalry"],
-  ["marine", "musket", "dragoon"],
-  ["trooper", "rifle", "armored"],
-  ["plasma", "railgun", "hovertank"],
+  ["club", "sling", "boar", "shaman", "ogre"],
+  ["legion", "archer", "cavalry", "priest", "ballista"],
+  ["marine", "musket", "dragoon", "drummer", "fieldgun"],
+  ["trooper", "rifle", "armored", "medic", "howitzer"],
+  ["plasma", "railgun", "hovertank", "android", "plasmagun"],
 ];
 
 /** melee ▶ charge ▶ ranged ▶ melee. Support never gets a bonus or a penalty. */
@@ -247,3 +259,84 @@ export const PASSIVE_XP = 1;
 export const CATCH_UP_DISCOUNT = 0.7;
 /** Sudden death: both bases lose this share of max HP per second. */
 export const SUDDEN_DEATH_PCT = 0.015;
+
+/* ── pre-battle shop: one command plan + items bought with ★ ────────────── */
+
+export type PlanId = "fortress" | "blitz" | "scholar" | "merchant";
+
+export interface PlanDef {
+  id: PlanId;
+  name: string;
+  emoji: string;
+  pros: string[];
+  cons: string;
+  color: string;
+}
+
+export const PLANS: Record<PlanId, PlanDef> = {
+  fortress: { id: "fortress", name: "철벽 수비", emoji: "🏰", pros: ["기지 HP +15%", "포탑 슬롯 2칸 개방", "포탑 피해 +15%"], cons: "생산 15% 느림", color: "#64748b" },
+  blitz: { id: "blitz", name: "전격 돌격", emoji: "⚔️", pros: ["시작 골드 +150", "공격력 +15%", "이동속도 +15%", "생산 20% 빠름"], cons: "진화 골드 +10%", color: "#dc2626" },
+  scholar: { id: "scholar", name: "학자의 길", emoji: "📜", pros: ["XP 획득 +35%", "진화 골드 −20%"], cons: "시작 골드 −20", color: "#7c3aed" },
+  merchant: { id: "merchant", name: "상인 연합", emoji: "💰", pros: ["골드 수입 +15%", "처치 골드 +10%"], cons: "유닛 HP −8%", color: "#ca8a04" },
+};
+export const PLAN_IDS = Object.keys(PLANS) as PlanId[];
+
+export type ItemId = "vault" | "veterans" | "armor" | "warmup" | "tower" | "drill" | "sharp" | "bonds";
+
+export interface ItemDef {
+  id: ItemId;
+  name: string;
+  emoji: string;
+  cost: number;
+  desc: string;
+}
+
+export const ITEMS: Record<ItemId, ItemDef> = {
+  vault: { id: "vault", name: "비상 금고", emoji: "🪙", cost: 1, desc: "시작 골드 +90" },
+  veterans: { id: "veterans", name: "정예 선봉대", emoji: "🎖️", cost: 2, desc: "시작하자마자 돌도끼 전사 3명 무료 출전" },
+  armor: { id: "armor", name: "강화 갑옷", emoji: "🛡️", cost: 2, desc: "모든 유닛 HP +8%" },
+  warmup: { id: "warmup", name: "필살기 예열", emoji: "☄️", cost: 2, desc: "첫 필살기가 처음부터 충전됨" },
+  tower: { id: "tower", name: "선제 포탑", emoji: "🏹", cost: 2, desc: "돌 투척대를 미리 설치" },
+  drill: { id: "drill", name: "강행 훈련", emoji: "⚡", cost: 2, desc: "생산 시간 −10%" },
+  sharp: { id: "sharp", name: "숙련 사수", emoji: "🎯", cost: 2, desc: "원거리·지원 사거리 +10%" },
+  bonds: { id: "bonds", name: "전쟁 공채", emoji: "📈", cost: 3, desc: "골드 수입 +15%" },
+};
+export const ITEM_IDS = Object.keys(ITEMS) as ItemId[];
+export const SHOP_BUDGET = 5;
+/** Seconds to pick in an online room before the current pick is locked in. */
+export const SHOP_SECONDS = 40;
+
+export interface Loadout {
+  plan: PlanId;
+  items: ItemId[];
+}
+
+/** Used when time runs out with nothing confirmed. */
+export const DEFAULT_LOADOUT: Loadout = { plan: "merchant", items: ["vault", "armor", "drill"] };
+
+export function loadoutCost(items: readonly ItemId[]): number {
+  return items.reduce((s, i) => s + ITEMS[i].cost, 0);
+}
+
+/** Network / storage input → a legal loadout (unknown or over-budget parts dropped). */
+export function sanitizeLoadout(raw: unknown): Loadout {
+  const r = (raw ?? {}) as { plan?: unknown; items?: unknown };
+  const plan = PLAN_IDS.includes(r.plan as PlanId) ? (r.plan as PlanId) : DEFAULT_LOADOUT.plan;
+  const items: ItemId[] = [];
+  if (Array.isArray(r.items)) {
+    for (const i of r.items) {
+      if (!ITEM_IDS.includes(i as ItemId) || items.includes(i as ItemId)) continue;
+      if (loadoutCost([...items, i as ItemId]) > SHOP_BUDGET) continue;
+      items.push(i as ItemId);
+    }
+  }
+  return { plan, items };
+}
+
+/** Suggested item sets per plan (shop "추천" buttons, bots). */
+export const PLAN_COMBOS: Record<PlanId, ItemId[]> = {
+  fortress: ["tower", "armor", "vault"],
+  blitz: ["veterans", "drill", "vault"],
+  scholar: ["warmup", "sharp", "vault"],
+  merchant: ["bonds", "armor"],
+};

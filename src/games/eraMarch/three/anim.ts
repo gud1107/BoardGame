@@ -67,8 +67,8 @@ export function newPose(): Pose {
 }
 
 /** Where the weapon arm rests while walking / waiting. */
-const CARRY: Record<Rig["weapon"], number> = { swing: 0.55, thrust: 1.25, bow: -0.1, gun: 0.95, sling: 0.25, throw: 0.35, heal: 0, none: 0 };
-const READY: Record<Rig["weapon"], number> = { swing: 1.15, thrust: 1.5, bow: 1.5, gun: 1.5, sling: 1.2, throw: 0.6, heal: 0, none: 0 };
+const CARRY: Record<Rig["weapon"], number> = { swing: 0.55, thrust: 1.25, bow: -0.1, gun: 0.95, sling: 0.25, throw: 0.35, heal: 0.45, drum: 0.95, none: 0 };
+const READY: Record<Rig["weapon"], number> = { swing: 1.15, thrust: 1.5, bow: 1.5, gun: 1.5, sling: 1.2, throw: 0.6, heal: 1.1, drum: 0.95, none: 0 };
 
 export function computePose(p: PoseIn, out: Pose): Pose {
   const { rig, t, move, cd } = p;
@@ -195,14 +195,22 @@ export function computePose(p: PoseIn, out: Pose): Pose {
         break;
       }
       case "heal":
-        out.pitch += 0.2;
+        if (rig.frame === "human") {
+          // raise the staff, flick it up as the heal lands
+          out.armR = inStrike ? lerp(2.5, 3.05, k) : inRecover ? lerp(3.05, 1.1, r) : lerp(1.1, 2.5, w);
+          out.armL = 1.0 + 0.35 * w;
+          out.pitch += -0.08 * w + (inStrike ? 0.05 : 0);
+        } else out.pitch += 0.2;
+        break;
+      case "drum":
         break;
       case "none": {
         // vehicles: barrel recoil on shots, a shove on rams
         const kick = since < 0.35 * h ? (1 - since / (0.35 * h)) ** 2 : 0;
         out.barrel = -0.38 * kick;
         out.pitch += -0.07 * kick;
-        out.lunge = inStrike ? 0.35 * k : inRecover ? lerp(0.35, 0, r) : -0.06 * w;
+        if (rig.ram) out.lunge = inStrike ? 0.35 * k : inRecover ? lerp(0.35, 0, r) : -0.06 * w;
+        else out.lunge = -0.12 * kick;
         break;
       }
     }
@@ -214,6 +222,13 @@ export function computePose(p: PoseIn, out: Pose): Pose {
       out.fleg[1] += 0.8 * rear + 0.25 * w;
       out.lunge += 0.15 * rear;
     }
+  }
+
+  if (rig.weapon === "drum") {
+    const f = engaged ? 16 : 9;
+    const a = engaged ? 0.65 : 0.45;
+    out.armR = 0.85 + Math.max(0, Math.sin(t * f + p.seed)) * a;
+    out.armL = 0.85 + Math.max(0, Math.sin(t * f + p.seed + Math.PI)) * a;
   }
 
   // ── reactions ──
