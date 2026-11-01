@@ -350,7 +350,7 @@ export default function GamePlayPage() {
           : "max-w-2xl";
 
   return (
-    <div className={`mx-auto ${pageMaxWidth} px-4 py-8 sm:px-6`}>
+    <div className={`mx-auto ${pageMaxWidth} px-4 pt-8 pb-24 sm:px-6 sm:pb-8`}>
       <div className="mb-6 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="relative flex h-14 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white/5 light:bg-slate-100">

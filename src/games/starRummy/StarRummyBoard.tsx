@@ -75,8 +75,9 @@ export function StarTile({
       title={label}
       onClick={onClick}
       onPointerDown={onDragStart}
+      onContextMenu={onDragStart ? (e) => e.preventDefault() : undefined}
       disabled={!onClick}
-      className={`relative flex ${onDragStart ? "touch-none select-none" : ""} ${dimmed ? "opacity-30" : ""} shrink-0 flex-col items-center justify-center rounded-[6px] border font-black leading-none shadow-[0_2px_0_rgba(0,0,0,0.35)] transition ${dims} ${
+      className={`relative flex ${onDragStart ? "select-none [-webkit-touch-callout:none]" : ""} ${dimmed ? "opacity-30" : ""} shrink-0 flex-col items-center justify-center rounded-[6px] border font-black leading-none shadow-[0_2px_0_rgba(0,0,0,0.35)] transition ${dims} ${
         wild ? "border-violet-300 bg-gradient-to-b from-violet-200 to-fuchsia-300" : "border-amber-200/80 bg-gradient-to-b from-[#fffaf0] to-[#efe2c4]"
       } ${selected ? "-translate-y-1.5 ring-2 ring-sky-400 ring-offset-1 ring-offset-black/40" : ""} ${fresh ? "outline-2 outline-dashed outline-sky-300 outline-offset-1" : ""} ${
         glow ? "shadow-[0_0_10px_3px_rgba(251,191,36,0.75)]" : ""
@@ -127,6 +128,18 @@ export default function StarRummyBoard({ state, viewerSeat, names, connectedSeat
   const [drag, setDrag] = useState<{ ids: TileId[]; x: number; y: number; over: DropTarget | null } | null>(null);
   // a drag ends in pointerup → the browser still fires click on the tile; swallow it
   const suppressClickRef = useRef(false);
+  // while a touch drag is live, the board's touchmove is cancelled so the page doesn't scroll
+  const rootRef = useRef<HTMLDivElement>(null);
+  const touchDragRef = useRef(false);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const block = (ev: TouchEvent) => {
+      if (touchDragRef.current) ev.preventDefault();
+    };
+    el.addEventListener("touchmove", block, { passive: false });
+    return () => el.removeEventListener("touchmove", block);
+  }, []);
 
   // A new turn (mine or anyone's) throws the local draft away.
   if (draftTurn !== state.turn) {
@@ -203,34 +216,78 @@ export default function StarRummyBoard({ state, viewerSeat, names, connectedSeat
   const moveSelected = (target: number | "new") => moveTiles(selected, target);
   const returnToHand = () => moveTiles(selected, "rack");
 
-  /** Pointer drag (mouse + touch): past 6 px it becomes a drag of this tile, or of the whole selection if the tile is selected. */
+  /**
+   * Pointer drag of this tile, or of the whole selection if the tile is selected.
+   * Mouse: past 6 px it becomes a drag. Touch: hold still ~0.2 s to pick it up —
+   * a quick swipe that starts on a tile still scrolls the page.
+   * Near the top/bottom edge of the screen the page scrolls along with the drag.
+   */
   function startDrag(id: TileId, e: ReactPointerEvent<HTMLButtonElement>) {
     if (!canPick(id) || e.button > 0) return;
+    const touch = e.pointerType !== "mouse";
     const sx = e.clientX;
     const sy = e.clientY;
+    let x = sx;
+    let y = sy;
     const ids = selected.includes(id) ? selected : [id];
     let dragging = false;
+    let moved = false;
     let over: DropTarget | null = null;
-    const move = (ev: PointerEvent) => {
-      if (!dragging && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
-      dragging = true;
-      ev.preventDefault();
-      over = dropTargetAt(ev.clientX, ev.clientY);
-      setDrag({ ids, x: ev.clientX, y: ev.clientY, over });
+    let raf = 0;
+    const show = () => {
+      over = dropTargetAt(x, y);
+      setDrag({ ids, x, y, over });
     };
-    const end = (ev: PointerEvent) => {
+    const edgeScroll = () => {
+      const edge = 72;
+      const h = window.innerHeight;
+      const v = y < edge ? -(edge - y) / edge : y > h - edge ? (y - (h - edge)) / edge : 0;
+      if (v !== 0) {
+        window.scrollBy(0, Math.round(v * 16));
+        show();
+      }
+      raf = requestAnimationFrame(edgeScroll);
+    };
+    const begin = () => {
+      dragging = true;
+      touchDragRef.current = touch;
+      if (touch) navigator.vibrate?.(12);
+      show();
+      raf = requestAnimationFrame(edgeScroll);
+    };
+    const hold = touch ? window.setTimeout(begin, 200) : 0;
+    const move = (ev: PointerEvent) => {
+      if (ev.pointerId !== e.pointerId) return;
+      x = ev.clientX;
+      y = ev.clientY;
+      const far = Math.hypot(x - sx, y - sy) >= (touch ? 10 : 6);
+      if (!dragging) {
+        if (!far) return;
+        if (touch) return finish(ev); // moved before the hold → it's a scroll
+        begin();
+      }
+      if (far) moved = true;
+      ev.preventDefault();
+      show();
+    };
+    const finish = (ev: PointerEvent) => {
+      if (ev.pointerId !== e.pointerId) return;
+      window.clearTimeout(hold);
+      cancelAnimationFrame(raf);
+      touchDragRef.current = false;
       window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", end);
-      window.removeEventListener("pointercancel", end);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
       if (!dragging) return;
+      setDrag(null);
+      if (!moved) return; // held and let go in place → plain tap
       suppressClickRef.current = true;
       window.setTimeout(() => (suppressClickRef.current = false), 0);
-      setDrag(null);
       if (ev.type === "pointerup" && over !== null) moveTiles(ids, over);
     };
     window.addEventListener("pointermove", move, { passive: false });
-    window.addEventListener("pointerup", end);
-    window.addEventListener("pointercancel", end);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
   }
 
   /** onClick that ignores the click a finished drag leaves behind. */
@@ -271,7 +328,7 @@ export default function StarRummyBoard({ state, viewerSeat, names, connectedSeat
   const panel = "rounded-2xl border border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white/90 light:shadow-sm";
 
   return (
-    <div className="flex flex-col gap-3">
+    <div ref={rootRef} className="flex flex-col gap-3">
       {/* header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs font-semibold text-white/70 light:text-slate-600">

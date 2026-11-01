@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.142.0",
+    releaseDate: "2026-11-02",
+    title: "🌌 별빛 러미 — 휴대폰 끌기 다듬기",
+    changes: [
+      { game: "star-rummy", type: "IMPROVE", desc: "✋ 휴대폰에선 타일을 살짝 꾹 눌러야 집혀요 — 타일 위에서 바로 밀면 화면이 스크롤돼요" },
+      { game: "star-rummy", type: "IMPROVE", desc: "↕️ 타일을 끌고 화면 위·아래 끝으로 가면 화면이 따라 스크롤돼요 — 조합이 많아 테이블이 길어도 OK" },
+      { game: "common", type: "FIX", desc: "🐛 휴대폰 게임 화면 아래에 여백 — 떠 있는 🐛 버튼이 맨 아래 내용(받침대 타일 등)을 가리지 않아요" },
+    ],
+  },
+  {
     version: "v1.141.0",
     releaseDate: "2026-11-01",
     title: "🔫 죽은척 대작전 — 이름·무기를 총격전으로, 게임 방법 패널",
