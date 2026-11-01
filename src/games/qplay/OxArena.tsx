@@ -18,13 +18,15 @@ function slot(seat: Seat, zone: number | null): Pos {
   const col = seat % 3;
   const row = Math.floor(seat / 3);
   const jitter = ((seat * 37) % 7) - 3;
-  if (zone === null) return { x: 50, y: 24 + seat * 9 };
+  // 아직 안 고른 사람은 가운데 선 위에 좌우 지그재그로(같은 쪽 이웃과 두 칸씩 떨어지게)
+  if (zone === null) return { x: 50 + (seat % 2 ? 6 : -6), y: 18 + seat * 9.5 };
   return { x: zone * 50 + 9 + col * 16 + jitter * 0.6, y: 26 + row * 25 + jitter };
 }
 
 const zoneOf = (x: number) => (x < 50 ? 0 : 1);
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-const initial = (name: string) => Array.from(name.replace(/^🤖\s*(AI\s*)?/, ""))[0] ?? "?";
+/** 말 위 글자 — 봇("[Lv.5] AI 봇 1")은 🤖, 사람은 이름 첫 글자. */
+const initial = (name: string) => (/봇|^🤖/.test(name) ? "🤖" : (Array.from(name.trim())[0] ?? "?"));
 
 export default function OxArena({
   state,
