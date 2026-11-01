@@ -156,6 +156,9 @@ export default function PlayDeadBoard(props: PlayDeadBoardProps) {
   const secsLeft = deadlineMs ? Math.max(0, Math.ceil((deadlineMs - nowMs) / 1000)) : null;
   const surge = surgeAt(state.round);
   const log = useMemo(() => (showing ? describeEvents(state, names, me) : []), [showing, state, names, me]);
+  // don't spoil the reveal: the log and table switch to the new round once bodies have hit the floor
+  const revealed = !prev || e >= SHOW.fall;
+  const tableState = revealed ? state : { ...state, seats: prev };
   const rankings = useMemo(() => (state.phase === "ended" ? computeRankings(state) : []), [state]);
   const nm = (s: Seat) => (s === me ? "나" : (names[s] ?? `${s + 1}번`));
 
@@ -319,7 +322,7 @@ export default function PlayDeadBoard(props: PlayDeadBoardProps) {
       {mine.confirmed && state.phase !== "ended" && <p className="text-center text-sm text-white/60 light:text-slate-500">☠ 사망이 확인됐어요. 남은 사람들의 연기를 지켜보세요.</p>}
 
       {/* 라운드 결과 */}
-      {showing && (
+      {showing && revealed && (
         <div className="flex flex-col gap-1 rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-sm light:border-slate-200 light:bg-white">
           {log.map((l, i) => (
             <p key={i} className={`break-keep ${l.mine ? "text-amber-200 light:text-amber-700" : "text-white/80 light:text-slate-700"}`}>
@@ -348,9 +351,9 @@ export default function PlayDeadBoard(props: PlayDeadBoardProps) {
             </tr>
           </thead>
           <tbody>
-            {state.seats.map((s, seat) => {
+            {tableState.seats.map((s, seat) => {
               const [lo, hi] = takenRange(s);
-              const p = aliveChance(state, seat, me);
+              const p = aliveChance(tableState, seat, me);
               return (
                 <tr key={seat} className="border-t border-white/5 text-white/80 light:border-slate-100 light:text-slate-700">
                   <td className="px-3 py-1.5">
