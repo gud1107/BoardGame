@@ -301,6 +301,15 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["all-clear", "🦈", "미션 올클리어", "한 잠수에서 미션 모두 달성", 1, k("missionAllClears")],
     ["streak-5", "🔥", "연속 올클리어", "5연속 미션 올클리어", 5, k("maxMissionStreak")],
   ],
+  "play-dead": [
+    ["survive-1", "🧍", "최후의 생존자", "마지막까지 살아남아 승리", 1, k("survived")],
+    ["kills-10", "💥", "에네르기파 장인", "상대를 쓰러뜨려 진짜로 끝내기 누적 10번", 10, k("kills")],
+    ["actor-15", "🎭", "명배우", "살아서 죽은 척한 라운드 누적 15", 15, k("fakeRounds")],
+    ["ambush-5", "⚡", "벌떡!", "벌떡 기습 명중 누적 5번", 5, k("ambushHits")],
+    ["expose-3", "🔪", "거짓말 탐지기", "확인사살로 죽은 척 폭로 3번", 3, k("exposes")],
+    ["loot-20", "💰", "시체 털이범", "기 뺏기로 누적 기 20개", 20, k("kiLooted")],
+    ["fake-win", "😏", "사실 살아있었지롱", "죽은 척하는 채로 승리", 1, k("fakeWins")],
+  ],
   "prism-five": [
     ["clear-1", "🦸", "첫 출동", "스테이지 하나 클리어", 1, k("clears")],
     ["final", "👑", "암흑제국 격멸", "FINAL 스테이지 클리어", 1, k("finalClears")],

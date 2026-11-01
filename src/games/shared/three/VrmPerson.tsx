@@ -540,8 +540,13 @@ function setupFirstPerson(vrm: VRM) {
   });
 }
 
-export default function VrmPerson(props: VrmPersonProps) {
-  const { look, position, facing, seed } = props;
+/**
+ * Loads the VRM for a look and keeps it dressed: borrowed hair / outfit / shoes, colour
+ * tint (greyed when `out`), make-up morphs and the low-spec outline switch. Shared by
+ * the seated rig below and standing rigs (play-dead's fighters) so a player's character
+ * looks the same everywhere. `morphs` feeds {@link tickVrm}.
+ */
+export function useVrmAvatar(look: PersonLook, seed: number, opts: { out?: boolean; lowDetail?: boolean } = {}) {
   const key = modelFor(look, seed);
   const [vrm, setVrm] = useState<VRM | null>(null);
   const { hairFrom, outfitFrom, shoesFrom } = look;
@@ -574,13 +579,10 @@ export default function VrmPerson(props: VrmPersonProps) {
       if (got) release(got);
     };
   }, [key, hairFrom, outfitFrom, shoesFrom]);
+  const out = !!opts.out;
   useEffect(() => {
-    if (vrm) tint(vrm, key, look, !!props.out);
-  }, [vrm, key, look, props.out]);
-  const firstPerson = !!props.firstPerson;
-  useEffect(() => {
-    if (vrm && firstPerson) setupFirstPerson(vrm);
-  }, [vrm, firstPerson]);
+    if (vrm) tint(vrm, key, look, out);
+  }, [vrm, key, look, out]);
   const morphs = useRef<FaceMorph[]>([]);
   const { eyes, face } = look;
   useEffect(() => {
@@ -589,15 +591,49 @@ export default function VrmPerson(props: VrmPersonProps) {
     morphs.current = faceMorphs(vrm, key, { eyes });
     shapeFace(vrm, { eyes, face });
   }, [vrm, key, eyes, face]);
+  // low-spec devices skip MToon's outline pass (it draws every mesh a second time)
+  const lowDetail = !!opts.lowDetail;
+  useEffect(() => {
+    if (!vrm) return;
+    for (const m of materialsOf(vrm.scene)) if ((m as { isOutline?: boolean }).isOutline) m.visible = !lowDetail;
+  }, [vrm, lowDetail]);
+  return { vrm, key, morphs };
+}
+
+/**
+ * VRM.update, unrolled so the hair/cloth springs can run at 30 Hz (off on low-spec
+ * devices) — they cost more than the rest of the rig, and the eye can't tell. Call
+ * after posing the normalized bones and setting expressions.
+ */
+export function tickVrm(vrm: VRM, dt: number, morphs: FaceMorph[], springAcc: { current: number }, lowDetail: boolean) {
+  vrm.humanoid.update();
+  vrm.lookAt?.update(dt);
+  liftMorphs(morphs);
+  vrm.expressionManager?.update();
+  const em = vrm.expressionManager;
+  if (em) holdMorphs(morphs, Math.max(em.getValue("blink") ?? 0, em.getValue("happy") ?? 0, em.getValue("surprised") ?? 0, em.getValue("sad") ?? 0, em.getValue("angry") ?? 0));
+  vrm.nodeConstraintManager?.update();
+  if (!lowDetail) {
+    springAcc.current += dt;
+    if (springAcc.current >= 1 / 30) {
+      vrm.springBoneManager?.update(springAcc.current);
+      springAcc.current = 0;
+    }
+  }
+  vrm.materials?.forEach((m) => (m as { update?: (d: number) => void }).update?.(dt));
+}
+
+export default function VrmPerson(props: VrmPersonProps) {
+  const { look, position, facing, seed } = props;
+  const { vrm, morphs } = useVrmAvatar(look, seed, { out: props.out, lowDetail: props.lowDetail });
+  const firstPerson = !!props.firstPerson;
+  useEffect(() => {
+    if (vrm && firstPerson) setupFirstPerson(vrm);
+  }, [vrm, firstPerson]);
   const { onReady } = props;
   useEffect(() => {
     if (vrm) onReady?.();
   }, [vrm, onReady]);
-  // low-spec devices skip MToon's outline pass (it draws every mesh a second time)
-  useEffect(() => {
-    if (!vrm) return;
-    for (const m of materialsOf(vrm.scene)) if ((m as { isOutline?: boolean }).isOutline) m.visible = !props.lowDetail;
-  }, [vrm, props.lowDetail]);
 
   // fit: thighs level on the seat, head at the cartoon rig's height
   const fit = useMemo(() => {
@@ -717,22 +753,7 @@ export default function VrmPerson(props: VrmPersonProps) {
       em.setValue("aa", mood === "talk" ? 0.25 + Math.abs(Math.sin(now * 11)) * 0.45 : f.mouth === "o" && f.eye <= 1.3 ? 0.35 : 0);
       em.setValue("blink", grin > 0.9 ? 0 : f.eye < 0.3 ? 1 : blinking(now, seed) ? 1 : 0);
     }
-    // VRM.update, unrolled so the hair/cloth springs can run at 30 Hz (off on low-spec
-    // devices) — they cost more than the rest of the rig, and the eye can't tell
-    vrm.humanoid.update();
-    vrm.lookAt?.update(dt);
-    liftMorphs(morphs.current);
-    vrm.expressionManager?.update();
-    if (em) holdMorphs(morphs.current, Math.max(em.getValue("blink") ?? 0, em.getValue("happy") ?? 0, em.getValue("surprised") ?? 0, em.getValue("sad") ?? 0, em.getValue("angry") ?? 0));
-    vrm.nodeConstraintManager?.update();
-    if (!props.lowDetail) {
-      springDt.current += dt;
-      if (springDt.current >= 1 / 30) {
-        vrm.springBoneManager?.update(springDt.current);
-        springDt.current = 0;
-      }
-    }
-    vrm.materials?.forEach((m) => (m as { update?: (d: number) => void }).update?.(dt));
+    tickVrm(vrm, dt, morphs.current, springDt, !!props.lowDetail);
   });
 
   // still downloading (or failed): an empty chair with the seat's cards and name tag — never a stand-in body

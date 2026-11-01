@@ -917,6 +917,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
   },
   {
+    id: "play-dead",
+    name: "죽은척 기싸움",
+    nameEn: "Play Dead: Ki Duel",
+    description:
+      "“기! 기! 파!” 기 모으기 손놀이에 죽은 척을 더한 2~6인 동시 행동 게임. 매 라운드 몰래 기 모으기·막기·파·장풍·에네르기파 중 하나를 골라 동시에 공개! 맞으면 무조건 털썩 쓰러지는데, 피해량은 맞은 사람만 알아서 진짜 죽었는지 죽은 척인지 아무도 몰라요. 쓰러진 몸에서 기를 뺏을까, 확인사살할까? 누워 있던 상대의 벌떡 기습을 조심하며 마지막까지 살아남으세요. 내 VRM 캐릭터가 달밤의 결투장에서 싸워요.",
+    players: { min: 2, max: 6 },
+    playTime: { minMinutes: 5, maxMinutes: 12 },
+    category: "party",
+    thumbnail: { emoji: "💀", gradient: ["#f2b544", "#1e1530"] },
+    tags: ["기모으기", "에네르기파", "죽은척", "블러핑", "동시행동", "3D", "AI봇"],
+    genres: ["party", "bluffing"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "prism-five",
     name: "섬광전대 프리즘파이브",
     nameEn: "Prism Five: Flash Squadron",

@@ -210,6 +210,15 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "받은 투표 (점수 모드)", value: (d) => n(d.votesReceived) },
     { label: "시간 초과로 자동 제출", value: (d) => n(d.autoFilled) },
   ],
+  "play-dead": [
+    { label: "최후의 생존", value: (d) => n(d.survived) },
+    { label: "끝내기 (한 판 최다)", value: (d) => `${n(d.kills)} (${n(d.maxKills)})` },
+    { label: "기술 명중 / 벌떡 기습 명중", value: (d) => `${n(d.blastHits)} / ${n(d.ambushHits)}` },
+    { label: "죽은 척 폭로", value: (d) => n(d.exposes) },
+    { label: "기 뺏기로 가져온 기", value: (d) => n(d.kiLooted) },
+    { label: "살아서 죽은 척한 라운드", value: (d) => n(d.fakeRounds) },
+    { label: "죽은 척하는 채로 승리", value: (d) => n(d.fakeWins) },
+  ],
   "prism-five": [
     { label: "최고 점수 (한 스테이지)", value: (d) => n(d.maxScore) },
     { label: "클리어", value: (d) => ratio(d.clears, d.runs) },

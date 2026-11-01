@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.136.0",
+    releaseDate: "2026-11-01",
+    title: "💀 새 게임: 죽은척 기싸움",
+    changes: [
+      { game: "play-dead", type: "FEAT", desc: "💀 새 게임 — “기! 기! 파!” 기 모으기 손놀이에 죽은 척을 더한 2~6인 동시 행동 게임. 맞으면 무조건 털썩, 피해량은 맞은 사람만 알아서 진짜 죽었는지 아무도 몰라요" },
+      { game: "play-dead", type: "FEAT", desc: "🧊 내 VRM 캐릭터가 달밤 결투장에서 기를 모으고 파·장풍·에네르기파를 쏴요 — 쓰러진 몸에서 기 뺏기, 확인사살, 벌떡 기습까지" },
+      { game: "play-dead", type: "FEAT", desc: "🤖 AI 봇 Lv.1~10 (공개 정보만으로 추리) · 📊 참가자 표에 ‘살아 있을 확률’ · 🔥 8라운드부터 기 폭주" },
+    ],
+  },
+  {
     version: "v1.135.0",
     releaseDate: "2026-11-01",
     title: "⭕❌ 큐플레이 OX — 막판 이동 보호 · 8명도 안 겹치는 광장",
