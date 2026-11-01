@@ -22,6 +22,7 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   telepathy: dynamic(() => import("./telepathy/TelepathyGame"), { ssr: false }),
   "bluff-roulette": dynamic(() => import("./bluffRoulette/BluffRouletteGame"), { ssr: false }),
   "merge-defense": dynamic(() => import("./mergeDefense/MergeDefenseGame"), { ssr: false }),
+  "era-march": dynamic(() => import("./eraMarch/EraMarchGame"), { ssr: false }),
   "ink-duel": dynamic(() => import("./inkDuel/InkDuelGame"), { ssr: false }),
   "city-chase": dynamic(() => import("./cityChase/CityChaseGame"), { ssr: false }),
   "doodle-phone": dynamic(() => import("./doodlePhone/DoodlePhoneGame"), { ssr: false }),
