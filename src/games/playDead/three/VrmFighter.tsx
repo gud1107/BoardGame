@@ -6,6 +6,7 @@ import * as THREE from "three";
 import type { VRMHumanBoneName } from "@pixiv/three-vrm";
 import { blinking, type PersonLook } from "@/games/shared/three/SeatedPerson";
 import { tickVrm, useVrmAvatar } from "@/games/shared/three/VrmPerson";
+import { fingerAngles, thumbAngles, type Side } from "@/games/shared/three/vrmHands";
 import { toVrm0 } from "@/games/shared/three/vrmPose";
 
 /**
@@ -66,6 +67,19 @@ const HOP = FALL + 2;
 const CHANNELS = HOP + 1;
 
 const HEAD_HEIGHT = 1.52;
+/** Finger curl: relaxed, and wrapped round the rifle (right fist on the grip, left hand cupping the handguard). */
+const CURL_REST = 0.15;
+const CURL_GRIP = { r: 0.9, l: 0.65 } as const;
+
+/** Finger/thumb angles per side for a curl, quantised to 1/50 so the frame loop reuses them. */
+const handCache = new Map<string, readonly (readonly [VRMHumanBoneName, number, number])[]>();
+function handShape(side: Side, curl: number) {
+  const k = Math.round(Math.max(0, Math.min(1, curl)) * 50);
+  const id = side + k;
+  let v = handCache.get(id);
+  if (!v) handCache.set(id, (v = [...fingerAngles(side, k / 50), ...thumbAngles(side, k / 50)]));
+  return v;
+}
 /** Which side a fighter topples to (±1) — sideways along the ring, so a body never falls out of shot. */
 export function fallSide(seed: number): number {
   return seed % 2 === 0 ? 1 : -1;
@@ -269,9 +283,9 @@ const fQ = new THREE.Quaternion();
 const fE = new THREE.Euler();
 const tmpV = new THREE.Vector3();
 
-/** Rifle-space points the palms sit on: right hand on the pistol grip, left under the handguard. */
+/** Rifle-space points the palms sit on: right fist round the pistol grip, left fist round the handguard. */
 const GRIP = new THREE.Vector3(0, -0.07, 0.38);
-const FORE = new THREE.Vector3(0, -0.045, 0.75);
+const FORE = new THREE.Vector3(0, -0.01, 0.75);
 const GRIP_TO_FORE = FORE.clone().sub(GRIP).normalize();
 const UP = new THREE.Vector3(0, 1, 0);
 const palmR = new THREE.Vector3();
@@ -328,7 +342,7 @@ export default function VrmFighter(props: VrmFighterProps) {
   const bodyRef = useRef<THREE.Group>(null);
   const rifleRef = useRef<THREE.Group>(null);
   const flashRef = useRef<THREE.Mesh>(null);
-  const state = useRef<{ key: string; start: number; yaw: number | null; walk: number; springs: { current: number }; cur: Float32Array; want: Float32Array } | null>(null);
+  const state = useRef<{ key: string; start: number; yaw: number | null; walk: number; curl: { r: number; l: number }; springs: { current: number }; cur: Float32Array; want: Float32Array } | null>(null);
   const fit = useMemo(() => {
     if (!vrm) return null;
     const head = vrm.humanoid.getNormalizedBoneNode("head");
@@ -342,7 +356,7 @@ export default function VrmFighter(props: VrmFighterProps) {
     if (!root || !body) return;
     const dt = Math.min(dtRaw, 0.05);
     const t = clock.elapsedTime;
-    state.current ??= { key: "", start: 0, yaw: null, walk: 0, springs: { current: 0 }, cur: new Float32Array(CHANNELS), want: new Float32Array(CHANNELS) };
+    state.current ??= { key: "", start: 0, yaw: null, walk: 0, curl: { r: CURL_REST, l: CURL_REST }, springs: { current: 0 }, cur: new Float32Array(CHANNELS), want: new Float32Array(CHANNELS) };
     const st = state.current;
     const { cur, want } = st;
     st.yaw ??= facing;
@@ -405,6 +419,18 @@ export default function VrmFighter(props: VrmFighterProps) {
       fQ.setFromEuler(fE.set(cur[i * 3], cur[i * 3 + 1], cur[i * 3 + 2]));
       node.quaternion.copy(vrm0 ? toVrm0(fQ) : fQ);
     }
+    // fingers close round the rifle while it's out
+    const armed = !!rifleRef.current?.visible;
+    const kc = 1 - Math.exp(-dt * 16);
+    for (const side of ["r", "l"] as const) {
+      st.curl[side] += ((armed ? CURL_GRIP[side] : CURL_REST) - st.curl[side]) * kc;
+      for (const [name, y, z] of handShape(side, st.curl[side])) {
+        const node = vrm.humanoid.getNormalizedBoneNode(name);
+        if (!node) continue;
+        fQ.setFromEuler(fE.set(0, y, z));
+        node.quaternion.copy(vrm0 ? toVrm0(fQ) : fQ);
+      }
+    }
     const em = vrm.expressionManager;
     if (em) {
       const f = face(pose, u);
@@ -446,7 +472,7 @@ export default function VrmFighter(props: VrmFighterProps) {
             <boxGeometry args={[0.04, 0.14, 0.06]} />
             <meshStandardMaterial color="#26282a" metalness={0.6} roughness={0.45} />
           </mesh>
-          {/* handguard — the left palm cups it from below (FORE) */}
+          {/* handguard — the left fist closes round it (FORE) */}
           <mesh position={[0, -0.01, 0.75]}>
             <boxGeometry args={[0.045, 0.06, 0.34]} />
             <meshStandardMaterial color="#3a3d33" roughness={0.7} />
