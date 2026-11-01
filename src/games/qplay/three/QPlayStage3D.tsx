@@ -516,7 +516,7 @@ function MissileScene({ state, viewerSeat, names, colors, lowDetail, onFire }: Q
         />
       )}
       <directionalLight position={[0, 3, 12]} intensity={0.9} color="#ffffff" />
-      <FitCamera width={span + 2.2} height={4.8} look={[0, 1.35, centre.z - 2.2]} from={[0.38, 1]} />
+      <FitCamera width={span + 2.4} height={5.4} look={[0, 1.6, centre.z - 2.2]} from={[0.38, 1]} />
       <AdaptiveResolution max={lowDetail ? 1.5 : 2} />
     </>
   );
@@ -537,7 +537,8 @@ const ZONE_X = [
   [1.75, 2.95],
 ];
 const LANE_X = [-0.55, 0.55];
-const ROW_Z = [-1.95, -0.65, 0.65, 1.95];
+// 앞줄(카메라 쪽)부터 채운다 — 적은 인원일수록 얼굴이 크게 보이게
+const ROW_Z = [1.75, 0.5, -0.75, -2.0];
 
 export function oxSpot(seat: Seat, zone: number | null): THREE.Vector3 {
   const col = seat % 2;
