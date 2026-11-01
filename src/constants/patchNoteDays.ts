@@ -18,6 +18,7 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
  */
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
   "2026-11-01": {
+    "star-rummy": "🌌 새 게임 별빛 러미 — 숫자 타일 런·그룹, 🔭 관측소, 🧊 천문대 3D, ✨ 첫 관측 도우미",
     "play-dead": "💀 새 게임 죽은척 기싸움 — “기! 기! 파!” 동시 행동, 🪖 포연 자욱한 전장에 모두 엎드려 엄폐",
     coup: "💥 화려한 연출, 🎭 행동·방어·패스마다 캐릭터 동작, 📜 내 카드 능력, ✓ 진실 행동 하이라이트",
     qplay: "🧊 3D 퀴즈 스튜디오, 🧗 탑·🚀 받침대·⭕❌ 광장 3D 무대, 🎚️ 문제 난이도 선택",
