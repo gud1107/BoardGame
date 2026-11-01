@@ -9,6 +9,7 @@ import {
   CHOSUNG_TRIES,
   CLIMB_TOP,
   MINI_INFO,
+  MISSILE_HP,
   OX_LOCK_MS,
   allAnswered,
   computeRankings,
@@ -281,6 +282,38 @@ function ClimbPanel({ state, viewerSeat, nowMs, onAction }: { state: GameState; 
 
 /* ── 미사일 ───────────────────────────────────────────────── */
 
+/**
+ * 미사일 — 내 하트를 크게(라이프 바). 방금 잃은 칸은 깨지는 효과, 0이면 탈락 띠.
+ * 하트는 틀리거나 안 고르면 −1, 미사일에 맞으면 −1(§11).
+ */
+function MyLife({ state, viewerSeat }: { state: GameState; viewerSeat: Seat }) {
+  const hp = state.hp[viewerSeat] ?? 0;
+  const left = state.alive.filter(Boolean).length;
+  if (!state.alive[viewerSeat]) {
+    return (
+      <div role="status" className="qplay-in flex items-center justify-center gap-2 rounded-2xl border-2 border-rose-500/60 bg-rose-950/60 px-4 py-2 text-center light:bg-rose-50">
+        <span className="text-2xl">💀</span>
+        <span className="text-sm font-black text-rose-200 light:text-rose-700">하트를 모두 잃어 탈락! 남은 {left}명의 대결을 구경해요</span>
+      </div>
+    );
+  }
+  return (
+    <div className={`flex items-center gap-3 rounded-2xl border-2 px-4 py-2 ${hp === 1 ? "animate-pulse border-rose-500/70 bg-rose-500/10" : "border-white/15 bg-white/[0.04] light:border-slate-200 light:bg-white"}`}>
+      <span className="text-xs font-black text-white/70 light:text-slate-600">내 라이프</span>
+      <span className="flex gap-1 text-3xl leading-none" aria-label={`하트 ${hp}개 남음`}>
+        {Array.from({ length: MISSILE_HP }, (_, i) => (
+          <span key={i === hp ? `lost-${hp}-${state.stage}` : i} className={i === hp ? "qplay-break" : ""}>
+            {i < hp ? "❤️" : "🖤"}
+          </span>
+        ))}
+      </span>
+      <span className={`ml-auto text-xs font-bold ${hp === 1 ? "text-rose-300 light:text-rose-600" : "text-white/55 light:text-slate-500"}`}>
+        {hp === 1 ? "마지막 하트! 틀리면 탈락" : `틀리거나 안 고르면 −1 · 생존 ${left}명`}
+      </span>
+    </div>
+  );
+}
+
 function Hearts({ hp }: { hp: number }) {
   return (
     <span className="tracking-tighter" aria-label={`하트 ${hp}개`}>
@@ -546,6 +579,8 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
         .qplay-shot { animation: qplay-pop .35s ease-out both }
         .qplay-rocket { display: inline-block; animation: qplay-fly .6s ease-in both }
         .qplay-boom { display: inline-block; animation: qplay-boom .9s ease-out both }
+        @keyframes qplay-break { 0% { transform: scale(1.6); filter: brightness(2) } 30% { transform: scale(1.2) rotate(-12deg) } 60% { transform: scale(1) rotate(10deg) } 100% { transform: none } }
+        .qplay-break { display: inline-block; animation: qplay-break .7s ease-out both }
         .qplay-in { animation: qplay-pop .3s ease-out both }
       `}</style>
 
@@ -590,6 +625,8 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
           )}
         </div>
       )}
+
+      {mini === "missile" && (state.phase === "question" || state.phase === "aim" || state.phase === "reveal") && <MyLife state={state} viewerSeat={viewerSeat} />}
 
       {/* 소개 화면엔 원탁을 띄우지 않는다 — 곧 무대/광장으로 바뀌며 3D를 두 번 불러와 렉이 걸렸다 */}
       {board3d.view === "3d" && !oxScene && (stage3d || state.phase !== "intro") && (

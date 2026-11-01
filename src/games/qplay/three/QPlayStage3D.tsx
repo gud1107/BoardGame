@@ -486,7 +486,8 @@ function MissileScene({ state, viewerSeat, names, colors, lowDetail, onFire }: Q
           else if (shot.to === s) pose = impact && shot.kill ? "hit" : "duck";
         }
         if (phase === "miniEnd" && alive) pose = "win";
-        if (out && !(shot?.to === s)) pose = "down";
+        // 이번에 하트가 다 닳은 사람은 털썩 쓰러지는 동작부터, 이미 탈락한 사람은 누워 있다
+        if (out && !(shot?.to === s)) pose = state.eliminated.includes(s) ? "hit" : "down";
         const fireable = aiming && s !== viewerSeat && alive;
         const color = colors[s % colors.length];
         const lift = PAD_BASE + Math.max(0, hp) * SEG;
@@ -510,7 +511,7 @@ function MissileScene({ state, viewerSeat, names, colors, lowDetail, onFire }: Q
               >
                 {s === viewerSeat && <FootRing color="#fbbf24" r={0.42} />}
                 {fireable && <FootRing color="#fb923c" pulse r={0.55} />}
-                <NameTag text={shortName(names[s] ?? `플레이어 ${s + 1}`)} sub={fireable ? `🎯 ${state.hp[s] === 1 ? "격추 가능!" : "눌러서 발사"}` : out ? "💀 탈락" : sub} color={color} me={s === viewerSeat} y={pose === "down" ? 0.9 : 2.0 * MISSILE_SIZE} />
+                <NameTag text={shortName(names[s] ?? `플레이어 ${s + 1}`)} sub={fireable ? `🎯 ${state.hp[s] === 1 ? "격추 가능!" : "눌러서 발사"}` : out ? "💀 탈락" : sub} color={color} me={s === viewerSeat} y={pose === "down" || pose === "hit" ? 0.9 : 2.0 * MISSILE_SIZE} />
                 {shot?.to === s && impact && <RiseText text={shot.kill ? "💥 격추!" : "💥 하트 −1"} color="#fca5a5" y={2.4} />}
                 {(state.missed ?? []).includes(s) && (phase === "aim" || (phase === "reveal" && !shot)) && <RiseText key={`m${state.stage}`} text={state.eliminated.includes(s) ? "💔 오답 · 탈락" : "💔 오답 −1"} color="#fda4af" y={2.6 * MISSILE_SIZE} />}
                 {phase === "reveal" && state.gained[s] > 0 && <RiseText key={`g${state.stage}`} text={`+${state.gained[s]}`} color="#4ade80" y={2.6} />}
