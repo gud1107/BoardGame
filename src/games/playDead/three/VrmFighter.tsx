@@ -107,9 +107,9 @@ function reloadPose(o: Float32Array, t: number) {
 
 function aim(o: Float32Array, recoil: number) {
   // shouldered rifle: right hand at the grip, left hand forward under the barrel
-  set3(o, B.rightUpperArm, -1.25 + recoil * 0.12, 0.35, 1.25);
-  set3(o, B.leftUpperArm, -1.45 + recoil * 0.12, -0.45, -1.15);
-  set3(o, B.rightLowerArm, 0, 1.2, 0);
+  set3(o, B.rightUpperArm, -0.75 + recoil * 0.12, 0.5, 1.25);
+  set3(o, B.leftUpperArm, -1.2 + recoil * 0.12, -0.45, -1.15);
+  set3(o, B.rightLowerArm, 0, 1.55, 0);
   set3(o, B.leftLowerArm, 0, -0.35, 0);
   set3(o, B.spine, 0.12 - recoil * 0.06, 0, 0);
   set3(o, B.head, 0.12, 0.15, 0);
@@ -269,6 +269,58 @@ const fQ = new THREE.Quaternion();
 const fE = new THREE.Euler();
 const tmpV = new THREE.Vector3();
 
+/** Rifle-space points the palms sit on: right hand on the pistol grip, left under the handguard. */
+const GRIP = new THREE.Vector3(0, -0.07, 0.38);
+const FORE = new THREE.Vector3(0, -0.045, 0.75);
+const GRIP_TO_FORE = FORE.clone().sub(GRIP).normalize();
+const UP = new THREE.Vector3(0, 1, 0);
+const palmR = new THREE.Vector3();
+const palmL = new THREE.Vector3();
+const gunDir = new THREE.Vector3();
+const gunUp = new THREE.Vector3();
+const wantUp = new THREE.Vector3();
+const gunQ = new THREE.Quaternion();
+const rollQ = new THREE.Quaternion();
+
+/** Palm centre in `space`'s local frame: wrist pulled 60% toward the middle knuckle. */
+function palm(vrm: NonNullable<ReturnType<typeof useVrmAvatar>["vrm"]>, side: "left" | "right", space: THREE.Object3D, out: THREE.Vector3): boolean {
+  const hand = vrm.humanoid.getRawBoneNode(`${side}Hand`);
+  if (!hand) return false;
+  hand.updateWorldMatrix(true, false);
+  hand.getWorldPosition(out);
+  const knuckle = vrm.humanoid.getRawBoneNode(`${side}MiddleProximal`);
+  if (knuckle) {
+    knuckle.updateWorldMatrix(false, false);
+    out.lerp(knuckle.getWorldPosition(tmpV), 0.6);
+  }
+  space.worldToLocal(out);
+  return true;
+}
+
+/**
+ * Seat the rifle in the hands: grip on the right palm, barrel through the left palm, kept upright.
+ * Arm angles alone leave a model-dependent gap (every VRM has different arm lengths).
+ */
+function seatRifle(rifle: THREE.Group, body: THREE.Group, vrm: NonNullable<ReturnType<typeof useVrmAvatar>["vrm"]>) {
+  if (!palm(vrm, "right", body, palmR) || !palm(vrm, "left", body, palmL)) return;
+  gunDir.subVectors(palmL, palmR);
+  // hands still swinging up (or crossed): point it straight ahead instead of backwards
+  if (gunDir.lengthSq() < 1e-4 || gunDir.normalize().z < 0.3) gunDir.set(0, 0, 1);
+  gunQ.setFromUnitVectors(GRIP_TO_FORE, gunDir);
+  // roll about the barrel so the sights stay on top
+  gunUp.copy(UP).applyQuaternion(gunQ);
+  gunUp.addScaledVector(gunDir, -gunUp.dot(gunDir));
+  wantUp.copy(UP).addScaledVector(gunDir, -gunDir.y);
+  if (gunUp.lengthSq() > 1e-6 && wantUp.lengthSq() > 1e-6) {
+    gunUp.normalize();
+    wantUp.normalize();
+    const roll = Math.atan2(tmpV.crossVectors(gunUp, wantUp).dot(gunDir), gunUp.dot(wantUp));
+    gunQ.premultiply(rollQ.setFromAxisAngle(gunDir, roll));
+  }
+  rifle.quaternion.copy(gunQ);
+  rifle.position.copy(palmR).sub(tmpV.copy(GRIP).applyQuaternion(gunQ));
+}
+
 export default function VrmFighter(props: VrmFighterProps) {
   const { look, seed, home, facing, pose, poseKey, moveTo, aimAt, out, lowDetail, speed = 3.2, size = 1 } = props;
   const { vrm, morphs } = useVrmAvatar(look, seed, { out, lowDetail });
@@ -364,6 +416,7 @@ export default function VrmFighter(props: VrmFighterProps) {
       em.setValue("blink", f.shut ? 1 : f.happy > 0.9 || f.surprised > 0 ? 0 : blinking(t, seed) ? 1 : 0);
     }
     tickVrm(vrm, dt, morphs.current, st.springs, lowDetail);
+    if (rifleRef.current?.visible) seatRifle(rifleRef.current, body, vrm);
   });
 
   return (
@@ -384,13 +437,19 @@ export default function VrmFighter(props: VrmFighterProps) {
             <cylinderGeometry args={[0.014, 0.014, 0.32, 8]} />
             <meshStandardMaterial color="#1b1c1e" metalness={0.7} roughness={0.4} />
           </mesh>
-          <mesh position={[0, -0.02, 0.05]}>
-            <boxGeometry args={[0.05, 0.1, 0.28]} />
+          <mesh position={[0, -0.02, 0.12]}>
+            <boxGeometry args={[0.05, 0.1, 0.22]} />
             <meshStandardMaterial color="#5a3b22" roughness={0.8} />
           </mesh>
-          <mesh position={[0, -0.1, 0.4]} rotation-x={0.25}>
+          {/* pistol grip — the right palm sits on it (GRIP) */}
+          <mesh position={[0, -0.1, 0.38]} rotation-x={0.25}>
             <boxGeometry args={[0.04, 0.14, 0.06]} />
             <meshStandardMaterial color="#26282a" metalness={0.6} roughness={0.45} />
+          </mesh>
+          {/* handguard — the left palm cups it from below (FORE) */}
+          <mesh position={[0, -0.01, 0.75]}>
+            <boxGeometry args={[0.045, 0.06, 0.34]} />
+            <meshStandardMaterial color="#3a3d33" roughness={0.7} />
           </mesh>
           <mesh ref={flashRef} position={[0, 0.01, 1.02]} visible={false}>
             <sphereGeometry args={[0.09, 8, 6]} />
