@@ -256,6 +256,7 @@ export default function StarRummyBoard({ state, viewerSeat, names, connectedSeat
               seat,
               name: nameOf(seat),
               tiles: state.hands[seat].length,
+              rack: seat === viewerSeat ? sortHand(state.hands[seat], sortBy) : undefined,
               score: state.scores[seat],
               opened: state.opened[seat],
               away: !connectedSeats.has(seat),

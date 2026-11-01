@@ -21,6 +21,8 @@ export interface StarRummySeat3D {
   seat: number;
   name: string;
   tiles: number;
+  /** Only for my own seat: my rack, face up toward me. */
+  rack?: TileId[];
   score: number;
   opened: boolean;
   away?: boolean;
@@ -42,9 +44,9 @@ export interface StarRummyTable3DProps {
 }
 
 const INK = ["#e11d48", "#2563eb", "#c47a06", "#059669"];
-const TW = 0.075;
-const TH = 0.1;
-const TD = 0.022;
+const TW = 0.095;
+const TH = 0.125;
+const TD = 0.026;
 
 const tileGeo = new THREE.BoxGeometry(TW, TD, TH);
 const faceGeo = new THREE.PlaneGeometry(TW * 0.92, TH * 0.92);
@@ -93,10 +95,10 @@ function FlatTile({ id, glow }: { id: TileId; glow?: boolean }) {
   );
 }
 
-/** A seat's rack: a wooden bar with tile backs standing on it (the owner's side is +z). */
-function Rack({ count }: { count: number }) {
-  const shown = Math.min(count, 16);
-  const step = TW * 0.92;
+/** A seat's rack: a wooden bar with tiles standing on it (the owner's side is +z) — faces toward me on my own rack. */
+function Rack({ count, faces }: { count: number; faces?: TileId[] }) {
+  const shown = Math.min(count, faces ? 24 : 16);
+  const step = TW * (shown > 16 ? 0.72 : 0.92);
   const width = Math.max(0.3, shown * step + 0.04);
   return (
     <group>
@@ -111,6 +113,7 @@ function Rack({ count }: { count: number }) {
             <planeGeometry args={[TW * 0.9, TH * 0.9]} />
             <primitive object={backMat} attach="material" />
           </mesh>
+          {faces?.[i] !== undefined && <mesh geometry={faceGeo} material={faceMat(faces[i])} position={[0, 0, TD / 2 + 0.0008]} />}
         </group>
       ))}
     </group>
@@ -245,7 +248,7 @@ export default function StarRummyTable3D(props: StarRummyTable3DProps) {
       active: activeSeat === s.seat,
       bubble,
       tag: s.tiles <= 2 && s.tiles > 0 ? { text: `⚠️ ${s.tiles}장 남음`, color: "#fbbf24" } : null,
-      front: <Rack count={s.tiles} />,
+      front: <Rack count={s.tiles} faces={s.rack} />,
     };
   });
 
