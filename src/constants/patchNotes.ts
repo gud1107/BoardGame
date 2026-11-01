@@ -106,6 +106,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       { game: "qplay", type: "FEAT", desc: "🎚️ 방 만들 때 문제 난이도(쉬움/보통/어려움) — 보통부터는 쉬운 문제·한 자리 구구단 같은 쉬운 셈이 안 나와요" },
       { game: "qplay", type: "IMPROVE", desc: "🎲 미니 게임 고르기는 기본 랜덤, 하나를 누르면 그 게임만 — 원하는 게임 하나를 한 번에 골라요" },
       { game: "qplay", type: "IMPROVE", desc: "✏️ 정답 공개 전엔 답을 바꿀 수 있어요 — 바꾸면 선착순 순서는 맨 뒤로, 모두 답하면 2초 뒤 공개" },
+      { game: "qplay", type: "IMPROVE", desc: "👑 유령 예측왕에게 +5점 위로 점수 · 살아 있는 사람에겐 유령이 고른 쪽을 공개 전까지 숨겨요 (따라 하기 방지)" },
       { game: "qplay", type: "FEAT", desc: "👻 미사일에서 탈락해도 유령으로 남은 문제의 정답을 계속 예측해요 — 점수와 무관, 끝나면 ‘유령 예측왕’ 발표" },
       { game: "qplay", type: "IMPROVE", desc: "❤️ 하트 옆에 ‘2/3’ 숫자도 함께, 미사일에 맞은 하트는 로켓이 터지는 순간 깎여요 (3D와 같은 타이밍)" },
       { game: "qplay", type: "IMPROVE", desc: "❤️ 미사일 중엔 ‘내 라이프’가 크게 보여요 — 잃은 하트는 깨지고, 마지막 하트면 빨갛게 깜빡, 다 닳으면 캐릭터가 털썩 쓰러지며 탈락" },

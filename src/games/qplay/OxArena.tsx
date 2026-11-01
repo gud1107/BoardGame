@@ -70,6 +70,8 @@ export default function OxArena({
   // 이번 문제 전에 이미 탈락한 사람 = 유령(이번 문제에 탈락한 사람은 💀로 남고 다음 문제부터 유령)
   const isGhost = (s: Seat) => !alive.has(s) && !state.eliminated.includes(s);
   const myGhostPick = ghosts[viewerSeat];
+  // 살아서 답을 고르는 사람에겐 공개 전까지 유령이 어느 쪽에 섰는지 숨긴다(유령 예측을 보고 따라가는 걸 막기) — 유령은 가운데 통로에
+  const hideGhosts = alive.has(viewerSeat) && !reveal;
 
   function moveTo(pos: Pos) {
     if (!canMove) return;
@@ -165,7 +167,7 @@ export default function OxArena({
         {!scene && seats.map((s) => {
           const me = s === viewerSeat;
           const ghost = isGhost(s);
-          const zone = me ? picked : ghost ? (ghosts[s] ?? null) : (state.answers[s]?.choice ?? null);
+          const zone = me ? picked : ghost ? (hideGhosts ? null : (ghosts[s] ?? null)) : (state.answers[s]?.choice ?? null);
           const pos = me && onMove ? myPos : slot(s, zone);
           const dead = reveal && state.eliminated.includes(s);
           const color = colors[s % colors.length];

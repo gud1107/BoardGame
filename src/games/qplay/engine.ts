@@ -79,6 +79,8 @@ export const MISSILE_KILL = 10;
 export const MISSILE_DEFEND = 5;
 export const MISSILE_HP_POINTS = 10;
 export const LAST_SURVIVOR = 30;
+/** OX·미사일이 끝날 때 유령 예측왕(가장 많이 맞힌 유령, 1개 이상)에게 주는 작은 위로 점수. */
+export const GHOST_KING_BONUS = 5;
 
 const COUNTS: Record<Exclude<MiniId, "climb">, Record<Length, number>> = {
   ox: { short: 6, normal: 8, long: 10 },
@@ -875,6 +877,15 @@ function miniOver(state: GameState): boolean {
 }
 
 /** 미니 게임 마감 보너스·기록(§4·§10·§11). */
+/** 유령 예측왕 — 유령으로 한 번이라도 예측했고, 적중 수가 가장 많은(1 이상) 좌석들. */
+export function ghostKings(state: Pick<GameState, "ghostHits" | "ghostTries">): Seat[] {
+  const tries = state.ghostTries ?? [];
+  const hits = state.ghostHits ?? [];
+  const best = Math.max(0, ...tries.map((t, s) => (t > 0 ? (hits[s] ?? 0) : 0)));
+  if (best === 0) return [];
+  return tries.map((t, s) => (t > 0 && hits[s] === best ? s : -1)).filter((s) => s >= 0);
+}
+
 function finishMini(state: GameState): GameState {
   const mini = currentMini(state);
   const n = state.seatCount;
@@ -901,6 +912,7 @@ function finishMini(state: GameState): GameState {
       stats = { ...stats, lastSurvivor: bump(stats.lastSurvivor, last) };
     }
   }
+  if (mini === "ox" || mini === "missile") for (const s of ghostKings(state)) bonus[s] += GHOST_KING_BONUS;
   const miniScores = addAll(state.miniScores, bonus);
   const top = Math.max(...miniScores);
   const winners = top > 0 ? miniScores.map((v, s) => (v === top ? s : -1)).filter((s) => s >= 0) : [];

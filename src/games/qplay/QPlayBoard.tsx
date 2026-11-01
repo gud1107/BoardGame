@@ -9,6 +9,7 @@ import {
   CHOSUNG_TRIES,
   CLIMB_TOP,
   MINI_INFO,
+  GHOST_KING_BONUS,
   MISSILE_FLIGHT_MS,
   MISSILE_HP,
   OX_LOCK_MS,
@@ -18,6 +19,7 @@ import {
   currentMini,
   currentQuestion,
   eligibleSeats,
+  ghostKings,
   hasFinished,
   phaseDurationMs,
   type EngineAction,
@@ -450,12 +452,10 @@ function GhostKing({ state, names, mini }: { state: GameState; names: Record<Sea
   const tries = state.ghostTries ?? [];
   const hits = state.ghostHits ?? [];
   if ((mini !== "ox" && mini !== "missile") || !tries.some((t) => t > 0)) return null;
-  const best = Math.max(...hits);
-  const kings = tries.map((t, s) => (t > 0 && hits[s] === best ? s : -1)).filter((s) => s >= 0);
+  const kings = ghostKings(state);
   return (
     <p className="text-center text-xs font-bold text-violet-200 light:text-violet-700">
-      👻 유령 예측왕: {kings.map((s) => `${names[s]} (${hits[s]}/${tries[s]})`).join(", ")}
-      {best === 0 && " — 아무도 못 맞혔어요"}
+      👻 유령 예측왕: {kings.length === 0 ? "아무도 못 맞혔어요" : `${kings.map((s) => `${names[s]} (${hits[s]}/${tries[s]})`).join(", ")} · +${GHOST_KING_BONUS}점`}
     </p>
   );
 }

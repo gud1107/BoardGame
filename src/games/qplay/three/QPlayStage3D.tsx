@@ -658,7 +658,9 @@ function OxScene({ state, viewerSeat, names, colors, lowDetail, ox }: QPlayStage
       {Array.from({ length: n }, (_, s) => {
         const me = s === viewerSeat;
         const ghost = isGhost(s);
-        const zone = me ? (ox?.picked ?? null) : ghost ? (ghosts[s] ?? null) : (state.answers[s]?.choice ?? null);
+        // 살아 있는 사람에겐 공개 전까지 유령의 쪽을 숨긴다(OxArena와 같은 규칙)
+        const hideGhost = alive.has(viewerSeat) && !reveal;
+        const zone = me ? (ox?.picked ?? null) : ghost ? (hideGhost ? null : (ghosts[s] ?? null)) : (state.answers[s]?.choice ?? null);
         const target = me && myFree ? myFree : oxSpot(s, zone);
         const dead = reveal && state.eliminated.includes(s);
         const ok = reveal && !ghost && alive.has(s) && zone === answer;

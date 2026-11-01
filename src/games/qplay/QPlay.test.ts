@@ -12,6 +12,8 @@ import {
   OX_CORRECT,
   OX_SURVIVE,
   allAnswered,
+  GHOST_KING_BONUS,
+  ghostKings,
   bankOrder,
   phaseDurationMs,
   chooseBotOxPlan,
@@ -414,6 +416,17 @@ describe("missile (§11)", () => {
     expect(s.ghostHits[1]).toBe(1);
     expect(s.hp[1]).toBe(before);
     expect(s.gained[1]).toBe(0);
+  });
+
+  it("유령 예측왕(적중 1개 이상, 최다)은 미니 게임이 끝날 때 +5", () => {
+    expect(ghostKings({ ghostHits: [0, 2, 2, 1], ghostTries: [0, 3, 2, 4] })).toEqual([1, 2]);
+    expect(ghostKings({ ghostHits: [0, 0], ghostTries: [0, 2] })).toEqual([]); // 아무도 못 맞히면 없음
+    let s = startGame(3, 21, { minis: ["missile"], rounds: 1 });
+    s = { ...s, phase: "question", ghostHits: [0, 1, 0], ghostTries: [0, 1, 0], alive: [true, false, false], hp: [3, 0, 0] };
+    s = applyAction(s, { type: "ANSWER", seat: 0, q: s.qIndex, choice: currentQuestion(s)!.answer });
+    s = timeout(s);
+    while (s.phase !== "miniEnd") s = timeout(s);
+    expect(s.gained[1]).toBe(GHOST_KING_BONUS);
   });
 
   it("goes straight to reveal when nobody is right", () => {

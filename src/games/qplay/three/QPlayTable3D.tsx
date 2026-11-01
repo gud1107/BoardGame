@@ -194,7 +194,9 @@ export default function QPlayTable3D({ state, viewerSeat, names, connectedSeats,
 
     // OX 유령(이미 탈락) — 예측 중인 쪽을 머리 위에
     const ghostPick = state.ghosts?.[s];
-    if (out && mini === "ox" && phase === "question" && ghostPick !== undefined) tag = { text: `👻 ${ghostPick === 0 ? "⭕" : "❌"} 예측`, color: "#c4b5fd" };
+    // 살아서 답을 고르는 사람에겐 유령이 고른 쪽을 숨긴다(따라 하기 방지)
+    if (out && mini === "ox" && phase === "question" && ghostPick !== undefined)
+      tag = { text: eligible.has(viewerSeat) ? "👻 예측 완료" : `👻 ${ghostPick === 0 ? "⭕" : "❌"} 예측`, color: "#c4b5fd" };
 
     const fireable =onFire && phase === "aim" && state.shooter === viewerSeat && s !== viewerSeat && state.alive[s];
     const color = THEME.seatColors[s % THEME.seatColors.length];
