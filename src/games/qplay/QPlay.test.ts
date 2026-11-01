@@ -157,12 +157,28 @@ describe("speed choice scoring (§3)", () => {
     s = act(s, { type: "ANSWER", seat: 2, q: 0, choice: q.answer });
     s = act(s, { type: "ANSWER", seat: 0, q: 0, choice: wrong });
     s = act(s, { type: "ANSWER", seat: 3, q: 0, choice: q.answer });
-    s = act(s, { type: "ANSWER", seat: 3, q: 0, choice: wrong }); // 중복은 무시
+    s = act(s, { type: "ANSWER", seat: 3, q: 0, choice: q.answer }); // 같은 답 다시 = 무시(순서 유지)
     s = act(s, { type: "ANSWER", seat: 1, q: 0, choice: q.answer });
     expect(allAnswered(s)).toBe(true);
     s = timeout(s);
     expect(s.phase).toBe("reveal");
     expect(s.gained).toEqual([0, CHOICE_POINTS[2], CHOICE_POINTS[0], CHOICE_POINTS[1]]);
+  });
+
+  it("공개 전엔 답을 바꿀 수 있고, 바꾸면 선착순 줄의 맨 뒤로", () => {
+    let s = only("nonsense", 3);
+    const q = currentQuestion(s)!;
+    const wrong = (q.answer + 1) % 4;
+    s = act(s, { type: "ANSWER", seat: 0, q: 0, choice: wrong });
+    s = act(s, { type: "ANSWER", seat: 1, q: 0, choice: q.answer });
+    s = act(s, { type: "ANSWER", seat: 0, q: 0, choice: q.answer }); // 오답 → 정답으로 바꿈
+    s = act(s, { type: "ANSWER", seat: 2, q: 0, choice: q.answer });
+    s = act(s, { type: "ANSWER", seat: 2, q: 0, choice: wrong }); // 정답 → 오답으로 바꿈
+    expect(s.answers[0]?.correct).toBe(true);
+    expect(s.answers[2]?.correct).toBe(false);
+    s = timeout(s);
+    // 1등은 처음부터 정답이던 1번, 0번은 바꾼 시점 순서라 2등
+    expect(s.gained).toEqual([CHOICE_POINTS[1], CHOICE_POINTS[0], 0]);
   });
 
   it("ignores answers for an old question or bad choice", () => {

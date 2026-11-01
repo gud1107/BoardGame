@@ -19,6 +19,7 @@ import {
   MINI_IDS,
   MINI_INFO,
   MIN_PLAYERS,
+  ANSWER_CHANGE_GRACE_MS,
   OX_GRACE_MS,
   ROUND_OPTIONS,
   allAnswered,
@@ -666,6 +667,7 @@ export default function QPlayGame({ onComplete }: PlayableGameProps) {
   const [stageSeen, setStageSeen] = useState<{ stage: number; round: number; at: number } | null>(null);
   const stageSeenRef = useRef<{ stage: number; round: number; at: number } | null>(null);
   const timeoutSentRef = useRef<number | null>(null);
+  const allDoneRef = useRef<{ stage: number; at: number } | null>(null);
   /** 봇 좌석 → 다음에 답할 시각. stage가 바뀌면 새로 잡는다. */
   const botClockRef = useRef<{ stage: number; next: Map<Seat, number>; ox: Map<Seat, number[]> }>({ stage: -1, next: new Map(), ox: new Map() });
   useEffect(() => {
@@ -692,8 +694,11 @@ export default function QPlayGame({ onComplete }: PlayableGameProps) {
       // OX는 느린 사람의 막판 이동이 닿을 때까지 조금 더 기다린다(engine OX_GRACE_MS)
       const grace = state.phase === "question" && currentQuestion(state)?.kind === "ox" ? OX_GRACE_MS : 0;
       if (amHost && duration > 0 && now - seen.at >= duration + grace) sendTimeout();
-      // 모두 답했으면 잠깐(답한 표시가 보이게) 뒤에 바로 정답 공개
-      if (amHost && state.phase === "question" && allAnswered(state) && now - seen.at >= 700) sendTimeout();
+      // 모두 답했으면 잠깐(그 사이 답을 바꿀 수 있게) 뒤에 정답 공개
+      if (state.phase === "question" && allAnswered(state)) {
+        if (allDoneRef.current?.stage !== state.stage) allDoneRef.current = { stage: state.stage, at: now };
+        if (amHost && now - allDoneRef.current.at >= ANSWER_CHANGE_GRACE_MS) sendTimeout();
+      }
 
       // 봇 — 봇마다 따로 정한 시각이 되면 답한다(§13)
       if (amHost && (state.phase === "question" || state.phase === "aim" || state.phase === "climb")) {

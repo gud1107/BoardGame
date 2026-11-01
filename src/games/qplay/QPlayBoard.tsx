@@ -10,6 +10,7 @@ import {
   CLIMB_TOP,
   MINI_INFO,
   OX_LOCK_MS,
+  allAnswered,
   computeRankings,
   correctOrder,
   currentMini,
@@ -671,8 +672,9 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
               names={names}
               picked={picked}
               reveal={state.phase !== "question"}
-              disabled={state.phase !== "question" || !eligible || picked !== null}
+              disabled={state.phase !== "question" || !eligible}
               onPick={(i) => {
+                if (i === picked) return;
                 getQPlaySound().unlock();
                 getQPlaySound().play("pick");
                 setLocalPick({ stage: state.stage, choice: i });
@@ -689,7 +691,7 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
           {state.phase === "question" && !eligible && q.kind !== "ox" && <p className="text-center text-sm font-bold text-white/60 light:text-slate-500">💀 탈락 — 남은 사람들의 대결을 구경해요</p>}
           {state.phase === "question" && eligible && picked !== null && q.kind === "choice" && (
             <p className="text-center text-xs text-white/60 light:text-slate-500">
-              답변 완료! 다른 사람을 기다리는 중 ({answeredSeats.size}/{eligibleSeats(state).length})
+              {allAnswered(state) ? "모두 답했어요 — 곧 정답 공개!" : `답변 완료! 다른 사람을 기다리는 중 (${answeredSeats.size}/${eligibleSeats(state).length})`} · 공개 전엔 다른 보기를 눌러 바꿀 수 있어요(바꾸면 순서는 맨 뒤로)
             </p>
           )}
         </div>

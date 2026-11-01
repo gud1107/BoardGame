@@ -63,6 +63,8 @@ export const OX_CORRECT = 10;
  */
 export const OX_LOCK_MS = 600;
 export const OX_GRACE_MS = 500;
+/** 모두 답한 뒤 정답 공개까지(ms) — 그 사이에도 답을 바꿀 수 있다. */
+export const ANSWER_CHANGE_GRACE_MS = 2000;
 export const OX_SURVIVE = 30;
 export const CLIMB_TOP = 10;
 export const CLIMB_FLOOR_POINTS = 5;
@@ -919,10 +921,12 @@ export function applyAction(state: GameState, action: EngineAction): GameState {
       if (!eligibleSeats(state).includes(action.seat)) return state;
       if (!Number.isInteger(action.choice) || action.choice < 0 || action.choice >= q.choices.length) return state;
       const prev = state.answers[action.seat];
-      // OX는 시간이 끝날 때 서 있는 쪽이 답 — 그 전엔 몇 번이든 O ↔ X로 옮겨 다닐 수 있다(§4).
-      if (prev && (q.kind !== "ox" || prev.choice === action.choice)) return state;
-      const answer: Answer = { choice: action.choice, correct: action.choice === q.answer, order: prev?.order ?? state.arrivals };
-      return { ...state, answers: { ...state.answers, [action.seat]: answer }, arrivals: prev ? state.arrivals : state.arrivals + 1 };
+      // 정답 공개 전엔 몇 번이든 답을 바꿀 수 있다(OX는 O ↔ X 이동, §4).
+      if (prev && prev.choice === action.choice) return state;
+      // 4지선다는 바꾸면 선착순 줄의 맨 뒤로 — 일단 빨리 찍고 나중에 고치는 꼼수를 막는다. OX는 순서 점수가 없어 그대로.
+      const requeue = !prev || q.kind !== "ox";
+      const answer: Answer = { choice: action.choice, correct: action.choice === q.answer, order: requeue ? state.arrivals : prev.order };
+      return { ...state, answers: { ...state.answers, [action.seat]: answer }, arrivals: requeue ? state.arrivals + 1 : state.arrivals };
     }
     case "GHOST": {
       // 탈락자의 유령 예측 — OX 문제 동안 살아 있는 사람처럼 몇 번이든 옮겨 다닌다

@@ -8,7 +8,7 @@ import ScreenSprite from "@/games/shared/three/ScreenSprite";
 import { AdaptiveResolution } from "@/games/shared/three/sceneFx";
 import { labelTexture } from "@/games/shared/three/tableKit";
 import { roomCharacterOf, useRoomCharacters } from "@/lib/character/roomCharacters";
-import VrmFighter, { type FighterPose } from "@/games/playDead/three/VrmFighter";
+import VrmFighter, { type FighterPose } from "./QPlayFighter";
 import { CLIMB_TOP, MISSILE_HP, currentMini, currentQuestion, eligibleSeats, hasFinished, type GameState, type Seat } from "../engine";
 
 /**
@@ -16,8 +16,8 @@ import { CLIMB_TOP, MISSILE_HP, currentMini, currentQuestion, eligibleSeats, has
  *
  * - 🧗 올라올라: 자리마다 10층 탑. 맞히면 한 층 위로 폴짝 뛰어오르고, 틀리면 한 층 아래로
  *   미끄러지며 휘청인다. 꼭대기에 닿으면 깃발 아래서 만세.
- * - 🚀 미사일: 반원으로 늘어선 받침대 = 하트(3칸). 사수가 손을 뻗으면 미사일이 날아가 터지고,
- *   맞은 사람의 받침대가 한 칸 내려앉는다. 하트 0이면 바닥으로 쓰러진다.
+ * - 🚀 미사일: 반원으로 늘어선 받침대 = 하트(3칸). 미사일이 사수 옆에서 하늘로 솟구쳤다가 표적 머리 위로
+ *   떨어져 터지고(표적은 머리를 감싸고 웅크림), 받침대가 한 칸 내려앉는다. 하트 0이면 바닥으로 쓰러진다.
  * - ⭕ OX: 왼쪽 ⭕ / 오른쪽 ❌ 광장을 캐릭터가 실제로 달려 다닌다. 내 캐릭터는 광장을 눌러/끌어
  *   옮기고(입력·판정은 OxArena가 그대로), 공개 때 오답 쪽 바닥이 꺼지며 쓰러진다.
  *
@@ -332,28 +332,47 @@ function SegmentBlock({ index, on, color, out }: { index: number; on: boolean; c
   );
 }
 
-const tmpA = new THREE.Vector3();
+const ROCKET_UP = 0.45;
+const ROCKET_FALL_AT = 0.7;
+const ROCKET_SKY = 7;
 
-/** 사수 → 표적. 포물선 비행 + 불꽃 꼬리, 도착하면 폭발. `dur`초 뒤 충돌. */
+/**
+ * 사수 옆에서 하늘로 솟구쳐 화면 밖으로 사라졌다가, 표적 머리 위로 수직 낙하해 폭발(`dur`초에 충돌).
+ * 떨어지는 동안 표적 발밑에 붉은 조준 원이 깜빡인다.
+ */
 function Rocket({ from, to, kill, dur }: { from: THREE.Vector3; to: THREE.Vector3; kill: boolean; dur: number }) {
+  const mark = useRef<THREE.Mesh>(null);
+  const markMat = useRef<THREE.MeshBasicMaterial>(null);
   const body = useRef<THREE.Group>(null);
   const boom = useRef<THREE.Mesh>(null);
   const boomMat = useRef<THREE.MeshBasicMaterial>(null);
   const ring = useRef<THREE.Mesh>(null);
   const ringMat = useRef<THREE.MeshBasicMaterial>(null);
   const start = useRef<number | null>(null);
-  const arc = 1.6 + from.distanceTo(to) * 0.2;
-  const at = (p: number, out: THREE.Vector3) => out.lerpVectors(from, to, p).setY(from.y + (to.y - from.y) * p + Math.sin(p * Math.PI) * arc);
   useFrame(({ clock }) => {
     start.current ??= clock.elapsedTime;
     const e = clock.elapsedTime - start.current;
-    const p = Math.min(1, e / dur);
     const g = body.current;
     if (g) {
-      g.visible = p < 1;
-      at(p, g.position);
-      at(Math.min(1, p + 0.02), tmpA);
-      g.lookAt(tmpA);
+      if (e < ROCKET_UP) {
+        // 솟구치기(점점 빨라짐) — 머리가 위(+y)
+        const p = e / ROCKET_UP;
+        g.visible = true;
+        g.position.set(from.x, from.y + p * p * ROCKET_SKY, from.z);
+        g.rotation.set(-Math.PI / 2, 0, 0);
+      } else if (e >= ROCKET_FALL_AT && e < dur) {
+        // 떨어지기(중력처럼 가속) — 머리가 아래(−y)
+        const p = (e - ROCKET_FALL_AT) / (dur - ROCKET_FALL_AT);
+        g.visible = true;
+        g.position.set(to.x, to.y + (1 - p * p) * ROCKET_SKY, to.z);
+        g.rotation.set(Math.PI / 2, 0, 0);
+      } else g.visible = false;
+    }
+    if (mark.current && markMat.current) {
+      mark.current.visible = e > 0.3 && e < dur;
+      const k = Math.max(0, (e - 0.3) / (dur - 0.3));
+      mark.current.scale.setScalar(1.4 - k * 0.6);
+      markMat.current.opacity = 0.35 + Math.abs(Math.sin(e * 14)) * 0.5;
     }
     const b = Math.max(0, e - dur);
     if (boom.current && boomMat.current) {
@@ -398,6 +417,10 @@ function Rocket({ from, to, kill, dur }: { from: THREE.Vector3; to: THREE.Vector
         <sphereGeometry args={[0.5, 16, 12]} />
         <meshBasicMaterial ref={boomMat} color={kill ? "#ef4444" : "#fb923c"} transparent blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
       </mesh>
+      <mesh ref={mark} position={[to.x, to.y - 0.98, to.z]} rotation-x={-Math.PI / 2} visible={false}>
+        <ringGeometry args={[0.42, 0.55, 32]} />
+        <meshBasicMaterial ref={markMat} color="#ef4444" transparent side={THREE.DoubleSide} depthWrite={false} toneMapped={false} />
+      </mesh>
       <mesh ref={ring} position={[to.x, 0.05, to.z]} rotation-x={-Math.PI / 2} visible={false}>
         <ringGeometry args={[0.45, 0.6, 32]} />
         <meshBasicMaterial ref={ringMat} color="#fdba74" transparent side={THREE.DoubleSide} depthWrite={false} toneMapped={false} />
@@ -406,7 +429,7 @@ function Rocket({ from, to, kill, dur }: { from: THREE.Vector3; to: THREE.Vector
   );
 }
 
-const ROCKET_DUR = 0.95;
+const ROCKET_DUR = 1.3;
 
 function MissileScene({ state, viewerSeat, names, colors, lowDetail, onFire }: QPlayStage3DProps) {
   const n = state.seatCount;
@@ -452,26 +475,15 @@ function MissileScene({ state, viewerSeat, names, colors, lowDetail, onFire }: Q
         const out = !alive && phase !== "intro" && phase !== "miniEnd";
         // 공개 중 맞은 사람: 충돌 전엔 잃기 전 하트로
         const hp = shot?.to === s && !impact ? Math.min(MISSILE_HP, state.hp[s] + 1) : state.hp[s];
-        const a = state.answers[s];
         let pose: FighterPose = "idle";
         let sub: string | null = "❤️".repeat(Math.max(0, state.hp[s])) + "🖤".repeat(Math.max(0, MISSILE_HP - state.hp[s]));
         if (shot?.to === s && !impact) sub = "❤️".repeat(hp) + "🖤".repeat(Math.max(0, MISSILE_HP - hp));
-        let aimAt: THREE.Vector3 | null = null;
         if (phase === "question" && eligible.has(s) && q && hasFinished(state, s)) sub = `✔️ 답변 완료 · ${sub}`;
-        if (phase === "aim") {
-          if (state.shooter === s) {
-            pose = "charge";
-            sub = "🚀 조준 중";
-          } else if (alive) pose = "block";
-        }
+        if (phase === "aim" && state.shooter === s) sub = "🚀 조준 중";
+        // 주고받는 동작 없이: 쏜 사람은 발사 버튼을 누른 듯 만세, 맞을 사람은 하늘을 보고 머리를 감싸고 웅크린다
         if (shot) {
-          if (shot.from === s) {
-            pose = "jangpung";
-            aimAt = spots[shot.to];
-          } else if (shot.to === s) {
-            pose = impact && shot.kill ? "hit" : "block";
-            aimAt = spots[shot.from];
-          } else if (a?.correct) pose = "idle";
+          if (shot.from === s) pose = "win";
+          else if (shot.to === s) pose = impact && shot.kill ? "hit" : "duck";
         }
         if (phase === "miniEnd" && alive) pose = "win";
         if (out && !(shot?.to === s)) pose = "down";
@@ -490,7 +502,7 @@ function MissileScene({ state, viewerSeat, names, colors, lowDetail, onFire }: Q
                 pose={pose}
                 poseKey={`${pose}-${state.stage}-${impact}`}
                 moveTo={null}
-                aimAt={aimAt ? tmpLocal(aimAt, spot) : null}
+                aimAt={null}
                 out={out}
                 size={MISSILE_SIZE}
                 lowDetail={lowDetail}
@@ -509,7 +521,7 @@ function MissileScene({ state, viewerSeat, names, colors, lowDetail, onFire }: Q
       {shot && (
         <Rocket
           key={state.stage}
-          from={spots[shot.from].clone().setY(PAD_BASE + state.hp[shot.from] * SEG + 1.3)}
+          from={spots[shot.from].clone().add(new THREE.Vector3(0.55, PAD_BASE + state.hp[shot.from] * SEG + 0.4, 0))}
           to={spots[shot.to].clone().setY(PAD_BASE + Math.min(MISSILE_HP, state.hp[shot.to] + 1) * SEG + 1.0)}
           kill={shot.kill}
           dur={ROCKET_DUR}
@@ -520,11 +532,6 @@ function MissileScene({ state, viewerSeat, names, colors, lowDetail, onFire }: Q
       <AdaptiveResolution max={lowDetail ? 1.5 : 2} />
     </>
   );
-}
-
-/** 받침대 그룹 안 좌표로(VrmFighter는 부모 기준으로 방향을 잰다). */
-function tmpLocal(world: THREE.Vector3, origin: THREE.Vector3): THREE.Vector3 {
-  return new THREE.Vector3(world.x - origin.x, 0, world.z - origin.z);
 }
 
 // ---------------------------------------------------------------------------
