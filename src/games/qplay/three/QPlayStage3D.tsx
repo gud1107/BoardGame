@@ -99,8 +99,8 @@ function FootRing({ color, pulse = false, r = 0.5 }: { color: string; pulse?: bo
 function NameTag({ text, sub, color, me, y }: { text: string; sub?: string | null; color: string; me: boolean; y: number }) {
   return (
     <>
-      <ScreenSprite position={[0, y, 0]} anchorY={y - 0.3} scale={[0.62, 0.155]} map={labelTexture(me ? `${text} (나)` : text, me ? "#fbbf24" : color)} />
-      {sub && <ScreenSprite position={[0, y + 0.19, 0]} anchorY={y - 0.3} scale={[0.62, 0.155]} map={labelTexture(sub, "#e2e8f0", { bg: "rgba(10,15,40,0.82)", fg: "#f1f5f9" })} />}
+      <ScreenSprite position={[0, y, 0]} anchorY={y - 0.3} scale={[0.5, 0.125]} map={labelTexture(me ? `${text} (나)` : text, me ? "#fbbf24" : color)} />
+      {sub && <ScreenSprite position={[0, y + 0.15, 0]} anchorY={y - 0.3} scale={[0.5, 0.125]} map={labelTexture(sub, "#e2e8f0", { bg: "rgba(10,15,40,0.82)", fg: "#f1f5f9" })} />}
     </>
   );
 }
@@ -173,26 +173,29 @@ function FitCamera({ width, height, look, from }: { width: number; height: numbe
 // ---------------------------------------------------------------------------
 // 🧗 올라올라
 
+/**
+ * 탑 = 캐릭터 뒤의 벽(층마다 색 띠·발판 가로대) + 꼭대기 금색 발판·깃발. 층마다 발판을 쌓으면
+ * 사람 키(1.6)보다 층 간격(0.42)이 좁아 몸을 뚫으므로, 발밑 발판은 캐릭터와 같이 움직인다(`Climber`).
+ */
 function Tower({ x, color, top }: { x: number; color: string; top: boolean }) {
   return (
     <group position-x={x}>
-      {/* 가운데 기둥 */}
-      <mesh position={[0, (CLIMB_TOP * H) / 2, -0.42]}>
-        <boxGeometry args={[0.12, CLIMB_TOP * H + 0.2, 0.12]} />
-        <meshStandardMaterial color="#334155" metalness={0.4} roughness={0.5} />
+      <mesh position={[0, (CLIMB_TOP * H) / 2, -0.5]}>
+        <boxGeometry args={[0.95, CLIMB_TOP * H + 0.1, 0.08]} />
+        <meshStandardMaterial color="#1e293b" roughness={0.7} />
       </mesh>
-      {Array.from({ length: CLIMB_TOP }, (_, i) => {
-        const k = i + 1;
-        const last = k === CLIMB_TOP;
-        return (
-          <mesh key={k} position={[0, k * H - 0.05, 0]}>
-            <boxGeometry args={[0.92, 0.1, 0.8]} />
-            <meshStandardMaterial color={last ? "#facc15" : k % 2 ? color : "#e2e8f0"} emissive={last ? "#facc15" : "#000000"} emissiveIntensity={last ? (top ? 0.9 : 0.25) : 0} roughness={0.55} />
-          </mesh>
-        );
-      })}
-      {/* 꼭대기 깃발 */}
-      <group position={[0.36, CLIMB_TOP * H, -0.3]}>
+      {Array.from({ length: CLIMB_TOP }, (_, i) => (
+        <mesh key={i} position={[0, i * H + H / 2, -0.45]}>
+          <boxGeometry args={[0.95, H - 0.04, 0.02]} />
+          <meshStandardMaterial color={i % 2 ? color : "#e2e8f0"} roughness={0.6} />
+        </mesh>
+      ))}
+      {/* 꼭대기 금색 발판 + 깃발 */}
+      <mesh position={[0, CLIMB_TOP * H - 0.05, -0.1]}>
+        <boxGeometry args={[0.95, 0.1, 0.9]} />
+        <meshStandardMaterial color="#facc15" emissive="#facc15" emissiveIntensity={top ? 0.9 : 0.25} roughness={0.5} />
+      </mesh>
+      <group position={[0.38, CLIMB_TOP * H, -0.45]}>
         <mesh position-y={0.45}>
           <cylinderGeometry args={[0.015, 0.015, 0.9, 6]} />
           <meshStandardMaterial color="#e5e7eb" />
@@ -234,8 +237,8 @@ function ClimbScene({ state, viewerSeat, names, colors, lowDetail }: QPlayStage3
           </mesh>
         ))}
       {/* 층 표시(왼쪽 끝 한 줄) */}
-      {Array.from({ length: CLIMB_TOP }, (_, i) => (
-        <ScreenSprite key={i} position={[xs[0] - 0.85, (i + 1) * H, 0]} scale={[0.32, 0.12]} map={labelTexture(i + 1 === CLIMB_TOP ? "🏁" : `${i + 1}F`, "#0f172a", { bg: "rgba(255,255,255,0.85)", fg: "#0f172a" })} />
+      {[2, 4, 6, 8, CLIMB_TOP].map((f) => (
+        <ScreenSprite key={f} position={[xs[0] - 0.75, f * H, -0.45]} scale={[0.22, 0.08]} map={labelTexture(f === CLIMB_TOP ? "🏁" : `${f}F`, "#0f172a", { bg: "rgba(255,255,255,0.85)", fg: "#0f172a" })} />
       ))}
       {xs.map((x, s) => (
         <Tower key={s} x={x} color={colors[s % colors.length]} top={state.floor[s] >= CLIMB_TOP} />
@@ -261,6 +264,12 @@ function Climber({ seat, home, state, me, name, look, color, lowDetail, ended }:
   return (
     <group position={[home.x, 0, 0]}>
       <Lift y={floor * H}>
+        {!top && (
+          <mesh position={[0, -0.05, -0.1]}>
+            <boxGeometry args={[0.8, 0.1, 0.7]} />
+            <meshStandardMaterial color={color} roughness={0.5} />
+          </mesh>
+        )}
         <VrmFighter look={look} seed={seat * 7 + 1} home={ORIGIN} facing={0} pose={pose} poseKey={`${pose}-${tries}`} moveTo={null} aimAt={null} out={false} lowDetail={lowDetail}>
           {me && <FootRing color="#fbbf24" r={0.36} />}
           <NameTag text={name} sub={`${medal}${top ? " 도착!" : `${floor}층`}`} color={color} me={me} y={2.0} />
@@ -498,7 +507,7 @@ function MissileScene({ state, viewerSeat, names, colors, lowDetail, onFire }: Q
           dur={ROCKET_DUR}
         />
       )}
-      <FitCamera width={span + 2.4} height={4.4} look={[0, 0.9, centre.z - 2.2]} from={[0.55, 1]} />
+      <FitCamera width={span + 2.4} height={5.4} look={[0, 1.25, centre.z - 2.2]} from={[0.55, 1]} />
       <AdaptiveResolution max={lowDetail ? 1.5 : 2} />
     </>
   );
@@ -512,13 +521,13 @@ function tmpLocal(world: THREE.Vector3, origin: THREE.Vector3): THREE.Vector3 {
 // ---------------------------------------------------------------------------
 // ⭕ OX 광장
 
-const PLAZA_W = 8.6;
+const PLAZA_W = 7.6;
 const PLAZA_D = 5.4;
 const ZONE_X = [
-  [-3.3, -2.0],
-  [2.0, 3.3],
+  [-2.95, -1.75],
+  [1.75, 2.95],
 ];
-const LANE_X = [-0.6, 0.6];
+const LANE_X = [-0.55, 0.55];
 const ROW_Z = [-1.95, -0.65, 0.65, 1.95];
 
 export function oxSpot(seat: Seat, zone: number | null): THREE.Vector3 {
@@ -585,8 +594,8 @@ function ZoneFloor({ zone, reveal, answer }: { zone: number; reveal: boolean; an
       {/* 오답 쪽 빗금 — 색각 이상이어도 보이게 */}
       {wrong &&
         Array.from({ length: 7 }, (_, i) => (
-          <mesh key={i} rotation={[-Math.PI / 2, 0, Math.PI / 4]} position={[-1.8 + i * 0.6, 0.008, 0]}>
-            <planeGeometry args={[0.12, 5]} />
+          <mesh key={i} rotation-x={-Math.PI / 2} position={[-1.5 + i * 0.5, 0.008, 0]}>
+            <planeGeometry args={[0.12, PLAZA_D - 0.2]} />
             <meshBasicMaterial color="#0f172a" transparent opacity={0.45} depthWrite={false} />
           </mesh>
         ))}
@@ -661,7 +670,7 @@ function OxScene({ state, viewerSeat, names, colors, lowDetail, ox }: QPlayStage
           </group>
         );
       })}
-      <FitCamera width={PLAZA_W + 0.4} height={PLAZA_D + 1.6} look={[0, 0, 0.35]} from={[0.95, 1]} />
+      <FitCamera width={PLAZA_W + 0.2} height={PLAZA_D} look={[0, 0.3, 0.2]} from={[1.2, 1]} />
       <AdaptiveResolution max={lowDetail ? 1.5 : 2} />
     </>
   );
