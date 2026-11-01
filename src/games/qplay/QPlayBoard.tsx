@@ -19,6 +19,7 @@ import {
   phaseDurationMs,
   type EngineAction,
   type GameState,
+  type MiniId,
   type Question,
   type Seat,
 } from "./engine";
@@ -354,7 +355,7 @@ function RevealPanel({ state, viewerSeat, names }: { state: GameState; viewerSea
           정답: {q.word} <span className="text-sm font-bold text-white/60 light:text-slate-500">({q.chosung})</span>
         </p>
       )}
-      {q.explain && <p className="break-keep text-center text-sm text-white/75 light:text-slate-600">💡 {q.explain}</p>}
+      {q.explain && q.kind !== "ox" && <p className="break-keep text-center text-sm text-white/75 light:text-slate-600">💡 {q.explain}</p>}
       {mini === "ox" && state.revived && <p className="text-center text-base font-black text-amber-200 light:text-amber-700">😇 전원 오답 — 모두 부활!</p>}
       {mini === "ox" && state.eliminated.length > 0 && (
         <p className="text-center text-sm font-bold text-rose-300 light:text-rose-600">💀 탈락: {state.eliminated.map((s) => names[s]).join(", ")}</p>
@@ -384,6 +385,21 @@ function RevealPanel({ state, viewerSeat, names }: { state: GameState; viewerSea
 
 /* ── 미니 게임 결과 · 최종 ─────────────────────────────────── */
 
+/** OX 끝: 탈락 뒤 유령으로 가장 많이 맞힌 사람(점수와 무관한 칭호). */
+function GhostKing({ state, names, mini }: { state: GameState; names: Record<Seat, string>; mini: MiniId }) {
+  const tries = state.ghostTries ?? [];
+  const hits = state.ghostHits ?? [];
+  if (mini !== "ox" || !tries.some((t) => t > 0)) return null;
+  const best = Math.max(...hits);
+  const kings = tries.map((t, s) => (t > 0 && hits[s] === best ? s : -1)).filter((s) => s >= 0);
+  return (
+    <p className="text-center text-xs font-bold text-violet-200 light:text-violet-700">
+      👻 유령 예측왕: {kings.map((s) => `${names[s]} (${hits[s]}/${tries[s]})`).join(", ")}
+      {best === 0 && " — 아무도 못 맞혔어요"}
+    </p>
+  );
+}
+
 function MiniEndPanel({ state, viewerSeat, names, isHost, onAction }: { state: GameState; viewerSeat: Seat; names: Record<Seat, string>; isHost: boolean; onAction: (a: EngineAction) => void }) {
   const record = state.history[state.history.length - 1];
   const info = MINI_INFO[record.mini];
@@ -404,6 +420,7 @@ function MiniEndPanel({ state, viewerSeat, names, isHost, onAction }: { state: G
           </li>
         ))}
       </ol>
+      <GhostKing state={state} names={names} mini={record.mini} />
       {state.miniIndex + 1 < state.plan.length && (
         <p className="text-center text-xs text-white/50 light:text-slate-500">
           다음: {MINI_INFO[state.plan[state.miniIndex + 1]].emoji} {MINI_INFO[state.plan[state.miniIndex + 1]].name}
@@ -475,7 +492,10 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
   // 내 선택은 방장 왕복 전에도 바로 보여 준다(OX는 마지막으로 옮긴 쪽).
   const [localPick, setLocalPick] = useState<{ stage: number; choice: number } | null>(null);
   const myAnswer = state.answers[viewerSeat];
-  const picked = localPick && localPick.stage === state.stage ? localPick.choice : (myAnswer?.choice ?? null);
+  // OX에서 이미 탈락한 나 = 👻 유령(점수 없이 예측 놀이). 이번 문제에 탈락한 사람은 다음 문제부터 유령.
+  const ghostMe = mini === "ox" && !state.alive[viewerSeat] && !state.eliminated.includes(viewerSeat);
+  const myJudged = ghostMe ? (state.ghosts?.[viewerSeat] ?? null) : (myAnswer?.choice ?? null);
+  const picked = localPick && localPick.stage === state.stage ? localPick.choice : myJudged;
   const eligible = eligibleSeats(state).includes(viewerSeat);
 
   const answeredSeats = new Set(Object.keys(state.answers).map(Number).filter((s) => hasFinished(state, s)));
@@ -488,9 +508,11 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
   const oxLocked = oxFocus && state.phase === "question" && remainingMs !== null && remainingMs <= OX_LOCK_MS;
   // 공개 때 내 화면의 마지막 쪽(방금 문제 단계의 로컬 선택)과 판정이 다르면 알려 준다
   const oxLate =
-    oxFocus && state.phase === "reveal" && localPick && localPick.stage === state.stage - 1 && localPick.choice !== (myAnswer?.choice ?? null)
-      ? { shown: localPick.choice, judged: myAnswer?.choice ?? null }
+    oxFocus && state.phase === "reveal" && localPick && localPick.stage === state.stage - 1 && localPick.choice !== myJudged
+      ? { shown: localPick.choice, judged: myJudged }
       : null;
+  // 시간이 0이 된 뒤 방장의 판정이 닿기 전까지 — 멈춘 "0" 대신 판정 중이라고 알린다(방장 인터넷이 느릴 때)
+  const judging = state.phase === "question" && remainingMs === 0;
 
   return (
     <div className="relative flex flex-col gap-3">
@@ -534,8 +556,14 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
               style={{ width: `${remainingMs === null ? 0 : Math.min(100, (remainingMs / Math.max(1, phaseDurationMs(state))) * 100)}%` }}
             />
           </div>
-          {(state.phase === "question" || state.phase === "climb" || state.phase === "aim") && (
-            <span className={`w-8 text-right text-lg font-black tabular-nums ${hurry ? "animate-pulse text-rose-400" : "text-white light:text-slate-900"}`}>{remaining}</span>
+          {judging ? (
+            <span role="status" className="shrink-0 animate-pulse text-xs font-black whitespace-nowrap text-amber-300 light:text-amber-700">
+              ⏳ 판정 중…
+            </span>
+          ) : (
+            (state.phase === "question" || state.phase === "climb" || state.phase === "aim") && (
+              <span className={`w-8 text-right text-lg font-black tabular-nums ${hurry ? "animate-pulse text-rose-400" : "text-white light:text-slate-900"}`}>{remaining}</span>
+            )
           )}
         </div>
       )}
@@ -583,16 +611,18 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
               picked={picked}
               reveal={state.phase !== "question"}
               onMove={
-                state.phase === "question" && eligible
+                state.phase === "question" && (eligible || ghostMe)
                   ? (choice) => {
                       getQPlaySound().unlock();
                       getQPlaySound().play("pick");
                       setLocalPick({ stage: state.stage, choice });
-                      onAction({ type: "ANSWER", seat: viewerSeat, q: state.qIndex, choice });
+                      onAction({ type: ghostMe ? "GHOST" : "ANSWER", seat: viewerSeat, q: state.qIndex, choice });
                     }
                   : null
               }
+              ghostMe={ghostMe}
               locked={oxLocked}
+              judging={judging}
               late={oxLate}
             />
           )}

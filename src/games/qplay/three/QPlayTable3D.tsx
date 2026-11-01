@@ -192,7 +192,11 @@ export default function QPlayTable3D({ state, viewerSeat, names, connectedSeats,
       if (champ.includes(s)) tag = { text: "🏆 우승", color: "#facc15" };
     }
 
-    const fireable = onFire && phase === "aim" && state.shooter === viewerSeat && s !== viewerSeat && state.alive[s];
+    // OX 유령(이미 탈락) — 예측 중인 쪽을 머리 위에
+    const ghostPick = state.ghosts?.[s];
+    if (out && mini === "ox" && phase === "question" && ghostPick !== undefined) tag = { text: `👻 ${ghostPick === 0 ? "⭕" : "❌"} 예측`, color: "#c4b5fd" };
+
+    const fireable =onFire && phase === "aim" && state.shooter === viewerSeat && s !== viewerSeat && state.alive[s];
     const color = THEME.seatColors[s % THEME.seatColors.length];
     return {
       seat: s,

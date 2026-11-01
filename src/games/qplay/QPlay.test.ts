@@ -200,6 +200,37 @@ describe("OX survival (§4)", () => {
   });
 });
 
+describe("OX ghosts (§4)", () => {
+  it("eliminated players predict as ghosts — counted per OX game, never scored", () => {
+    let s = only("ox", 3);
+    let a = currentQuestion(s)!.answer;
+    // 1번: 0번 탈락
+    s = act(s, { type: "ANSWER", seat: 0, q: 0, choice: 1 - a });
+    s = act(s, { type: "ANSWER", seat: 1, q: 0, choice: a });
+    s = act(s, { type: "ANSWER", seat: 2, q: 0, choice: a });
+    // 산 사람은 유령 행동을 못 한다
+    expect(act(s, { type: "GHOST", seat: 1, q: 0, choice: a })).toBe(s);
+    s = timeout(s);
+    expect(s.alive).toEqual([false, true, true]);
+    s = timeout(s); // 2번 문제
+    a = currentQuestion(s)!.answer;
+    s = act(s, { type: "GHOST", seat: 0, q: s.qIndex, choice: 1 - a });
+    s = act(s, { type: "GHOST", seat: 0, q: s.qIndex, choice: a }); // 유령도 옮겨 다닌다
+    expect(act(s, { type: "GHOST", seat: 0, q: s.qIndex, choice: a })).toBe(s);
+    expect(act(s, { type: "GHOST", seat: 0, q: s.qIndex, choice: 5 })).toBe(s);
+    s = act(s, { type: "ANSWER", seat: 1, q: s.qIndex, choice: a });
+    s = act(s, { type: "ANSWER", seat: 2, q: s.qIndex, choice: a });
+    const before = s.miniScores[0];
+    s = timeout(s);
+    expect(s.ghostHits[0]).toBe(1);
+    expect(s.ghostTries[0]).toBe(1);
+    expect(s.miniScores[0]).toBe(before);
+    expect(s.alive[0]).toBe(false);
+    s = timeout(s); // 3번 — 유령 자리는 새 문제마다 비운다
+    expect(s.ghosts).toEqual({});
+  });
+});
+
 describe("OX free movement (§4)", () => {
   it("lets players switch sides until time runs out — where they stand at the end counts", () => {
     let s = only("ox", 2);

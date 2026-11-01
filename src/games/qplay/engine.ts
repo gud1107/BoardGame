@@ -375,6 +375,13 @@ export interface GameState {
   readonly miniWins: readonly number[];
   readonly history: readonly MiniRecord[];
   readonly cursors: Readonly<Record<BankId, number>>;
+  /**
+   * OX 유령 — 이미 탈락한 사람이 이번 문제에 서 있는 쪽(§4 유령 예측). 점수·생존과 무관한
+   * 구경 놀이라 판정엔 안 들어가고, 이번 OX 게임 동안 적중/시도만 센다.
+   */
+  readonly ghosts: Readonly<Record<Seat, number>>;
+  readonly ghostHits: readonly number[];
+  readonly ghostTries: readonly number[];
   /** 좌석별 "답할 수 있었는데 안 낸 문제" 연속 횟수 — 무응답 봇 대체 투표 트리거용. */
   readonly idle: readonly number[];
   readonly stats: SeatStats;
@@ -382,6 +389,7 @@ export interface GameState {
 
 export type EngineAction =
   | { type: "ANSWER"; seat: Seat; q: number; choice: number }
+  | { type: "GHOST"; seat: Seat; q: number; choice: number }
   | { type: "TYPE"; seat: Seat; q: number; text: string }
   | { type: "FIRE"; seat: Seat; target: Seat }
   | { type: "CLIMB"; seat: Seat; idx: number; choice: number }
@@ -411,7 +419,8 @@ export function phaseDurationMs(state: Pick<GameState, "phase" | "plan" | "miniI
     case "aim":
       return 7000;
     case "reveal":
-      return mini === "ox" ? 3000 : 3500;
+      // OX는 광장(누가 어디 섰나)과 해설을 휴대폰에서 둘 다 읽을 시간
+      return mini === "ox" ? 5000 : 3500;
     case "climb":
       return CLIMB_SECONDS[state.options.length] * 1000;
     case "miniEnd":
@@ -538,6 +547,9 @@ function setupMini(state: GameState, miniIndex: number): GameState {
     lastClimb: Array.from({ length: n }, () => null),
     miniScores: zeros(n),
     cursors,
+    ghosts: {},
+    ghostHits: zeros(n),
+    ghostTries: zeros(n),
   };
 }
 
@@ -573,6 +585,9 @@ export function startGame(seatCount: number, seed: number, options?: Partial<Gam
     miniWins: zeros(n),
     history: [],
     cursors: { ox: 0, proverb: 0, idiom: 0, nonsense: 0, general: 0, chosung: 0 },
+    ghosts: {},
+    ghostHits: zeros(n),
+    ghostTries: zeros(n),
     idle: zeros(n),
     stats: {
       correct: zeros(n),
@@ -612,12 +627,20 @@ function resolveQuestion(state: GameState): GameState {
 
   let alive = state.alive;
   let eliminated: Seat[] = [];
+  let ghostHits = state.ghostHits ?? zeros(n);
+  let ghostTries = state.ghostTries ?? zeros(n);
   let revived = false;
   let shooter: Seat | null = null;
 
   switch (mini) {
     case "ox": {
       for (const s of order) gained[s] = OX_CORRECT;
+      const q = currentQuestion(state);
+      for (const [k, choice] of Object.entries(state.ghosts ?? {})) {
+        const s = Number(k);
+        ghostTries = bump(ghostTries, s);
+        if (q && choice === q.answer) ghostHits = bump(ghostHits, s);
+      }
       const out = eligible.filter((s) => !state.answers[s]?.correct);
       if (out.length === eligible.length && eligible.length > 0) revived = true;
       else {
@@ -651,6 +674,8 @@ function resolveQuestion(state: GameState): GameState {
     shot: null,
     idle,
     stats,
+    ghostHits,
+    ghostTries,
   };
 }
 
@@ -733,7 +758,7 @@ function finishMini(state: GameState): GameState {
 
 function nextQuestion(state: GameState): GameState {
   if (miniOver(state)) return finishMini(state);
-  return { ...state, phase: "question", stage: state.stage + 1, qIndex: state.qIndex + 1, answers: {}, arrivals: 0, shooter: null, shot: null, gained: zeros(state.seatCount), eliminated: [], revived: false };
+  return { ...state, phase: "question", stage: state.stage + 1, qIndex: state.qIndex + 1, answers: {}, arrivals: 0, ghosts: {}, shooter: null, shot: null, gained: zeros(state.seatCount), eliminated: [], revived: false };
 }
 
 function advanceMini(state: GameState): GameState {
@@ -764,6 +789,16 @@ export function applyAction(state: GameState, action: EngineAction): GameState {
       if (prev && (q.kind !== "ox" || prev.choice === action.choice)) return state;
       const answer: Answer = { choice: action.choice, correct: action.choice === q.answer, order: prev?.order ?? state.arrivals };
       return { ...state, answers: { ...state.answers, [action.seat]: answer }, arrivals: prev ? state.arrivals : state.arrivals + 1 };
+    }
+    case "GHOST": {
+      // 탈락자의 유령 예측 — OX 문제 동안 살아 있는 사람처럼 몇 번이든 옮겨 다닌다
+      if (state.phase !== "question" || action.q !== state.qIndex) return state;
+      if (currentQuestion(state)?.kind !== "ox") return state;
+      if (action.seat < 0 || action.seat >= state.seatCount || eligibleSeats(state).includes(action.seat)) return state;
+      if (action.choice !== 0 && action.choice !== 1) return state;
+      const ghosts = state.ghosts ?? {};
+      if (ghosts[action.seat] === action.choice) return state;
+      return { ...state, ghosts: { ...ghosts, [action.seat]: action.choice } };
     }
     case "TYPE": {
       if (state.phase !== "question" || action.q !== state.qIndex) return state;

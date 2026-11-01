@@ -703,7 +703,11 @@ export default function QPlayGame({ onComplete }: PlayableGameProps) {
         for (const seat of allBotSeatsRef.current) {
           if (seat >= state.seatCount) continue;
           if (state.phase === "aim" && seat !== state.shooter) continue;
-          if (state.phase === "question" && (!eligibleSeats(state).includes(seat) || (hasFinished(state, seat) && !(isOx && clock.ox.get(seat)?.length)))) continue;
+          // OX에선 탈락한 봇도 유령으로 예측 놀이에 낀다(점수 무관)
+          const ghost = isOx && !eligibleSeats(state).includes(seat);
+          if (state.phase === "question" && !ghost && !eligibleSeats(state).includes(seat)) continue;
+          const placed = ghost ? state.ghosts?.[seat] !== undefined : hasFinished(state, seat);
+          if (state.phase === "question" && placed && !(isOx && clock.ox.get(seat)?.length)) continue;
           const idx = botSeatsRef.current.indexOf(seat);
           const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
           const at = clock.next.get(seat);
@@ -732,7 +736,7 @@ export default function QPlayGame({ onComplete }: PlayableGameProps) {
             const rest = left < 1600 ? [] : plan.slice(1);
             clock.ox.set(seat, rest);
             clock.next.set(seat, rest.length ? now + Math.min(900 + Math.random() * 1300, Math.max(0, left - 900)) : now + 60_000);
-            if (choice !== undefined) handleAction({ type: "ANSWER", seat, q: state.qIndex, choice });
+            if (choice !== undefined) handleAction({ type: ghost ? "GHOST" : "ANSWER", seat, q: state.qIndex, choice });
           } else if (mini === "chosung") {
             const text = chooseBotTyping(state, seat, level);
             clock.next.set(seat, text ? now + 2500 + Math.random() * 3000 : now + 60_000);

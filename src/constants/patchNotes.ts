@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.137.0",
+    releaseDate: "2026-11-01",
+    title: "👻 큐플레이 OX — 탈락해도 유령으로 계속 놀기",
+    changes: [
+      { game: "qplay", type: "FEAT", desc: "👻 OX에서 탈락하면 유령이 되어 광장을 떠다니며 계속 ⭕/❌를 예측해요 — 점수엔 영향 없고, 끝나면 ‘유령 예측왕’ 발표 (탈락한 봇도 유령으로 참여)" },
+      { game: "qplay", type: "IMPROVE", desc: "⏳ 시간이 0이 됐는데 판정이 늦으면 멈춘 0 대신 ‘판정 중…’을 보여 줘요 (방장 인터넷이 느릴 때)" },
+      { game: "qplay", type: "IMPROVE", desc: "💡 OX 정답 공개 3초 → 5초, 해설은 광장 바로 아래로 — 휴대폰에서 스크롤 없이 결과와 해설을 함께 봐요" },
+    ],
+  },
+  {
     version: "v1.136.0",
     releaseDate: "2026-11-01",
     title: "💀 새 게임: 죽은척 기싸움",
