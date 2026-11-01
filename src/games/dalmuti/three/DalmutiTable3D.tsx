@@ -388,32 +388,36 @@ function TrickPile({ plays, nameOf }: { plays: DalmutiTable3DProps["plays"]; nam
   const geo = useTableGeo();
   const top = plays[plays.length - 1];
   const older = plays.slice(-4, -1);
-  const topWidth = Math.min(2.1, geo.tableR * 1.4);
+  // Big tables (6~8인) put me further from the centre — grow the pile with the table so
+  // the top play reads at the same on-screen size as in a 4인 game.
+  const grow = Math.max(1, geo.tableR / 1.6);
+  const topW = TOP_W * grow;
+  const topWidth = Math.min(2.1 * grow, geo.tableR * 1.4);
   const topColor = top ? SEAT_COLORS[top.seat % SEAT_COLORS.length] : undefined;
-  const chipScale = Math.max(1, geo.tableR / 1.6);
-  const oldWidth = Math.min(0.7, (geo.tableR * 1.5) / Math.max(1, older.length) - 0.08);
+  const oldWidth = Math.min(0.7 * grow, (geo.tableR * 1.5) / Math.max(1, older.length) - 0.08);
+  const chipW = 0.75 * grow;
   return (
     <group>
       {older.map((p, k) => (
         <group
           key={`${p.seat}-${p.cards.map((c) => c.id).join(",")}`}
-          position={[(k - (older.length - 1) / 2) * (oldWidth + 0.08), 0.002, -0.5]}
+          position={[(k - (older.length - 1) / 2) * (oldWidth + 0.08), 0.002, -0.5 * grow]}
         >
-          <PlayFan cards={p.cards} w={OLD_W} h={OLD_H} maxWidth={oldWidth} />
+          <PlayFan cards={p.cards} w={OLD_W * grow} h={OLD_H * grow} maxWidth={oldWidth} />
         </group>
       ))}
       {top && (
-        <group key={`${top.seat}-${top.cards.map((c) => c.id).join(",")}`} position={[0, 0.006, 0.3]}>
+        <group key={`${top.seat}-${top.cards.map((c) => c.id).join(",")}`} position={[0, 0.006, 0.3 * grow]}>
           <FlyIn from={geo.spotOf(top.seat, 0.4).sub(new THREE.Vector3(0, geo.tableY, 0))} dur={0.5} arc={0.55}>
-            <PlayFan cards={top.cards} w={TOP_W} h={TOP_H} maxWidth={topWidth} glow={topColor} />
+            <PlayFan cards={top.cards} w={topW} h={TOP_H * grow} maxWidth={topWidth} glow={topColor} />
           </FlyIn>
-          {/* big tables put me further away — grow the chip with the table so 6~8인 can still read it */}
+          {/* clear of the fan's right edge, clamped onto the felt for huge sets */}
           <ScreenSprite
-            position={[Math.min((TOP_W + fanStep(top.cards.length, TOP_W, topWidth) * (top.cards.length - 1)) / 2 + 0.5, geo.tableR - 0.45), 0.1, 0.3]}
-            scale={[0.75 * chipScale, 0.19 * chipScale]}
-            map={labelTexture(`🃏 ${nameOf(top.seat)}`, topColor!)}
+            position={[Math.min((topW + fanStep(top.cards.length, topW, topWidth) * (top.cards.length - 1)) / 2 + chipW / 2 + 0.12, geo.tableR - chipW / 2), 0.1, 0]}
+            scale={[chipW, 0.19 * grow]}
+            map={labelTexture(nameOf(top.seat), topColor!)}
           />
-          <ImpactRing key={plays.length} color={top.cards.some((c) => c.isJoker) ? "#fb7185" : "#fde68a"} size={1.5} />
+          <ImpactRing key={plays.length} color={top.cards.some((c) => c.isJoker) ? "#fb7185" : "#fde68a"} size={1.5 * grow} />
         </group>
       )}
     </group>
