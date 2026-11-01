@@ -118,6 +118,17 @@ function useTurnClock(turn: number): number {
   return left.turn === turn ? left.ms : TURN_MS;
 }
 
+/** Set once the player has finished a real touch drag (or closed the tip) — the "hold to pick up" tip never shows again. */
+const HOLD_TIP_KEY = "star-rummy-hold-tip-v1";
+
+function wantsHoldTip(): boolean {
+  try {
+    return window.matchMedia("(pointer: coarse)").matches && localStorage.getItem(HOLD_TIP_KEY) !== "done";
+  } catch {
+    return false;
+  }
+}
+
 export default function StarRummyBoard({ state, viewerSeat, names, connectedSeats, isHost, onAction, onGameEnd, onRulebook }: StarRummyBoardProps) {
   const board3d = useBoardView("star-rummy-view");
   const [lowDetail] = useState(preferLowDetail);
@@ -131,6 +142,14 @@ export default function StarRummyBoard({ state, viewerSeat, names, connectedSeat
   // while a touch drag is live, the board's touchmove is cancelled so the page doesn't scroll
   const rootRef = useRef<HTMLDivElement>(null);
   const touchDragRef = useRef(false);
+  // touch only: "hold to pick up" tip; "nudge" = they just swiped from a tile and got a scroll instead
+  const [holdTip, setHoldTip] = useState<"off" | "show" | "nudge">(() => (wantsHoldTip() ? "show" : "off"));
+  const closeHoldTip = () => {
+    setHoldTip("off");
+    try {
+      localStorage.setItem(HOLD_TIP_KEY, "done");
+    } catch {}
+  };
   useEffect(() => {
     const el = rootRef.current;
     if (!el) return;
@@ -263,7 +282,10 @@ export default function StarRummyBoard({ state, viewerSeat, names, connectedSeat
       const far = Math.hypot(x - sx, y - sy) >= (touch ? 10 : 6);
       if (!dragging) {
         if (!far) return;
-        if (touch) return finish(ev); // moved before the hold → it's a scroll
+        if (touch) {
+          setHoldTip((t) => (t === "off" ? t : "nudge"));
+          return finish(ev); // moved before the hold → it's a scroll
+        }
         begin();
       }
       if (far) moved = true;
@@ -283,7 +305,9 @@ export default function StarRummyBoard({ state, viewerSeat, names, connectedSeat
       if (!moved) return; // held and let go in place → plain tap
       suppressClickRef.current = true;
       window.setTimeout(() => (suppressClickRef.current = false), 0);
-      if (ev.type === "pointerup" && over !== null) moveTiles(ids, over);
+      if (ev.type !== "pointerup" || over === null) return;
+      moveTiles(ids, over);
+      if (touch) closeHoldTip();
     };
     window.addEventListener("pointermove", move, { passive: false });
     window.addEventListener("pointerup", finish);
@@ -527,6 +551,32 @@ export default function StarRummyBoard({ state, viewerSeat, names, connectedSeat
             ))}
           </div>
         </div>
+        {myTurn && holdTip !== "off" && (
+          <div
+            role="status"
+            className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[12px] leading-snug transition ${
+              holdTip === "nudge" ? "border-amber-300 bg-amber-300/20 text-amber-100 light:bg-amber-50 light:text-amber-900" : "border-sky-300/40 bg-sky-400/10 text-sky-100 light:border-sky-300 light:bg-sky-50 light:text-sky-900"
+            }`}
+          >
+            <span aria-hidden className="text-base">
+              👆
+            </span>
+            <span className="flex-1">
+              {holdTip === "nudge" ? (
+                <>
+                  바로 밀면 화면이 스크롤돼요 — 타일을 <b>꾹 눌러</b> 손가락 위로 떠오르면 그때 끌어 보세요
+                </>
+              ) : (
+                <>
+                  타일을 <b>꾹 눌러</b> 집은 뒤 조합으로 끌어 놓아요 · 짧게 누르면 선택
+                </>
+              )}
+            </span>
+            <button type="button" aria-label="안내 닫기" onClick={closeHoldTip} className="-my-1 px-1.5 py-1 text-sm opacity-70 hover:opacity-100">
+              ✕
+            </button>
+          </div>
+        )}
         <div className="flex flex-wrap gap-1">
           {rack.map((id) => (
             <StarTile
