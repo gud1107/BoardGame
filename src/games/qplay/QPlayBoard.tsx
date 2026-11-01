@@ -607,7 +607,7 @@ export default function QPlayBoard({ state, viewerSeat, names, connectedSeats, i
               ✅ 정답자: {correctOrder(state).map((s, i) => `${i + 1}등 ${names[s]}`).join(" · ")}
             </p>
           )}
-          {state.phase === "question" && !eligible && <p className="text-center text-sm font-bold text-white/60 light:text-slate-500">💀 탈락 — 남은 사람들의 대결을 구경해요</p>}
+          {state.phase === "question" && !eligible && q.kind !== "ox" && <p className="text-center text-sm font-bold text-white/60 light:text-slate-500">💀 탈락 — 남은 사람들의 대결을 구경해요</p>}
           {state.phase === "question" && eligible && picked !== null && q.kind === "choice" && (
             <p className="text-center text-xs text-white/60 light:text-slate-500">
               답변 완료! 다른 사람을 기다리는 중 ({answeredSeats.size}/{eligibleSeats(state).length})
