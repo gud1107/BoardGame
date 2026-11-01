@@ -1,21 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
-import { botThink, newBotMemory, type AiLevel, AI_LEVEL_INFO } from "./ai";
 import { BEATS, DOCTRINES, ERA_DOCTRINES, ERA_TURRETS, ERAS, LANE, POP_CAP, QUEUE_CAP, ROLE_ICON, ROLE_NAME, SELL_REFUND, SLOT_COST, SPECIALS, TICK_MS, TURRETS, UNITS, type DoctrineId, type Era, type Role, type TurretKind } from "./data";
-import { commandError, evolveCost, frontProgress, incomeOf, nextEra, popOf, progress, rosterOf, secondsLeft, specialCdMax, startGame, stepGame, type Command, type EraMarchState, type FxEvent, type SeatCommand, type Side } from "./engine";
+import { commandError, evolveCost, frontProgress, incomeOf, nextEra, popOf, progress, rosterOf, secondsLeft, specialCdMax, type Command, type EraMarchState, type FxEvent, type Side } from "./engine";
 import { EraMarchSound, eraSuite, playCue, unlockAudio } from "./eraMarchAudio";
+import type { MatchDriver } from "./driver";
 import { BattleScene, TEAM_HEX } from "./three/battleScene";
 
 /**
- * Play screen: full-screen 3D battlefield + HUD, you (side 0, blue, left)
- * against a bot (side 1, red, right).
+ * Play screen: full-screen 3D battlefield + HUD. A `MatchDriver` owns the
+ * simulation (local vs AI, or the online replay); the board only renders,
+ * collects commands and hands each tick's events to the scene, the sound
+ * layer and the HUD toasts. Your own base is always on the left: the guest
+ * (side 1) gets a mirrored view.
  *
- * The simulation runs at a fixed TICK_MS inside the animation loop; every
- * HUD command is queued and applied on the next tick, exactly like a remote
- * command would be in the planned online mode. The HUD re-renders at ~10 Hz
- * from the live state ref instead of on every tick.
+ * The HUD re-renders at ~10 Hz from a state snapshot instead of on every tick.
  */
 
 export interface MatchSummary {
@@ -31,7 +31,6 @@ export interface MatchSummary {
   specials: number;
   goldEarned: number;
   doctrines: DoctrineId[];
-  level: AiLevel;
 }
 
 interface Toast {
@@ -41,24 +40,35 @@ interface Toast {
   at: number;
 }
 
-const ME: Side = 0;
-const FOE: Side = 1;
 const ROLE_ORDER: Role[] = ["melee", "ranged", "charge", "support"];
 
 const counterOf = (r: Role): Role | null => (r === "support" ? null : (ROLE_ORDER.find((x) => BEATS[x] === r) ?? null));
 
-export default function EraMarchBoard({ level, seed, reduceShake, onEnd, onQuit, onRules }: { level: AiLevel; seed: number; reduceShake: boolean; onEnd: (m: MatchSummary) => void; onQuit: () => void; onRules: () => void }) {
+interface Props {
+  driver: MatchDriver;
+  reduceShake: boolean;
+  /** Line under the "진격!" banner, e.g. "Lv.5 중사 상대". */
+  subtitle: string;
+  onEnd: (m: MatchSummary) => void;
+  onQuit: () => void;
+  onRules: () => void;
+  /** Extra overlay (online: takeover banners / vote modal). */
+  children?: ReactNode;
+}
+
+export default function EraMarchBoard({ driver, reduceShake, subtitle, onEnd, onQuit, onRules, children }: Props) {
+  const ME = driver.mySide;
+  const FOE: Side = ME === 0 ? 1 : 0;
+  const online = driver.online;
   const hostRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const miniRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<BattleScene | null>(null);
-  const [initial] = useState(() => startGame(seed));
-  const stateRef = useRef<EraMarchState>(initial);
-  const pending = useRef<Command[]>([]);
+  const stateRef = useRef<EraMarchState>(driver.state());
   const pausedRef = useRef(false);
   const speedRef = useRef(1);
   // HUD snapshot: the live state object plus a counter so React re-renders at ~10 Hz
-  const [hud, setHud] = useState({ s: initial, n: 0 });
+  const [hud, setHud] = useState(() => ({ s: driver.state(), n: 0, lag: 0 }));
   const [paused, setPaused] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [turretOpen, setTurretOpen] = useState(false);
@@ -86,15 +96,16 @@ export default function EraMarchBoard({ level, seed, reduceShake, onEnd, onQuit,
       toast(err, "warn");
       return;
     }
-    pending.current.push(cmd);
+    driver.send(cmd);
     playCue("click", 0.6);
-  }, [toast]);
+  }, [toast, driver, ME]);
 
   const setPause = useCallback((v: boolean) => {
+    if (online) return;
     pausedRef.current = v;
     setPaused(v);
     playCue("pause", 0.7);
-  }, []);
+  }, [online]);
 
   /* ── event → HUD toasts / banners ─────────────────────────────────── */
   const onEventsHud = useCallback((events: FxEvent[], s: EraMarchState) => {
@@ -109,55 +120,60 @@ export default function EraMarchBoard({ level, seed, reduceShake, onEnd, onQuit,
         if (e.side === ME) setBanner({ title: `${sp.emoji} ${sp.name}!`, sub: sp.desc, color: "#fde68a" });
         else toast(`⚠ 상대 필살기: ${sp.emoji} ${sp.name}`, "warn");
       } else if (e.t === "specialReady" && e.side === ME) toast(`${SPECIALS[s.players[ME].era].emoji} 필살기 준비 완료 [R]`, "good");
+      else if (e.t === "reject" && e.side === ME && online) toast(e.reason, "warn");
       else if (e.t === "suddenDeath") setBanner({ title: "⏳ 서든데스", sub: "양쪽 기지가 매초 무너집니다", color: "#f87171" });
     }
-  }, [toast]);
+  }, [toast, ME, online]);
 
   /* ── mount: scene + loop ──────────────────────────────────────────── */
   useEffect(() => {
     const host = hostRef.current!;
-    const scene = new BattleScene(host, overlayRef.current!);
+    const scene = new BattleScene(host, overlayRef.current!, ME === 1);
     sceneRef.current = scene;
     const sound = new EraMarchSound();
-    const mem = newBotMemory(seed);
     const prevX = new Map<number, number>();
-    let acc = 0;
     let last = performance.now();
     let raf = 0;
     let hudAt = 0;
     let bgmEra: Era | null = null;
     let endAt = 0;
     let wasReady = false;
+    let frameT = 0;
     const ro = new ResizeObserver(() => scene.resize());
     ro.observe(host);
+    const hooks = {
+      before: (s: EraMarchState) => {
+        prevX.clear();
+        for (const u of s.units) prevX.set(u.id, u.x);
+      },
+      after: (s: EraMarchState) => {
+        if (!s.events.length) return;
+        scene.onEvents(s.events, s);
+        sound.handle(s.events, scene.view(), ME, frameT);
+        onEventsHud(s.events, s);
+      },
+    };
+    const extra = driver as MatchDriver & { replaced?: boolean; lag?: () => number };
 
     const loop = (t: number) => {
       raf = requestAnimationFrame(loop);
+      frameT = t;
       const dt = Math.min(0.1, (t - last) / 1000);
       last = t;
-      const s = stateRef.current;
-      const running = !pausedRef.current && countRef.current <= 0 && s.winner === null;
-      if (running) acc += dt * 1000 * speedRef.current;
-      let steps = 0;
-      while (acc >= TICK_MS && steps < 8) {
-        acc -= TICK_MS;
-        steps++;
+      const before = driver.state();
+      const running = !pausedRef.current && countRef.current <= 0 && before.winner === null;
+      // online the clock never pauses — only the opening countdown holds it
+      driver.pump(running ? dt * 1000 * speedRef.current : 0, hooks);
+      if (extra.replaced) {
+        extra.replaced = false;
+        scene.reset();
         prevX.clear();
-        for (const u of s.units) prevX.set(u.id, u.x);
-        const cmds: SeatCommand[] = pending.current.splice(0).map((cmd) => ({ side: ME, cmd }));
-        for (const cmd of botThink(s, FOE, level, mem)) cmds.push({ side: FOE, cmd });
-        stepGame(s, cmds);
-        if (s.events.length) {
-          scene.onEvents(s.events, s);
-          sound.handle(s.events, scene.view(), ME, t);
-          onEventsHud(s.events, s);
-        }
-        if (s.winner !== null) break;
       }
-      if (steps === 8) acc = 0;
-      const alpha = running ? Math.min(1, acc / TICK_MS) : 1;
+      const s = driver.state();
+      stateRef.current = s;
+      const alpha = running ? driver.alpha() : 1;
       scene.render({ s, prevX, alpha, now: t, dt, viewer: ME, reduceShake });
-      drawMinimap(miniRef.current, s, scene.view());
+      drawMinimap(miniRef.current, s, scene.view(), ME);
 
       // BGM follows my era; urgent layer when my base is low or in sudden death
       const myEra = s.players[ME].era;
@@ -178,7 +194,8 @@ export default function EraMarchBoard({ level, seed, reduceShake, onEnd, onQuit,
 
       if (t - hudAt > 100) {
         hudAt = t;
-        setHud((h) => ({ s, n: h.n + 1 }));
+        const lag = extra.lag ? extra.lag() : 0;
+        setHud((h) => ({ s, n: h.n + 1, lag }));
       }
       if (s.winner !== null && !endedRef.current) {
         if (!endAt) endAt = t;
@@ -198,7 +215,6 @@ export default function EraMarchBoard({ level, seed, reduceShake, onEnd, onQuit,
             specials: me.stats.specials,
             goldEarned: me.stats.goldEarned,
             doctrines: me.doctrines,
-            level,
           });
         }
       }
@@ -211,7 +227,7 @@ export default function EraMarchBoard({ level, seed, reduceShake, onEnd, onQuit,
       scene.dispose();
       sceneRef.current = null;
     };
-    // the match is created once per mount (the parent remounts with a new key)
+    // one driver per mount (the parent remounts with a new key)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -226,11 +242,11 @@ export default function EraMarchBoard({ level, seed, reduceShake, onEnd, onQuit,
       setCountdown((c) => c - 1);
       if (countdown === 1) {
         playCue("start");
-        setBanner({ title: "⚔️ 진격!", sub: `${AI_LEVEL_INFO[level].label} 상대`, color: "#fde68a" });
+        setBanner({ title: "⚔️ 진격!", sub: subtitle, color: "#fde68a" });
       } else playCue("click", 0.8);
     }, 800);
     return () => clearTimeout(id);
-  }, [countdown, level]);
+  }, [countdown, subtitle]);
 
   useEffect(() => {
     if (!banner) return;
@@ -256,11 +272,11 @@ export default function EraMarchBoard({ level, seed, reduceShake, onEnd, onQuit,
       return;
     }
     if (ERA_DOCTRINES[nn]) {
-      pausedRef.current = true;
+      if (!online) pausedRef.current = true;
       setDoctrinePick(nn);
       playCue("click");
     } else send({ t: "evolve" });
-  }, [send, toast]);
+  }, [send, toast, ME, online]);
 
   const pickDoctrine = (d: DoctrineId) => {
     send({ t: "evolve", doctrine: d });
@@ -361,23 +377,30 @@ export default function EraMarchBoard({ level, seed, reduceShake, onEnd, onQuit,
       {/* top: bases + timer + minimap */}
       <div className="pointer-events-none absolute inset-x-0 top-0 p-2 sm:p-3">
         <div className="flex items-start gap-2">
-          <BaseCard side={ME} p={me} label="나" />
+          <BaseCard side={ME} p={me} label={driver.names[ME] || "나"} />
           <div className="pointer-events-auto flex shrink-0 flex-col items-center gap-1">
             <div className={`rounded-lg px-2.5 py-1 font-mono text-sm font-bold tabular-nums shadow ${s.suddenDeath ? "animate-pulse bg-red-700" : "bg-black/60"}`}>{s.suddenDeath ? "서든데스" : `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`}</div>
             <div className="flex gap-1">
-              <IconBtn label={paused ? "계속" : "일시정지"} onClick={() => setPause(!paused)}>{paused ? "▶" : "⏸"}</IconBtn>
-              <IconBtn label="배속" onClick={() => { const v = speed === 1 ? 2 : 1; speedRef.current = v; setSpeed(v); playCue("click"); }}>{speed}×</IconBtn>
+              {online ? (
+                <IconBtn label="나가기" onClick={onQuit}>✕</IconBtn>
+              ) : (
+                <>
+                  <IconBtn label={paused ? "계속" : "일시정지"} onClick={() => setPause(!paused)}>{paused ? "▶" : "⏸"}</IconBtn>
+                  <IconBtn label="배속" onClick={() => { const v = speed === 1 ? 2 : 1; speedRef.current = v; setSpeed(v); playCue("click"); }}>{speed}×</IconBtn>
+                </>
+              )}
               <IconBtn label={soundOn ? "소리 끄기" : "소리 켜기"} onClick={() => { unlockAudio(); const st = useAudioSettingsStore.getState(); if (soundOn) st.setMasterMuted(true); else { st.setMasterMuted(false); st.setBgmMuted(false); st.setSfxMuted(false); } }}>{soundOn ? "🔊" : "🔇"}</IconBtn>
             </div>
           </div>
-          <BaseCard side={FOE} p={foe} label={AI_LEVEL_INFO[level].label} right />
+          <BaseCard side={FOE} p={foe} label={driver.names[FOE]} right />
         </div>
         <canvas
           ref={miniRef}
           className="pointer-events-auto mt-2 h-5 w-full cursor-pointer rounded-md border border-white/15 bg-black/50"
           onPointerDown={(e) => {
             const r = e.currentTarget.getBoundingClientRect();
-            sceneRef.current?.focusLane(((e.clientX - r.left) / r.width) * LANE);
+            const k = (e.clientX - r.left) / r.width;
+            sceneRef.current?.focusLane((ME === 1 ? 1 - k : k) * LANE);
             playCue("click", 0.5);
           }}
           aria-label="미니맵 — 눌러서 이동"
@@ -502,12 +525,17 @@ export default function EraMarchBoard({ level, seed, reduceShake, onEnd, onQuit,
             </button>
           </div>
 
-          {turretOpen && <TurretPanel s={s} onSend={send} />}
+          {turretOpen && <TurretPanel s={s} side={ME} onSend={send} />}
         </div>
       </div>
 
+      {online && hud.lag > 20 && (
+        <div className="pointer-events-none absolute left-1/2 top-[132px] -translate-x-1/2 rounded-full bg-black/70 px-3 py-1 text-xs font-bold text-amber-200">📶 연결 지연 — 따라잡는 중…</div>
+      )}
+      {children}
+
       {doctrinePick !== null && (
-        <DoctrineModal era={doctrinePick} cost={evoCost} onPick={pickDoctrine} onCancel={() => { setDoctrinePick(null); pausedRef.current = paused; }} />
+        <DoctrineModal era={doctrinePick} cost={evoCost} online={online} onPick={pickDoctrine} onCancel={() => { setDoctrinePick(null); pausedRef.current = paused; }} />
       )}
 
       <style>{`
@@ -549,7 +577,8 @@ function BaseCard({ side, p, label, right }: { side: Side; p: EraMarchState["pla
   );
 }
 
-function TurretPanel({ s, onSend }: { s: EraMarchState; onSend: (c: Command) => void }) {
+function TurretPanel({ s, side, onSend }: { s: EraMarchState; side: Side; onSend: (c: Command) => void }) {
+  const ME = side;
   const me = s.players[ME];
   const kinds: TurretKind[] = [];
   for (let e = 0; e <= me.era; e++) kinds.push(...ERA_TURRETS[e]);
@@ -596,13 +625,13 @@ function TurretPanel({ s, onSend }: { s: EraMarchState; onSend: (c: Command) => 
   );
 }
 
-function DoctrineModal({ era, cost, onPick, onCancel }: { era: Era; cost: number; onPick: (d: DoctrineId) => void; onCancel: () => void }) {
+function DoctrineModal({ era, cost, online, onPick, onCancel }: { era: Era; cost: number; online: boolean; onPick: (d: DoctrineId) => void; onCancel: () => void }) {
   const pair = ERA_DOCTRINES[era]!;
   const e = ERAS[era];
   return (
     <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/65 p-3">
       <div className="w-full max-w-xl rounded-2xl border border-amber-300/30 bg-stone-900/95 p-4 shadow-2xl">
-        <div className="text-center text-xs font-bold text-amber-200/80">게임 일시정지 · 진화 비용 {cost}G</div>
+        <div className={`text-center text-xs font-bold ${online ? "text-red-300" : "text-amber-200/80"}`}>{online ? "⚠ 온라인 대전 중 — 전투는 계속됩니다" : "게임 일시정지"} · 진화 비용 {cost}G</div>
         <div className="text-center text-2xl font-black" style={{ color: e.accent }}>{e.emoji} {e.name}로 진화</div>
         <div className="mb-3 text-center text-sm text-white/70">교리를 하나 고르세요 — 전용 유닛과 패시브가 생깁니다</div>
         <div className="grid grid-cols-2 gap-2">
@@ -627,7 +656,8 @@ function DoctrineModal({ era, cost, onPick, onCancel }: { era: Era; cost: number
   );
 }
 
-function drawMinimap(cv: HTMLCanvasElement | null, s: EraMarchState, view: { center: number; half: number }) {
+/** Lane strip; mirrored for side 1 so your own base is always on the left. */
+function drawMinimap(cv: HTMLCanvasElement | null, s: EraMarchState, view: { center: number; half: number }, me: Side) {
   if (!cv) return;
   const w = cv.clientWidth;
   const h = cv.clientHeight;
@@ -640,20 +670,27 @@ function drawMinimap(cv: HTMLCanvasElement | null, s: EraMarchState, view: { cen
   const ctx = cv.getContext("2d")!;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
-  const X = (x: number) => (x / LANE) * w;
+  const flip = me === 1;
+  const X = (x: number) => ((flip ? LANE - x : x) / LANE) * w;
   // territory
   const f0 = frontProgress(s, 0);
   const f1 = frontProgress(s, 1);
+  const span = (a: number, b: number) => {
+    const x0 = X(a);
+    const x1 = X(b);
+    ctx.fillRect(Math.min(x0, x1), 0, Math.abs(x1 - x0), h);
+  };
   ctx.fillStyle = "rgba(59,130,246,0.25)";
-  ctx.fillRect(0, 0, X(Math.max(40, f0)), h);
+  span(0, Math.max(40, f0));
   ctx.fillStyle = "rgba(239,68,68,0.25)";
-  ctx.fillRect(X(LANE - Math.max(40, f1)), 0, w, h);
+  span(LANE - Math.max(40, f1), LANE);
   ctx.fillStyle = "rgba(255,255,255,0.35)";
   ctx.fillRect(X(LANE / 2) - 0.5, 0, 1, h);
   // view box
   ctx.strokeStyle = "rgba(255,255,255,0.8)";
   ctx.lineWidth = 1;
-  ctx.strokeRect(X(view.center - view.half) + 0.5, 0.5, X(view.half * 2) - 1, h - 1);
+  const v0 = Math.min(X(view.center - view.half), X(view.center + view.half));
+  ctx.strokeRect(v0 + 0.5, 0.5, (view.half * 2 * w) / LANE - 1, h - 1);
   // units
   for (const u of s.units) {
     ctx.fillStyle = TEAM_HEX[u.side];
@@ -667,7 +704,7 @@ function drawMinimap(cv: HTMLCanvasElement | null, s: EraMarchState, view: { cen
   ctx.font = "11px system-ui";
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
-  ctx.fillText(ERAS[s.players[0].era].emoji, 2, h / 2);
+  ctx.fillText(ERAS[s.players[me].era].emoji, 2, h / 2);
   ctx.textAlign = "right";
-  ctx.fillText(ERAS[s.players[1].era].emoji, w - 2, h / 2);
+  ctx.fillText(ERAS[s.players[me === 0 ? 1 : 0].era].emoji, w - 2, h / 2);
 }

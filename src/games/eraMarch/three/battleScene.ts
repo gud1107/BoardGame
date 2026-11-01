@@ -14,6 +14,11 @@
  * allocates per frame. Resolution and shadows step down when frames run
  * long.
  *
+ * Mirror (online guest, side 1): the whole scene gets scale.x = −1 so your
+ * own base is on the left too; only the camera, the overlay projection and
+ * drag direction need to know (three.js flips face winding for negative
+ * determinants by itself).
+ *
  * Readability layer: a 2D canvas on top draws HP bars in team colour with a
  * role glyph (⚔/🏹/🐎), floating damage numbers (orange and larger on a
  * counter hit, grey on a weak one), gold pop-ups, base HP plates and an edge
@@ -300,7 +305,12 @@ export class BattleScene {
   private skyEra = -1;
   private now = 0;
 
-  constructor(private host: HTMLElement, overlayCanvas: HTMLCanvasElement) {
+  /** −1 when the view is mirrored. */
+  private readonly M: number;
+
+  constructor(private host: HTMLElement, overlayCanvas: HTMLCanvasElement, private mirror = false) {
+    this.M = mirror ? -1 : 1;
+    this.scene.scale.x = this.M;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -599,7 +609,7 @@ export class BattleScene {
   /** Drag in screen pixels → camera pan; auto-follow resumes after a pause. */
   pan(dxPx: number) {
     const span = this.visibleWidth();
-    this.camX = clamp(this.camX - (dxPx / this.w) * span, -48, 48);
+    this.camX = clamp(this.camX - (dxPx / this.w) * span * this.M, -48, 48);
     this.camTarget = this.camX;
     this.manualUntil = performance.now() + 4000;
   }
@@ -975,8 +985,8 @@ export class BattleScene {
     const dist = this.camDistance();
     this.shake = Math.max(0, this.shake - dt * 2.2);
     const sk = f.reduceShake ? 0 : this.shake * this.shake * 0.8;
-    this.camera.position.set(this.camX + (Math.random() - 0.5) * sk, dist * 0.42 + (Math.random() - 0.5) * sk, dist);
-    this.camera.lookAt(this.camX, 2.2, 0);
+    this.camera.position.set(this.camX * this.M + (Math.random() - 0.5) * sk, dist * 0.42 + (Math.random() - 0.5) * sk, dist);
+    this.camera.lookAt(this.camX * this.M, 2.2, 0);
     this.sun.position.set(this.camX + 25, 60, 45);
     this.sun.target.position.set(this.camX, 0, 0);
 
@@ -1248,7 +1258,7 @@ export class BattleScene {
   /* ── overlay ───────────────────────────────────────────────────────── */
 
   private project(x: number, y: number, z: number): { x: number; y: number; ok: boolean } {
-    _v.set(x, y, z).project(this.camera);
+    _v.set(x * this.M, y, z).project(this.camera);
     return { x: (_v.x * 0.5 + 0.5) * this.w, y: (-_v.y * 0.5 + 0.5) * this.h, ok: _v.z < 1 && _v.x > -1.2 && _v.x < 1.2 };
   }
 
@@ -1339,7 +1349,8 @@ export class BattleScene {
     const me = f.viewer;
     const threat = s.units.some((u) => u.side !== me && progress(me === 0 ? 1 : 0, u.x) > LANE - 220);
     if (threat && Math.abs(v.center - wallX(me)) > v.half * 0.9) {
-      const left = me === 0;
+      // your base is on the left in both the normal and the mirrored view
+      const left = me === 0 !== this.mirror;
       const pulse = 0.6 + Math.sin(now * 8) * 0.4;
       ctx.globalAlpha = pulse;
       ctx.fillStyle = "#dc2626";

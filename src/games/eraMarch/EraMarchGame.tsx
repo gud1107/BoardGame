@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { PlayableGameProps } from "../types";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import { recordMatchStat } from "@/lib/stats/playerStats";
@@ -8,18 +8,31 @@ import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import { AI_LEVEL_INFO, sanitizeAiLevel, type AiLevel } from "./ai";
 import { DOCTRINES, ERAS, SPECIALS } from "./data";
 import EraMarchBoard, { type MatchSummary } from "./EraMarchBoard";
+import EraMarchOnline, { type OnlineResult } from "./EraMarchOnline";
+import { SoloDriver } from "./driver";
 import RulebookModal from "./RulebookModal";
 import { playCue, unlockAudio } from "./eraMarchAudio";
 
 /**
- * 시대의 진격 entry: 메뉴(상대 레벨) → 대전(EraMarchBoard) → 결과 → 재대결.
- * Each finished match is recorded to /stats right away (so rematches count);
- * leaving through "나가기" only tells the game page the session is over.
+ * 시대의 진격 entry: 메뉴 → AI 대전(SoloDriver) 또는 🌐 온라인 1:1
+ * (EraMarchOnline) → 결과 → 재대결. An invite link (`?room=1234`) opens the
+ * online join step directly. Each finished match is recorded to /stats right
+ * away (so rematches count); "나가기" only tells the game page the session is
+ * over.
+ *
+ * Sound is on by default here: the first visit unmutes the site audio
+ * settings once (remembered), after that whatever the player picks sticks.
  */
 
 const GAME_ID = "era-march";
 const PREF_KEY = "era-march-prefs";
 const WINS_KEY = "era-march-wins";
+const SOUND_DEFAULT_KEY = "era-march-sound-default-v1";
+
+function roomFromUrl(): string | null {
+  const v = new URLSearchParams(window.location.search).get("room");
+  return v && /^\d{4}$/.test(v) ? v : null;
+}
 
 interface Prefs {
   level: AiLevel;
@@ -44,15 +57,33 @@ function loadWins(): Record<number, number> {
 }
 
 export default function EraMarchGame({ participants, onComplete }: PlayableGameProps) {
+  // the component is loaded client-only (ssr: false), so window/localStorage are there on first render
+  const [online, setOnline] = useState<{ intent: "create" | "join"; code?: string } | null>(() => {
+    const code = roomFromUrl();
+    return code ? { intent: "join", code } : null;
+  });
   const [screen, setScreen] = useState<"menu" | "playing" | "results">("menu");
-  // the component is loaded client-only (ssr: false), so localStorage is there on first render
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   const [wins, setWins] = useState<Record<number, number>>(loadWins);
-  const [run, setRun] = useState({ n: 0, seed: 1 });
-  const [result, setResult] = useState<MatchSummary | null>(null);
+  const [run, setRun] = useState<{ n: number; level: AiLevel; driver: SoloDriver | null }>({ n: 0, level: 3, driver: null });
+  const [result, setResult] = useState<(MatchSummary & { level: AiLevel }) | null>(null);
   const [rules, setRules] = useState(false);
   const audio = useAudioSettingsStore();
   const soundOn = !audio.masterMuted && !(audio.bgmMuted && audio.sfxMuted);
+
+  // sound on by default: unmute once on the first visit, then respect the player's own choice
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(SOUND_DEFAULT_KEY)) return;
+      window.localStorage.setItem(SOUND_DEFAULT_KEY, "1");
+    } catch {
+      return;
+    }
+    const st = useAudioSettingsStore.getState();
+    st.setMasterMuted(false);
+    st.setBgmMuted(false);
+    st.setSfxMuted(false);
+  }, []);
 
   const savePrefs = (p: Prefs) => {
     setPrefs(p);
@@ -65,11 +96,14 @@ export default function EraMarchGame({ participants, onComplete }: PlayableGameP
     unlockAudio();
     if (level !== prefs.level) savePrefs({ ...prefs, level });
     trackGameEvent(GAME_ID, "game_start", { isHost: true });
-    setRun((r) => ({ n: r.n + 1, seed: Math.floor(Math.random() * 2_000_000_000) }));
+    const seed = Math.floor(Math.random() * 2_000_000_000);
+    const me = participants[0]?.name || "나";
+    setRun((r) => ({ n: r.n + 1, level, driver: new SoloDriver(seed, level, me, AI_LEVEL_INFO[level].label) }));
     setScreen("playing");
   };
 
-  const handleEnd = (m: MatchSummary) => {
+  const handleEnd = (summary: MatchSummary) => {
+    const m = { ...summary, level: run.level };
     setResult(m);
     setScreen("results");
     if (m.won) {
@@ -93,15 +127,40 @@ export default function EraMarchGame({ participants, onComplete }: PlayableGameP
     );
   };
 
+  const handleOnline = (r: OnlineResult) => {
+    const m = r.summary;
+    void recordMatchStat(
+      GAME_ID,
+      {
+        rank: m.won ? 1 : 2,
+        playerCount: 2,
+        botPlayed: r.botPlayed,
+        withBots: r.withBots,
+        botLevel: r.withBots ? 5 : null,
+        details: { kills: m.kills, trained: m.trained, maxEra: m.era + 1, damage: Math.round(m.damage), specials: m.specials, onlineWins: m.won ? 1 : 0 },
+      },
+      new Date().toISOString(),
+    );
+  };
+
   const finish = () => {
     const pid = participants[0]?.id ?? "solo";
     onComplete({ rankings: [{ playerId: pid, rank: result?.won ? 1 : 2 }], finishedAt: new Date().toISOString() });
   };
 
-  if (screen === "playing") {
+  if (online) {
     return (
       <>
-        <EraMarchBoard key={run.n} level={prefs.level} seed={run.seed} reduceShake={prefs.reduceShake} onEnd={handleEnd} onQuit={() => setScreen("menu")} onRules={() => setRules(true)} />
+        <EraMarchOnline intent={online.intent} initialCode={online.code} reduceShake={prefs.reduceShake} onExit={() => setOnline(null)} onResult={handleOnline} onRules={() => setRules(true)} />
+        {rules && <div className="fixed inset-0 z-[90]"><RulebookModal onClose={() => setRules(false)} /></div>}
+      </>
+    );
+  }
+
+  if (screen === "playing" && run.driver) {
+    return (
+      <>
+        <EraMarchBoard key={run.n} driver={run.driver} subtitle={`${AI_LEVEL_INFO[run.level].label} 상대`} reduceShake={prefs.reduceShake} onEnd={handleEnd} onQuit={() => setScreen("menu")} onRules={() => setRules(true)} />
         {rules && <div className="fixed inset-0 z-[70]"><RulebookModal onClose={() => setRules(false)} /></div>}
       </>
     );
@@ -185,6 +244,14 @@ export default function EraMarchGame({ participants, onComplete }: PlayableGameP
             <button onClick={() => start()} className="mt-4 w-full rounded-xl bg-gradient-to-b from-amber-300 to-amber-500 py-3 text-lg font-black text-black shadow-lg active:scale-[0.99]">
               ⚔️ {AI_LEVEL_INFO[prefs.level].label}와 전투 시작
             </button>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button onClick={() => { unlockAudio(); trackGameEvent(GAME_ID, "room_create"); setOnline({ intent: "create" }); }} className="rounded-xl border border-sky-400/40 bg-sky-500/15 py-2.5 text-sm font-black light:bg-sky-50">
+                🌐 친구와 온라인 대전
+              </button>
+              <button onClick={() => { unlockAudio(); trackGameEvent(GAME_ID, "invite_click"); setOnline({ intent: "join" }); }} className="rounded-xl border border-white/15 bg-white/5 py-2.5 text-sm font-bold light:border-slate-200 light:bg-slate-50">
+                🔑 초대 코드로 참여
+              </button>
+            </div>
           </div>
 
           <div className="grid gap-2 text-sm sm:grid-cols-3">

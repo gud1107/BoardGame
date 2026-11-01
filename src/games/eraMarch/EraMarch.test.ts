@@ -87,3 +87,83 @@ describe("era march sound", async () => {
     }
   });
 });
+
+describe("era march online replay", async () => {
+  const { OnlineDriver, checksum } = await import("./online");
+  type Msg = { at: number; to: "host" | "guest"; event: string; payload: unknown };
+
+  /** Two drivers over an in-memory "network" with `latency` ms delay; both sides driven by bots through send(). */
+  function room(latency: number, opts: { dropBatchAt?: number } = {}) {
+    let now = 0;
+    const queue: Msg[] = [];
+    let batches = 0;
+    const host = new OnlineDriver(0, 99, true, ["A", "B"], (event, payload) => {
+      if (event === "batch" && ++batches === opts.dropBatchAt) return;
+      queue.push({ at: now + latency, to: "guest", event, payload: structuredClone(payload) });
+    }, () => now);
+    const guest = new OnlineDriver(1, 99, false, ["A", "B"], (event, payload) => queue.push({ at: now + latency, to: "host", event, payload: structuredClone(payload) }), () => now);
+    const deliver = () => {
+      for (let i = 0; i < queue.length; ) {
+        const m = queue[i];
+        if (m.at > now) { i++; continue; }
+        queue.splice(i, 1);
+        if (m.to === "guest" && m.event === "batch") guest.onBatch(m.payload as never);
+        if (m.to === "host" && m.event === "input") { const p = m.payload as { side: 0 | 1; cmd: unknown }; host.onInput(p.side, p.cmd); }
+        if (m.to === "host" && m.event === "state-request") queue.push({ at: now + latency, to: "guest", event: "sync", payload: structuredClone(host.snapshot()) });
+        if (m.to === "guest" && m.event === "sync") guest.onSync(m.payload as never);
+      }
+    };
+    const mh = newBotMemory(5), mg = newBotMemory(6);
+    const hooks = { before: () => {}, after: () => {} };
+    /** `hostRuns: false` = the authority stops ticking and only flushes what it already played. */
+    const run = (ms: number, hostRuns = true) => {
+      for (let t = 0; t < ms; t += 16) {
+        now += 16;
+        if (hostRuns) {
+          for (const c of botThink(host.state(), 0, 7, mh)) host.send(c);
+          for (const c of botThink(guest.state(), 1, 7, mg)) guest.send(c);
+        }
+        host.pump(hostRuns ? 16 : 0, hooks);
+        deliver();
+        guest.pump(16, hooks);
+      }
+    };
+    return { host, guest, run };
+  }
+
+  it("the follower replays the authority's match exactly, despite latency", () => {
+    const { host, guest, run } = room(90);
+    run(60_000);
+    run(2000, false); // let the follower drain
+    expect(guest.state().tick).toBeGreaterThan(1000);
+    const h = host.state();
+    const g = guest.state();
+    expect(g.tick).toBe(h.tick);
+    expect(checksum(g)).toBe(checksum(h));
+    expect(h.units.length + h.players[1].stats.trained).toBeGreaterThan(5); // the guest's commands really reached the host
+  }, 30_000);
+
+  it("a lost batch triggers a resync and the follower converges again", () => {
+    const { host, guest, run } = room(60, { dropBatchAt: 20 });
+    run(30_000);
+    run(2000, false);
+    expect(guest.replaced).toBe(true);
+    expect(checksum(guest.state())).toBe(checksum(host.state()));
+  }, 30_000);
+
+  it("the follower can take over authority and keep the match going", () => {
+    const { host, guest, run } = room(60);
+    run(10_000);
+    run(1000, false);
+    const t = guest.state().tick;
+    guest.becomeAuthority();
+    guest.setBot(0, true);
+    let sent = 0;
+    const g2 = guest as unknown as { emit: (e: string, p: unknown) => void };
+    g2.emit = () => { sent++; };
+    for (let i = 0; i < 400; i++) guest.pump(16, { before: () => {}, after: () => {} });
+    expect(guest.state().tick).toBeGreaterThan(t + 100);
+    expect(sent).toBeGreaterThan(0);
+    void host;
+  });
+});
