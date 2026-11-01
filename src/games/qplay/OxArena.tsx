@@ -118,7 +118,7 @@ export default function OxArena({
             <span className={`pointer-events-none absolute inset-0 flex items-center justify-center text-[7rem] leading-none sm:text-[9rem] ${reveal ? (z === answer ? "opacity-70" : "opacity-15") : "opacity-25"}`}>{SIDE[z]}</span>
             {reveal && (
               <span
-                className={`absolute top-2 left-1/2 z-30 -translate-x-1/2 rounded-full px-3 py-0.5 text-sm font-black whitespace-nowrap shadow ${z === answer ? "bg-emerald-500 text-white" : "bg-slate-800 text-slate-200"}`}
+                className={`absolute top-1 left-1/2 z-30 -translate-x-1/2 rounded-full px-2.5 py-0.5 text-xs font-black whitespace-nowrap shadow ${z === answer ? "bg-emerald-500 text-white" : "bg-slate-800 text-slate-200"}`}
               >
                 {z === answer ? "✔ 정답" : "✘ 오답"}
               </span>
@@ -142,7 +142,7 @@ export default function OxArena({
               style={{ left: `${pos.x}%`, top: `${pos.y}%`, width: `${TOKEN_W}%` }}
             >
               <span
-                className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-full font-black text-white shadow-lg ${me ? "h-11 w-11 text-lg ring-[3px] ring-amber-300" : "h-9 w-9 text-sm ring-2 ring-black/30"} ${dead ? "opacity-50 grayscale" : ""}`}
+                className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-full font-black text-white shadow-lg ${me ? "h-10 w-10 text-base ring-2 ring-amber-300" : "h-9 w-9 text-sm ring-2 ring-black/30"} ${dead ? "opacity-50 grayscale" : ""}`}
                 style={{ background: color }}
               >
                 {me && photo ? (
