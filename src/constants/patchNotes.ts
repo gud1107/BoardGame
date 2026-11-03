@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.143.0",
+    releaseDate: "2026-11-04",
+    title: "🫣 새 게임 한밤의 숨바꼭질",
+    changes: [
+      { game: "hide-and-seek", type: "FEAT", desc: "🫣 새 게임 한밤의 숨바꼭질 — 2~6인, 3D 저택의 방 10개·숨을 곳 25곳. 매 턴 몰래 고르고 동시에 공개, 모두 한 번씩 술래" },
+      { game: "hide-and-seek", type: "FEAT", desc: "🔍 뒤지기·🔦 손전등 vs 🤫 숨죽이기·🐾 살금살금·🏃 찜! — 🔊 삐걱·🍃 부스럭·💓 인기척으로 추리, 잡히면 꼬마 술래" },
+      { game: "hide-and-seek", type: "FEAT", desc: "🧑‍🎤 내 캐릭터가 저택을 걸어 다니며 숨고 찾아요 · 🤖 AI 봇 Lv.1~10 (공개 단서만으로 추리) · 🏅 업적 7종" },
+    ],
+  },
+  {
     version: "v1.142.0",
     releaseDate: "2026-11-02",
     title: "🌌 별빛 러미 — 휴대폰 끌기 다듬기",

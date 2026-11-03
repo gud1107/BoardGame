@@ -952,6 +952,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "hide-and-seek",
+    name: "한밤의 숨바꼭질",
+    nameEn: "Midnight Hide & Seek",
+    description:
+      "달빛 비치는 3D 저택에서 2~6명이 즐기는 숨바꼭질. 라운드마다 한 명이 술래가 되어 마당 기둥에서 열을 세는 동안, 나머지는 창고·거실·욕실·안방·아이방·다락방 등 방 10개의 숨을 곳 25곳 중 하나에 몰래 숨어요. 매 턴 모두 몰래 고르고 동시에 공개 — 술래는 가구 뒤를 뒤지고 손전등으로 옆방을 비추고, 숨은 사람은 숨죽이거나 살금살금 자리를 옮기거나 술래 기둥까지 달려 “찜!”. 삐걱 소리·부스럭·인기척으로 서로의 위치를 추리하고, 잡히면 꼬마 술래가 되어 함께 찾아요. 모두 한 번씩 술래를 하고 점수 합으로 승부!",
+    players: { min: 2, max: 6 },
+    playTime: { minMinutes: 10, maxMinutes: 25 },
+    category: "party",
+    thumbnail: { emoji: "🫣", gradient: ["#4338ca", "#0b1026"] },
+    tags: ["숨바꼭질", "저택", "추리", "동시행동", "블러핑", "3D", "AI봇"],
+    genres: ["party", "bluffing"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "prism-five",
     name: "섬광전대 프리즘파이브",
     nameEn: "Prism Five: Flash Squadron",

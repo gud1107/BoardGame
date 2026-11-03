@@ -25,6 +25,7 @@ export const GAME_DIFFICULTY: Record<string, 1 | 2 | 3 | 4 | 5> = {
   "prism-five": 2,
   "play-dead": 2,
   "star-rummy": 2,
+  "hide-and-seek": 2,
   "liar-game": 1,
   qplay: 1,
   "word-tower": 1,

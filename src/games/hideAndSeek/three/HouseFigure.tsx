@@ -1,0 +1,265 @@
+"use client";
+
+import { useMemo, useRef, type ReactNode } from "react";
+import { useFrame } from "@react-three/fiber";
+import * as THREE from "three";
+import type { VRMHumanBoneName } from "@pixiv/three-vrm";
+import { blinking, type PersonLook } from "@/games/shared/three/SeatedPerson";
+import { tickVrm, useVrmAvatar } from "@/games/shared/three/VrmPerson";
+import { toVrm0 } from "@/games/shared/three/vrmPose";
+
+/**
+ * 숨바꼭질 저택을 돌아다니는 VRM 인물 — 다른 3D 테이블과 같은 내 캐릭터(`useVrmAvatar`).
+ * `path`(월드 좌표 웨이포인트)를 따라 걷고, 도착하면 `pose`를 취한다. 자세는 정규화 본의
+ * 목표 각도를 매 프레임 섞는다(프레임당 할당 없음). VRM이 아직 안 왔으면 자리 색 캡슐.
+ */
+
+export type FigurePose = "stand" | "count" | "crouch" | "search" | "caught" | "cheer" | "flash";
+
+export interface HouseFigureProps {
+  look: PersonLook;
+  seed: number;
+  color: string;
+  /** 출발점부터 도착점까지 (마지막 점이 머무는 곳) */
+  path: THREE.Vector3[];
+  /** path가 바뀌면 처음부터 다시 걷는다 */
+  pathKey: string;
+  /** 걷기 시작까지 기다리는 초 */
+  delay?: number;
+  /** 도착 후 바라볼 곳 */
+  faceTo: THREE.Vector3 | null;
+  pose: FigurePose;
+  lowDetail: boolean;
+  speed?: number;
+  size?: number;
+  children?: ReactNode;
+}
+
+const BONES: VRMHumanBoneName[] = ["spine", "chest", "neck", "head", "rightUpperArm", "rightLowerArm", "leftUpperArm", "leftLowerArm", "rightUpperLeg", "rightLowerLeg", "leftUpperLeg", "leftLowerLeg"];
+const B = Object.fromEntries(BONES.map((b, i) => [b, i * 3])) as Record<(typeof BONES)[number], number>;
+const CROUCH = BONES.length * 3;
+const HOP = CROUCH + 1;
+const CHANNELS = HOP + 1;
+const HEAD_HEIGHT = 1.45;
+
+function set3(o: Float32Array, at: number, x: number, y: number, z: number) {
+  o[at] = x;
+  o[at + 1] = y;
+  o[at + 2] = z;
+}
+
+function poseTarget(o: Float32Array, pose: FigurePose, t: number, seed: number) {
+  o.fill(0);
+  const sway = Math.sin(t * 1.7 + seed) * 0.03;
+  // arms down at the sides
+  set3(o, B.rightUpperArm, 0, 0, 1.25 + sway);
+  set3(o, B.leftUpperArm, 0, 0, -1.25 - sway);
+  set3(o, B.rightLowerArm, 0, 0.2, 0);
+  set3(o, B.leftLowerArm, 0, -0.2, 0);
+  set3(o, B.spine, Math.sin(t * 2.1 + seed) * 0.02, 0, 0);
+  switch (pose) {
+    case "stand":
+      return;
+    case "count":
+      // 기둥에 이마를 대고 두 팔로 눈을 가린다
+      set3(o, B.rightUpperArm, -1.6, 0.6, 0.6);
+      set3(o, B.leftUpperArm, -1.6, -0.6, -0.6);
+      set3(o, B.rightLowerArm, 0, 2.0, 0);
+      set3(o, B.leftLowerArm, 0, -2.0, 0);
+      set3(o, B.spine, 0.25, 0, 0);
+      set3(o, B.head, 0.35 + Math.sin(t * 3) * 0.04, 0, 0);
+      return;
+    case "crouch":
+      // 몸을 잔뜩 웅크리고 숨는다
+      set3(o, B.rightUpperArm, -0.9, 0.3, 0.9);
+      set3(o, B.leftUpperArm, -0.9, -0.3, -0.9);
+      set3(o, B.rightLowerArm, 0, 1.6, 0);
+      set3(o, B.leftLowerArm, 0, -1.6, 0);
+      set3(o, B.spine, 0.55, 0, 0);
+      set3(o, B.head, 0.2, Math.sin(t * 0.9 + seed) * 0.35, 0);
+      set3(o, B.rightUpperLeg, -1.25, 0, 0.15);
+      set3(o, B.leftUpperLeg, -1.25, 0, -0.15);
+      set3(o, B.rightLowerLeg, 2.0, 0, 0);
+      set3(o, B.leftLowerLeg, 2.0, 0, 0);
+      o[CROUCH] = 0.55;
+      return;
+    case "search": {
+      // 허리를 숙여 가구 뒤를 뒤적인다
+      const r = Math.sin(t * 9) * 0.15;
+      set3(o, B.spine, 0.7, 0, 0);
+      set3(o, B.head, 0.15, Math.sin(t * 2.5) * 0.3, 0);
+      set3(o, B.rightUpperArm, -1.2, 0, 1.0 + r);
+      set3(o, B.leftUpperArm, -1.2, 0, -1.0 - r);
+      set3(o, B.rightUpperLeg, -0.6, 0, 0.15);
+      set3(o, B.leftUpperLeg, -0.6, 0, -0.15);
+      set3(o, B.rightLowerLeg, 1.0, 0, 0);
+      set3(o, B.leftLowerLeg, 1.0, 0, 0);
+      o[CROUCH] = 0.18;
+      return;
+    }
+    case "flash":
+      // 손전등을 앞으로 비춘다
+      set3(o, B.rightUpperArm, -1.35, 0.25, 0.25);
+      set3(o, B.rightLowerArm, 0, 0.15, 0);
+      set3(o, B.head, 0.05, 0, 0);
+      return;
+    case "caught":
+      // 화들짝 두 손을 든다
+      set3(o, B.rightUpperArm, 0, 0, -1.0);
+      set3(o, B.leftUpperArm, 0, 0, 1.0);
+      set3(o, B.rightLowerArm, 0, 0.9, 0);
+      set3(o, B.leftLowerArm, 0, -0.9, 0);
+      set3(o, B.spine, -0.12, 0, 0);
+      return;
+    case "cheer":
+      set3(o, B.rightUpperArm, -0.2, 0, -1.1 + Math.sin(t * 6) * 0.15);
+      set3(o, B.leftUpperArm, -0.2, 0, 1.1 - Math.sin(t * 6) * 0.15);
+      set3(o, B.rightLowerArm, 0, 0.2, 0);
+      set3(o, B.leftLowerArm, 0, -0.2, 0);
+      set3(o, B.spine, -0.1, 0, 0);
+      o[HOP] = Math.abs(Math.sin(t * 6)) * 0.12;
+      return;
+  }
+}
+
+function face(pose: FigurePose): { surprised: number; happy: number; angry: number; shut: boolean } {
+  switch (pose) {
+    case "count":
+      return { surprised: 0, happy: 0, angry: 0, shut: true };
+    case "crouch":
+      return { surprised: 0.35, happy: 0, angry: 0, shut: false };
+    case "search":
+    case "flash":
+      return { surprised: 0, happy: 0, angry: 0.45, shut: false };
+    case "caught":
+      return { surprised: 1, happy: 0, angry: 0, shut: false };
+    case "cheer":
+      return { surprised: 0, happy: 1, angry: 0, shut: false };
+    default:
+      return { surprised: 0, happy: 0, angry: 0, shut: false };
+  }
+}
+
+const fQ = new THREE.Quaternion();
+const fE = new THREE.Euler();
+const tmp = new THREE.Vector3();
+
+export default function HouseFigure(props: HouseFigureProps) {
+  const { look, seed, color, path, pathKey, delay = 0, faceTo, pose, lowDetail, speed = 2.6, size = 1 } = props;
+  const { vrm, morphs } = useVrmAvatar(look, seed, { lowDetail });
+  const rootRef = useRef<THREE.Group>(null);
+  const bodyRef = useRef<THREE.Group>(null);
+  const st = useRef<{ key: string; start: number; leg: number; yaw: number | null; walk: number; springs: { current: number }; cur: Float32Array; want: Float32Array } | null>(null);
+  const fit = useMemo(() => {
+    if (!vrm) return null;
+    const head = vrm.humanoid.getNormalizedBoneNode("head");
+    const y = head ? head.getWorldPosition(new THREE.Vector3()).y : 1.4;
+    return HEAD_HEIGHT / Math.max(0.5, y);
+  }, [vrm]);
+
+  useFrame(({ clock }, dtRaw) => {
+    const root = rootRef.current;
+    const body = bodyRef.current;
+    if (!root || !body || path.length === 0) return;
+    const dt = Math.min(dtRaw, 0.05);
+    const t = clock.elapsedTime;
+    const s = (st.current ??= { key: "", start: 0, leg: 0, yaw: null, walk: 0, springs: { current: 0 }, cur: new Float32Array(CHANNELS), want: new Float32Array(CHANNELS) });
+    if (s.key !== pathKey) {
+      // 새 경로: 지금 서 있는 곳에서 가장 가까운 점부터가 아니라 처음부터 (첫 점 = 직전 도착점)
+      if (s.key === "") root.position.copy(path[0]);
+      s.key = pathKey;
+      s.start = t;
+      s.leg = 1;
+    }
+    const waiting = t - s.start < delay;
+    let walking = false;
+    if (!waiting) {
+      // 경로를 다 걸었어도(또는 중간에 새 경로로 바뀌어도) 마지막 점까지는 마저 걷는다
+      const dest = path[Math.min(s.leg, path.length - 1)];
+      tmp.subVectors(dest, root.position);
+      const dist = tmp.length();
+      const step = dt * speed;
+      if (dist <= step) {
+        root.position.copy(dest);
+        if (s.leg < path.length) s.leg++;
+      } else {
+        root.position.addScaledVector(tmp, step / dist);
+        walking = true;
+        if (tmp.x * tmp.x + tmp.z * tmp.z > 1e-4) {
+          const yawTo = Math.atan2(tmp.x, tmp.z);
+          let dy = yawTo - (s.yaw ?? yawTo);
+          dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+          s.yaw = (s.yaw ?? yawTo) + dy * (1 - Math.exp(-dt * 12));
+        }
+      }
+    }
+    if (!walking && faceTo) {
+      const yawTo = Math.atan2(faceTo.x - root.position.x, faceTo.z - root.position.z);
+      let dy = yawTo - (s.yaw ?? yawTo);
+      dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      s.yaw = (s.yaw ?? yawTo) + dy * (1 - Math.exp(-dt * 8));
+    }
+    root.rotation.y = s.yaw ?? 0;
+
+    poseTarget(s.want, walking ? "stand" : pose, t, seed);
+    if (walking) {
+      s.walk += dt * 10;
+      const w = Math.sin(s.walk) * 0.55;
+      s.want[B.rightUpperLeg] = w;
+      s.want[B.leftUpperLeg] = -w;
+      s.want[B.rightLowerLeg] = Math.max(0, -w) * 1.1;
+      s.want[B.leftLowerLeg] = Math.max(0, w) * 1.1;
+      s.want[B.rightUpperArm] = -w * 0.6;
+      s.want[B.leftUpperArm] = w * 0.6;
+      s.want[B.rightUpperArm + 2] = 1.25;
+      s.want[B.leftUpperArm + 2] = -1.25;
+    }
+    const k = 1 - Math.exp(-dt * 12);
+    for (let i = 0; i < CHANNELS; i++) s.cur[i] += (s.want[i] - s.cur[i]) * k;
+    body.position.y = s.cur[HOP] - s.cur[CROUCH] * size;
+
+    if (!vrm || !fit) return;
+    const vrm0 = vrm.meta.metaVersion === "0";
+    for (let i = 0; i < BONES.length; i++) {
+      const node = vrm.humanoid.getNormalizedBoneNode(BONES[i]);
+      if (!node) continue;
+      fQ.setFromEuler(fE.set(s.cur[i * 3], s.cur[i * 3 + 1], s.cur[i * 3 + 2]));
+      node.quaternion.copy(vrm0 ? toVrm0(fQ) : fQ);
+    }
+    const em = vrm.expressionManager;
+    if (em) {
+      const f = face(walking ? "stand" : pose);
+      em.setValue("surprised", f.surprised);
+      em.setValue("happy", f.happy);
+      em.setValue("angry", f.angry);
+      em.setValue("blink", f.shut ? 1 : f.happy > 0.9 || f.surprised > 0.5 ? 0 : blinking(t, seed) ? 1 : 0);
+    }
+    tickVrm(vrm, dt, morphs.current, s.springs, lowDetail);
+  });
+
+  return (
+    <group ref={rootRef}>
+      <mesh rotation-x={-Math.PI / 2} position-y={0.02}>
+        <circleGeometry args={[0.36 * size, 18]} />
+        <meshBasicMaterial color="#000000" transparent opacity={0.35} depthWrite={false} />
+      </mesh>
+      <group ref={bodyRef}>
+        {vrm && fit ? (
+          <primitive object={vrm.scene} scale={fit * size} />
+        ) : (
+          <group scale={size}>
+            <mesh position-y={0.62}>
+              <capsuleGeometry args={[0.26, 0.6, 6, 12]} />
+              <meshStandardMaterial color={color} roughness={0.6} />
+            </mesh>
+            <mesh position-y={1.32}>
+              <sphereGeometry args={[0.22, 14, 10]} />
+              <meshStandardMaterial color="#f1d3b8" roughness={0.7} />
+            </mesh>
+          </group>
+        )}
+      </group>
+      {props.children}
+    </group>
+  );
+}

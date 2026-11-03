@@ -210,6 +210,15 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "받은 투표 (점수 모드)", value: (d) => n(d.votesReceived) },
     { label: "시간 초과로 자동 제출", value: (d) => n(d.autoFilled) },
   ],
+  "hide-and-seek": [
+    { label: "최고 점수", value: (d) => n(d.maxScore) },
+    { label: "찜 / 끝까지 숨음", value: (d) => `${n(d.homes)} / ${n(d.survives)}` },
+    { label: "술래로 찾은 사람 (한 판 최다)", value: (d) => `${n(d.catches)} (${n(d.maxCatches)})` },
+    { label: "싹쓸이", value: (d) => n(d.sweeps) },
+    { label: "찜 막기", value: (d) => n(d.blocks) },
+    { label: "꼬마 술래로 찾음", value: (d) => n(d.helperCatches) },
+    { label: "술래와 같은 방에서 버팀", value: (d) => n(d.closeCalls) },
+  ],
   "star-rummy": [
     { label: "최종 우승 / 라운드 승리", value: (d) => `${n(d.gamesWon)} / ${n(d.roundsWon)}` },
     { label: "러미 (손 다 비우기)", value: (d) => n(d.rummyOuts) },

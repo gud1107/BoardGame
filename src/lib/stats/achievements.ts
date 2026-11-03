@@ -301,6 +301,15 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["all-clear", "🦈", "미션 올클리어", "한 잠수에서 미션 모두 달성", 1, k("missionAllClears")],
     ["streak-5", "🔥", "연속 올클리어", "5연속 미션 올클리어", 5, k("maxMissionStreak")],
   ],
+  "hide-and-seek": [
+    ["home-10", "🙌", "찜의 달인", "술래 기둥까지 달려 찜 누적 10번", 10, k("homes")],
+    ["survive-10", "🐦", "못 찾겠다 꾀꼬리", "끝까지 숨어 있기 누적 10번", 10, k("survives")],
+    ["catch-20", "👁️", "매의 눈", "술래로 누적 20명 찾기", 20, k("catches")],
+    ["sweep-1", "🧹", "싹쓸이", "한 라운드에 모두 찾아내기", 1, k("sweeps")],
+    ["block-5", "🚫", "기둥 지킴이", "찜하러 뛰는 사람 막기 누적 5번", 5, k("blocks")],
+    ["helper-5", "🔦", "꼬마 술래", "잡힌 뒤 직접 찾아내기 누적 5번", 5, k("helperCatches")],
+    ["close-15", "💓", "심장이 쫄깃", "술래와 같은 방에서 안 들키기 누적 15번", 15, k("closeCalls")],
+  ],
   "star-rummy": [
     ["rummy-1", "🎉", "첫 러미", "손의 타일을 모두 내려놓아 라운드 끝내기", 1, k("rummyOuts")],
     ["rummy-10", "🌌", "별자리 장인", "러미 누적 10번", 10, k("rummyOuts")],

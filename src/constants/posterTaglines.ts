@@ -54,6 +54,7 @@ export const POSTER_TAGLINES: Partial<Record<GameId, string>> = {
   "prism-five": "변신! 다섯 빛이 하나 될 때, 악은 무너진다",
   "play-dead": "털썩. 그런데… 진짜 죽었을까?",
   "star-rummy": "쪼개고, 합치고, 다시 빛나게 — 마지막 별은 누구 손에?",
+  "hide-and-seek": "쉿… 삐걱. 술래가 바로 옆방에 있다.",
   "era-march": "돌도끼에서 플라즈마까지, 먼저 진화하는 쪽이 이긴다",
   "lost-cities": "잃어버린 도시로, 모험엔 대가가 있다",
   "rat-a-tat-cat": "기억해라, 그리고 속여라",
