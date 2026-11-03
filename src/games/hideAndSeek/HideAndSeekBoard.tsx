@@ -19,7 +19,7 @@ import {
   type Seat,
   type SeatState,
 } from "./engine";
-import { cluesFor, describeEvents, figuresFor, MOVE_LABEL, SEAT_COLORS, T } from "./show";
+import { cluesFor, describeEvents, figuresFor, MOVE_LABEL, rummageFor, SEAT_COLORS, T } from "./show";
 import type { CameraFocus } from "./three/HouseScene3D";
 import type { Drive } from "./three/HouseFigure";
 import { walkSpecFor, type WalkInput, type WalkNear, type WalkTarget } from "./walk";
@@ -58,6 +58,8 @@ const CARD_HELP: Record<MoveKind, string> = {
   flash: "옆방을 비춰 몇 명 숨었는지 알아내요. 이동은 안 해요",
 };
 
+/** 3D 상호작용 표시용 짧은 동사 (배그 "[E] 줍기"처럼) */
+const VERB: Record<MoveKind, string> = { hide: "🫣 숨기", stay: "🤫 숨죽이기", sneak: "🐾 옮기기", home: "🏃 찜!", search: "🔍 뒤지기", move: "🚶 멈추기", flash: "🔦 손전등" };
 const KINDS_HIDER: MoveKind[] = ["stay", "sneak", "home"];
 const KINDS_HUNTER: MoveKind[] = ["search", "move", "flash"];
 const needsSpot = (k: MoveKind) => k === "hide" || k === "sneak" || k === "search";
@@ -161,13 +163,45 @@ export default function HideAndSeekBoard(props: HideAndSeekBoardProps) {
 
   // --- 직접 걷기 (3D) -----------------------------------------------------
   const [walkOn, setWalkOn] = useState(true);
-  const walkMode = gl && walkOn && choosing;
+  // 전체 화면: 브라우저 전체 화면 + (iOS 등 미지원이면) 화면 꽉 채우기. 전체 화면에선 항상 걸어서 고른다
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [full, setFull] = useState(false);
+  function toggleFull() {
+    if (!full) {
+      setFull(true);
+      stageRef.current?.requestFullscreen?.().catch(() => {});
+    } else {
+      setFull(false);
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    }
+  }
+  useEffect(() => {
+    if (!full) return;
+    const onChange = () => {
+      if (!document.fullscreenElement) setFull(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFull(false);
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [full]);
+  const walkMode = gl && (walkOn || full) && choosing;
   const walkSpec = useMemo(() => (walkMode ? walkSpecFor(state, me) : null), [walkMode, state, me]);
   const walkInput = useRef<WalkInput>({ x: 0, z: 0, hop: false });
   const drive = useRef<Drive>({ active: false, x: 0, y: 0, z: 0, yaw: 0, moving: false });
   const [near, setNear] = useState<WalkNear | null>(null);
   const nearTarget = walkSpec && near?.target ? (walkSpec.targets.find((t) => t.key === near.target) ?? null) : null;
-  const nearStop = walkSpec && near && !nearTarget ? (walkSpec.stops[near.room] ?? null) : null;
+  const nearStop = walkSpec && near ? (walkSpec.stops[near.room] ?? null) : null;
+  const nearFlash = walkSpec && near?.flash ? (walkSpec.flashes.find((t) => t.key === near.flash) ?? null) : null;
+  // 터치 기기엔 키 표시 대신 버튼을 누르라고
+  const [touch] = useState(() => typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches);
+  const cap = (k: string) => (touch ? "" : `[${k}] `);
+  const nearLabel = nearTarget ? { at: nearTarget.at, text: `${cap("E")}${VERB[nearTarget.move.kind]}` } : nearFlash ? { at: nearFlash.at, text: `${cap("F")}${VERB.flash}` } : null;
   // 걸어서 고른 자리 — 커밋 뒤 판정까지 내 캐릭터가 그 자리에 머문다
   const [walked, setWalked] = useState<{ tag: string; t: WalkTarget } | null>(null);
   const turnTag = `${state.seed}:${state.round}:${state.turn}`;
@@ -180,13 +214,17 @@ export default function HideAndSeekBoard(props: HideAndSeekBoardProps) {
   }
   const primary = useRef<() => void>(() => {});
   const secondary = useRef<() => void>(() => {});
+  const flashKey = useRef<() => void>(() => {});
   useEffect(() => {
     primary.current = () => {
       if (nearTarget) chooseWalk(nearTarget);
       else if (near?.ladder) walkInput.current.hop = true;
     };
     secondary.current = () => {
-      if (walkSpec?.stops[near?.room ?? "yard"]) chooseWalk(walkSpec.stops[near!.room]!);
+      if (nearStop) chooseWalk(nearStop);
+    };
+    flashKey.current = () => {
+      if (nearFlash) chooseWalk(nearFlash);
     };
   });
   // 키보드: WASD/방향키 이동 · E/스페이스/엔터 고르기 · Q 여기서 멈추기
@@ -212,6 +250,8 @@ export default function HideAndSeekBoard(props: HideAndSeekBoardProps) {
         primary.current();
       } else if (key === "q" && !e.repeat) {
         secondary.current();
+      } else if (key === "f" && !e.repeat) {
+        flashKey.current();
       }
     };
     const onUp = (e: KeyboardEvent) => {
@@ -234,6 +274,13 @@ export default function HideAndSeekBoard(props: HideAndSeekBoardProps) {
     return figuresRaw.map((f) => (f.seat === me ? { ...f, path: [walked.t.snap], pathKey: `walk:${walked.t.key}`, pose: walked.t.pose, faceTo: walked.t.pose === "search" ? walked.t.at : null } : f));
   }, [figuresRaw, walked, turnTag, showing, me]);
   const clues = useMemo(() => cluesFor(state, fresh), [state, fresh]);
+  // 들썩이는 가구: 판정 때 뒤져지는 곳 + 내가 막 뒤지기로 고른 곳(판정 전까지 계속 뒤적뒤적)
+  const committedSearch = !showing && props.committedMove?.kind === "search" ? props.committedMove.spot! : null;
+  const rummage = useMemo(() => {
+    const r = rummageFor(state, fresh);
+    if (committedSearch) r.push({ spot: committedSearch, at: -1e9, until: 1e9 });
+    return r;
+  }, [state, fresh, committedSearch]);
   const myRoom: RoomId | null = mine.status === "hiding" ? (mine.spot ? mine.room : props.committedMove?.spot ? spot(props.committedMove.spot)!.room : null) : mine.room;
   const seekerRoom = state.seats[state.seeker].room;
 
@@ -286,7 +333,10 @@ export default function HideAndSeekBoard(props: HideAndSeekBoardProps) {
       <HowToPlay startOpen={state.round === 1 && state.turn === 0} />
 
       {/* 저택 */}
-      <div className="relative h-[clamp(320px,62vw,540px)] overflow-hidden rounded-2xl border border-white/10 bg-[#0b1026]">
+      <div
+        ref={stageRef}
+        className={full ? "fixed inset-0 z-[80] h-[100dvh] w-screen overflow-hidden bg-[#0b1026]" : "relative h-[clamp(320px,62vw,540px)] overflow-hidden rounded-2xl border border-white/10 bg-[#0b1026]"}
+      >
         {gl ? (
           <HouseScene3D
             viewerSeat={me}
@@ -303,41 +353,80 @@ export default function HideAndSeekBoard(props: HideAndSeekBoardProps) {
             lowDetail={lowDetail}
             walk={{ spec: walkSpec, input: walkInput, drive, onNear: setNear }}
             nearTarget={nearTarget?.at ?? null}
+            nearLabel={nearLabel}
+            rummage={rummage}
           />
         ) : (
           <FloorPlan state={state} viewer={me} pickSpots={pickSpots} pickRooms={pickRooms} target={target} onSpot={(id) => setTarget({ spot: id })} onRoom={(id) => setTarget({ room: id })} />
         )}
         {walkMode && walkSpec && (
           <>
-            <div className="pointer-events-none absolute left-2 top-2 max-w-[60%] rounded-xl bg-black/55 px-2.5 py-1.5 text-[11px] leading-snug text-white/85 backdrop-blur">
+            <div className={`pointer-events-none absolute left-2 top-2 max-w-[60%] rounded-xl bg-black/55 px-2.5 py-1.5 text-[11px] leading-snug text-white/85 backdrop-blur ${full ? "hidden lg:block" : ""}`}>
               <b className="text-cyan-200">🕹️ 직접 걸어서 고르기</b>
               <br />
-              <span className="hidden sm:inline">WASD·방향키 이동 · E/스페이스 고르기{Object.keys(walkSpec.stops).length > 0 ? " · Q 여기서 멈추기" : ""}</span>
+              <span className="hidden sm:inline">
+                WASD·방향키 이동 · <Key k="E" /> 상호작용{Object.keys(walkSpec.stops).length > 0 ? <> · <Key k="Q" /> 여기서 멈추기</> : null}
+                {walkSpec.flashes.length > 0 ? <> · 문 앞에서 <Key k="F" /> 손전등</> : null}
+              </span>
               <span className="sm:hidden">왼쪽 조이스틱으로 걸어요</span>
               <br />
               {state.step === "hide" ? "금빛 고리 가구 앞에 가서 숨으세요" : mine.status === "hiding" ? "이번 턴엔 이 방과 옆방까지 갈 수 있어요" : "금빛 고리 = 뒤질 수 있는 곳"}
             </div>
             <Joystick inputRef={walkInput} />
-            <div className="absolute bottom-3 right-3 flex flex-col items-end gap-1.5">
+            {/* 배그식 상호작용 프롬프트 — 키 표시 + 누를 수 있는 버튼 */}
+            <div className="absolute bottom-3 right-3 flex max-w-[60%] flex-col items-end gap-1.5">
+              {nearFlash && (
+                <button type="button" onClick={() => flashKey.current()} className="flex min-h-10 items-center gap-2 rounded-full border border-amber-300/70 bg-black/60 px-3 text-xs font-bold text-amber-100 backdrop-blur">
+                  {!touch && <Key k="F" />} {nearFlash.label}
+                </button>
+              )}
               {nearStop && (
-                <button type="button" onClick={() => secondary.current()} className="min-h-10 rounded-full border border-white/25 bg-black/55 px-3.5 text-xs font-semibold text-white backdrop-blur">
-                  {nearStop.label}
+                <button type="button" onClick={() => secondary.current()} className="flex min-h-10 items-center gap-2 rounded-full border border-white/30 bg-black/60 px-3 text-xs font-semibold text-white backdrop-blur">
+                  {!touch && <Key k="Q" />} {nearStop.label}
                 </button>
               )}
               {nearTarget ? (
-                <button type="button" onClick={() => primary.current()} className="min-h-12 max-w-[11rem] animate-pulse rounded-2xl bg-cyan-400 px-4 text-sm font-black text-slate-900 shadow-lg shadow-cyan-500/30">
-                  {nearTarget.label}
+                <button type="button" onClick={() => primary.current()} className="flex min-h-12 items-center gap-2 rounded-2xl bg-cyan-400 px-4 text-sm font-black text-slate-900 shadow-lg shadow-cyan-500/40 ring-2 ring-cyan-200/70">
+                  {!touch && <Key k="E" dark />} {nearTarget.label}
                 </button>
               ) : near?.ladder ? (
-                <button type="button" onClick={() => primary.current()} className="min-h-12 rounded-2xl bg-amber-300 px-4 text-sm font-black text-slate-900">
-                  🪜 사다리 {near.room === "attic" ? "내려가기" : "오르기"}
+                <button type="button" onClick={() => primary.current()} className="flex min-h-12 items-center gap-2 rounded-2xl bg-amber-300 px-4 text-sm font-black text-slate-900">
+                  {!touch && <Key k="E" dark />} 🪜 사다리 {near.room === "attic" ? "내려가기" : "오르기"}
                 </button>
               ) : null}
             </div>
           </>
         )}
-        {gl && !walkMode && (
-          <div className="absolute right-2 top-2 flex flex-col gap-1.5">
+        {gl && (
+          <button
+            type="button"
+            onClick={toggleFull}
+            aria-label={full ? "전체 화면 끄기" : "전체 화면"}
+            className={`absolute right-2 top-2 z-10 min-h-9 rounded-full border px-3 text-xs font-semibold backdrop-blur ${full ? "border-cyan-300 bg-cyan-400/25 text-cyan-50" : "border-white/20 bg-black/40 text-white/85 hover:border-white/40"}`}
+          >
+            {full ? "✕ 나가기" : "⛶ 전체 화면"}
+          </button>
+        )}
+        {full && <FullHud state={state} me={me} names={names} secsLeft={secsLeft} committed={!!props.committedMove} choosingMine={choosing} revealed={revealed} onReady={props.onReady} onExit={toggleFull} />}
+        {full && choosing && optionsFor("flash").length > 0 && (
+          <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 flex-wrap justify-center gap-1.5">
+            {optionsFor("flash").map((m) => (
+              <button
+                key={m.room}
+                type="button"
+                onClick={() => {
+                  getHideAndSeekSound().play("commit");
+                  onCommit(m);
+                }}
+                className="min-h-9 rounded-full border border-amber-300/60 bg-black/55 px-3 text-xs font-semibold text-amber-100 backdrop-blur"
+              >
+                🔦 {room(m.room!).name}
+              </button>
+            ))}
+          </div>
+        )}
+        {gl && !walkMode && !full && (
+          <div className="absolute right-2 top-12 flex flex-col gap-1.5">
             {(
               [
                 ["🏠", "전체", { kind: "all" }],
@@ -545,6 +634,89 @@ export default function HideAndSeekBoard(props: HideAndSeekBoardProps) {
             결과 확인
           </button>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** 키보드 키 모양 */
+function Key({ k, dark }: { k: string; dark?: boolean }) {
+  return (
+    <kbd className={`inline-grid h-6 min-w-6 place-items-center rounded-md border-b-2 px-1 font-mono text-[11px] font-black ${dark ? "border-slate-900/60 bg-slate-900 text-cyan-200" : "border-white/40 bg-white/90 text-slate-900"}`}>
+      {k}
+    </kbd>
+  );
+}
+
+/** 전체 화면에서 보드 대신 위에 띄우는 요약 (라운드·시간·상태·이번 턴 결과) */
+function FullHud({
+  state,
+  me,
+  names,
+  secsLeft,
+  committed,
+  choosingMine,
+  revealed,
+  onReady,
+  onExit,
+}: {
+  state: GameState;
+  me: Seat;
+  names: Record<Seat, string>;
+  secsLeft: number | null;
+  committed: boolean;
+  choosingMine: boolean;
+  revealed: boolean;
+  onReady: () => void;
+  onExit: () => void;
+}) {
+  const lines = state.phase === "resolved" && revealed ? describeEvents(state.events, names, me).slice(0, 4) : [];
+  const status =
+    state.phase === "choosing"
+      ? choosingMine
+        ? state.step === "hide"
+          ? "🙈 숨을 곳으로 걸어가세요"
+          : "내 차례 — 걸어가서 고르세요"
+        : committed
+          ? "✅ 결정! 다른 사람 기다리는 중…"
+          : state.step === "hide"
+            ? "🙈 다들 숨는 중… 하나, 둘, 셋…"
+            : "지켜보는 중…"
+      : state.phase === "revealing"
+        ? "모두 결정! 공개하는 중…"
+        : state.phase === "ended"
+          ? "🏆 게임 끝!"
+          : state.roundOver
+            ? `🎭 라운드 ${state.round} 끝`
+            : "👀 공개!";
+  return (
+    <div className="pointer-events-none absolute left-1/2 top-12 flex w-[min(92vw,30rem)] -translate-x-1/2 flex-col items-center gap-1 sm:top-2">
+      <div className="flex items-center gap-2 rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
+        <span className="text-amber-300">
+          R{state.round}/{state.rounds}
+        </span>
+        {state.step === "seek" && (
+          <span>
+            턴 {state.turn}/{state.seekTurns} · 남은 {hidersLeft(state)}
+          </span>
+        )}
+        {secsLeft !== null && state.phase === "choosing" && <span className={secsLeft <= 3 ? "text-rose-400" : ""}>⏱ {secsLeft}s</span>}
+      </div>
+      <div className="rounded-xl bg-black/55 px-3 py-1 text-center text-[13px] text-white/90 backdrop-blur">{status}</div>
+      {lines.map((l, i) => (
+        <div key={i} className={`rounded-lg bg-black/55 px-2.5 py-0.5 text-center text-[12px] backdrop-blur ${l.mine ? "text-amber-200" : "text-white/80"}`}>
+          {l.text}
+        </div>
+      ))}
+      {state.phase === "resolved" && revealed && !state.ready[me] && (
+        <button type="button" onClick={onReady} className="pointer-events-auto mt-0.5 min-h-9 rounded-full bg-white/90 px-4 text-xs font-bold text-slate-900">
+          {state.roundOver ? "다음 라운드 ▶" : "다음 턴 ▶"}
+        </button>
+      )}
+      {state.phase === "ended" && revealed && (
+        <button type="button" onClick={onExit} className="pointer-events-auto mt-0.5 min-h-9 rounded-full bg-amber-400 px-4 text-xs font-bold text-slate-900">
+          결과 보러 나가기
+        </button>
       )}
     </div>
   );

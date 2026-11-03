@@ -8,9 +8,9 @@ import ScreenSprite from "@/games/shared/three/ScreenSprite";
 import { AdaptiveResolution } from "@/games/shared/three/sceneFx";
 import { labelTexture } from "@/games/shared/three/tableKit";
 import { roomCharacterOf, useRoomCharacters } from "@/lib/character/roomCharacters";
-import { FLOOR_Y, ROOMS, SPOTS, WALL_H, room, roomCenter, type RoomId } from "../house";
+import { DOOR_LIST, FLOOR_Y, ROOMS, SPOTS, WALL_H, doorPoints, room, roomCenter, type RoomId } from "../house";
 import { PILLAR, SEAT_COLORS, type ClueSpec, type FigureSpec, type P3 } from "../show";
-import { ladderHop, nearestTarget, roomOf, stepWalk, WALK_SPEED, type WalkInput, type WalkNear, type WalkPos, type WalkSpec } from "../walk";
+import { ladderHop, nearestFlash, nearestTarget, roomOf, stepWalk, WALK_SPEED, type WalkInput, type WalkNear, type WalkPos, type WalkSpec } from "../walk";
 import HouseFigure, { type Drive } from "./HouseFigure";
 import Prop from "./Props";
 
@@ -46,6 +46,10 @@ export interface HouseScene3DProps {
   walk?: { spec: WalkSpec | null; input: RefObject<WalkInput>; drive: RefObject<Drive>; onNear: (n: WalkNear) => void };
   /** 걷기 중 가까이 있는 대상 — 금빛으로 표시 */
   nearTarget?: P3 | null;
+  /** 배그식 상호작용 표시: 가까운 대상 위에 "[E] 뒤지기" */
+  nearLabel?: { at: P3; text: string } | null;
+  /** 들썩이는 가구 (판정 연출 시각 기준 초, 내가 막 뒤지기로 고른 곳은 계속) */
+  rummage?: { spot: string; at: number; until: number }[];
 }
 
 const v3 = (p: P3) => new THREE.Vector3(p[0], p[1], p[2]);
@@ -71,8 +75,8 @@ function Wall({ axis, at, from, to, y, h, color, gaps = [] }: { axis: "x" | "z";
   const segs: [number, number][] = [];
   let cur = from;
   for (const g of [...gaps].sort((a, b) => a - b)) {
-    if (g - 0.6 > cur) segs.push([cur, g - 0.6]);
-    cur = g + 0.6;
+    if (g - 0.72 > cur) segs.push([cur, g - 0.72]);
+    cur = g + 0.72;
   }
   if (cur < to) segs.push([cur, to]);
   return (
@@ -99,9 +103,41 @@ function House() {
   return (
     <group>
       {/* 바닥 */}
-      {ROOMS.filter((r) => r.id !== "yard").map((r) => (
+      {ROOMS.filter((r) => r.id !== "yard" && r.id !== "landing").map((r) => (
         <Slab key={r.id} x0={r.box[0]} x1={r.box[1]} z0={r.box[2]} z1={r.box[3]} y={FLOOR_Y[r.floor]} color={r.floorColor} />
       ))}
+      {/* 2층 복도 바닥 — 계단 구멍(x -1.8~-0.8, z 0.45~2.85)을 비워 둔다 */}
+      {(
+        [
+          [-5, -1.8, 0, 3.5],
+          [-0.8, 0, 0, 3.5],
+          [-1.8, -0.8, 2.85, 3.5],
+          [-1.8, -0.8, 0, 0.45],
+        ] as const
+      ).map(([a, b, c, d]) => (
+        <Slab key={`ld${a}${c}`} x0={a} x1={b} z0={c} z1={d} y={y2} color={room("landing").floorColor} />
+      ))}
+      {/* 계단 구멍 난간 (옆으로는 못 지나가는 그 난간) */}
+      <Wall axis="z" at={-1.8} from={0.45} to={2.85} y={y2} h={0.75} color="#6d4c41" />
+      <Wall axis="z" at={-0.8} from={0.45} to={2.85} y={y2} h={0.75} color="#6d4c41" />
+      <Wall axis="x" at={2.85} from={-1.8} to={-0.8} y={y2} h={0.75} color="#6d4c41" />
+      {/* 앞쪽 낮은 담 — 마당으로 나가는 문 자리만 비어 있다 */}
+      <Wall axis="x" at={3.5} from={-9} to={-5} y={y1} h={0.55} color="#8d7b68" gaps={[-7]} />
+      <Wall axis="x" at={3.5} from={-5} to={0} y={y1} h={0.55} color="#8d7b68" gaps={[-2.5]} />
+      <Wall axis="x" at={3.5} from={0} to={5} y={y1} h={0.55} color="#8d7b68" gaps={[2.5]} />
+      {/* 문틀 — 문 자리를 한눈에 */}
+      {DOOR_LIST.flatMap(([a, b]) => {
+        const pts = doorPoints(a, b);
+        if (pts.length !== 1) return [];
+        const [x, y, z] = pts[0];
+        const alongX = Math.abs(z - Math.round(z)) < 0.01 && (z === 0 || z === 3.5) && !(Math.abs(x) === 5 || x === 0);
+        return [-0.72, 0.72].map((o) => (
+          <mesh key={`${a}${b}${o}`} position={alongX ? [x + o, y + 0.65, z] : [x, y + 0.65, z + o]}>
+            <boxGeometry args={[0.12, 1.3, 0.12]} />
+            <meshStandardMaterial color="#e8d5b0" roughness={0.7} />
+          </mesh>
+        ));
+      })}
       {/* 바깥 벽 (뒤·옆) */}
       <Wall axis="x" at={-3.5} from={-9} to={-5} y={y1} h={WALL_H} color={room("garage").wallColor} />
       <Wall axis="x" at={-3.5} from={-5} to={0} y={y1} h={WALL_H} color={room("bath").wallColor} />
@@ -368,6 +404,58 @@ function Beam({ from, to, at, fxStart }: { from: P3; to: P3; at: number; fxStart
   );
 }
 
+/** 뒤지는 동안 가구가 들썩들썩 */
+function Wiggle({ spec, fxStart, children }: { spec?: { at: number; until: number }; fxStart: number; children: ReactNode }) {
+  const ref = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => {
+    const g = ref.current;
+    if (!g) return;
+    const e = fxClock(fxStart);
+    const on = !!spec && e >= spec.at && e <= spec.until;
+    const t = clock.elapsedTime;
+    g.rotation.z = on ? Math.sin(t * 38) * 0.05 : 0;
+    g.rotation.x = on ? Math.sin(t * 29 + 1) * 0.03 : 0;
+    g.position.y = on ? Math.abs(Math.sin(t * 22)) * 0.07 : 0;
+  });
+  return <group ref={ref}>{children}</group>;
+}
+
+/** 뒤진 곳 바닥에서 퍼지는 고리 */
+function Ping({ pos, color, at, big, fxStart }: { pos: P3; color: string; at: number; big: boolean; fxStart: number }) {
+  const ref = useRef<THREE.Mesh>(null);
+  const mat = useRef<THREE.MeshBasicMaterial>(null);
+  useFrame(() => {
+    const m = ref.current;
+    if (!m || !mat.current) return;
+    const e = fxClock(fxStart) - at;
+    const dur = big ? 1.1 : 0.8;
+    m.visible = e >= 0 && e < dur;
+    const p = Math.max(0, e) / dur;
+    m.scale.setScalar(0.3 + p * (big ? 2.6 : 1.6));
+    mat.current.opacity = 0.9 * (1 - p);
+  });
+  return (
+    <mesh ref={ref} rotation-x={-Math.PI / 2} position={[pos[0], pos[1] + 0.06, pos[2]]} visible={false}>
+      <ringGeometry args={[0.7, 0.95, 40]} />
+      <meshBasicMaterial ref={mat} color={color} transparent depthWrite={false} toneMapped={false} side={THREE.DoubleSide} />
+    </mesh>
+  );
+}
+
+/** 배그식 상호작용 표시 — 가까운 대상 위에 떠서 살짝 오르내린다 */
+function InteractLabel({ at, text }: { at: P3; text: string }) {
+  const ref = useRef<THREE.Group>(null);
+  const map = useMemo(() => labelTexture(text, "#22d3ee", { bg: "rgba(4,30,44,0.92)", fg: "#ecfeff" }), [text]);
+  useFrame(({ clock }) => {
+    if (ref.current) ref.current.position.y = at[1] + 1.75 + Math.sin(clock.elapsedTime * 4) * 0.05;
+  });
+  return (
+    <group ref={ref} position={[at[0], at[1] + 1.75, at[2]]}>
+      <ScreenSprite position={[0, 0, 0]} scale={[0.82, 0.2]} map={map} renderOrder={14} />
+    </group>
+  );
+}
+
 function Mark({ pos }: { pos: P3 }) {
   const map = useMemo(() => labelTexture("✖ 확인함", "#94a3b8", { bg: "rgba(30,30,40,0.7)", fg: "#cbd5e1" }), []);
   return <ScreenSprite position={pos} scale={[0.7, 0.18]} map={map} />;
@@ -411,8 +499,9 @@ function Walker({ spec, inputRef, driveRef, onNear }: { spec: WalkSpec | null; i
     d.moving = len > 0.08;
     if (d.moving) d.yaw = Math.atan2(vx, vz);
     const target = nearestTarget(s.pos, spec.targets);
-    const n: WalkNear = { target: target?.key ?? null, room: roomOf(s.pos), ladder: ladderHop(s.pos, s.allowed) !== null };
-    const tag = `${n.target}|${n.room}|${n.ladder}`;
+    const fl = nearestFlash(s.pos, spec.flashes);
+    const n: WalkNear = { target: target?.key ?? null, room: roomOf(s.pos), ladder: ladderHop(s.pos, s.allowed) !== null, flash: fl?.key ?? null };
+    const tag = `${n.target}|${n.room}|${n.ladder}|${n.flash}`;
     if (tag !== s.near) {
       s.near = tag;
       onNear(n);
@@ -448,9 +537,14 @@ function CameraRig({ focus, follow }: { focus: CameraFocus; follow?: RefObject<D
     if (f?.active) {
       // 직접 걷는 중: 내 캐릭터 뒤 위에서 따라간다 (화면 위 = 집 안쪽)
       const aspect = size.width / Math.max(1, size.height);
-      const back = aspect < 1 ? 7.2 : 5.6;
-      goal.current.pos.set(f.x, f.y + back * 0.62, f.z + back);
-      goal.current.look.set(f.x, f.y + 0.7, f.z - 0.8);
+      const back = aspect < 1 ? 7.4 : 5.8;
+      // 카메라는 위층 바닥(천장) 밑에 머문다 — 위로 올라가면 천장에 가려 화면이 까매진다.
+      // 마당·다락(위가 트임)에서만 더 높이 올라가 내려다본다
+      const floorY = f.y < FLOOR_Y[1] - 0.5 ? FLOOR_Y[0] : f.y < FLOOR_Y[2] - 0.5 ? FLOOR_Y[1] : FLOOR_Y[2];
+      const open = f.z > 3.5 || floorY === FLOOR_Y[2];
+      const lift = open ? back * 0.6 : Math.min(back * 0.6, FLOOR_Y[1] - 0.45 - (f.y - floorY));
+      goal.current.pos.set(f.x, f.y + lift, f.z + back);
+      goal.current.look.set(f.x, f.y + 0.8, f.z - (open ? 0.8 : 1.6));
     }
     const k = 1 - Math.exp(-Math.min(dt, 0.05) * (f?.active ? 6 : 4));
     if (!cur.current) {
@@ -506,7 +600,9 @@ function SceneContents(props: HouseScene3DProps) {
         const y = FLOOR_Y[room(sp.room).floor];
         return (
           <group key={sp.id} position={[sp.x, y, sp.z]} rotation-y={sp.rot ?? 0}>
-            <Prop kind={sp.prop} />
+            <Wiggle spec={props.rummage?.find((r) => r.spot === sp.id)} fxStart={fxStart}>
+              <Prop kind={sp.prop} />
+            </Wiggle>
           </group>
         );
       })}
@@ -546,8 +642,11 @@ function SceneContents(props: HouseScene3DProps) {
             return <Beam key={c.key} from={c.from} to={c.to} at={c.at} fxStart={fxStart} />;
           case "mark":
             return <Mark key={c.key} pos={c.pos} />;
+          case "ping":
+            return <Ping key={c.key} pos={c.pos} color={c.color} at={c.at} big={c.big} fxStart={fxStart} />;
         }
       })}
+      {props.nearLabel && <InteractLabel key={props.nearLabel.text} at={props.nearLabel.at} text={props.nearLabel.text} />}
       {props.walk?.spec?.targets.map((t) => (
         <TargetGlow key={t.key} at={t.at} near={!!props.nearTarget && props.nearTarget[0] === t.at[0] && props.nearTarget[2] === t.at[2] && props.nearTarget[1] === t.at[1]} />
       ))}

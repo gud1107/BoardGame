@@ -38,7 +38,15 @@ export interface FigureSpec {
 export type ClueSpec =
   | { key: string; kind: "bubble"; pos: P3; text: string; color: string; at: number }
   | { key: string; kind: "beam"; from: P3; to: P3; at: number }
-  | { key: string; kind: "mark"; pos: P3 };
+  | { key: string; kind: "mark"; pos: P3 }
+  /** 뒤진 가구 바닥에서 퍼지는 고리 — 찾았으면 크고 빨갛게 */
+  | { key: string; kind: "ping"; pos: P3; color: string; at: number; big: boolean };
+
+/** 이번 판정에서 뒤져지는 가구 — 뒤적이는 동안 들썩인다 (판정 연출 시각, 초) */
+export function rummageFor(state: GameState, fresh: boolean): { spot: string; at: number; until: number }[] {
+  if (!fresh || state.step !== "seek") return [];
+  return state.events.filter((e) => e.t === "search").map((e) => ({ spot: e.t === "search" ? e.spot : "", at: T.search - 0.55, until: T.search + 0.15 }));
+}
 
 function ring(c: { x: number; y: number; z: number }, k: number, r = 0.75): P3 {
   const a = k * 2.399 + 0.6;
@@ -211,6 +219,10 @@ export function cluesFor(state: GameState, fresh: boolean): ClueSpec[] {
       }
       case "search":
         out.push({ key: k(`s${i}`), kind: "bubble", pos: shift(spotTop(e.spot), 0.25), text: e.found.length ? "찾았다!" : "없다…", color: e.found.length ? "#f87171" : "#94a3b8", at: at(T.search) });
+        if (fresh) {
+          const sp = spot(e.spot)!;
+          out.push({ key: k(`pg${i}`), kind: "ping", pos: [sp.x, FLOOR_Y[room(sp.room).floor], sp.z], color: e.found.length ? "#f43f5e" : "#94a3b8", at: T.search, big: e.found.length > 0 });
+        }
         break;
       case "bump":
         out.push({ key: k(`b${i}`), kind: "bubble", pos: shift(roomTop(e.room), 0.6), text: "딱 마주쳤다!", color: "#f87171", at: at(T.bump) });

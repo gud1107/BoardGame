@@ -72,6 +72,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       { game: "hide-and-seek", type: "FEAT", desc: "🔍 뒤지기·🔦 손전등 vs 🤫 숨죽이기·🐾 살금살금·🏃 찜! — 🔊 삐걱·🍃 부스럭·💓 인기척으로 추리, 잡히면 꼬마 술래" },
       { game: "hide-and-seek", type: "FEAT", desc: "🧑‍🎤 내 캐릭터가 저택을 걸어 다니며 숨고 찾아요 · 🤖 AI 봇 Lv.1~10 (공개 단서만으로 추리) · 🏅 업적 7종" },
       { game: "hide-and-seek", type: "FEAT", desc: "🕹️ 직접 걸어서 숨기 — WASD·방향키(휴대폰은 조이스틱)로 내 캐릭터를 움직여 가구 앞에서 E! 계단·사다리로 2층·다락까지, 술래는 걸어가서 뒤지기" },
+      { game: "hide-and-seek", type: "FEAT", desc: "⛶ 전체 화면 · 배그처럼 가구 위 [E] 표시로 상호작용, 문 앞 F 손전등·Q 멈추기 · 뒤지면 가구가 들썩, 벽·계단·카메라 끼임 고침" },
       { game: "hide-and-seek", type: "FEAT", desc: "🎵 살금살금 오르골 BGM(막판엔 심장 박동) · 삐걱·부스럭·두근두근·찾았다! 효과음 · “꼭꼭 숨어라!” 구호 · 🖼️ 로비 포스터" },
     ],
   },

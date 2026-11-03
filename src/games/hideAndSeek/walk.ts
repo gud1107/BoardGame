@@ -23,6 +23,8 @@ export interface WalkNear {
   target: string | null;
   room: RoomId;
   ladder: boolean;
+  /** 가까운 문 너머로 손전등을 비출 수 있으면 그 대상 key */
+  flash: string | null;
 }
 
 /** 걸을 수 있는 칸: 방, 또는 현관↔2층 복도 계단 */
@@ -55,6 +57,8 @@ export interface WalkSpec {
   targets: WalkTarget[];
   /** 방마다 "여기서 멈추기"(술래 이동) */
   stops: Partial<Record<RoomId, WalkTarget>>;
+  /** 술래: 지금 방의 문 앞에서 F — 문 너머 옆방을 손전등으로 */
+  flashes: WalkTarget[];
 }
 
 /** 마당은 집 오른쪽 술래 기둥까지 넓게 걷는다 */
@@ -97,7 +101,7 @@ function sameFloorDoor(a: RoomId, b: RoomId): P3 | null {
 function nearDoorOf(r: RoomId, x: number, z: number): boolean {
   for (const nb of NEIGHBORS[r]) {
     const d = sameFloorDoor(r, nb);
-    if (d && Math.hypot(d[0] - x, d[2] - z) < DOOR_HALF + 0.3) return true;
+    if (d && Math.hypot(d[0] - x, d[2] - z) < DOOR_HALF - 0.05) return true;
   }
   return false;
 }
@@ -153,7 +157,7 @@ function tryMove(p: WalkPos, x0: number, z0: number, allowed: ReadonlySet<RoomId
   }
   if (!allowed.has(r2)) return null;
   const door = sameFloorDoor(p.zone, r2);
-  if (!door || Math.hypot(door[0] - x, door[2] - z) > DOOR_HALF + 0.25) return null;
+  if (!door || Math.hypot(door[0] - x, door[2] - z) > DOOR_HALF - 0.1) return null;
   return { x, y: p.y, z, zone: r2 };
 }
 
@@ -179,6 +183,22 @@ export function ladderHop(p: WalkPos, allowed: ReadonlySet<RoomId>): WalkPos | n
   if (p.zone === "kids" && allowed.has("attic")) return { x: LADDER.x, y: FLOOR_Y[2], z: LADDER.z + 0.5, zone: "attic" };
   if (p.zone === "attic" && allowed.has("kids")) return { x: LADDER.x, y: FLOOR_Y[1], z: LADDER.z + 0.5, zone: "kids" };
   return null;
+}
+
+/** 지금 방 안에서 손전등 문(1.6칸 안) 중 가장 가까운 것 */
+export function nearestFlash(p: WalkPos, flashes: readonly WalkTarget[]): WalkTarget | null {
+  if (p.zone === "stairs") return null;
+  let best: WalkTarget | null = null;
+  let bd = 1.6;
+  for (const t of flashes) {
+    if (t.zone !== p.zone) continue;
+    const d = Math.hypot(t.at[0] - p.x, t.at[2] - p.z);
+    if (d < bd) {
+      bd = d;
+      best = t;
+    }
+  }
+  return best;
 }
 
 /** 가장 가까운 대상 (같은 층, REACH 안) */
@@ -214,7 +234,7 @@ export function walkSpecFor(state: GameState, me: Seat): WalkSpec | null {
   };
   if (state.step === "hide") {
     const targets = legal.map((m) => spotTarget(m.spot!, `🫣 ${spot(m.spot!)!.name}에 숨기`, m, "crouch", spotHide(m.spot!)));
-    return { key, start: posOf(homeSlot(me), BASE), rooms: ROOMS.map((r) => r.id), targets, stops: {} };
+    return { key, start: posOf(homeSlot(me), BASE), rooms: ROOMS.map((r) => r.id), targets, stops: {}, flashes: [] };
   }
   if (s.status === "hiding" && s.spot) {
     const targets: WalkTarget[] = [];
@@ -230,7 +250,7 @@ export function walkSpecFor(state: GameState, me: Seat): WalkSpec | null {
         targets.push({ key: "home", at: PILLAR, zone: BASE, label: "🏃 찜!", move: m, snap: homeSlot(me), pose: "stand" });
       }
     }
-    return { key, start: posOf(spotHide(s.spot), s.room), rooms: [...rooms], targets, stops: {} };
+    return { key, start: posOf(spotHide(s.spot), s.room), rooms: [...rooms], targets, stops: {}, flashes: [] };
   }
   // 술래 편
   const rooms = new Set<RoomId>([s.room]);
@@ -247,5 +267,14 @@ export function walkSpecFor(state: GameState, me: Seat): WalkSpec | null {
       stops[m.room!] = { key: `move:${m.room}`, at: [0, 0, 0], zone: m.room!, label: `🚶 ${room(m.room!).name}에서 멈추기`, move: m, snap: roomSlot(m.room!, me), pose: "stand" };
     }
   }
-  return { key, start: posOf(hunterPos(state, me), s.room), rooms: [...rooms], targets, stops };
+  // 손전등: 이동 없이 지금 방에서 비춘다 → 지금 방의 그 문 앞에서만, 고르면 제자리로 돌아온다
+  const start = hunterPos(state, me);
+  const flashes: WalkTarget[] = legal
+    .filter((m) => m.kind === "flash")
+    .flatMap((m) => {
+      const pts = doorPoints(s.room, m.room!);
+      if (pts.length === 0) return [];
+      return [{ key: `flash:${m.room}`, at: pts[0], zone: s.room, label: `🔦 ${room(m.room!).name} 비추기`, move: m, snap: start, pose: "stand" as const }];
+    });
+  return { key, start: posOf(start, s.room), rooms: [...rooms], targets, stops, flashes };
 }
