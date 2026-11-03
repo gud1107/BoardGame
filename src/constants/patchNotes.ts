@@ -71,6 +71,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       { game: "hide-and-seek", type: "FEAT", desc: "🫣 새 게임 한밤의 숨바꼭질 — 2~6인, 3D 저택의 방 10개·숨을 곳 25곳. 매 턴 몰래 고르고 동시에 공개, 모두 한 번씩 술래" },
       { game: "hide-and-seek", type: "FEAT", desc: "🔍 뒤지기·🔦 손전등 vs 🤫 숨죽이기·🐾 살금살금·🏃 찜! — 🔊 삐걱·🍃 부스럭·💓 인기척으로 추리, 잡히면 꼬마 술래" },
       { game: "hide-and-seek", type: "FEAT", desc: "🧑‍🎤 내 캐릭터가 저택을 걸어 다니며 숨고 찾아요 · 🤖 AI 봇 Lv.1~10 (공개 단서만으로 추리) · 🏅 업적 7종" },
+      { game: "hide-and-seek", type: "FEAT", desc: "🎵 살금살금 오르골 BGM(막판엔 심장 박동) · 삐걱·부스럭·두근두근·찾았다! 효과음 · “꼭꼭 숨어라!” 구호 · 🖼️ 로비 포스터" },
     ],
   },
   {

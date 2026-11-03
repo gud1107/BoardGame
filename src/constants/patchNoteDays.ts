@@ -17,6 +17,9 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
  * Keep it short (≤ 80 chars), headline features only.
  */
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
+  "2026-11-04": {
+    "hide-and-seek": "🫣 새 게임 한밤의 숨바꼭질 — 3D 저택 숨바꼭질, 🔦 손전등·🏃 찜!, 🤖 AI 봇, 🎵 소리",
+  },
   "2026-11-01": {
     "star-rummy": "🌌 새 게임 별빛 러미 — 숫자 타일 런·그룹, 🔭 관측소, 🧊 천문대 3D, ✨ 첫 관측 도우미",
     "play-dead": "💀 새 게임 죽은척 대작전 — 몰래 고르고 동시에 쏘는 블러프 총격전, 🪖 전장에 모두 엎드려 엄폐",

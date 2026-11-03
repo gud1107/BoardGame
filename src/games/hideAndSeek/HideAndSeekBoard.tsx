@@ -22,6 +22,9 @@ import {
 import { cluesFor, describeEvents, figuresFor, MOVE_LABEL, SEAT_COLORS, T } from "./show";
 import type { CameraFocus } from "./three/HouseScene3D";
 import HowToPlay from "./HowToPlay";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { callOut, getHideAndSeekSound, revealCues, tensionOf } from "./hideAndSeekSound";
 
 const HouseScene3D = dynamic(() => import("./three/HouseScene3D"), { ssr: false });
 
@@ -107,8 +110,37 @@ export default function HideAndSeekBoard(props: HideAndSeekBoardProps) {
     setTarget(opts.length === 1 ? { spot: opts[0].spot, room: opts[0].room } : null);
   }
   function submit() {
-    if (move && ready) onCommit(move);
+    if (!move || !ready) return;
+    getHideAndSeekSound().play("commit");
+    onCommit(move);
   }
+
+  // --- 소리 ----------------------------------------------------------------
+  useSuiteBgm(getHideAndSeekSound, state.phase !== "ended", tensionOf(state));
+  const soundStage = useRef<number | null>(null);
+  useEffect(() => {
+    if (soundStage.current === state.stage) return;
+    const first = soundStage.current === null;
+    soundStage.current = state.stage;
+    if (first) return;
+    const s = getHideAndSeekSound();
+    const timers: number[] = [];
+    const later = (sec: number, fn: () => void) => timers.push(window.setTimeout(fn, sec * 1000));
+    if (state.phase === "choosing" && state.step === "hide") {
+      s.play("count");
+      later(0.4, () => callOut("꼭꼭 숨어라, 머리카락 보일라!"));
+    } else if (state.phase === "choosing" && isActing(state, me)) {
+      s.play("turn");
+    } else if (state.phase === "resolved" && state.step === "hide") {
+      s.play("ready");
+      callOut("찾는다!", 1.1, 1.0);
+    } else if (state.phase === "resolved" || state.phase === "ended") {
+      for (const [t, name, arg] of revealCues(state.events)) later(t, () => s.play(name, arg));
+      if (state.events.some((e) => e.t === "survive")) later(T.reveal, () => callOut("못 찾겠다 꾀꼬리!", 1.0, 1.25));
+      if (state.phase === "ended") later(T.end + 0.4, () => s.play("victory"));
+    }
+    // 판정 화면을 일찍 넘겨도 예약된 소리는 마저 난다 (다음 단계와 겹치지 않을 만큼 짧다)
+  }, [state, me]);
 
   // 시간 초과 직전 자동 확정: 고른 게 있으면 그걸로
   const { deadlineMs, nowMs } = props;
@@ -166,6 +198,7 @@ export default function HideAndSeekBoard(props: HideAndSeekBoardProps) {
           )}
         </div>
         <div className="flex items-center gap-1.5 text-xs">
+          <SuiteSoundHud suite={getHideAndSeekSound} icon="🫣" label="Midnight Tiptoe" preview="creak" />
           <span className={`rounded-full px-2.5 py-1 ${state.phase === "choosing" || state.phase === "revealing" ? "bg-white font-semibold text-slate-900 light:bg-slate-900 light:text-white" : "border border-white/15 text-white/50 light:border-slate-300 light:text-slate-400"}`}>
             {state.step === "hide" ? "① 숨기" : "① 몰래 고르기"}
           </span>
@@ -205,7 +238,7 @@ export default function HideAndSeekBoard(props: HideAndSeekBoardProps) {
                 ...(state.step === "seek" && seekerRoom !== BASE && mine.status !== "seeker" ? ([["👁️", "술래", { kind: "room", room: seekerRoom }]] as const) : []),
               ] as [string, string, CameraFocus][]
             ).map(([icon, label, f]) => {
-              const on = f.kind === focus.kind && (f.kind === "all" || (focus.kind === "room" && focus.room === f.room));
+              const on = f.kind === focus.kind && (f.kind === "all" || (focus.kind === "room" && f.kind === "room" && focus.room === f.room));
               return (
                 <button
                   key={label}

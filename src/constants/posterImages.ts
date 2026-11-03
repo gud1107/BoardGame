@@ -33,6 +33,7 @@ const POSTER_IDS: ReadonlySet<GameId> = new Set<GameId>([
   "great-legacy",
   "grid-poker",
   "hanamikoji",
+  "hide-and-seek",
   "hill-of-truth",
   "hungry-shark",
   "ink-duel",

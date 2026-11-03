@@ -24,7 +24,8 @@ import Prop from "./Props";
  * 해상도 자동 조절(AdaptiveResolution).
  */
 
-export type CameraFocus = { kind: "all" } | { kind: "room"; room: RoomId };
+/** "shot" = 고정 구도 (로비 포스터 촬영용) */
+export type CameraFocus = { kind: "all" } | { kind: "room"; room: RoomId } | { kind: "shot"; pos: P3; look: P3 };
 
 export interface HouseScene3DProps {
   viewerSeat: number;
@@ -364,7 +365,10 @@ function CameraRig({ focus }: { focus: CameraFocus }) {
     const aspect = size.width / Math.max(1, size.height);
     // 가로로 맞춰 거리를 잡는다 (fov 40°: tan 20° ≈ 0.364). 낮게 내려다봐야 2층 바닥 밑 1층 뒷방까지 보인다
     const fit = (halfW: number, min: number) => Math.max(min, halfW / (0.364 * aspect));
-    if (focus.kind === "all") {
+    if (focus.kind === "shot") {
+      goal.current.pos.set(...focus.pos);
+      goal.current.look.set(...focus.look);
+    } else if (focus.kind === "all") {
       const d = fit(8.6, 15);
       goal.current.pos.set(-1, 2.6 + d * 0.2, 2 + d);
       goal.current.look.set(-1, 2.6, 0);
