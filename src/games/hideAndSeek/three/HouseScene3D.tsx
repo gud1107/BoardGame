@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type ReactNode, type RefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { resolveLook } from "@/games/shared/three/SeatedPerson";
@@ -10,7 +10,8 @@ import { labelTexture } from "@/games/shared/three/tableKit";
 import { roomCharacterOf, useRoomCharacters } from "@/lib/character/roomCharacters";
 import { FLOOR_Y, ROOMS, SPOTS, WALL_H, room, roomCenter, type RoomId } from "../house";
 import { PILLAR, SEAT_COLORS, type ClueSpec, type FigureSpec, type P3 } from "../show";
-import HouseFigure from "./HouseFigure";
+import { ladderHop, nearestTarget, roomOf, stepWalk, WALK_SPEED, type WalkInput, type WalkNear, type WalkPos, type WalkSpec } from "../walk";
+import HouseFigure, { type Drive } from "./HouseFigure";
 import Prop from "./Props";
 
 /**
@@ -41,6 +42,10 @@ export interface HouseScene3DProps {
   onPickRoom: (id: RoomId) => void;
   focus: CameraFocus;
   lowDetail: boolean;
+  /** 직접 걷기 (없으면 끔) */
+  walk?: { spec: WalkSpec | null; input: RefObject<WalkInput>; drive: RefObject<Drive>; onNear: (n: WalkNear) => void };
+  /** 걷기 중 가까이 있는 대상 — 금빛으로 표시 */
+  nearTarget?: P3 | null;
 }
 
 const v3 = (p: P3) => new THREE.Vector3(p[0], p[1], p[2]);
@@ -141,8 +146,8 @@ function House() {
       <Wall axis="x" at={0} from={0} to={5} y={y2} h={half} color="#9e8b74" gaps={[2.5]} />
       {/* 계단 (현관 → 2층 복도) */}
       {Array.from({ length: 10 }, (_, i) => (
-        <mesh key={i} position={[-4.3, (i + 0.5) * 0.3, 3.1 - i * 0.26]}>
-          <boxGeometry args={[1.0, 0.3, 0.3]} />
+        <mesh key={i} position={[-1.3, (i + 0.5) * 0.3, 2.85 - (i + 0.5) * 0.24]}>
+          <boxGeometry args={[1.0, 0.3, 0.26]} />
           <meshStandardMaterial color="#8d6e63" roughness={0.8} />
         </mesh>
       ))}
@@ -280,6 +285,20 @@ function PickRing({ position, picked, size = 0.7, onPick }: { position: P3; pick
   );
 }
 
+/** 걷기 중 갈 수 있는 대상 표시 — 가까이 서면 밝은 하늘색 */
+function TargetGlow({ at, near }: { at: P3; near: boolean }) {
+  const mat = useRef<THREE.MeshBasicMaterial>(null);
+  useFrame(({ clock }) => {
+    if (mat.current) mat.current.opacity = near ? 0.95 : 0.3 + Math.sin(clock.elapsedTime * 3) * 0.12;
+  });
+  return (
+    <mesh rotation-x={-Math.PI / 2} position={[at[0], at[1] + 0.04, at[2]]}>
+      <ringGeometry args={[near ? 0.75 : 0.62, near ? 0.95 : 0.72, 32]} />
+      <meshBasicMaterial ref={mat} color={near ? "#67e8f9" : "#f2b544"} transparent opacity={0.4} depthWrite={false} toneMapped={false} />
+    </mesh>
+  );
+}
+
 function RoomPick({ id, picked, onPick }: { id: RoomId; picked: boolean; onPick: () => void }) {
   const r = room(id);
   const y = FLOOR_Y[r.floor];
@@ -357,7 +376,52 @@ function Mark({ pos }: { pos: P3 }) {
 // ---------------------------------------------------------------------------
 // 카메라
 
-function CameraRig({ focus }: { focus: CameraFocus }) {
+/** 이번 턴 직접 걷기: 매 프레임 입력을 읽어 `drive`를 움직이고, 가까운 대상이 바뀌면 알린다 */
+function Walker({ spec, inputRef, driveRef, onNear }: { spec: WalkSpec | null; inputRef: RefObject<WalkInput>; driveRef: RefObject<Drive>; onNear: (n: WalkNear) => void }) {
+  const st = useRef<{ key: string; pos: WalkPos; allowed: Set<RoomId>; near: string } | null>(null);
+  useFrame((_, dtRaw) => {
+    const d = driveRef.current;
+    if (!spec) {
+      d.active = false;
+      st.current = null;
+      return;
+    }
+    if (!st.current || st.current.key !== spec.key) st.current = { key: spec.key, pos: spec.start, allowed: new Set(spec.rooms), near: "" };
+    const s = st.current;
+    s.allowed = new Set(spec.rooms);
+    // 느린 기기에서도 제 속도로 걷게 프레임당 최대 0.1초 (벽·문 판정은 칸 단위라 뚫고 지나가지 않는다)
+    const dt = Math.min(dtRaw, 0.1);
+    const inp = inputRef.current;
+    let vx = inp.x;
+    let vz = inp.z;
+    const len = Math.hypot(vx, vz);
+    if (len > 1) {
+      vx /= len;
+      vz /= len;
+    }
+    if (inp.hop) {
+      inp.hop = false;
+      s.pos = ladderHop(s.pos, s.allowed) ?? s.pos;
+    }
+    s.pos = stepWalk(s.pos, vx * WALK_SPEED * dt, vz * WALK_SPEED * dt, s.allowed);
+    d.active = true;
+    d.x = s.pos.x;
+    d.y = s.pos.y;
+    d.z = s.pos.z;
+    d.moving = len > 0.08;
+    if (d.moving) d.yaw = Math.atan2(vx, vz);
+    const target = nearestTarget(s.pos, spec.targets);
+    const n: WalkNear = { target: target?.key ?? null, room: roomOf(s.pos), ladder: ladderHop(s.pos, s.allowed) !== null };
+    const tag = `${n.target}|${n.room}|${n.ladder}`;
+    if (tag !== s.near) {
+      s.near = tag;
+      onNear(n);
+    }
+  });
+  return null;
+}
+
+function CameraRig({ focus, follow }: { focus: CameraFocus; follow?: RefObject<Drive> }) {
   const { camera, size } = useThree();
   const goal = useRef({ pos: new THREE.Vector3(), look: new THREE.Vector3() });
   const cur = useRef<{ look: THREE.Vector3 } | null>(null);
@@ -380,7 +444,15 @@ function CameraRig({ focus }: { focus: CameraFocus }) {
     }
   }, [focus, size]);
   useFrame((_, dt) => {
-    const k = 1 - Math.exp(-Math.min(dt, 0.05) * 4);
+    const f = follow?.current;
+    if (f?.active) {
+      // 직접 걷는 중: 내 캐릭터 뒤 위에서 따라간다 (화면 위 = 집 안쪽)
+      const aspect = size.width / Math.max(1, size.height);
+      const back = aspect < 1 ? 7.2 : 5.6;
+      goal.current.pos.set(f.x, f.y + back * 0.62, f.z + back);
+      goal.current.look.set(f.x, f.y + 0.7, f.z - 0.8);
+    }
+    const k = 1 - Math.exp(-Math.min(dt, 0.05) * (f?.active ? 6 : 4));
     if (!cur.current) {
       camera.position.copy(goal.current.pos);
       cur.current = { look: goal.current.look.clone() };
@@ -459,6 +531,7 @@ function SceneContents(props: HouseScene3DProps) {
               pose={f.pose}
               lowDetail={lowDetail}
               size={0.9}
+              drive={f.mine ? props.walk?.drive : undefined}
             >
               {f.tag && <ScreenSprite position={[0, 1.75, 0]} anchorY={1.5} scale={[0.85, 0.21]} map={labelTexture(f.tag, color, f.mine ? { bg: "rgba(8,40,60,0.9)", fg: "#e0f2fe" } : {})} />}
             </HouseFigure>
@@ -475,7 +548,11 @@ function SceneContents(props: HouseScene3DProps) {
             return <Mark key={c.key} pos={c.pos} />;
         }
       })}
-      <CameraRig focus={props.focus} />
+      {props.walk?.spec?.targets.map((t) => (
+        <TargetGlow key={t.key} at={t.at} near={!!props.nearTarget && props.nearTarget[0] === t.at[0] && props.nearTarget[2] === t.at[2] && props.nearTarget[1] === t.at[1]} />
+      ))}
+      {props.walk && <Walker spec={props.walk.spec} inputRef={props.walk.input} driveRef={props.walk.drive} onNear={props.walk.onNear} />}
+      <CameraRig focus={props.focus} follow={props.walk?.drive} />
       <AdaptiveResolution max={lowDetail ? 1.5 : 2} />
     </>
   );

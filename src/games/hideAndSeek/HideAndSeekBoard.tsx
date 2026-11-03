@@ -21,6 +21,8 @@ import {
 } from "./engine";
 import { cluesFor, describeEvents, figuresFor, MOVE_LABEL, SEAT_COLORS, T } from "./show";
 import type { CameraFocus } from "./three/HouseScene3D";
+import type { Drive } from "./three/HouseFigure";
+import { walkSpecFor, type WalkInput, type WalkNear, type WalkTarget } from "./walk";
 import HowToPlay from "./HowToPlay";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
@@ -155,9 +157,83 @@ export default function HideAndSeekBoard(props: HideAndSeekBoardProps) {
   });
 
   // --- 3D 장면 데이터 ------------------------------------------------------
-  const figures = useMemo(() => figuresFor(state, me, fresh, prevMine, props.committedMove, names), [state, me, fresh, prevMine, props.committedMove, names]);
-  const clues = useMemo(() => cluesFor(state, fresh), [state, fresh]);
   const [focus, setFocus] = useState<CameraFocus>({ kind: "all" });
+
+  // --- 직접 걷기 (3D) -----------------------------------------------------
+  const [walkOn, setWalkOn] = useState(true);
+  const walkMode = gl && walkOn && choosing;
+  const walkSpec = useMemo(() => (walkMode ? walkSpecFor(state, me) : null), [walkMode, state, me]);
+  const walkInput = useRef<WalkInput>({ x: 0, z: 0, hop: false });
+  const drive = useRef<Drive>({ active: false, x: 0, y: 0, z: 0, yaw: 0, moving: false });
+  const [near, setNear] = useState<WalkNear | null>(null);
+  const nearTarget = walkSpec && near?.target ? (walkSpec.targets.find((t) => t.key === near.target) ?? null) : null;
+  const nearStop = walkSpec && near && !nearTarget ? (walkSpec.stops[near.room] ?? null) : null;
+  // 걸어서 고른 자리 — 커밋 뒤 판정까지 내 캐릭터가 그 자리에 머문다
+  const [walked, setWalked] = useState<{ tag: string; t: WalkTarget } | null>(null);
+  const turnTag = `${state.seed}:${state.round}:${state.turn}`;
+  function chooseWalk(t: WalkTarget) {
+    if (!choosing || !legal.some((m) => sameMove(m, t.move))) return;
+    setWalked({ tag: turnTag, t });
+    setFocus({ kind: "room", room: t.zone });
+    getHideAndSeekSound().play("commit");
+    onCommit(t.move);
+  }
+  const primary = useRef<() => void>(() => {});
+  const secondary = useRef<() => void>(() => {});
+  useEffect(() => {
+    primary.current = () => {
+      if (nearTarget) chooseWalk(nearTarget);
+      else if (near?.ladder) walkInput.current.hop = true;
+    };
+    secondary.current = () => {
+      if (walkSpec?.stops[near?.room ?? "yard"]) chooseWalk(walkSpec.stops[near!.room]!);
+    };
+  });
+  // 키보드: WASD/방향키 이동 · E/스페이스/엔터 고르기 · Q 여기서 멈추기
+  useEffect(() => {
+    if (!walkMode) return;
+    const inp = walkInput.current;
+    const down = new Set<string>();
+    const sync = () => {
+      const k = (a: string, b: string) => (down.has(a) || down.has(b) ? 1 : 0);
+      inp.x = k("d", "arrowright") - k("a", "arrowleft");
+      inp.z = k("s", "arrowdown") - k("w", "arrowup");
+    };
+    const typing = (e: KeyboardEvent) => e.target instanceof HTMLElement && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable);
+    const onDown = (e: KeyboardEvent) => {
+      if (typing(e)) return;
+      const key = e.key.toLowerCase();
+      if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) {
+        e.preventDefault();
+        down.add(key);
+        sync();
+      } else if ((key === "e" || key === " " || key === "enter") && !e.repeat) {
+        e.preventDefault();
+        primary.current();
+      } else if (key === "q" && !e.repeat) {
+        secondary.current();
+      }
+    };
+    const onUp = (e: KeyboardEvent) => {
+      down.delete(e.key.toLowerCase());
+      sync();
+    };
+    window.addEventListener("keydown", onDown);
+    window.addEventListener("keyup", onUp);
+    return () => {
+      window.removeEventListener("keydown", onDown);
+      window.removeEventListener("keyup", onUp);
+      inp.x = 0;
+      inp.z = 0;
+    };
+  }, [walkMode]);
+
+  const figuresRaw = useMemo(() => figuresFor(state, me, fresh, prevMine, props.committedMove, names), [state, me, fresh, prevMine, props.committedMove, names]);
+  const figures = useMemo(() => {
+    if (!walked || walked.tag !== turnTag || showing) return figuresRaw;
+    return figuresRaw.map((f) => (f.seat === me ? { ...f, path: [walked.t.snap], pathKey: `walk:${walked.t.key}`, pose: walked.t.pose, faceTo: walked.t.pose === "search" ? walked.t.at : null } : f));
+  }, [figuresRaw, walked, turnTag, showing, me]);
+  const clues = useMemo(() => cluesFor(state, fresh), [state, fresh]);
   const myRoom: RoomId | null = mine.status === "hiding" ? (mine.spot ? mine.room : props.committedMove?.spot ? spot(props.committedMove.spot)!.room : null) : mine.room;
   const seekerRoom = state.seats[state.seeker].room;
 
@@ -218,18 +294,49 @@ export default function HideAndSeekBoard(props: HideAndSeekBoardProps) {
             figures={figures}
             clues={clues}
             fxStart={fxStart.at}
-            pickSpots={pickSpots}
-            pickRooms={pickRooms}
+            pickSpots={walkMode ? [] : pickSpots}
+            pickRooms={walkMode ? [] : pickRooms}
             picked={choosing ? target : null}
             onPickSpot={(id) => setTarget({ spot: id })}
             onPickRoom={(id) => setTarget({ room: id })}
             focus={focus}
             lowDetail={lowDetail}
+            walk={{ spec: walkSpec, input: walkInput, drive, onNear: setNear }}
+            nearTarget={nearTarget?.at ?? null}
           />
         ) : (
           <FloorPlan state={state} viewer={me} pickSpots={pickSpots} pickRooms={pickRooms} target={target} onSpot={(id) => setTarget({ spot: id })} onRoom={(id) => setTarget({ room: id })} />
         )}
-        {gl && (
+        {walkMode && walkSpec && (
+          <>
+            <div className="pointer-events-none absolute left-2 top-2 max-w-[60%] rounded-xl bg-black/55 px-2.5 py-1.5 text-[11px] leading-snug text-white/85 backdrop-blur">
+              <b className="text-cyan-200">🕹️ 직접 걸어서 고르기</b>
+              <br />
+              <span className="hidden sm:inline">WASD·방향키 이동 · E/스페이스 고르기{Object.keys(walkSpec.stops).length > 0 ? " · Q 여기서 멈추기" : ""}</span>
+              <span className="sm:hidden">왼쪽 조이스틱으로 걸어요</span>
+              <br />
+              {state.step === "hide" ? "금빛 고리 가구 앞에 가서 숨으세요" : mine.status === "hiding" ? "이번 턴엔 이 방과 옆방까지 갈 수 있어요" : "금빛 고리 = 뒤질 수 있는 곳"}
+            </div>
+            <Joystick inputRef={walkInput} />
+            <div className="absolute bottom-3 right-3 flex flex-col items-end gap-1.5">
+              {nearStop && (
+                <button type="button" onClick={() => secondary.current()} className="min-h-10 rounded-full border border-white/25 bg-black/55 px-3.5 text-xs font-semibold text-white backdrop-blur">
+                  {nearStop.label}
+                </button>
+              )}
+              {nearTarget ? (
+                <button type="button" onClick={() => primary.current()} className="min-h-12 max-w-[11rem] animate-pulse rounded-2xl bg-cyan-400 px-4 text-sm font-black text-slate-900 shadow-lg shadow-cyan-500/30">
+                  {nearTarget.label}
+                </button>
+              ) : near?.ladder ? (
+                <button type="button" onClick={() => primary.current()} className="min-h-12 rounded-2xl bg-amber-300 px-4 text-sm font-black text-slate-900">
+                  🪜 사다리 {near.room === "attic" ? "내려가기" : "오르기"}
+                </button>
+              ) : null}
+            </div>
+          </>
+        )}
+        {gl && !walkMode && (
           <div className="absolute right-2 top-2 flex flex-col gap-1.5">
             {(
               [
@@ -263,8 +370,40 @@ export default function HideAndSeekBoard(props: HideAndSeekBoardProps) {
       {/* 행동 고르기 */}
       {state.phase === "choosing" && acting && (
         <div className="flex flex-col gap-2">
-          {choosing ? (
+          {choosing && walkMode ? (
+            <div className="flex flex-col gap-2 rounded-xl border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-sm text-cyan-50 light:text-cyan-900">
+              <span className="break-keep">
+                {nearTarget ? `${nearTarget.label} — E/스페이스 또는 오른쪽 아래 버튼` : state.step === "hide" ? "🙈 술래가 세는 동안 저택을 돌아다니며 숨을 곳을 찾으세요." : mine.status === "hiding" ? "🤫 지금 자리에서 고르면 숨죽이기, 다른 가구 앞으로 가면 살금살금, 기둥까지 가면 찜!" : "🔍 가구 앞에서 뒤지기, 방 안에서 Q(멈추기)로 이동만 할 수도 있어요."}
+              </span>
+              {optionsFor("flash").length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                  🔦 손전등 {state.flashes}/{FLASH_CHARGES}:
+                  {optionsFor("flash").map((m) => (
+                    <button
+                      key={m.room}
+                      type="button"
+                      onClick={() => {
+                        getHideAndSeekSound().play("commit");
+                        onCommit(m);
+                      }}
+                      className="min-h-9 rounded-full border border-amber-300/60 px-3 font-semibold text-amber-100 light:text-amber-700"
+                    >
+                      {room(m.room!).icon} {room(m.room!).name} 비추기
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button type="button" onClick={() => setWalkOn(false)} className="self-start text-xs text-white/50 underline light:text-slate-500">
+                📋 목록에서 고르기
+              </button>
+            </div>
+          ) : choosing ? (
             <>
+              {gl && (
+                <button type="button" onClick={() => setWalkOn(true)} className="self-start rounded-full border border-cyan-300/50 px-3 py-1 text-xs font-semibold text-cyan-100 light:text-cyan-700">
+                  🕹️ 직접 걸어서 고르기
+                </button>
+              )}
               {state.step === "seek" && (
                 <div className="grid grid-cols-3 gap-2">
                   {kindsAvail.map((k) => {
@@ -407,6 +546,45 @@ export default function HideAndSeekBoard(props: HideAndSeekBoardProps) {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** 휴대폰용 가상 조이스틱 — 누른 곳 기준으로 끌면 그 방향으로 걷는다 */
+function Joystick({ inputRef }: { inputRef: React.RefObject<WalkInput> }) {
+  const [knob, setKnob] = useState<{ x: number; y: number } | null>(null);
+  const R = 44;
+  const set = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    let x = e.clientX - (r.left + r.width / 2);
+    let y = e.clientY - (r.top + r.height / 2);
+    const d = Math.hypot(x, y);
+    if (d > R) {
+      x = (x / d) * R;
+      y = (y / d) * R;
+    }
+    setKnob({ x, y });
+    inputRef.current.x = x / R;
+    inputRef.current.z = y / R;
+  };
+  const release = () => {
+    setKnob(null);
+    inputRef.current.x = 0;
+    inputRef.current.z = 0;
+  };
+  return (
+    <div
+      className="absolute bottom-3 left-3 grid h-28 w-28 touch-none select-none place-items-center rounded-full border border-white/25 bg-black/35 backdrop-blur"
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        set(e);
+      }}
+      onPointerMove={(e) => knob && set(e)}
+      onPointerUp={release}
+      onPointerCancel={release}
+      aria-label="이동 조이스틱"
+    >
+      <div className="h-11 w-11 rounded-full bg-white/70 shadow" style={{ transform: `translate(${knob?.x ?? 0}px, ${knob?.y ?? 0}px)` }} />
     </div>
   );
 }

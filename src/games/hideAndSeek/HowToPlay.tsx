@@ -20,6 +20,9 @@ export default function HowToPlay({ startOpen }: { startOpen: boolean }) {
           <p className="break-keep">
             <b className="text-white light:text-slate-900">한 턴</b> — 모두 몰래 행동을 고르고(🔒) 동시에 공개돼요. 남이 뭘 골랐는지는 공개 전까지 아무도 몰라요.
           </p>
+          <p className="break-keep">
+            <b className="text-white light:text-slate-900">🕹️ 직접 걷기</b> — 내 차례엔 내 캐릭터를 WASD·방향키(휴대폰은 왼쪽 아래 조이스틱)로 움직여요. 금빛 고리 가구 앞에 서면 버튼이 떠요 — E·스페이스(또는 버튼)로 숨기·뒤지기, 술래는 Q로 그 방에서 멈추기. 계단은 똑바로 걸어 오르내리고, 다락은 아이방 사다리 앞에서 E. 이번 턴에 갈 수 없는 방의 문은 막혀 있어요.
+          </p>
           <ul className="flex list-disc flex-col gap-1 pl-5 break-keep">
             <li>
               <b>👁️ 술래</b>: 🔍 뒤지기(지금 방이나 옆방의 숨을 곳 하나, 그 방으로 이동) · 🚶 이동(두 방까지) · 🔦 손전등(옆방에 몇 명 숨었는지, 라운드당 {FLASH_CHARGES}번)

@@ -89,7 +89,7 @@ function lastTurnEvents(state: GameState): TurnEvent[] {
 }
 
 /** 술래 편이 지금 서 있는 곳: 이번(직전) 턴에 뒤졌으면 그 가구 앞, 아니면 방 안 */
-function hunterPos(state: GameState, seat: Seat): P3 {
+export function hunterPos(state: GameState, seat: Seat): P3 {
   const s = state.seats[seat];
   if (state.step === "hide") return s.room === BASE && seat === state.seeker ? [PILLAR[0], 0, PILLAR[2] - 0.75] : roomSlot(s.room, seat);
   for (const e of lastTurnEvents(state)) if (e.t === "search" && e.seat === seat) return spotStand(e.spot);

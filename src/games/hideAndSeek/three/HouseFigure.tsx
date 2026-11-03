@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, type ReactNode } from "react";
+import { useMemo, useRef, type ReactNode, type RefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { VRMHumanBoneName } from "@pixiv/three-vrm";
@@ -32,7 +32,18 @@ export interface HouseFigureProps {
   lowDetail: boolean;
   speed?: number;
   size?: number;
+  /** 있으면(active) 경로 대신 이 값을 따른다 — 내 캐릭터를 직접 걷게 할 때 */
+  drive?: RefObject<Drive>;
   children?: ReactNode;
+}
+
+export interface Drive {
+  active: boolean;
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  moving: boolean;
 }
 
 const BONES: VRMHumanBoneName[] = ["spine", "chest", "neck", "head", "rightUpperArm", "rightLowerArm", "leftUpperArm", "leftLowerArm", "rightUpperLeg", "rightLowerLeg", "leftUpperLeg", "leftLowerLeg"];
@@ -145,7 +156,7 @@ const fE = new THREE.Euler();
 const tmp = new THREE.Vector3();
 
 export default function HouseFigure(props: HouseFigureProps) {
-  const { look, seed, color, path, pathKey, delay = 0, faceTo, pose, lowDetail, speed = 2.6, size = 1 } = props;
+  const { look, seed, color, path, pathKey, delay = 0, faceTo, pose, lowDetail, speed = 2.6, size = 1, drive } = props;
   const { vrm, morphs } = useVrmAvatar(look, seed, { lowDetail });
   const rootRef = useRef<THREE.Group>(null);
   const bodyRef = useRef<THREE.Group>(null);
@@ -169,11 +180,22 @@ export default function HouseFigure(props: HouseFigureProps) {
       if (s.key === "") root.position.copy(path[0]);
       s.key = pathKey;
       s.start = t;
-      s.leg = 1;
+      // 이미 도착점에 서 있으면(직접 걸어서 고른 경우) 경로를 다시 걷지 않는다
+      s.leg = root.position.distanceTo(path[path.length - 1]) < 0.4 ? path.length : 1;
     }
     const waiting = t - s.start < delay;
     let walking = false;
-    if (!waiting) {
+    const d = drive?.current;
+    if (d?.active) {
+      // 플레이어가 직접 조종 중
+      root.position.set(d.x, d.y, d.z);
+      walking = d.moving;
+      if (d.moving) {
+        let dy = d.yaw - (s.yaw ?? d.yaw);
+        dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+        s.yaw = (s.yaw ?? d.yaw) + dy * (1 - Math.exp(-dt * 14));
+      }
+    } else if (!waiting) {
       // 경로를 다 걸었어도(또는 중간에 새 경로로 바뀌어도) 마지막 점까지는 마저 걷는다
       const dest = path[Math.min(s.leg, path.length - 1)];
       tmp.subVectors(dest, root.position);
