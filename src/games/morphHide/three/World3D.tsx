@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import ScreenSprite from "@/games/shared/three/ScreenSprite";
@@ -14,6 +14,31 @@ import { bodySize, chestThings, dynamicSolids, npcSize, roundGrid, walkSpeed, ty
 import type { Snap, SnapBuffer, SnapPlayer } from "../net";
 import Thing from "./Things";
 import { Car, Cat, Dog, Humanoid, Vacuum, type WeaponLook } from "./Figures";
+import VrmFigure, { castLook, seekerLook } from "./VrmFigure";
+import { roomCharacterOf, useRoomCharacters } from "@/lib/character/roomCharacters";
+import { WEAPONS } from "../data";
+
+/** 사람 VRM에 필요한 판 정보 (출연진 랜덤 얼굴은 시드·라운드·자리로 정해 모든 기기가 같다) */
+const FigCtx = createContext({ seed: 0, round: 0, low: false });
+
+function castKeyFor(seed: number, round: number, seat: number): number {
+  return (seed % 100003) * 31 + round * 7919 + seat * 13 + 1;
+}
+
+/** 술래 = 각자 프로필 VRM */
+function SeekerVrm({ seat, name, anim }: { seat: number; name: string; anim: string }) {
+  const chars = useRoomCharacters((st) => st.byName);
+  const { low } = useContext(FigCtx);
+  const look = useMemo(() => seekerLook(seat, roomCharacterOf(chars, name)), [seat, name, chars]);
+  return <VrmFigure look={look} seed={seat * 5 + 3} anim={anim} lowDetail={low} />;
+}
+
+/** 행인 = 출연진 중 랜덤 VRM */
+function CastVrm({ castKey, anim }: { castKey: number; anim: string }) {
+  const { low } = useContext(FigCtx);
+  const look = useMemo(() => castLook(castKey), [castKey]);
+  return <VrmFigure look={look} seed={castKey % 997} anim={anim} lowDetail={low} />;
+}
 
 /**
  * 변신 숨바꼭질 3D 월드.
@@ -286,18 +311,14 @@ function GoalBeacon({ slot }: { slot: number }) {
 // ---------------------------------------------------------------------------
 // 사람·동물·물건
 
-function weaponLook(snap: Snap): WeaponLook {
-  if (snap.phase !== "hunt") return "flashlight";
-  return weaponSchedule(snap.options.huntSec)[snap.tier] as WeaponLook;
-}
 
 /** 변신한 모양 하나 (플레이어·분신 공용) */
-function FormModel({ dg, anim, pose, look, held }: { dg: string | null; anim: string; pose: number; look: number; held?: WeaponLook }) {
+function FormModel({ dg, anim, pose, look, held, castKey }: { dg: string | null; anim: string; pose: number; look: number; held?: WeaponLook; castKey?: number }) {
   const def = disguise(dg);
   if (!def) return <Humanoid anim={anim} look={look} uniform held={held ?? "flashlight"} />;
   switch (def.form) {
     case "person":
-      return <Humanoid anim={anim} look={look} />;
+      return castKey !== undefined ? <CastVrm castKey={castKey} anim={anim} /> : <Humanoid anim={anim} look={look} />;
     case "guard":
       return <Humanoid anim={anim} look={look} uniform held="flashlight" />;
     case "dog":
@@ -356,12 +377,14 @@ function RemotePlayer({ buf, p, snap, name, showName }: { buf: SnapBuffer; p: Sn
   const em = p.em ? EMOTES.find((e) => e.id === p.em!.id) : null;
   const def = disguise(p.dg);
   const anim = em && p.anim !== "walk" && p.anim !== "run" ? em.anim : p.anim;
+  const fig = useContext(FigCtx);
+  const wpn = snap.phase === "hunt" ? WEAPONS[weaponSchedule(snap.options.huntSec)[snap.tier]] : null;
   const h = p.role === "seeker" ? 1.75 : (def?.h ?? 1.7);
   return (
     <group ref={ref}>
       <BlobShadow radius={p.role === "seeker" ? 0.42 : Math.max(0.3, (def?.r ?? 0.3) * 1.4)} opacity={0.7} />
-      {p.role === "seeker" ? <Humanoid anim={anim} look={p.s} uniform held={weaponLook(snap)} /> : <FormModel dg={p.dg} anim={anim} pose={p.pose} look={(p.s * 3 + 1) % 8} />}
-      {showName && <Tag text={p.role === "seeker" ? `👁️ ${name}` : name} color={p.role === "seeker" ? "#38bdf8" : "#a7f3d0"} y={h + 0.45} />}
+      {p.role === "seeker" ? <SeekerVrm seat={p.s} name={name} anim={anim} /> : <FormModel dg={p.dg} anim={anim} pose={p.pose} look={(p.s * 3 + 1) % 8} castKey={castKeyFor(fig.seed, fig.round, p.s)} />}
+      {showName && <Tag text={p.role === "seeker" ? `👁️ ${name}${wpn ? ` ${wpn.icon}` : ""}` : name} color={p.role === "seeker" ? "#38bdf8" : "#a7f3d0"} y={h + 0.45} />}
       {em && <Bubble text={`${em.icon} ${em.line}`} y={h + (showName ? 0.85 : 0.5)} />}
       {p.role === "seeker" && snap.phase === "hide" && <Bubble text="🙈 눈 가리는 중…" y={h + 0.85} />}
     </group>
@@ -379,7 +402,7 @@ function NpcView({ buf, id, kind, anim, look }: { buf: SnapBuffer; id: number; k
   return (
     <group ref={ref}>
       {kind !== "car" && <BlobShadow radius={kind === "vacuum" ? 0.36 : kind === "cat" ? 0.3 : 0.42} opacity={0.7} />}
-      {kind === "ped" && <Humanoid anim={anim} look={look} />}
+      {kind === "ped" && <CastVrm castKey={100_000 + id * 37 + look} anim={anim} />}
       {kind === "guard" && <Humanoid anim={anim} look={look} uniform held="flashlight" />}
       {kind === "dog" && <Dog anim={anim} look={look} />}
       {kind === "cat" && <Cat anim={anim} look={look} />}
@@ -389,7 +412,8 @@ function NpcView({ buf, id, kind, anim, look }: { buf: SnapBuffer; id: number; k
   );
 }
 
-function DecoyView({ buf, id, dg, anim, pose, look }: { buf: SnapBuffer; id: number; dg: string; anim: string; pose: number; look: number }) {
+function DecoyView({ buf, id, dg, anim, pose, look, owner }: { buf: SnapBuffer; id: number; dg: string; anim: string; pose: number; look: number; owner: number }) {
+  const fig = useContext(FigCtx);
   const ref = useRef<THREE.Group>(null);
   useFrame(() => {
     const p = buf.decoy(id, performance.now());
@@ -399,7 +423,7 @@ function DecoyView({ buf, id, dg, anim, pose, look }: { buf: SnapBuffer; id: num
   });
   return (
     <group ref={ref}>
-      <FormModel dg={dg} anim={anim} pose={pose} look={look} />
+      <FormModel dg={dg} anim={anim} pose={pose} look={look} castKey={castKeyFor(fig.seed, fig.round, owner)} />
     </group>
   );
 }
@@ -752,11 +776,12 @@ function LocalPlayer(props: World3DProps & { gridRef: RefObject<ReturnType<typeo
     }
   });
   const def = disguise(me.dg);
-  const held = weaponLook(snap);
+  const castKey = castKeyFor(snap.seed, snap.round, me.s);
+  const myName = props.names[mySeat] ?? "";
   return (
     <group ref={group}>
       <BlobShadow radius={me.role === "seeker" ? 0.42 : Math.max(0.3, (def?.r ?? 0.3) * 1.4)} opacity={0.7} />
-      <AnimProxy stateRef={animState} render={(a, pose) => (me.role === "seeker" ? <Humanoid anim={a} look={me.s} uniform held={held} /> : <FormModel dg={me.dg} anim={a} pose={pose} look={(me.s * 3 + 1) % 8} />)} />
+      <AnimProxy stateRef={animState} render={(a, pose) => (me.role === "seeker" ? <SeekerVrm seat={me.s} name={myName} anim={a} /> : <FormModel dg={me.dg} anim={a} pose={pose} look={(me.s * 3 + 1) % 8} castKey={castKey} />)} />
       {me.em && <Bubble text={`${EMOTES.find((e) => e.id === me.em!.id)?.icon ?? ""} ${EMOTES.find((e) => e.id === me.em!.id)?.line ?? ""}`} y={(def?.h ?? 1.75) + 0.5} />}
     </group>
   );
@@ -829,6 +854,7 @@ function Scene(props: World3DProps) {
   const { snap, buf, mySeat, names, controlsRef } = props;
   const gridRef = useRef<ReturnType<typeof roundGrid> | null>(null);
   const round = useMemo(() => roundGrid(snap.seed, Math.max(1, snap.round)), [snap.seed, snap.round]);
+  const figCtx = useMemo(() => ({ seed: snap.seed, round: snap.round, low: props.lowDetail }), [snap.seed, snap.round, props.lowDetail]);
   useEffect(() => {
     gridRef.current = round;
   }, [round]);
@@ -837,6 +863,7 @@ function Scene(props: World3DProps) {
   const chests = chestThings(snap);
   return (
     <>
+      <FigCtx.Provider value={figCtx}>
       <color attach="background" args={[DUSK.horizon]} />
       <fog attach="fog" args={[DUSK.fog, 38, 120]} />
       <Sky />
@@ -871,7 +898,7 @@ function Scene(props: World3DProps) {
         <NpcView key={n.id} buf={buf} id={n.id} kind={n.kind} anim={n.anim} look={n.look} />
       ))}
       {snap.decoys.map((d) => (
-        <DecoyView key={d.id} buf={buf} id={d.id} dg={d.disguise} anim={d.anim} pose={d.pose} look={(d.owner * 3 + 1) % 8} />
+        <DecoyView key={d.id} buf={buf} id={d.id} dg={d.disguise} anim={d.anim} pose={d.pose} look={(d.owner * 3 + 1) % 8} owner={d.owner} />
       ))}
       {snap.players.map((p) => {
         if (p.s === mySeat) return null;
@@ -885,6 +912,7 @@ function Scene(props: World3DProps) {
       <Effects fx={props.fx} snap={snap} />
       <AdaptiveResolution max={props.lowDetail ? 1.25 : 1.75} />
       {!props.lowDetail && <PostFx bloom={0.42} ao={false} />}
+      </FigCtx.Provider>
     </>
   );
 }

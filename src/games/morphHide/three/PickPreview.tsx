@@ -6,6 +6,7 @@ import type * as THREE from "three";
 import { disguise } from "../data";
 import { Cat, Dog, Humanoid, Vacuum } from "./Figures";
 import Thing from "./Things";
+import VrmFigure, { castLook } from "./VrmFigure";
 
 /**
  * 변신 카드 3장의 움직임 미리보기 — 캔버스 하나에 세 모델을 나란히.
@@ -46,7 +47,7 @@ function Mover({ id, x }: { id: string; x: number }) {
     <group position={[x, 0, 0]} scale={scale}>
       <group ref={ref}>
         <group ref={inner}>
-          {def.form === "person" && <Humanoid anim="walk" look={2} />}
+          {def.form === "person" && <VrmFigure look={castLook(7)} seed={7} anim="walk" lowDetail />}
           {def.form === "guard" && <Humanoid anim="inspect" look={1} uniform held="flashlight" />}
           {def.form === "dog" && <Dog anim="run" look={0} />}
           {def.form === "cat" && <Cat anim="walk" look={0} />}
