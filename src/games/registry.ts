@@ -952,6 +952,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "morph-hide",
+    name: "변신 숨바꼭질",
+    nameEn: "Morph & Seek",
+    description:
+      "숨는 사람은 카드 3장 중 하나를 골라 쓰레기통·벤치·자판기 같은 물건, 건널목을 건너는 행인, 공원을 뛰노는 강아지, 손을 내밀고 점검하는 “술래인 척 점검원”으로 변신해 3D 저택·뒷골목·건널목·공원에 숨어요. 맵에는 같은 물건과 NPC가 원래 섞여 있어 진짜와 가짜를 가리기 어렵죠. 술래는 맨손에서 시작해 시간이 지날수록 뿅망치·권총·저격총으로 무기가 바뀌지만, 엉뚱한 걸 치면 체력이 깎여요. 자세 바꾸기·분신 만들기·감정표현·문/창문/보물 상자·점프 파쿠르, 찜 장소로 탈출하는 꼼꼼이 모드까지 — 실시간 2~8인, 빈자리는 AI 봇.",
+    players: { min: 2, max: 8 },
+    playTime: { minMinutes: 10, maxMinutes: 30 },
+    category: "party",
+    thumbnail: { emoji: "🦎", gradient: ["#c026d3", "#141a3a"] },
+    tags: ["숨바꼭질", "변신", "실시간액션", "3D", "파티", "AI봇"],
+    genres: ["party"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "hide-and-seek",
     name: "한밤의 숨바꼭질",
     nameEn: "Midnight Hide & Seek",

@@ -210,6 +210,13 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "받은 투표 (점수 모드)", value: (d) => n(d.votesReceived) },
     { label: "시간 초과로 자동 제출", value: (d) => n(d.autoFilled) },
   ],
+  "morph-hide": [
+    { label: "최고 점수", value: (d) => n(d.maxScore) },
+    { label: "끝까지 숨음 / 찜 탈출", value: (d) => `${n(d.survives)} / ${n(d.escapes)}` },
+    { label: "술래로 찾은 사람 (한 판 최다)", value: (d) => `${n(d.catches)} (${n(d.maxCatches)})` },
+    { label: "엉뚱한 걸 친 횟수", value: (d) => n(d.wrongHits) },
+    { label: "만든 분신", value: (d) => n(d.decoys) },
+  ],
   "hide-and-seek": [
     { label: "최고 점수", value: (d) => n(d.maxScore) },
     { label: "찜 / 끝까지 숨음", value: (d) => `${n(d.homes)} / ${n(d.survives)}` },

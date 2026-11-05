@@ -63,4 +63,5 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   "play-dead": dynamic(() => import("./playDead/PlayDeadGame"), { ssr: false }),
   "star-rummy": dynamic(() => import("./starRummy/StarRummyGame"), { ssr: false }),
   "hide-and-seek": dynamic(() => import("./hideAndSeek/HideAndSeekGame"), { ssr: false }),
+  "morph-hide": dynamic(() => import("./morphHide/MorphHideGame"), { ssr: false }),
 };

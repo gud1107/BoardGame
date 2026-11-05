@@ -301,6 +301,13 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["all-clear", "🦈", "미션 올클리어", "한 잠수에서 미션 모두 달성", 1, k("missionAllClears")],
     ["streak-5", "🔥", "연속 올클리어", "5연속 미션 올클리어", 5, k("maxMissionStreak")],
   ],
+  "morph-hide": [
+    ["survive-10", "🦎", "완벽한 변신", "끝까지 숨어 있기 누적 10번", 10, k("survives")],
+    ["catch-20", "👁️", "눈썰미", "술래로 누적 20명 찾기", 20, k("catches")],
+    ["sweep-3", "🧹", "한 판에 셋", "한 라운드에 3명 이상 찾기", 3, k("maxCatches")],
+    ["escape-5", "🏁", "꼼꼼이 탈출", "찜 장소 탈출 누적 5번", 5, k("escapes")],
+    ["decoy-10", "👯", "분신술", "분신 누적 10개 만들기", 10, k("decoys")],
+  ],
   "hide-and-seek": [
     ["home-10", "🙌", "찜의 달인", "술래 기둥까지 달려 찜 누적 10번", 10, k("homes")],
     ["survive-10", "🐦", "못 찾겠다 꾀꼬리", "끝까지 숨어 있기 누적 10번", 10, k("survives")],
