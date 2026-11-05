@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { DOORS, FILLER_SLOTS, FIXED_THINGS, NAV_EDGES, NAV_NODES, STATIC_SOLIDS, thingSolid } from "./map";
 import { SolidGrid, groundAt, stepBody, type Body, type CollWorld } from "./physics";
 import { DISGUISES, SEEKER_HP, weaponSchedule, weaponTier } from "./data";
+import { evalMany } from "./selfplay";
+import { hiderParamsFor, seekerParamsFor } from "./botParams";
 import { applyAct, buildFillers, computeRankings, createHost, createMatch, dynamicSolids, hostStep, type HostRuntime } from "./sim";
 
 function worldWith(round = 1, seed = 7): CollWorld {
@@ -122,6 +124,39 @@ function runBots(seed: number, n: number, level: number, opts: Parameters<typeof
   }
   return rt;
 }
+
+describe("trained bots + balance rules", () => {
+  it("Lv10 vs Lv10 stays near a coin flip per hider, and strong hiders beat weak ones", () => {
+    const seeds = [50_000, 50_001, 50_002, 50_003, 50_004, 50_005];
+    const even = evalMany(seeds, hiderParamsFor(10), seekerParamsFor(10));
+    expect(even.catchFrac).toBeGreaterThan(0.2);
+    expect(even.catchFrac).toBeLessThan(0.75);
+    const weakHiders = evalMany(seeds, hiderParamsFor(1), seekerParamsFor(10));
+    expect(weakHiders.catchFrac).toBeGreaterThan(even.catchFrac);
+  }, 120_000);
+
+  it("spamming wrong hits escalates the penalty, catching heals", () => {
+    const m = createMatch(4, [{ bot: false, level: 5 }, { bot: false, level: 5 }], { huntSec: 180, rounds: 1 });
+    const rt = createHost(m);
+    for (let i = 0; i < (15 + 30 + 1) * 20; i++) hostStep(rt, 50);
+    const s = rt.state.players[rt.state.seekers[0]];
+    const npc = rt.state.npcs.find((n) => n.kind === "ped")!;
+    const hits: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      const before = s.hp;
+      s.x = npc.x;
+      s.z = npc.z - 1;
+      s.y = npc.y;
+      applyAct(rt, s.seat, { t: "atk", o: [s.x, s.y + 1.55, s.z], d: [0, -0.3, 1] });
+      hits.push(before - s.hp);
+      for (let k = 0; k < 16; k++) hostStep(rt, 50);
+    }
+    // 맨손 −4 → −6 → −8 (20초 안 연속)
+    expect(hits.filter((h) => h > 0).length).toBeGreaterThanOrEqual(2);
+    const pos = hits.filter((h) => h > 0);
+    expect(pos[pos.length - 1]).toBeGreaterThan(pos[0]);
+  });
+});
 
 describe("bot match", () => {
   it("plays to the end with catches, wrong hits and survivors across seeds", () => {

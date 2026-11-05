@@ -175,6 +175,14 @@ export const SEEKER_HP = 150;
 export const SEEKER_SPEED = 2.2;
 export const DECOY_CHARGES = 2;
 export const REROLLS = 1;
+/**
+ * 헛손질 연속 가중 — 최근 SPAM_WINDOW_MS 안에 헛친 횟수 n이면 벌점 × (1 + SPAM_STEP·n).
+ * 셀프플레이에서 "근처를 다 두드려 보기"가 지배 전략이 돼서 넣었다(가끔 하는 실수는 그대로).
+ */
+export const SPAM_WINDOW_MS = 20_000;
+export const SPAM_STEP = 0.5;
+/** 숨은 사람을 잡으면 술래 체력 회복 (최대 SEEKER_HP) */
+export const CATCH_HEAL = 25;
 
 /** 판 옵션 */
 export interface GameOptions {

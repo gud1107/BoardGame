@@ -1,4 +1,4 @@
-import type { GameOptions } from "./data";
+import { SPAM_WINDOW_MS, type GameOptions } from "./data";
 import type { DecoyState, GameEvent, MatchState, NpcKind, Phase, PlayerStats, Role, RoundSummary } from "./sim";
 
 /**
@@ -29,6 +29,8 @@ export interface SnapPlayer {
   em: { id: string; at: number } | null;
   score: number;
   catches: number;
+  /** 최근 헛손질 횟수 (다음 벌점 가중) */
+  wr: number;
   stats?: PlayerStats;
 }
 
@@ -106,6 +108,7 @@ export function makeSnap(s: MatchState, seq: number): Snap {
       em: p.emote,
       score: p.score,
       catches: p.roundCatches,
+      wr: p.wrongAt.filter((t) => t > s.t - SPAM_WINDOW_MS).length,
       ...(over ? { stats: p.stats } : {}),
     })),
     npcs: s.npcs.map((n) => ({ id: n.id, kind: n.kind, x: r2(n.x), y: r2(n.y), z: r2(n.z), yaw: r2(n.yaw), anim: n.anim, look: n.look })),

@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AREAS, CHEST_SLOTS, GOAL_SLOTS, ROOMS, STATIC_SOLIDS, placeName, slotY } from "./map";
-import { DISGUISES, EMOTES, POSES, SEEKER_HP, WEAPONS, disguise, secsToNextTier, weaponSchedule } from "./data";
+import { DISGUISES, EMOTES, POSES, SEEKER_HP, SPAM_STEP, WEAPONS, disguise, secsToNextTier, weaponSchedule } from "./data";
 import type { Act, PosReport } from "./sim";
 import type { Snap, SnapBuffer } from "./net";
 import { freshControls, type Controls, type FxItem, type NearInfo, type SelfInfo } from "./three/World3D";
@@ -491,7 +491,7 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
                   </div>
                   <HpBar hp={me.hp} w="w-full" />
                   <div className="mt-0.5 flex justify-between text-[10px] text-white/50">
-                    <span>헛치면 −{weapon.penalty}</span>
+                    <span className={me.wr > 0 ? "text-amber-200" : ""}>헛치면 −{Math.round(weapon.penalty * (1 + SPAM_STEP * me.wr))}{me.wr > 0 ? " (연속)" : ""}</span>
                     {nextTier !== null && (
                       <span className="text-sky-200/80">
                         다음 {WEAPONS[sched[snap.tier + 1]].icon} {fmt(nextTier)}
