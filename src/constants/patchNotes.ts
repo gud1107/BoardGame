@@ -70,6 +70,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     changes: [
       { game: "morph-hide", type: "FEAT", desc: "🦎 새 게임 변신 숨바꼭질 — 카드 3장 중 골라 사물·행인·강아지·“술래인 척 점검원”으로 변신, 실시간 3D 저택·골목·건널목·공원" },
       { game: "morph-hide", type: "FEAT", desc: "👁️ 술래 무기가 시간따라 🖐️→🔨→🔫→🎯 (이전 무기 못 꺼냄), 엉뚱한 걸 치면 체력 감소 · 🚦 행인·강아지·자동차 NPC" },
+      { game: "morph-hide", type: "IMPROVE", desc: "🎥 배그식 어깨 너머 3인칭(부드러운 시점·벽 충돌·조준 확대) · 🌇 노을 하늘·그림자·질감 · 🧭 나침반·십자선·유리 HUD · ⚙️ 감도" },
       { game: "morph-hide", type: "FEAT", desc: "🔄 자세 바꾸기·👯 분신·😜 감정표현·🚪 문·🪟 창문·🎁 상자·⤴️ 점프 파쿠르 · 🗺️ 미니맵 · ⛶ 전체 화면 · 🏁 꼼꼼이 모드 · 🤖 봇" },
     ],
   },

@@ -213,13 +213,13 @@ export function windowSolid(w: WindowDef): Solid {
 const F0 = FLOOR[0];
 const F1 = FLOOR[1];
 const F2 = FLOOR[2];
-const OUT = "#cbb89a";
-const PART = "#b8a58a";
+const OUT = "#e6dccb";
+const PART = "#d8cdbb";
 
 // 1층 바깥벽
 wall("x", -5.25, -13.5, 7.5, F0, WALL_H, OUT, [win("x", -3.75, -5.25, F0, 1.4, 0.8, 2.6, "욕실 창문"), door("x", 3.75, -5.25, F0, 1.4, false, "부엌 뒷문")]);
 wall("x", 5.25, -13.5, 7.5, F0, WALL_H, OUT, [door("x", -10.5, 5.25, F0, 2.4, true, "창고 셔터"), door("x", -3.75, 5.25, F0, 1.4, false, "현관문"), win("x", 3.75, 5.25, F0, 2.0, 0.75, 2.6, "거실 창문")]);
-wall("z", -13.5, -5.25, 5.25, F0, WALL_H, "#6f6a62");
+wall("z", -13.5, -5.25, 5.25, F0, WALL_H, "#9a948b");
 wall("z", 7.5, -5.25, 5.25, F0, WALL_H, OUT, [win("z", 7.5, -2.6, F0, 1.4, 0.8, 2.6, "부엌 창문"), door("z", 7.5, 2.6, F0, 1.4, false, "거실 옆문")]);
 // 1층 칸막이
 wall("z", -7.5, -5.25, 5.25, F0, WALL_H, PART, [door("z", -7.5, 2.6, F0, 1.4, true, "창고 문")]);

@@ -55,7 +55,7 @@ function useLowDetail() {
 }
 
 function Key({ k, dark }: { k: string; dark?: boolean }) {
-  return <kbd className={`inline-flex min-w-5 items-center justify-center rounded border px-1 text-[10px] font-bold ${dark ? "border-slate-900/40 bg-slate-900/15 text-slate-900" : "border-white/40 bg-white/10 text-white"}`}>{k}</kbd>;
+  return <kbd className={`inline-flex h-5 min-w-5 items-center justify-center rounded-md border px-1 font-sans text-[10px] font-semibold ${dark ? "border-slate-900/30 bg-slate-900/10 text-slate-900" : "border-white/25 bg-white/10 text-white/90"}`}>{k}</kbd>;
 }
 
 const fmt = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.max(0, Math.floor(sec % 60))).padStart(2, "0")}`;
@@ -73,6 +73,19 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
   const [emoteOpen, setEmoteOpen] = useState(false);
   const [locked, setLocked] = useState(false);
   const [mutedUi, setMutedUi] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settings, setSettings] = useState<ViewSettings>(() => loadSettings());
+  function updateSettings(next: ViewSettings) {
+    setSettings(next);
+    try {
+      window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+    } catch {
+      // 저장 못 해도 이번 판엔 적용된다
+    }
+  }
+  useEffect(() => {
+    controls.current.sens = settings.sens;
+  }, [settings.sens]);
   const [poseState, setPoseState] = useState<{ key: string; pose: number }>({ key: "", pose: 0 });
   const stageRef = useRef<HTMLDivElement>(null);
   const [nowPerf, setNowPerf] = useState(() => performance.now());
@@ -287,6 +300,11 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
   const joyActive = useRef(false);
   function onStageDown(e: React.PointerEvent<HTMLDivElement>) {
     if ((e.target as HTMLElement).closest("[data-hud]")) return;
+    // 배그식: 화면을 누르면 마우스 시점 고정
+    if (e.pointerType === "mouse" && !locked && settings.mode === "pubg" && (e.button === 0 || e.button === 2)) {
+      stageRef.current?.requestPointerLock?.();
+      return;
+    }
     if (e.pointerType === "mouse" && e.button === 2) {
       // 우클릭: 마우스 시점 고정 (ESC로 해제) / 이미 고정이면 조준
       if (locked) controls.current.aim = true;
@@ -306,8 +324,8 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
     const dy = e.clientY - d.y;
     if (!d.moved && Math.hypot(dx, dy) < 6) return;
     d.moved = true;
-    controls.current.lookDX += dx * (e.pointerType === "touch" ? 1.4 : 1);
-    controls.current.lookDY += dy * (e.pointerType === "touch" ? 1.2 : 1);
+    controls.current.lookDX += dx * (e.pointerType === "touch" ? 1.5 : 1.1);
+    controls.current.lookDY += dy * (e.pointerType === "touch" ? 1.3 : 1.1);
     d.x = e.clientX;
     d.y = e.clientY;
   }
@@ -321,8 +339,11 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
   const hidersTotal = snap.players.filter((p) => p.role === "hider").length;
   const nextTier = snap.phase === "hunt" ? secsToNextTier(snap.options.huntSec, elapsed) : null;
   const chestPulse = [...fx].reverse().find((f) => f.ev.type === "chest" && f.ev.seat === mySeat && f.ev.reward === "pulse" && nowPerf - f.at < 4000);
+  const hit = [...fx].reverse().find((f) => (f.ev.type === "catch" || f.ev.type === "wrong") && f.ev.by === mySeat && nowPerf - f.at < 450);
+  const playing = visible && (snap.phase === "hide" || snap.phase === "hunt") && !(isSeeker && snap.phase === "hide");
 
-  const phaseLabel = snap.phase === "pick" ? "🎴 변신 고르기" : snap.phase === "hide" ? "🙈 숨는 시간" : snap.phase === "hunt" ? "👁️ 술래 시간" : snap.phase === "roundEnd" ? "📋 라운드 결과" : "🏁 게임 끝";
+  const phaseLabel = snap.phase === "pick" ? "변신 고르기" : snap.phase === "hide" ? "숨는 시간" : snap.phase === "hunt" ? "술래 시간" : snap.phase === "roundEnd" ? "라운드 결과" : "게임 끝";
+  const urgent = left < 10 && (snap.phase === "hunt" || snap.phase === "hide");
 
   return (
     <div className="flex flex-col gap-2">
@@ -335,9 +356,9 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
         onPointerUp={onStageUp}
         onPointerCancel={onStageUp}
         onWheel={(e) => {
-          controls.current.zoom = Math.max(0.6, Math.min(1.8, controls.current.zoom * (e.deltaY > 0 ? 1.08 : 0.93)));
+          controls.current.zoom = Math.max(0.7, Math.min(1.6, controls.current.zoom * (e.deltaY > 0 ? 1.06 : 0.94)));
         }}
-        className={`select-none overflow-hidden bg-[#141a3a] ${full ? "fixed inset-0 z-[80] h-[100dvh] w-screen" : "relative h-[clamp(380px,72vh,760px)] rounded-2xl border border-white/10"}`}
+        className={`select-none overflow-hidden bg-[#1d2a5c] font-sans ${full ? "fixed inset-0 z-[80] h-[100dvh] w-screen" : "relative h-[clamp(400px,74vh,780px)] rounded-3xl border border-white/10 shadow-2xl shadow-black/40"}`}
         style={{ touchAction: "none" }}
       >
         <World3D
@@ -353,64 +374,69 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
           spectate={specSeat}
           fx={fx}
           lowDetail={lowDetail}
-          clickMove={!locked}
+          clickMove={!locked && (touch || settings.mode === "click")}
         />
 
-        {/* 위: 단계·시간·역할 */}
-        <div data-hud className="pointer-events-none absolute left-2 top-2 flex max-w-[calc(100%-8.5rem)] flex-col items-start gap-1 sm:left-1/2 sm:max-w-none sm:-translate-x-1/2 sm:items-center">
-          <div className="flex items-center gap-2 rounded-full bg-black/60 px-3 py-1 text-xs font-bold text-white backdrop-blur sm:text-sm">
-            <span>{phaseLabel}</span>
-            <span className={`tabular-nums ${left < 10 && snap.phase !== "roundEnd" ? "text-rose-300" : "text-amber-200"}`}>{fmt(left)}</span>
-            <span className="text-white/50">R{snap.round}/{snap.options.rounds}</span>
+        {/* 위 가운데: 나침반 + 단계·시간 */}
+        <div data-hud className="pointer-events-none absolute left-1/2 top-[3.3rem] flex -translate-x-1/2 flex-col items-center gap-1.5 sm:top-2">
+          {playing && (
+            <div className="hidden sm:block">
+              <Compass selfRef={selfRef} width={300} />
+            </div>
+          )}
+          <div className={`flex items-center gap-2.5 rounded-full px-3.5 py-1 ${GLASS} ${urgent ? "ring-1 ring-rose-400/60" : ""}`}>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/55">{phaseLabel}</span>
+            <span className={`text-base font-black tabular-nums leading-none sm:text-lg ${urgent ? "text-rose-300" : "text-white"}`}>{fmt(left)}</span>
+            <span className="text-[10px] font-semibold tabular-nums text-white/45">
+              R{snap.round}/{snap.options.rounds}
+            </span>
           </div>
           {snap.phase === "hunt" && (
-            <div className="rounded-xl bg-black/50 px-2.5 py-0.5 text-[11px] leading-snug text-white/85 backdrop-blur">
-              🫣 남은 숨는 사람 {hidersLeft}/{hidersTotal}
-              {snap.goal?.open && <span className="ml-1.5 font-bold text-yellow-300">🏁 찜 장소: {GOAL_SLOTS[snap.goal.slot].name}</span>}
-              {snap.goal && !snap.goal.open && <span className="ml-1.5 text-yellow-200/80">🏁 찜 장소 {fmt(Math.max(0, snap.options.huntSec * 0.5 - elapsed))} 뒤</span>}
+            <div className="flex flex-wrap justify-center gap-1">
+              <Chip>
+                🫣 <b className="tabular-nums">{hidersLeft}</b>
+                <span className="text-white/45">/{hidersTotal}</span>
+              </Chip>
+              {snap.goal?.open && <Chip tone="gold">🏁 {GOAL_SLOTS[snap.goal.slot].name}</Chip>}
+              {snap.goal && !snap.goal.open && <Chip tone="gold">🏁 {fmt(Math.max(0, snap.options.huntSec * 0.5 - elapsed))}</Chip>}
             </div>
           )}
         </div>
 
         {/* 왼쪽 위: 나 */}
         {me && (
-          <div data-hud className="pointer-events-none absolute left-2 top-[4.6rem] max-w-[52%] rounded-xl sm:top-2 sm:max-w-[30%] bg-black/55 px-2.5 py-1.5 text-[11px] leading-snug text-white/90 backdrop-blur">
-            <div className="font-bold">
-              {isSeeker ? "👁️ 술래" : def ? `${def.icon} ${def.name}` : "🫣 숨는 사람"} <span className="font-normal text-white/60">· {myName}</span>
+          <div data-hud className={`pointer-events-none absolute left-2 top-2 max-w-[38%] rounded-2xl px-3 py-2 text-[11px] leading-snug text-white/90 sm:max-w-[26%] ${GLASS}`}>
+            <div className="flex items-center gap-1.5">
+              <span className={`rounded-md px-1.5 py-px text-[9px] font-bold tracking-wide ${isSeeker ? "bg-sky-400/20 text-sky-200" : "bg-emerald-400/20 text-emerald-200"}`}>{isSeeker ? "SEEKER" : "HIDER"}</span>
+              <span className="truncate font-semibold">{myName}</span>
             </div>
-            {isSeeker && snap.phase === "hunt" && (
-              <>
-                <div className="mt-0.5 flex items-center gap-1">
-                  <span>
-                    {weapon.icon} {weapon.name}
-                  </span>
-                  {weapon.kind === "ray" && <span className="text-amber-200">· 🔸{me.ammo}</span>}
-                </div>
-                <div className="mt-1 h-1.5 w-28 overflow-hidden rounded bg-white/15">
-                  <div className={`h-full ${me.hp > 40 ? "bg-emerald-400" : "bg-rose-500"}`} style={{ width: `${me.hp}%` }} />
-                </div>
-                <div className="text-[10px] text-white/60">체력 {me.hp} · 엉뚱한 걸 치면 −{weapon.penalty}</div>
-                {nextTier !== null && (
-                  <div className="text-[10px] text-sky-200">
-                    다음 무기 {WEAPONS[sched[snap.tier + 1]].icon} {fmt(nextTier)} 뒤
-                  </div>
-                )}
-              </>
-            )}
-            {!isSeeker && def && (
-              <div className="text-[10px] text-white/70">
-                자세: {poseList[pose % Math.max(1, poseList.length)]?.name ?? "기본"} · 분신 {me.dc}개
-              </div>
-            )}
-            <div className="text-[10px] text-white/55">
+            <div className="mt-1 truncate text-[10px] text-white/55">
               {place.icon} {place.name}
+            </div>
+            {/* 휴대폰: 아래 패널 대신 여기에 */}
+            <div className="sm:hidden">
+              {isSeeker && snap.phase === "hunt" && (
+                <div className="mt-1">
+                  <div className="flex items-center gap-1 font-semibold">
+                    {weapon.icon} {weapon.name}
+                    {weapon.kind === "ray" && <span className="tabular-nums text-amber-200">· {me.ammo}</span>}
+                  </div>
+                  <HpBar hp={me.hp} w="w-24" />
+                </div>
+              )}
+              {!isSeeker && def && (
+                <div className="mt-1 text-[10px] text-white/75">
+                  {def.icon} {def.name} · 👯 {me.dc}
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* 오른쪽 위: 미니맵 + 버튼 */}
+        {/* 오른쪽 위: 버튼 + 미니맵 */}
         <div data-hud className="absolute right-2 top-2 flex flex-col items-end gap-1.5">
           <div className="flex gap-1">
+            <HudBtn onClick={() => setShowSettings((v) => !v)} label="설정" icon="⚙️" />
             <HudBtn onClick={() => setShowBoard((v) => !v)} label="점수" icon="🏆" />
             <HudBtn
               onClick={() => {
@@ -422,37 +448,74 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
             />
             <HudBtn onClick={toggleFull} label={full ? "나가기" : "전체 화면"} icon={full ? "✕" : "⛶"} />
           </div>
-          <button type="button" onClick={() => setShowMap(true)} aria-label="지도 크게 보기" className="rounded-xl border border-white/20 bg-black/40 p-1">
-            <MiniMap snap={snap} buf={buf} mySeat={mySeat} selfRef={selfRef} size={touch ? 96 : 128} />
+          <button type="button" onClick={() => setShowMap(true)} aria-label="지도 크게 보기" className={`overflow-hidden rounded-2xl p-1 ${GLASS}`}>
+            <MiniMap snap={snap} buf={buf} mySeat={mySeat} selfRef={selfRef} size={touch ? 92 : 132} />
           </button>
+          {showSettings && <SettingsPanel settings={settings} onChange={updateSettings} touch={touch} />}
         </div>
 
         {/* 킬피드 */}
         <KillFeed fx={fx} names={names} mySeat={mySeat} now={nowPerf} />
 
-        {/* 조준점 */}
-        {isSeeker && snap.phase === "hunt" && visible && (
+        {/* 조준점 (배그식: 가는 십자 + 가운데 점) */}
+        {isSeeker && snap.phase === "hunt" && visible && <Crosshair melee={weapon.kind === "melee"} />}
+        {hit && (
           <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-            <div className={`h-5 w-5 rounded-full border-2 ${weapon.kind === "melee" ? "border-amber-300/80" : "border-rose-400/90"}`} />
-            <div className="absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white" />
+            <div className={`grid h-10 w-10 place-items-center text-3xl font-light leading-none drop-shadow ${hit.ev.type === "catch" ? "text-white" : "text-rose-400"}`}>✕</div>
           </div>
         )}
 
         {/* 상호작용 프롬프트 */}
         {near && visible && (
-          <div data-hud className="absolute bottom-40 left-1/2 -translate-x-1/2 sm:bottom-24">
-            <button type="button" onClick={() => (controls.current.use = true)} className="flex min-h-11 items-center gap-2 rounded-2xl bg-cyan-400 px-4 text-sm font-black text-slate-900 shadow-lg shadow-cyan-500/40 ring-2 ring-cyan-200/70">
-              {!touch && <Key k="E" dark />} {near.label}
+          <div data-hud className="absolute bottom-44 left-1/2 -translate-x-1/2 sm:bottom-32">
+            <button type="button" onClick={() => (controls.current.use = true)} className={`flex min-h-11 items-center gap-2.5 rounded-2xl px-4 text-sm font-semibold text-white ${GLASS} ring-1 ring-cyan-300/50`}>
+              {!touch && <Key k="E" />} {near.label}
             </button>
           </div>
         )}
 
         {chestPulse && chestPulse.ev.type === "chest" && (
-          <div className="pointer-events-none absolute left-1/2 top-24 -translate-x-1/2 rounded-xl bg-sky-500/85 px-3 py-1.5 text-sm font-bold text-white">📡 반경 12m 안에 숨은 사람 {chestPulse.ev.count}명!</div>
+          <div className={`pointer-events-none absolute left-1/2 top-28 -translate-x-1/2 rounded-2xl px-4 py-2 text-sm font-semibold text-sky-100 ${GLASS} ring-1 ring-sky-300/50`}>📡 반경 12m 안에 숨은 사람 {chestPulse.ev.count}명</div>
+        )}
+
+        {/* 아래 가운데 (PC): 무기·체력 / 변신 */}
+        {playing && me && (
+          <div data-hud className="pointer-events-none absolute bottom-3 left-1/2 hidden -translate-x-1/2 sm:block">
+            {isSeeker ? (
+              <div className={`flex items-center gap-3 rounded-2xl px-4 py-2 ${GLASS}`}>
+                <div className="text-2xl">{weapon.icon}</div>
+                <div className="min-w-44">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-sm font-semibold text-white">{weapon.name}</span>
+                    <span className="text-lg font-black tabular-nums text-white">{weapon.kind === "ray" ? me.ammo : "∞"}</span>
+                  </div>
+                  <HpBar hp={me.hp} w="w-full" />
+                  <div className="mt-0.5 flex justify-between text-[10px] text-white/50">
+                    <span>헛치면 −{weapon.penalty}</span>
+                    {nextTier !== null && (
+                      <span className="text-sky-200/80">
+                        다음 {WEAPONS[sched[snap.tier + 1]].icon} {fmt(nextTier)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : def ? (
+              <div className={`flex items-center gap-3 rounded-2xl px-4 py-2 ${GLASS}`}>
+                <div className="text-2xl">{def.icon}</div>
+                <div>
+                  <div className="text-sm font-semibold text-white">{def.name}</div>
+                  <div className="text-[11px] text-white/55">
+                    자세 {poseList[pose % Math.max(1, poseList.length)]?.name ?? "기본"} · 👯 분신 {me.dc}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
         )}
 
         {/* 조작 */}
-        {visible && (snap.phase === "hide" || snap.phase === "hunt") && !(isSeeker && snap.phase === "hide") && (
+        {playing && (
           <ControlPad
             touch={touch}
             isSeeker={isSeeker}
@@ -470,7 +533,7 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
           />
         )}
         {emoteOpen && (
-          <div data-hud className="absolute bottom-40 right-3 flex flex-col gap-1.5 sm:bottom-24">
+          <div data-hud className="absolute bottom-44 right-3 flex flex-col gap-1.5 sm:bottom-32">
             {EMOTES.map((em, i) => (
               <button
                 key={em.id}
@@ -479,7 +542,7 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
                   onAct({ t: "emote", id: em.id });
                   setEmoteOpen(false);
                 }}
-                className="flex min-h-10 items-center gap-2 rounded-full border border-white/25 bg-black/65 px-3 text-xs font-semibold text-white backdrop-blur"
+                className={`flex min-h-10 items-center gap-2 rounded-full px-3.5 text-xs font-semibold text-white ${GLASS} hover:bg-white/15`}
               >
                 {!touch && <Key k={String(i + 1)} />} {em.icon} {em.name}
               </button>
@@ -489,15 +552,19 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
 
         {/* 술래 눈가림 */}
         {isSeeker && (snap.phase === "hide" || snap.phase === "pick") && (
-          <div className="absolute inset-0 grid place-items-center bg-black/90">
-            <div className="text-center text-white">
-              <div className="text-5xl">🙈</div>
-              <div className="mt-2 text-lg font-black">술래는 눈을 가리고 열을 세는 중…</div>
-              <div className="mt-1 text-4xl font-black tabular-nums text-amber-300">{Math.ceil(left + (snap.phase === "pick" ? 30 : 0))}</div>
-              <p className="mx-auto mt-3 max-w-xs break-keep text-xs text-white/60">숨는 사람들은 사물·사람·동물로 변신해서 숨고 있어요. 움직이는 물건, 어색한 행인, 손을 안 내미는 점검원을 찾아내세요!</p>
-              <p className="mx-auto mt-2 max-w-xs break-keep text-xs text-sky-200/80">
-                무기는 시간이 지날수록 좋아져요: {sched.map((w) => `${WEAPONS[w].icon}${WEAPONS[w].name}`).join(" → ")}
-              </p>
+          <div className="absolute inset-0 grid place-items-center bg-gradient-to-b from-[#0b1026]/95 via-black/95 to-[#0b1026]/95">
+            <div className="px-6 text-center text-white">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.3em] text-white/45">Blindfolded</div>
+              <div className="mt-2 text-lg font-bold">눈을 가리고 열을 세는 중</div>
+              <div className="mt-2 text-6xl font-black tabular-nums text-white">{Math.ceil(left + (snap.phase === "pick" ? 30 : 0))}</div>
+              <p className="mx-auto mt-4 max-w-xs break-keep text-xs leading-relaxed text-white/55">움직이는 물건, 신호를 안 지키는 행인, 손을 안 내미는 점검원을 찾아내세요.</p>
+              <div className="mx-auto mt-4 flex max-w-sm flex-wrap justify-center gap-1.5">
+                {sched.map((w, i) => (
+                  <span key={w} className={`rounded-full px-2.5 py-1 text-[11px] ${GLASS}`}>
+                    <span className="text-white/40">{i + 1}</span> {WEAPONS[w].icon} {WEAPONS[w].name}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -505,18 +572,21 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
         {/* 변신 고르기 */}
         {!isSeeker && snap.phase === "pick" && me && <PickCards snap={snap} mySeat={mySeat} left={left} onAct={onAct} />}
         {!isSeeker && snap.phase === "hide" && def && (
-          <div className="pointer-events-none absolute bottom-[42%] left-1/2 -translate-x-1/2 rounded-xl bg-black/55 px-3 py-1.5 text-center text-xs text-white/90 backdrop-blur">
-            {def.icon} <b>{def.name}</b>(으)로 변신! {Math.ceil(left)}초 안에 숨으세요
+          <div className={`pointer-events-none absolute left-1/2 top-[32%] -translate-x-1/2 rounded-2xl px-4 py-2 text-center ${GLASS}`}>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/45">Hide</div>
+            <div className="text-sm text-white">
+              {def.icon} <b>{def.name}</b>(으)로 변신 — <span className="tabular-nums">{Math.ceil(left)}</span>초 안에 숨으세요
+            </div>
           </div>
         )}
 
         {/* 탈락/관전 */}
         {dead && snap.phase === "hunt" && (
-          <div data-hud className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-xs text-white">
-            <span>{me?.escaped ? "🏁 찜 성공! 관전 중" : isSeeker ? "😵 체력이 다 떨어졌어요" : "💥 잡혔어요 — 관전 중"}</span>
+          <div data-hud className={`absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full px-3.5 py-1.5 text-xs text-white ${GLASS}`}>
+            <span>{me?.escaped ? "🏁 찜 성공 · 관전 중" : isSeeker ? "😵 체력 소진 · 관전 중" : "💥 잡혔어요 · 관전 중"}</span>
             {specSeat !== null && (
-              <button type="button" className="rounded-full bg-white/15 px-2 py-0.5" onClick={() => setSpectate(alivePeople[(alivePeople.indexOf(specSeat) + 1) % alivePeople.length] ?? null)}>
-                👀 {names[specSeat]} ▶
+              <button type="button" className="rounded-full bg-white/10 px-2.5 py-0.5 hover:bg-white/20" onClick={() => setSpectate(alivePeople[(alivePeople.indexOf(specSeat) + 1) % alivePeople.length] ?? null)}>
+                {names[specSeat]} ›
               </button>
             )}
           </div>
@@ -525,19 +595,142 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
         {snap.phase === "roundEnd" && <RoundResult snap={snap} names={names} mySeat={mySeat} />}
         {(showBoard || snap.phase === "gameOver") && <ScoreBoard snap={snap} names={names} mySeat={mySeat} onClose={() => setShowBoard(false)} />}
         {showMap && <BigMap snap={snap} buf={buf} mySeat={mySeat} selfRef={selfRef} onClose={() => setShowMap(false)} />}
-        {!touch && !locked && snap.phase === "hunt" && isSeeker && visible && (
-          <div className="pointer-events-none absolute bottom-3 left-1/2 hidden -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 text-[11px] text-white/80 sm:block">
-            우클릭 = 마우스 시점 고정 (그다음 좌클릭 공격 · 우클릭 꾹 조준 · ESC 해제) · <Key k="F" /> 공격
-          </div>
+        {!touch && !locked && playing && settings.mode === "pubg" && (
+          <div className={`pointer-events-none absolute left-1/2 top-1/2 mt-10 -translate-x-1/2 rounded-full px-3.5 py-1.5 text-[11px] text-white/85 ${GLASS}`}>🖱️ 화면을 클릭하면 마우스로 둘러봐요 · ESC 해제</div>
         )}
       </div>
     </div>
   );
 }
 
+const GLASS = "border border-white/10 bg-slate-950/45 shadow-lg shadow-black/25 backdrop-blur-md";
+
+function Chip({ children, tone }: { children: ReactNode; tone?: "gold" }) {
+  return <span className={`rounded-full px-2.5 py-0.5 text-[11px] ${GLASS} ${tone === "gold" ? "text-amber-200" : "text-white/85"}`}>{children}</span>;
+}
+
+function HpBar({ hp, w }: { hp: number; w: string }) {
+  return (
+    <div className={`mt-1 h-1.5 ${w} overflow-hidden rounded-full bg-white/12`}>
+      <div className={`h-full rounded-full transition-[width] duration-300 ${hp > 50 ? "bg-white/90" : hp > 25 ? "bg-amber-300" : "bg-rose-500"}`} style={{ width: `${hp}%` }} />
+    </div>
+  );
+}
+
+function Crosshair({ melee }: { melee: boolean }) {
+  const gap = melee ? 7 : 5;
+  const len = melee ? 5 : 7;
+  const bar = "absolute bg-white/95 shadow-[0_0_2px_rgba(0,0,0,0.9)]";
+  return (
+    <div className="pointer-events-none absolute left-1/2 top-1/2 h-0 w-0">
+      <span className={bar} style={{ left: -1, top: -gap - len, width: 2, height: len }} />
+      <span className={bar} style={{ left: -1, top: gap, width: 2, height: len }} />
+      <span className={bar} style={{ top: -1, left: -gap - len, height: 2, width: len }} />
+      <span className={bar} style={{ top: -1, left: gap, height: 2, width: len }} />
+      <span className="absolute -left-[1.5px] -top-[1.5px] h-[3px] w-[3px] rounded-full bg-white shadow-[0_0_2px_rgba(0,0,0,0.9)]" />
+      {melee && <span className="absolute -left-4 -top-4 h-8 w-8 rounded-full border border-white/40" />}
+    </div>
+  );
+}
+
+/** 배그식 나침반 띠 — 카메라 방향을 15°마다 눈금으로 */
+function Compass({ selfRef, width }: { selfRef: React.RefObject<SelfInfo>; width: number }) {
+  const strip = useRef<HTMLDivElement>(null);
+  const label = useRef<HTMLSpanElement>(null);
+  const PX = width / 120; // 화면에 ±60°
+  useEffect(() => {
+    let raf = 0;
+    const loop = () => {
+      raf = requestAnimationFrame(loop);
+      const cy = selfRef.current.camYaw;
+      let h = (180 - (cy * 180) / Math.PI) % 360;
+      if (h < 0) h += 360;
+      if (strip.current) strip.current.style.transform = `translateX(${width / 2 - (h + 360) * PX}px)`;
+      if (label.current) label.current.textContent = String(Math.round(h) % 360).padStart(3, "0");
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [selfRef, width, PX]);
+  const ticks = [];
+  for (let d = 0; d <= 1080; d += 15) {
+    const deg = d % 360;
+    const name = deg === 0 ? "N" : deg === 90 ? "E" : deg === 180 ? "S" : deg === 270 ? "W" : deg % 45 === 0 ? String(deg) : "";
+    ticks.push(
+      <span key={d} className="absolute top-0 flex -translate-x-1/2 flex-col items-center" style={{ left: d * PX }}>
+        <span className={`w-px ${name ? "h-2 bg-white/80" : "h-1 bg-white/40"}`} />
+        {name && <span className={`mt-px text-[9px] font-semibold leading-none ${deg % 90 === 0 ? "text-white" : "text-white/55"}`}>{name}</span>}
+      </span>,
+    );
+  }
+  return (
+    <div className="relative h-7 overflow-hidden" style={{ width, maskImage: "linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent)", WebkitMaskImage: "linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent)" }}>
+      <div ref={strip} className="absolute left-0 top-0 h-5 will-change-transform">
+        {ticks}
+      </div>
+      <span className="absolute bottom-0 left-1/2 -translate-x-1/2 text-[9px] font-bold tabular-nums text-amber-200">
+        <span ref={label}>000</span>
+      </span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 설정 (이 기기에만 저장)
+
+export interface ViewSettings {
+  sens: number;
+  /** pubg = 클릭하면 마우스 시점 고정 / click = 바닥 클릭으로 걷기 */
+  mode: "pubg" | "click";
+}
+
+const SETTINGS_KEY = "morph-hide:view";
+
+function loadSettings(): ViewSettings {
+  try {
+    const raw = window.localStorage.getItem(SETTINGS_KEY);
+    const v = raw ? (JSON.parse(raw) as Partial<ViewSettings>) : {};
+    return { sens: typeof v.sens === "number" ? Math.max(0.3, Math.min(2.5, v.sens)) : 1, mode: v.mode === "click" ? "click" : "pubg" };
+  } catch {
+    return { sens: 1, mode: "pubg" };
+  }
+}
+
+function SettingsPanel({ settings, onChange, touch }: { settings: ViewSettings; onChange: (s: ViewSettings) => void; touch: boolean }) {
+  return (
+    <div className={`w-56 rounded-2xl p-3 text-xs text-white ${GLASS}`}>
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/45">조작 설정</div>
+      <label className="flex flex-col gap-1">
+        <span className="flex justify-between">
+          <span>시점 감도</span>
+          <span className="tabular-nums text-white/60">{settings.sens.toFixed(1)}</span>
+        </span>
+        <input type="range" min={0.3} max={2.5} step={0.1} value={settings.sens} onChange={(e) => onChange({ ...settings, sens: Number(e.target.value) })} className="accent-white" />
+      </label>
+      {!touch && (
+        <div className="mt-3 flex flex-col gap-1">
+          <span>마우스 조작</span>
+          <div className="grid grid-cols-2 gap-1">
+            {(
+              [
+                ["pubg", "🎯 배그식 시점"],
+                ["click", "🖱️ 클릭 이동"],
+              ] as const
+            ).map(([m, l]) => (
+              <button key={m} type="button" onClick={() => onChange({ ...settings, mode: m })} className={`rounded-lg px-2 py-1.5 ${settings.mode === m ? "bg-white text-slate-900" : "bg-white/10 text-white/80 hover:bg-white/15"}`}>
+                {l}
+              </button>
+            ))}
+          </div>
+          <span className="text-[10px] leading-snug text-white/45">{settings.mode === "pubg" ? "화면을 클릭하면 마우스로 둘러보고, 좌클릭 공격·우클릭 조준. ESC로 풀어요." : "바닥을 클릭하면 거기로 걸어가요. 드래그로 둘러보기."}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function HudBtn({ onClick, label, icon }: { onClick: () => void; label: string; icon: string }) {
   return (
-    <button type="button" onClick={onClick} aria-label={label} className="grid h-9 min-w-9 place-items-center rounded-full border border-white/20 bg-black/45 px-2 text-sm text-white backdrop-blur hover:border-white/40">
+    <button type="button" onClick={onClick} aria-label={label} title={label} className={`grid h-9 min-w-9 place-items-center rounded-full px-2 text-sm text-white transition hover:bg-white/15 ${GLASS}`}>
       {icon}
     </button>
   );
@@ -562,27 +755,27 @@ function ControlPad(props: {
   locked: boolean;
 }) {
   const { controlsRef } = props;
-  const big = "grid place-items-center rounded-full border text-white shadow-lg backdrop-blur active:scale-95";
+  const big = "grid place-items-center rounded-full border text-white shadow-lg shadow-black/30 backdrop-blur-md transition active:scale-95";
   return (
     <>
-      <Joystick controlsRef={controlsRef} activeRef={props.joyActive} />
-      <div data-hud className="absolute bottom-3 right-3 flex items-end gap-2">
+      {props.touch && <Joystick controlsRef={controlsRef} activeRef={props.joyActive} />}
+      <div data-hud className="absolute bottom-4 right-4 flex items-end gap-2">
         <div className="flex flex-col items-end gap-2">
           {!props.isSeeker && (
             <>
-              <button type="button" onClick={props.onPose} className={`${big} h-11 min-w-11 border-white/30 bg-black/55 px-2 text-[11px] font-bold`}>
+              <button type="button" onClick={props.onPose} className={`${big} h-11 min-w-11 border-white/10 bg-slate-950/50 px-2.5 text-[11px] font-semibold`}>
                 {!props.touch && <Key k="C" />} 🔄 {props.poseName}
               </button>
-              <button type="button" disabled={props.decoys <= 0} onClick={props.onDecoy} className={`${big} h-11 min-w-11 border-fuchsia-300/50 bg-fuchsia-500/35 px-2 text-[11px] font-bold disabled:opacity-40`}>
+              <button type="button" disabled={props.decoys <= 0} onClick={props.onDecoy} className={`${big} h-11 min-w-11 border-white/10 bg-slate-950/50 px-2.5 text-[11px] font-semibold disabled:opacity-40`}>
                 {!props.touch && <Key k="G" />} 👯 분신 {props.decoys}
               </button>
             </>
           )}
-          <button type="button" onClick={props.onEmote} className={`${big} h-11 min-w-11 border-amber-300/50 bg-amber-500/30 px-2 text-[11px] font-bold`}>
+          <button type="button" onClick={props.onEmote} className={`${big} h-11 min-w-11 border-white/10 bg-slate-950/50 px-2.5 text-[11px] font-semibold`}>
             😜 감정표현
           </button>
         </div>
-        <div className="flex flex-col items-center gap-2">
+        <div className={props.touch ? "flex flex-col items-center gap-2" : "hidden"}>
           {props.isSeeker && props.hunt && (
             <>
               {props.canAim && (
@@ -591,32 +784,32 @@ function ControlPad(props: {
                   onPointerDown={() => (controlsRef.current.aim = true)}
                   onPointerUp={() => (controlsRef.current.aim = false)}
                   onPointerLeave={() => (controlsRef.current.aim = false)}
-                  className={`${big} h-12 w-12 border-sky-300/60 bg-sky-500/35 text-lg`}
+                  className={`${big} h-12 w-12 border-white/15 bg-slate-950/50 text-lg`}
                   aria-label="조준"
                 >
                   🔭
                 </button>
               )}
-              <button type="button" onPointerDown={() => (controlsRef.current.attack = true)} className={`${big} h-16 w-16 border-rose-300/70 bg-rose-500/55 text-[11px] font-black`} aria-label="공격">
+              <button type="button" onPointerDown={() => (controlsRef.current.attack = true)} className={`${big} h-16 w-16 border-white/20 bg-rose-500/45 text-[11px] font-bold`} aria-label="공격">
                 <span className="text-lg leading-none">{props.weaponName.split(" ")[0]}</span>
                 {!props.touch ? <Key k="F" /> : "공격"}
               </button>
             </>
           )}
-          <button type="button" onPointerDown={() => (controlsRef.current.jump = true)} className={`${big} h-14 w-14 border-white/40 bg-white/20 text-[11px] font-black`} aria-label="점프">
+          <button type="button" onPointerDown={() => (controlsRef.current.jump = true)} className={`${big} h-14 w-14 border-white/15 bg-white/15 text-[11px] font-bold`} aria-label="점프">
             ⤴️
             <span>{props.touch ? "점프" : "Space"}</span>
           </button>
         </div>
       </div>
       {!props.touch && (
-        <div className="pointer-events-none absolute bottom-3 left-36 hidden max-w-[34%] rounded-xl bg-black/45 px-2.5 py-1.5 text-[10px] leading-snug text-white/75 lg:block">
+        <div className="pointer-events-none absolute bottom-4 left-4 hidden max-w-[24%] rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2 text-[10px] leading-relaxed text-white/65 backdrop-blur-md lg:block">
           <Key k="W" />
           <Key k="A" />
           <Key k="S" />
           <Key k="D" /> 이동 · <Key k="Shift" /> 달리기 · <Key k="Space" /> 점프 · <Key k="E" /> 문·창문·상자·사다리 · <Key k="M" /> 지도 · 1~4 감정표현
           <br />
-          마우스 드래그로 둘러보기 · 바닥 클릭하면 거기로 걸어가요
+          {props.isSeeker ? "좌클릭·F 공격 · 우클릭 꾹 조준 · 휠 거리" : "C 자세 · G 분신 · 휠 거리"}
         </div>
       )}
     </>
@@ -651,7 +844,7 @@ function Joystick({ controlsRef, activeRef }: { controlsRef: React.RefObject<Con
   return (
     <div
       data-hud
-      className="absolute bottom-3 left-3 grid h-32 w-32 touch-none select-none place-items-center rounded-full border border-white/25 bg-black/35 backdrop-blur"
+      className="absolute bottom-4 left-4 grid h-32 w-32 touch-none select-none place-items-center rounded-full border border-white/10 bg-slate-950/35 shadow-lg shadow-black/30 backdrop-blur-md"
       onPointerDown={(e) => {
         e.currentTarget.setPointerCapture(e.pointerId);
         activeRef.current = true;
@@ -662,7 +855,7 @@ function Joystick({ controlsRef, activeRef }: { controlsRef: React.RefObject<Con
       onPointerCancel={release}
       aria-label="이동 조이스틱"
     >
-      <div className="h-12 w-12 rounded-full bg-white/70 shadow" style={{ transform: `translate(${knob?.x ?? 0}px, ${knob?.y ?? 0}px)` }} />
+      <div className="h-12 w-12 rounded-full bg-white/85 shadow-lg shadow-black/40 ring-1 ring-white/60" style={{ transform: `translate(${knob?.x ?? 0}px, ${knob?.y ?? 0}px)` }} />
     </div>
   );
 }
@@ -670,14 +863,25 @@ function Joystick({ controlsRef, activeRef }: { controlsRef: React.RefObject<Con
 // ---------------------------------------------------------------------------
 // 변신 카드 (롤 증강처럼 3장 중 하나)
 
+const TONE = {
+  prop: { off: "border-amber-200/25 bg-gradient-to-b from-amber-300/10 to-white/[0.03] hover:border-amber-200/60", on: "border-amber-200 bg-amber-300/20 shadow-[0_0_30px_-6px_rgba(252,211,77,0.6)]", bar: "bg-amber-300", chip: "bg-amber-300/15 text-amber-100" },
+  living: { off: "border-emerald-200/25 bg-gradient-to-b from-emerald-300/10 to-white/[0.03] hover:border-emerald-200/60", on: "border-emerald-200 bg-emerald-300/20 shadow-[0_0_30px_-6px_rgba(110,231,183,0.6)]", bar: "bg-emerald-300", chip: "bg-emerald-300/15 text-emerald-100" },
+  guard: { off: "border-sky-200/25 bg-gradient-to-b from-sky-300/10 to-white/[0.03] hover:border-sky-200/60", on: "border-sky-200 bg-sky-300/20 shadow-[0_0_30px_-6px_rgba(125,211,252,0.6)]", bar: "bg-sky-300", chip: "bg-sky-300/15 text-sky-100" },
+} as const;
+
+function toneOf(form: string): keyof typeof TONE {
+  return form === "prop" ? "prop" : form === "guard" ? "guard" : "living";
+}
+
 function PickCards({ snap, mySeat, left, onAct }: { snap: Snap; mySeat: number; left: number; onAct: (a: Act) => void }) {
   const me = snap.players[mySeat];
   const picked = me.dg;
   const offer = me.offer;
   return (
-    <div data-hud className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#0b1026]/92 p-3">
+    <div data-hud className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gradient-to-b from-[#0b1026]/95 via-[#151b3d]/92 to-[#2a1f3d]/95 p-3 backdrop-blur-sm">
       <div className="text-center">
-        <div className="text-lg font-black text-white sm:text-2xl">🎴 무엇으로 변신할까요?</div>
+        <div className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/45">Choose your disguise</div>
+        <div className="mt-1 text-lg font-bold text-white sm:text-2xl">무엇으로 변신할까요?</div>
         <div className="text-xs text-white/60">
           {Math.ceil(left)}초 안에 안 고르면 <b className="text-amber-200">랜덤</b>으로 정해져요
         </div>
@@ -699,11 +903,12 @@ function PickCards({ snap, mySeat, left, onAct }: { snap: Snap; mySeat: number; 
                   play("pick", 1);
                   onAct({ t: "pick", id });
                 }}
-                className={`flex min-h-32 flex-col items-center gap-1 rounded-2xl border-2 p-2 text-center transition ${on ? "border-cyan-300 bg-cyan-400/20" : picked ? "border-white/10 bg-white/5 opacity-50" : "border-amber-300/60 bg-gradient-to-b from-amber-400/15 to-white/5 hover:-translate-y-1 hover:border-amber-200"}`}
+                className={`group relative flex min-h-32 flex-col items-center gap-1 overflow-hidden rounded-2xl border p-2.5 text-center backdrop-blur-md transition duration-200 ${on ? `${TONE[toneOf(d.form)].on} -translate-y-1` : picked ? "border-white/5 bg-white/[0.03] opacity-40" : `${TONE[toneOf(d.form)].off} hover:-translate-y-1.5`}`}
               >
-                <span className="text-2xl">{d.icon}</span>
-                <span className="text-sm font-black text-white">{d.name}</span>
-                <span className="rounded-full bg-white/10 px-1.5 text-[10px] text-white/70">{d.form === "prop" ? "물건" : d.form === "guard" ? "술래 위장" : d.form === "vacuum" ? "기계" : d.form === "person" ? "사람" : "동물"}</span>
+                <span className={`absolute inset-x-0 top-0 h-0.5 ${TONE[toneOf(d.form)].bar}`} />
+                <span className="text-2xl drop-shadow">{d.icon}</span>
+                <span className="text-sm font-bold text-white">{d.name}</span>
+                <span className={`rounded-full px-2 py-px text-[10px] font-medium ${TONE[toneOf(d.form)].chip}`}>{d.form === "prop" ? "물건" : d.form === "guard" ? "술래 위장" : d.form === "vacuum" ? "기계" : d.form === "person" ? "사람" : "동물"}</span>
                 <span className="hidden break-keep text-[10px] leading-snug text-white/60 sm:block">{d.blurb}</span>
               </button>
             );
@@ -711,7 +916,7 @@ function PickCards({ snap, mySeat, left, onAct }: { snap: Snap; mySeat: number; 
         </div>
       </div>
       {!picked && me.rr > 0 && (
-        <button type="button" onClick={() => onAct({ t: "reroll" })} className="rounded-full border border-white/25 px-4 py-1.5 text-xs font-semibold text-white/85 hover:border-white/50">
+        <button type="button" onClick={() => onAct({ t: "reroll" })} className={`rounded-full px-4 py-1.5 text-xs font-semibold text-white/85 transition hover:bg-white/15 ${GLASS}`}>
           🔄 다시 뽑기 ({me.rr}번 남음)
         </button>
       )}
@@ -914,11 +1119,11 @@ function KillFeed({ fx, names, mySeat, now }: { fx: FxItem[]; names: Record<numb
     }
   };
   return (
-    <div className="pointer-events-none absolute right-2 top-[11.5rem] flex max-w-[55%] flex-col items-end gap-1 sm:top-[13.5rem]">
+    <div className="pointer-events-none absolute right-2 top-[10.5rem] flex max-w-[55%] flex-col items-end gap-1 sm:top-[14rem]">
       {items.map((f) => {
         const l = line(f);
         return l ? (
-          <div key={f.ev.id} className="rounded-lg bg-black/60 px-2 py-0.5 text-[11px] text-white/90 backdrop-blur">
+          <div key={f.ev.id} className={`rounded-xl px-2.5 py-1 text-[11px] text-white/90 ${GLASS}`}>
             {l}
           </div>
         ) : null;
@@ -931,15 +1136,16 @@ function RoundResult({ snap, names, mySeat }: { snap: Snap; names: Record<number
   const h = snap.history[snap.history.length - 1];
   if (!h) return null;
   return (
-    <div className="absolute inset-0 z-10 grid place-items-center bg-black/70 p-3">
-      <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-[#0f1530] p-4 text-white">
-        <div className="text-center text-xl font-black">{h.winner === "seekers" ? "👁️ 술래 승리! 모두 찾았다" : "🫣 숨는 사람 승리!"}</div>
+    <div className="absolute inset-0 z-10 grid place-items-center bg-black/55 p-3 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-slate-950/70 p-5 text-white shadow-2xl shadow-black/50 backdrop-blur-xl">
+        <div className="text-center text-[10px] font-semibold uppercase tracking-[0.3em] text-white/45">Round {snap.round}</div>
+        <div className="mt-1 text-center text-xl font-bold">{h.winner === "seekers" ? "👁️ 술래 승리! 모두 찾았다" : "🫣 숨는 사람 승리!"}</div>
         <div className="mt-1 text-center text-xs text-white/60">술래: {h.seekers.map((s) => names[s]).join(", ")}</div>
         <ul className="mt-3 flex flex-col gap-1 text-sm">
           {h.hiders.map((x) => {
             const d = disguise(x.disguise);
             return (
-              <li key={x.seat} className={`flex items-center justify-between rounded-lg px-2 py-1 ${x.seat === mySeat ? "bg-cyan-400/15" : "bg-white/5"}`}>
+              <li key={x.seat} className={`flex items-center justify-between rounded-xl px-3 py-1.5 ${x.seat === mySeat ? "bg-white/15" : "bg-white/[0.04]"}`}>
                 <span>
                   {d?.icon} {names[x.seat]} <span className="text-white/50">({d?.name ?? "?"})</span>
                 </span>
@@ -957,10 +1163,10 @@ function ScoreBoard({ snap, names, mySeat, onClose }: { snap: Snap; names: Recor
   const rows = [...snap.players].sort((a, b) => b.score - a.score);
   return (
     <div data-hud className="absolute inset-0 z-20 grid place-items-center bg-black/60 p-3" onClick={onClose}>
-      <div className="w-full max-w-xs rounded-2xl border border-white/15 bg-[#0f1530] p-4 text-white">
-        <div className="mb-2 text-center font-black">{snap.phase === "gameOver" ? "🏁 최종 점수" : "🏆 점수"}</div>
+      <div className="w-full max-w-xs rounded-3xl border border-white/10 bg-slate-950/70 p-5 text-white shadow-2xl shadow-black/50 backdrop-blur-xl">
+        <div className="mb-3 text-center font-bold">{snap.phase === "gameOver" ? "🏁 최종 점수" : "🏆 점수"}</div>
         {rows.map((p, i) => (
-          <div key={p.s} className={`flex items-center justify-between rounded-lg px-2 py-1 text-sm ${p.s === mySeat ? "bg-cyan-400/15" : ""}`}>
+          <div key={p.s} className={`flex items-center justify-between rounded-xl px-3 py-1.5 text-sm ${p.s === mySeat ? "bg-white/15" : ""}`}>
             <span>
               {i + 1}. {p.role === "seeker" ? "👁️" : "🫣"} {names[p.s]}
             </span>

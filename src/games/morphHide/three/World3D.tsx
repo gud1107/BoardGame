@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } 
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import ScreenSprite from "@/games/shared/three/ScreenSprite";
-import { AdaptiveResolution } from "@/games/shared/three/sceneFx";
+import { AdaptiveResolution, BlobShadow, PostFx, StudioEnvironment } from "@/games/shared/three/sceneFx";
+import { DUSK, ShadowSetup, Sky, SunLight, surfaceTexture, type SurfaceKind } from "./Atmosphere";
 import { labelTexture } from "@/games/shared/three/tableKit";
 import { CHEST_SLOTS, DOORS, FIXED_THINGS, FLOOR, GOAL_SLOTS, LADDER, ROAD, ROOMS, STATIC_SOLIDS, WINDOWS, slotY, type PlacedThing } from "../map";
 import { EMOTES, RUN_MULT, disguise, poseOf, weaponSchedule } from "../data";
@@ -38,10 +39,12 @@ export interface Controls {
   /** 클릭·터치로 찍은 곳까지 걷기 */
   moveTo: [number, number, number] | null;
   pose: number;
+  /** 마우스·드래그 감도 배율 */
+  sens: number;
 }
 
 export function freshControls(): Controls {
-  return { mx: 0, mz: 0, run: false, jump: false, use: false, attack: false, aim: false, lookDX: 0, lookDY: 0, zoom: 1, moveTo: null, pose: 0 };
+  return { mx: 0, mz: 0, run: false, jump: false, use: false, attack: false, aim: false, lookDX: 0, lookDY: 0, zoom: 1, moveTo: null, pose: 0, sens: 1 };
 }
 
 export type NearKind = "door" | "window" | "chest" | "ladder";
@@ -135,28 +138,37 @@ function ColorInstances({ color, list }: { color: string; list: readonly { x0: n
   );
 }
 
-function Plane({ x0, x1, z0, z1, y = 0.005, color }: { x0: number; x1: number; z0: number; z1: number; y?: number; color: string }) {
+function Plane({ x0, x1, z0, z1, y = 0.005, color, surface, tile = 3 }: { x0: number; x1: number; z0: number; z1: number; y?: number; color?: string; surface?: SurfaceKind; tile?: number }) {
+  const map = useMemo(() => {
+    if (!surface) return null;
+    const t = surfaceTexture(surface).clone();
+    t.needsUpdate = true;
+    t.repeat.set((x1 - x0) / tile, (z1 - z0) / tile);
+    return t;
+  }, [surface, x0, x1, z0, z1, tile]);
   return (
     <mesh rotation-x={-Math.PI / 2} position={[(x0 + x1) / 2, y, (z0 + z1) / 2]}>
       <planeGeometry args={[x1 - x0, z1 - z0]} />
-      <meshStandardMaterial color={color} roughness={1} />
+      <meshStandardMaterial color={map ? "#ffffff" : color} map={map} roughness={surface === "tile" ? 0.45 : surface === "wood" ? 0.6 : 0.95} />
     </mesh>
   );
 }
 
+const ROOM_SURFACE: Record<string, SurfaceKind> = { garage: "concrete", hall: "wood", living: "wood", bath: "tile", kitchen: "tile" };
+
 function Ground() {
   return (
     <group>
-      <Plane x0={-40} x1={36} z0={-30} z1={60} y={-0.01} color="#2c4a26" />
+      <Plane x0={-40} x1={36} z0={-30} z1={60} y={-0.01} surface="grass" tile={4} />
       {ROOMS.filter((r) => r.floor === 0).map((r) => (
-        <Plane key={r.id} x0={r.box[0]} x1={r.box[1]} z0={r.box[2]} z1={r.box[3]} y={0.008} color={r.floorColor} />
+        <Plane key={r.id} x0={r.box[0]} x1={r.box[1]} z0={r.box[2]} z1={r.box[3]} y={0.008} surface={ROOM_SURFACE[r.id] ?? "wood"} tile={r.id === "bath" || r.id === "kitchen" ? 1.6 : 2.4} />
       ))}
       {/* 뒷골목 */}
-      <Plane x0={-16} x1={12} z0={-8} z1={-5.35} color="#5a5a5e" />
+      <Plane x0={-16} x1={12} z0={-8} z1={-5.35} surface="concrete" tile={3} />
       {/* 인도·도로·건널목 */}
-      <Plane x0={-30} x1={30} z0={14} z1={16} color="#9a9a9a" />
-      <Plane x0={-30} x1={30} z0={ROAD.z0} z1={ROAD.z1} color="#2b2d33" />
-      <Plane x0={-30} x1={30} z0={23} z1={25} color="#9a9a9a" />
+      <Plane x0={-30} x1={30} z0={14} z1={16} surface="sidewalk" tile={2} />
+      <Plane x0={-30} x1={30} z0={ROAD.z0} z1={ROAD.z1} surface="asphalt" tile={4} />
+      <Plane x0={-30} x1={30} z0={23} z1={25} surface="sidewalk" tile={2} />
       {Array.from({ length: 9 }, (_, i) => (
         <Plane key={i} x0={ROAD.crossX0} x1={ROAD.crossX1} z0={16.3 + i * 0.75} z1={16.3 + i * 0.75 + 0.42} y={0.012} color="#f1f5f9" />
       ))}
@@ -164,12 +176,12 @@ function Ground() {
         <Plane key={`c${i}`} x0={-22 + i * 4} x1={-20 + i * 4} z0={19.45} z1={19.55} y={0.012} color="#facc15" />
       ))}
       {/* 공원 산책길 */}
-      <Plane x0={-2.8} x1={-1.2} z0={25} z1={30.5} y={0.01} color="#c2a878" />
-      <Plane x0={-13} x1={9} z0={34.3} z1={35.8} y={0.01} color="#c2a878" />
-      <Plane x0={-12.3} x1={-10.7} z0={25} z1={36} y={0.01} color="#c2a878" />
-      <Plane x0={6.3} x1={7.9} z0={25} z1={38} y={0.01} color="#c2a878" />
+      <Plane x0={-2.8} x1={-1.2} z0={25} z1={30.5} y={0.01} surface="path" tile={1.6} />
+      <Plane x0={-13} x1={9} z0={34.3} z1={35.8} y={0.01} surface="path" tile={1.6} />
+      <Plane x0={-12.3} x1={-10.7} z0={25} z1={36} y={0.01} surface="path" tile={1.6} />
+      <Plane x0={6.3} x1={7.9} z0={25} z1={38} y={0.01} surface="path" tile={1.6} />
       {/* 마당 디딤돌 길 */}
-      <Plane x0={-1.4} x1={0.4} z0={5.4} z1={14} y={0.01} color="#8d8d8d" />
+      <Plane x0={-1.4} x1={0.4} z0={5.4} z1={14} y={0.01} surface="sidewalk" tile={1.8} />
       {/* 술래 기지 */}
       <mesh rotation-x={-Math.PI / 2} position={[9, 0.02, 9.5]}>
         <ringGeometry args={[1.1, 1.3, 32]} />
@@ -196,11 +208,7 @@ function Ground() {
           <meshStandardMaterial color="#a1887f" />
         </mesh>
       ))}
-      {/* 달 */}
-      <mesh position={[30, 34, -40]}>
-        <circleGeometry args={[3, 28]} />
-        <meshBasicMaterial color="#fff8dc" toneMapped={false} />
-      </mesh>
+
     </group>
   );
 }
@@ -341,6 +349,7 @@ function RemotePlayer({ buf, p, snap, name, showName }: { buf: SnapBuffer; p: Sn
   useFrame(() => {
     const pose = buf.player(p.s, performance.now());
     if (!pose || !ref.current) return;
+    ref.current.visible = camState.hideSeat !== p.s;
     ref.current.position.set(pose.x, pose.y, pose.z);
     ref.current.rotation.y = pose.yaw;
   });
@@ -350,6 +359,7 @@ function RemotePlayer({ buf, p, snap, name, showName }: { buf: SnapBuffer; p: Sn
   const h = p.role === "seeker" ? 1.75 : (def?.h ?? 1.7);
   return (
     <group ref={ref}>
+      <BlobShadow radius={p.role === "seeker" ? 0.42 : Math.max(0.3, (def?.r ?? 0.3) * 1.4)} opacity={0.7} />
       {p.role === "seeker" ? <Humanoid anim={anim} look={p.s} uniform held={weaponLook(snap)} /> : <FormModel dg={p.dg} anim={anim} pose={p.pose} look={(p.s * 3 + 1) % 8} />}
       {showName && <Tag text={p.role === "seeker" ? `👁️ ${name}` : name} color={p.role === "seeker" ? "#38bdf8" : "#a7f3d0"} y={h + 0.45} />}
       {em && <Bubble text={`${em.icon} ${em.line}`} y={h + (showName ? 0.85 : 0.5)} />}
@@ -368,6 +378,7 @@ function NpcView({ buf, id, kind, anim, look }: { buf: SnapBuffer; id: number; k
   });
   return (
     <group ref={ref}>
+      {kind !== "car" && <BlobShadow radius={kind === "vacuum" ? 0.36 : kind === "cat" ? 0.3 : 0.42} opacity={0.7} />}
       {kind === "ped" && <Humanoid anim={anim} look={look} />}
       {kind === "guard" && <Humanoid anim={anim} look={look} uniform held="flashlight" />}
       {kind === "dog" && <Dog anim={anim} look={look} />}
@@ -478,13 +489,16 @@ function LocalPlayer(props: World3DProps & { gridRef: RefObject<ReturnType<typeo
   const group = useRef<THREE.Group>(null);
   const body = useRef<Body>({ x: me.x, y: me.y, z: me.z, vy: 0, grounded: true, r: 0.3, h: 1.7 });
   const tpSeen = useRef(-1);
-  const cam = useRef({ yaw: Math.PI, pitch: 0.32, dist: 4.2, off: 0, init: false });
+  // 배그식 3인칭: 목표 시점(tYaw/tPitch)을 마우스가 바로 바꾸고, 실제 시점은 살짝 늦게 따라가 부드럽다.
+  // pivot은 몸을 부드럽게 따라가고(계단·점프에서 덜컹이지 않게), 거리는 벽에 막히면 즉시 당겨졌다가 천천히 풀린다.
+  const cam = useRef({ yaw: Math.PI, pitch: 0.28, tYaw: Math.PI, tPitch: 0.28, dist: 3.2, fov: 60, pivot: new THREE.Vector3(), pivotInit: false, init: false });
   const lastSent = useRef(0);
   const anim = useRef("idle");
   const yawRef = useRef(0);
   const nearTag = useRef("");
   const animState = useRef({ value: "idle", pose: 0 });
   const lastSwing = useRef(0);
+  const faceRef = useRef(0);
 
   useFrame(({ camera }, dtRaw) => {
     const dt = Math.min(dtRaw, 0.1);
@@ -504,21 +518,27 @@ function LocalPlayer(props: World3DProps & { gridRef: RefObject<ReturnType<typeo
       b.z = meNow.z;
       b.vy = 0;
       b.grounded = true;
-      yawRef.current = meNow.yaw;
+      yawRef.current = faceRef.current = meNow.yaw;
       c.moveTo = null;
+      cam.current.pivotInit = false;
       if (!cam.current.init) {
-        cam.current.yaw = meNow.role === "seeker" ? Math.PI : Math.PI;
+        cam.current.yaw = cam.current.tYaw = Math.PI;
         cam.current.init = true;
       }
     }
     const visible = meNow.role === "seeker" ? meNow.alive : meNow.alive && !meNow.escaped && !!meNow.dg;
     const canMove = visible && (snapNow.phase === "hunt" || (snapNow.phase === "hide" && meNow.role === "hider"));
 
-    // 시점
-    cam.current.yaw -= c.lookDX * 0.0042;
-    cam.current.pitch = Math.max(-0.35, Math.min(1.1, cam.current.pitch + c.lookDY * 0.0035));
+    // 시점 — 입력은 목표값에 바로, 실제 시점은 지수 감쇠로 따라간다 (조준 중엔 더 둔하게)
+    const aimingNow = c.aim && meNow.role === "seeker" && snapNow.phase === "hunt";
+    const sens = c.sens * (aimingNow ? 0.5 : 1);
+    cam.current.tYaw -= c.lookDX * 0.0032 * sens;
+    cam.current.tPitch = Math.max(-0.55, Math.min(1.15, cam.current.tPitch + c.lookDY * 0.0026 * sens));
     c.lookDX = 0;
     c.lookDY = 0;
+    const kLook = 1 - Math.exp(-dt * 26);
+    cam.current.yaw += angDiff(cam.current.tYaw, cam.current.yaw) * kLook;
+    cam.current.pitch += (cam.current.tPitch - cam.current.pitch) * kLook;
     const cy = cam.current.yaw;
     const fx = Math.sin(cy);
     const fz = Math.cos(cy);
@@ -576,9 +596,8 @@ function LocalPlayer(props: World3DProps & { gridRef: RefObject<ReturnType<typeo
         const moved = Math.hypot(b.x - ox, b.z - oz);
         moving = moved > speed * dt * 0.2;
         const def = disguise(meNow.dg);
-        const turns = meNow.role === "seeker" || (def && def.form !== "prop" && def.form !== "vacuum");
-        if (moving && turns) yawRef.current = Math.atan2(b.x - ox, b.z - oz);
-        if (moving && def?.form === "vacuum") yawRef.current = Math.atan2(b.x - ox, b.z - oz);
+        const turns = meNow.role === "seeker" || (def && def.form !== "prop");
+        if (moving && turns) faceRef.current = Math.atan2(b.x - ox, b.z - oz);
         if (c.moveTo && !moving) c.moveTo = null;
         anim.current = !b.grounded ? "jump" : moving ? (run ? "run" : "walk") : "idle";
       }
@@ -630,10 +649,12 @@ function LocalPlayer(props: World3DProps & { gridRef: RefObject<ReturnType<typeo
         camera.getWorldDirection(dir);
         onAct({ t: "atk", o: [camera.position.x, camera.position.y, camera.position.z], d: [dir.x, dir.y, dir.z] });
         lastSwing.current = performance.now();
-        yawRef.current = Math.atan2(dir.x, dir.z);
+        faceRef.current = Math.atan2(dir.x, dir.z);
       }
     }
-    if (meNow.role === "seeker" && c.aim) yawRef.current = Math.atan2(fx, fz);
+    // 술래는 조준하거나 서 있을 땐 카메라가 보는 쪽을 바라본다 (배그처럼)
+    if (meNow.role === "seeker" && (aimingNow || (!moving && performance.now() - lastSwing.current < 1500))) faceRef.current = Math.atan2(fx, fz);
+    yawRef.current += angDiff(faceRef.current, yawRef.current) * (1 - Math.exp(-dt * 13));
 
     // 위치 보고 (100ms)
     const now = performance.now();
@@ -657,6 +678,7 @@ function LocalPlayer(props: World3DProps & { gridRef: RefObject<ReturnType<typeo
     let py = b.y;
     let pz = b.z;
     let ph = b.h;
+    camState.hideSeat = -1;
     if (!visible && props.spectate !== null) {
       const sp = buf.player(props.spectate, now);
       const sq = snapNow.players[props.spectate];
@@ -667,54 +689,65 @@ function LocalPlayer(props: World3DProps & { gridRef: RefObject<ReturnType<typeo
         ph = bodySize({ role: sq.role, disguise: sq.dg }).h;
       }
     }
-    const aiming = c.aim && meNow.role === "seeker" && snapNow.phase === "hunt";
-    const sniper = aiming && weaponSchedule(snapNow.options.huntSec)[snapNow.tier] === "sniper";
-    const baseDist = (meNow.role === "seeker" ? 3.4 : Math.max(2.6, ph * 2.2)) * c.zoom * (size.width < 640 ? 1.15 : 1);
-    const want = aiming ? (sniper ? 0.15 : 1.6) : baseDist;
-    cam.current.dist += (want - cam.current.dist) * Math.min(1, dt * 10);
-    const pitch = cam.current.pitch;
-    const pivot = new THREE.Vector3(px, py + Math.max(ph * 0.85, 0.6) + 0.35, pz);
-    if (aiming) pivot.add(new THREE.Vector3(Math.cos(cy) * -0.45, 0.1, -Math.sin(cy) * -0.45));
-    const backAt = (yawOff: number, pAdd: number) => {
-      const yy = cy + yawOff;
-      const pp = Math.min(1.25, pitch + pAdd);
-      return new THREE.Vector3(-Math.sin(yy) * Math.cos(pp), Math.sin(pp), -Math.cos(yy) * Math.cos(pp));
-    };
-    let dist = cam.current.dist;
-    const grid = props.gridRef.current;
-    let back = backAt(cam.current.off, 0);
-    if (grid) {
-      const dyn = dynamicSolids(snapNow);
-      const free = (v: THREE.Vector3) => {
-        const hit = cameraBlock(grid.grid.all, dyn, pivot, v, dist);
-        return hit === null ? dist : Math.max(0.25, hit - 0.2);
-      };
-      // 벽에 막혀 너무 가까우면, 옆으로 비껴 트인 쪽에서 본다 (머리 속에 카메라가 박히지 않게)
-      let bestOff = 0;
-      let bestFree = free(backAt(0, 0));
-      if (!aiming && bestFree < dist * 0.6) {
-        let bestScore = bestFree;
-        for (const off of [0.5, -0.5, 1.0, -1.0, 1.6, -1.6, 2.4, -2.4]) {
-          const f = free(backAt(off, 0.25));
-          const score = f - Math.abs(off) * 0.4;
-          if (score > bestScore) {
-            bestScore = score;
-            bestOff = off;
-            bestFree = f;
-          }
-        }
-      }
-      cam.current.off += (bestOff - cam.current.off) * Math.min(1, dt * 5);
-      back = backAt(cam.current.off, Math.abs(cam.current.off) > 0.05 ? 0.25 * Math.min(1, Math.abs(cam.current.off) / 0.5) : 0);
-      dist = free(back);
+    const sniper = aimingNow && weaponSchedule(snapNow.options.huntSec)[snapNow.tier] === "sniper";
+    const small = ph < 1.2;
+    const eyeH = small ? Math.max(0.55, ph + 0.45) : ph * 0.92;
+    // 몸을 부드럽게 따라가는 피벗 (수평은 빠르게, 높이는 천천히 — 계단·점프가 출렁이지 않게)
+    const pv = cam.current.pivot;
+    if (!cam.current.pivotInit) {
+      pv.set(px, py + eyeH, pz);
+      cam.current.pivotInit = true;
+    } else {
+      const kh = 1 - Math.exp(-dt * 20);
+      const kv = 1 - Math.exp(-dt * 9);
+      pv.x += (px - pv.x) * kh;
+      pv.z += (pz - pv.z) * kh;
+      pv.y += (py + eyeH - pv.y) * kv;
     }
-    if (group.current && dist < 0.7) group.current.visible = false;
-    camera.position.copy(pivot).addScaledVector(back, dist);
-    camera.lookAt(pivot.clone().addScaledVector(back, -4));
+    const pitch = cam.current.pitch;
+    const fwd = new THREE.Vector3(fx * Math.cos(pitch), -Math.sin(pitch), fz * Math.cos(pitch));
+    const right = new THREE.Vector3(-Math.cos(cy), 0, Math.sin(cy));
+    // 어깨 너머: 캐릭터가 화면 왼쪽에 오도록 오른쪽 어깨 뒤에서 본다
+    const shoulder = sniper ? 0 : aimingNow ? 0.62 : small ? 0.35 : 0.55;
+    const want = sniper ? 0 : aimingNow ? 1.25 : (small ? 3.0 : 3.1) * c.zoom;
+    const origin = pv.clone().addScaledVector(right, shoulder);
+    if (sniper) origin.copy(pv);
+    // 벽 충돌: 머리 → 어깨 → 카메라까지 막히면 그 앞까지 즉시 당기고, 풀리면 천천히 뒤로
+    let free = want;
+    const grid = props.gridRef.current;
+    if (grid && want > 0) {
+      const dyn = dynamicSolids(snapNow);
+      const back = fwd.clone().negate();
+      const sideHit = cameraBlock(grid.grid.all, dyn, pv, right, shoulder + 0.15);
+      if (sideHit !== null) origin.copy(pv).addScaledVector(right, Math.max(0, sideHit - 0.2));
+      for (const [ox, oy] of [
+        [0, 0],
+        [0.18, 0.12],
+        [-0.18, 0.12],
+        [0, -0.15],
+      ] as const) {
+        const o = origin.clone().addScaledVector(right, ox);
+        o.y += oy;
+        const hit = cameraBlock(grid.grid.all, dyn, o, back, want + 0.3);
+        if (hit !== null) free = Math.min(free, Math.max(0.2, hit - 0.25));
+      }
+    }
+    if (free < cam.current.dist) cam.current.dist = free;
+    else cam.current.dist += (free - cam.current.dist) * (1 - Math.exp(-dt * 3.2));
+    const dist = cam.current.dist;
+    const hideSelf = sniper || dist < 0.75;
+    if (group.current && hideSelf) group.current.visible = false;
+    if (!visible && props.spectate !== null && dist < 0.75) camState.hideSeat = props.spectate;
+    camera.position.copy(origin).addScaledVector(fwd, -dist);
+    camera.lookAt(camera.position.clone().add(fwd));
+    // 시야각: 가로 기준(배그 3인칭 ≈ 80°)을 세로로 바꿔 화면 비율이 달라도 같은 넓이로 보이게
     const pc = camera as THREE.PerspectiveCamera;
-    const fov = sniper ? 18 : aiming ? 50 : 62;
-    if (Math.abs(pc.fov - fov) > 0.1) {
-      pc.fov += (fov - pc.fov) * Math.min(1, dt * 10);
+    const aspect = size.width / Math.max(1, size.height);
+    const hfov = sniper ? 16 : aimingNow ? 58 : 82;
+    const vfov = Math.min(sniper ? 20 : 78, Math.max(sniper ? 10 : 42, (2 * Math.atan(Math.tan((hfov * Math.PI) / 360) / aspect) * 180) / Math.PI));
+    cam.current.fov += (vfov - cam.current.fov) * (1 - Math.exp(-dt * 12));
+    if (Math.abs(pc.fov - cam.current.fov) > 0.01) {
+      pc.fov = cam.current.fov;
       pc.updateProjectionMatrix();
     }
   });
@@ -722,6 +755,7 @@ function LocalPlayer(props: World3DProps & { gridRef: RefObject<ReturnType<typeo
   const held = weaponLook(snap);
   return (
     <group ref={group}>
+      <BlobShadow radius={me.role === "seeker" ? 0.42 : Math.max(0.3, (def?.r ?? 0.3) * 1.4)} opacity={0.7} />
       <AnimProxy stateRef={animState} render={(a, pose) => (me.role === "seeker" ? <Humanoid anim={a} look={me.s} uniform held={held} /> : <FormModel dg={me.dg} anim={a} pose={pose} look={(me.s * 3 + 1) % 8} />)} />
       {me.em && <Bubble text={`${EMOTES.find((e) => e.id === me.em!.id)?.icon ?? ""} ${EMOTES.find((e) => e.id === me.em!.id)?.line ?? ""}`} y={(def?.h ?? 1.75) + 0.5} />}
     </group>
@@ -739,6 +773,17 @@ function AnimProxy({ stateRef, render }: { stateRef: RefObject<{ value: string; 
 }
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
+
+/** b → a 로 가는 가장 짧은 각도 차 */
+function angDiff(a: number, b: number): number {
+  let d = a - b;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
+/** 카메라가 너무 가까울 때 숨길 관전 대상 (useFrame끼리만 주고받는 값) */
+const camState = { hideSeat: -1 };
 
 function cameraBlock(solids: readonly { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number; k: string }[], dyn: readonly { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number; k: string }[], o: THREE.Vector3, d: THREE.Vector3, max: number): number | null {
   let best: number | null = null;
@@ -792,12 +837,13 @@ function Scene(props: World3DProps) {
   const chests = chestThings(snap);
   return (
     <>
-      <color attach="background" args={["#141a3a"]} />
-      <fog attach="fog" args={["#141a3a", 30, 75]} />
-      <hemisphereLight args={["#b8c6ff", "#2a2216", 1.15]} />
-      <ambientLight intensity={0.35} color="#ffe2b8" />
-      <directionalLight position={[20, 30, 25]} intensity={1.0} color="#d4dcff" />
-      <directionalLight position={[-15, 12, -10]} intensity={0.45} color="#ffc98a" />
+      <color attach="background" args={[DUSK.horizon]} />
+      <fog attach="fog" args={[DUSK.fog, 38, 120]} />
+      <Sky />
+      <hemisphereLight args={[DUSK.sky, DUSK.ground, 0.85]} />
+      <SunLight shadows={!props.lowDetail} followRef={props.selfRef} />
+      <StudioEnvironment intensity={0.32} />
+      <ShadowSetup enabled={!props.lowDetail} />
       <group
         onClick={(e: ThreeEvent<MouseEvent>) => {
           if (!props.clickMove || e.delta > 6) return;
@@ -838,13 +884,14 @@ function Scene(props: World3DProps) {
       {me && <LocalPlayer key={`${me.role}:${me.dg}`} {...props} gridRef={gridRef} />}
       <Effects fx={props.fx} snap={snap} />
       <AdaptiveResolution max={props.lowDetail ? 1.25 : 1.75} />
+      {!props.lowDetail && <PostFx bloom={0.42} ao={false} />}
     </>
   );
 }
 
 export default function World3D(props: World3DProps) {
   return (
-    <Canvas dpr={props.lowDetail ? [1, 1.25] : [1, 1.75]} gl={{ antialias: !props.lowDetail, powerPreference: "high-performance" }} camera={{ fov: 62, position: [9, 4, 14], near: 0.08, far: 160 }} style={{ touchAction: "none" }}>
+    <Canvas shadows={props.lowDetail ? false : "soft"} dpr={props.lowDetail ? [1, 1.25] : [1, 1.75]} gl={{ antialias: !props.lowDetail, powerPreference: "high-performance" }} camera={{ fov: 62, position: [9, 4, 14], near: 0.08, far: 160 }} style={{ touchAction: "none" }}>
       <Scene {...props} />
     </Canvas>
   );
