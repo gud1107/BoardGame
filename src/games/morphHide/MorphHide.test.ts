@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DOORS, FILLER_SLOTS, FIXED_THINGS, NAV_EDGES, NAV_NODES, STATIC_SOLIDS, thingSolid } from "./map";
 import { SolidGrid, groundAt, stepBody, type Body, type CollWorld } from "./physics";
-import { DISGUISES, weaponSchedule, weaponTier } from "./data";
+import { DISGUISES, SEEKER_HP, weaponSchedule, weaponTier } from "./data";
 import { applyAct, buildFillers, computeRankings, createHost, createMatch, dynamicSolids, hostStep, type HostRuntime } from "./sim";
 
 function worldWith(round = 1, seed = 7): CollWorld {
@@ -188,6 +188,6 @@ describe("bot match", () => {
       for (let k = 0; k < 16; k++) hostStep(rt, 50);
     }
     expect(s.stats.wrongHits).toBeGreaterThan(5);
-    expect(s.hp).toBeLessThan(100);
+    expect(s.hp).toBeLessThan(SEEKER_HP);
   });
 });

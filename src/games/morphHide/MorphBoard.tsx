@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AREAS, CHEST_SLOTS, GOAL_SLOTS, ROOMS, STATIC_SOLIDS, placeName, slotY } from "./map";
-import { DISGUISES, EMOTES, POSES, WEAPONS, disguise, secsToNextTier, weaponSchedule } from "./data";
+import { DISGUISES, EMOTES, POSES, SEEKER_HP, WEAPONS, disguise, secsToNextTier, weaponSchedule } from "./data";
 import type { Act, PosReport } from "./sim";
 import type { Snap, SnapBuffer } from "./net";
 import { freshControls, type Controls, type FxItem, type NearInfo, type SelfInfo } from "./three/World3D";
@@ -612,7 +612,7 @@ function Chip({ children, tone }: { children: ReactNode; tone?: "gold" }) {
 function HpBar({ hp, w }: { hp: number; w: string }) {
   return (
     <div className={`mt-1 h-1.5 ${w} overflow-hidden rounded-full bg-white/12`}>
-      <div className={`h-full rounded-full transition-[width] duration-300 ${hp > 50 ? "bg-white/90" : hp > 25 ? "bg-amber-300" : "bg-rose-500"}`} style={{ width: `${hp}%` }} />
+      <div className={`h-full rounded-full transition-[width] duration-300 ${hp > SEEKER_HP * 0.5 ? "bg-white/90" : hp > SEEKER_HP * 0.25 ? "bg-amber-300" : "bg-rose-500"}`} style={{ width: `${(hp / SEEKER_HP) * 100}%` }} />
     </div>
   );
 }

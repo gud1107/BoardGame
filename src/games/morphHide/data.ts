@@ -170,7 +170,8 @@ export function secsToNextTier(huntSec: number, elapsedSec: number): number | nu
   return ((t + 1) * huntSec) / n - elapsedSec;
 }
 
-export const SEEKER_HP = 100;
+/** 술래 체력 — 11-05 사용자 요청으로 100 → 150 (헛손질 몇 번에 너무 빨리 탈락) */
+export const SEEKER_HP = 150;
 export const SEEKER_SPEED = 2.2;
 export const DECOY_CHARGES = 2;
 export const REROLLS = 1;
