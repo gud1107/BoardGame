@@ -74,6 +74,7 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
   const [locked, setLocked] = useState(false);
   const [mutedUi, setMutedUi] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [freeLookUi, setFreeLookUi] = useState(false);
   const [settings, setSettings] = useState<ViewSettings>(() => loadSettings());
   function updateSettings(next: ViewSettings) {
     setSettings(next);
@@ -262,10 +263,15 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
     const down = (e: KeyboardEvent) => {
       if (typing(e)) return;
       const k = e.key.toLowerCase();
-      if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " ", "shift", "tab"].includes(k)) e.preventDefault();
+      if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " ", "shift", "tab", "alt"].includes(k)) e.preventDefault();
       if (e.repeat) return;
       keys.current.add(k);
       if (k === " ") controls.current.jump = true;
+      else if (k === "r") controls.current.turn = true;
+      else if (k === "alt" || k === "v") {
+        controls.current.freeLook = true;
+        setFreeLookUi(true);
+      }
       else if (k === "e") controls.current.use = true;
       else if (k === "f") controls.current.attack = true;
       else if (k === "c") actRef.current.cyclePose();
@@ -279,10 +285,17 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
       const k = e.key.toLowerCase();
       keys.current.delete(k);
       if (k === "tab") setShowBoard(false);
+      if (k === "alt" || k === "v") {
+        e.preventDefault();
+        controls.current.freeLook = false;
+        setFreeLookUi(false);
+      }
       sync();
     };
     const blur = () => {
       keys.current.clear();
+      controls.current.freeLook = false;
+      setFreeLookUi(false);
       sync();
     };
     window.addEventListener("keydown", down);
@@ -457,6 +470,10 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
         {/* 킬피드 */}
         <KillFeed fx={fx} names={names} mySeat={mySeat} now={nowPerf} />
 
+        {freeLookUi && playing && (
+          <div className={`pointer-events-none absolute left-1/2 top-[38%] -translate-x-1/2 rounded-full px-3 py-1 text-[11px] text-white/90 ${GLASS}`}>👁 둘러보는 중 — 몸·자세는 그대로</div>
+        )}
+
         {/* 조준점 (배그식: 가는 십자 + 가운데 점) */}
         {isSeeker && snap.phase === "hunt" && visible && <Crosshair melee={weapon.kind === "melee"} />}
         {hit && (
@@ -529,6 +546,7 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
             onPose={cyclePose}
             onDecoy={() => onAct({ t: "decoy" })}
             onEmote={() => setEmoteOpen((v) => !v)}
+            onFreeLook={setFreeLookUi}
             locked={locked}
           />
         )}
@@ -752,6 +770,7 @@ function ControlPad(props: {
   onPose: () => void;
   onDecoy: () => void;
   onEmote: () => void;
+  onFreeLook: (on: boolean) => void;
   locked: boolean;
 }) {
   const { controlsRef } = props;
@@ -771,6 +790,30 @@ function ControlPad(props: {
               </button>
             </>
           )}
+          <div className="flex gap-2">
+            <button type="button" onClick={() => (controlsRef.current.turn = true)} className={`${big} h-11 min-w-11 border-white/10 bg-slate-950/50 px-2.5 text-[11px] font-semibold`} aria-label="뒤돌기">
+              {props.touch ? <span className="text-base">↩</span> : <><Key k="R" /> ↩ 뒤돌기</>}
+            </button>
+            <button
+              type="button"
+              onPointerDown={() => {
+                controlsRef.current.freeLook = true;
+                props.onFreeLook(true);
+              }}
+              onPointerUp={() => {
+                controlsRef.current.freeLook = false;
+                props.onFreeLook(false);
+              }}
+              onPointerCancel={() => {
+                controlsRef.current.freeLook = false;
+                props.onFreeLook(false);
+              }}
+              className={`${big} h-11 min-w-11 border-white/10 bg-slate-950/50 px-2.5 text-[11px] font-semibold`}
+              aria-label="둘러보기 (누르는 동안)"
+            >
+              {props.touch ? <span className="text-base">👁</span> : <><Key k="Alt" /> 👁 둘러보기</>}
+            </button>
+          </div>
           <button type="button" onClick={props.onEmote} className={`${big} h-11 min-w-11 border-white/10 bg-slate-950/50 px-2.5 text-[11px] font-semibold`}>
             😜 감정표현
           </button>
@@ -809,7 +852,7 @@ function ControlPad(props: {
           <Key k="S" />
           <Key k="D" /> 이동 · <Key k="Shift" /> 달리기 · <Key k="Space" /> 점프 · <Key k="E" /> 문·창문·상자·사다리 · <Key k="M" /> 지도 · 1~4 감정표현
           <br />
-          {props.isSeeker ? "좌클릭·F 공격 · 우클릭 꾹 조준 · 휠 거리" : "C 자세 · G 분신 · 휠 거리"}
+          {props.isSeeker ? "좌클릭·F 공격 · 우클릭 꾹 조준 · R 뒤돌기 · Alt 꾹 둘러보기" : "C 자세 · G 분신 · R 뒤돌기 · Alt 꾹 둘러보기"}
         </div>
       )}
     </>

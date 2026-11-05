@@ -68,6 +68,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     releaseDate: "2026-11-06",
     title: "🦎 변신 숨바꼭질 밸런스 · 셀프플레이 AI · VRM",
     changes: [
+      { game: "morph-hide", type: "IMPROVE", desc: "↩ 뒤돌기(R) · 👁 둘러보기(Alt 꾹) — 몸·자세는 그대로 두고 시점만 돌려 주변 살피기, 떼면 원래 방향으로" },
       { game: "morph-hide", type: "IMPROVE", desc: "🧑‍🎤 술래는 내 프로필 VRM 캐릭터로, 행인 NPC와 ‘행인’ 변신은 출연진 VRM 중 랜덤 — 누가 진짜 행인인지 모르게" },
       { game: "morph-hide", type: "IMPROVE", desc: "⚖️ 술래 헛손질이 20초 안에 이어지면 벌점이 커지고(×1.5·×2…), 숨은 사람을 잡으면 체력 +25 — 마구 두드리기 대신 관찰" },
       { game: "morph-hide", type: "IMPROVE", desc: "🤖 봇이 정답을 안 보고 움직임·새로 생긴 물건·어색한 행동으로 추리, 숨는 쪽·술래 셀프플레이로 학습한 Lv.10" },

@@ -17,6 +17,9 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
  * Keep it short (≤ 80 chars), headline features only.
  */
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
+  "2026-11-06": {
+    "morph-hide": "⚖️ 헛손질 연속 가중·잡으면 회복, 🤖 셀프플레이 AI, 🧑‍🎤 VRM 캐릭터, 👁 둘러보기·↩ 뒤돌기",
+  },
   "2026-11-05": {
     "morph-hide": "🦎 새 게임 변신 숨바꼭질 — 실시간 3D 변신 숨바꼭질, 시간별 무기, 🎥 배그식 3인칭",
   },

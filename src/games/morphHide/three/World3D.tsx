@@ -66,10 +66,14 @@ export interface Controls {
   pose: number;
   /** 마우스·드래그 감도 배율 */
   sens: number;
+  /** 뒤돌기 (한 번) */
+  turn: boolean;
+  /** 둘러보기 — 누르는 동안 몸·자세·이동 방향은 그대로, 시점만 */
+  freeLook: boolean;
 }
 
 export function freshControls(): Controls {
-  return { mx: 0, mz: 0, run: false, jump: false, use: false, attack: false, aim: false, lookDX: 0, lookDY: 0, zoom: 1, moveTo: null, pose: 0, sens: 1 };
+  return { mx: 0, mz: 0, run: false, jump: false, use: false, attack: false, aim: false, lookDX: 0, lookDY: 0, zoom: 1, moveTo: null, pose: 0, sens: 1, turn: false, freeLook: false };
 }
 
 export type NearKind = "door" | "window" | "chest" | "ladder";
@@ -515,7 +519,7 @@ function LocalPlayer(props: World3DProps & { gridRef: RefObject<ReturnType<typeo
   const tpSeen = useRef(-1);
   // 배그식 3인칭: 목표 시점(tYaw/tPitch)을 마우스가 바로 바꾸고, 실제 시점은 살짝 늦게 따라가 부드럽다.
   // pivot은 몸을 부드럽게 따라가고(계단·점프에서 덜컹이지 않게), 거리는 벽에 막히면 즉시 당겨졌다가 천천히 풀린다.
-  const cam = useRef({ yaw: Math.PI, pitch: 0.28, tYaw: Math.PI, tPitch: 0.28, dist: 3.2, fov: 60, pivot: new THREE.Vector3(), pivotInit: false, init: false });
+  const cam = useRef({ yaw: Math.PI, pitch: 0.28, tYaw: Math.PI, tPitch: 0.28, dist: 3.2, fov: 60, pivot: new THREE.Vector3(), pivotInit: false, init: false, free: false, baseYaw: Math.PI, basePitch: 0.28, slowUntil: 0 });
   const lastSent = useRef(0);
   const anim = useRef("idle");
   const yawRef = useRef(0);
@@ -556,22 +560,48 @@ function LocalPlayer(props: World3DProps & { gridRef: RefObject<ReturnType<typeo
     // 시점 — 입력은 목표값에 바로, 실제 시점은 지수 감쇠로 따라간다 (조준 중엔 더 둔하게)
     const aimingNow = c.aim && meNow.role === "seeker" && snapNow.phase === "hunt";
     const sens = c.sens * (aimingNow ? 0.5 : 1);
-    cam.current.tYaw -= c.lookDX * 0.0032 * sens;
-    cam.current.tPitch = Math.max(-0.55, Math.min(1.15, cam.current.tPitch + c.lookDY * 0.0026 * sens));
+    const cm = cam.current;
+    const nowT = performance.now();
+    // 둘러보기: 누르는 순간의 방향을 기억하고, 떼면 그 방향으로 부드럽게 돌아온다
+    if (c.freeLook && !cm.free) {
+      cm.free = true;
+      cm.baseYaw = cm.tYaw;
+      cm.basePitch = cm.tPitch;
+    } else if (!c.freeLook && cm.free) {
+      cm.free = false;
+      cm.tYaw = cm.baseYaw;
+      cm.tPitch = cm.basePitch;
+      cm.slowUntil = nowT + 450;
+    }
+    // 뒤돌기: 시점 180° (사람·동물·술래는 몸도 같이, 물건은 몸이 돌면 들키니 시점만)
+    if (c.turn) {
+      c.turn = false;
+      cm.tYaw += Math.PI;
+      if (cm.free) cm.baseYaw += Math.PI;
+      cm.slowUntil = nowT + 450;
+      const dd = disguise(meNow.dg);
+      if (meNow.role === "seeker" || (dd && dd.form !== "prop")) faceRef.current += Math.PI;
+    }
+    cm.tYaw -= c.lookDX * 0.0032 * sens;
+    cm.tPitch = Math.max(-0.55, Math.min(1.15, cm.tPitch + c.lookDY * 0.0026 * sens));
     c.lookDX = 0;
     c.lookDY = 0;
-    const kLook = 1 - Math.exp(-dt * 26);
-    cam.current.yaw += angDiff(cam.current.tYaw, cam.current.yaw) * kLook;
-    cam.current.pitch += (cam.current.tPitch - cam.current.pitch) * kLook;
-    const cy = cam.current.yaw;
+    const kLook = 1 - Math.exp(-dt * (nowT < cm.slowUntil ? 11 : 26));
+    cm.yaw += angDiff(cm.tYaw, cm.yaw) * kLook;
+    cm.pitch += (cm.tPitch - cm.pitch) * kLook;
+    const cy = cm.yaw;
     const fx = Math.sin(cy);
     const fz = Math.cos(cy);
+    // 이동·몸 방향 기준: 둘러보는 중엔 누르기 전 방향
+    const my = cm.free ? cm.baseYaw : cy;
+    const mfx = Math.sin(my);
+    const mfz = Math.cos(my);
 
     let moving = false;
     if (canMove) {
       const grid = props.gridRef.current;
-      let mx = -c.mx * Math.cos(cy) + c.mz * fx;
-      let mz = c.mx * Math.sin(cy) + c.mz * fz;
+      let mx = -c.mx * Math.cos(my) + c.mz * mfx;
+      let mz = c.mx * Math.sin(my) + c.mz * mfz;
       if (Math.hypot(c.mx, c.mz) > 0.05) c.moveTo = null;
       else if (c.moveTo) {
         const dx = c.moveTo[0] - b.x;
@@ -677,7 +707,7 @@ function LocalPlayer(props: World3DProps & { gridRef: RefObject<ReturnType<typeo
       }
     }
     // 술래는 조준하거나 서 있을 땐 카메라가 보는 쪽을 바라본다 (배그처럼)
-    if (meNow.role === "seeker" && (aimingNow || (!moving && performance.now() - lastSwing.current < 1500))) faceRef.current = Math.atan2(fx, fz);
+    if (meNow.role === "seeker" && !cm.free && (aimingNow || (!moving && performance.now() - lastSwing.current < 1500))) faceRef.current = Math.atan2(fx, fz);
     yawRef.current += angDiff(faceRef.current, yawRef.current) * (1 - Math.exp(-dt * 13));
 
     // 위치 보고 (100ms)
