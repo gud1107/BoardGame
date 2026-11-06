@@ -26,7 +26,7 @@
  */
 
 import * as THREE from "three";
-import { ERAS, LANE, ROLE_ICON, TICK_MS, UNITS, type Era, type Fx, type TurretKind, type UnitKind } from "../data";
+import { AUG_TIER_COLOR, AUGMENTS, ERAS, LANE, ROLE_ICON, TICK_MS, UNITS, type Era, type Fx, type TurretKind, type UnitKind } from "../data";
 import { frontProgress, fromProgress, progress, wallX, type EraMarchState, type FxEvent, type Side } from "../engine";
 import { airshipTemplate, baseTemplate, mammothTemplate, rockTemplate, shipTemplate, treeTemplate, turretTemplate, TURRET_SLOTS, type Template } from "./models";
 import { TEAM_HEX, unitHeight, unitRig, type Rig } from "./rigs";
@@ -830,6 +830,24 @@ export class BattleScene {
         case "special":
           this.specialStart(e.side, e.era, s);
           break;
+        case "augment": {
+          const t = AUGMENTS[e.id];
+          if (!t) break;
+          const x = this.bases[e.side].group.position.x;
+          const hex = AUG_TIER_COLOR[t.tier];
+          this.pillar(x, hex);
+          this.ring(x, 0.2, 0, 1, 12, 1, hex, 1);
+          this.burst(this.sparks, x, 4, 0, 40, 7, -2, 0.22, 1.3, hex, 6);
+          break;
+        }
+        case "revive": {
+          const x = W(e.x);
+          const z = laneZ(e.id);
+          this.ring(x, 0.15, z, 0.3, 3, 0.6, "#fde68a", 1);
+          this.burst(this.sparks, x, 1.5, z, 18, 3, -5, 0.16, 0.9, "#fef3c7", 2);
+          this.texts.push({ text: "부활!", x, y: 3, z, t0: now, color: "#fde68a", size: 14, dur: 1.1 });
+          break;
+        }
         case "strike":
           if (e.era === 1) this.explosion(W(e.x), 0.5, 0, 2.4, true, "#a8a29e");
           else if (e.era === 2) this.explosion(W(e.x), 0.8, 0, 1.6, true);

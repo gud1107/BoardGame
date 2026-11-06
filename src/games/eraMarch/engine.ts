@@ -28,6 +28,17 @@
 
 import {
   ALLY_GAP,
+  AUG_PICK_SECONDS,
+  AUG_REROLLS,
+  AUG_ROUNDS,
+  AUGMENT_LIST,
+  AUGMENTS,
+  BEATS,
+  CHAIN_MUL,
+  CHAIN_RANGE,
+  DEATH_BLAST_RADIUS,
+  EXECUTE_HP,
+  REVIVE_HP,
   BASE_FRONT,
   CATCH_UP_DISCOUNT,
   CONTACT_GAP,
@@ -60,6 +71,9 @@ import {
   TRAIN_XP,
   TURRETS,
   UNITS,
+  type AugFx,
+  type AugmentId,
+  type AugTier,
   type DoctrineId,
   type Era,
   type ItemId,
@@ -86,6 +100,8 @@ export interface Unit {
   lastAtk: number;
   /** Whether the unit moved this tick. */
   moving: boolean;
+  /** Already got back up once (불사 군단). */
+  revived?: boolean;
 }
 
 export interface QueueItem {
@@ -94,6 +110,8 @@ export interface QueueItem {
   total: number;
   /** Shop vanguard: no refund on cancel. */
   free?: boolean;
+  /** 쌍둥이 징집 copy (never copies again). */
+  twin?: boolean;
 }
 
 export interface TurretSlot {
@@ -128,6 +146,19 @@ export interface PlayerState {
   baseHp: number;
   baseMax: number;
   stats: PlayerStats;
+  /** Augments picked so far (in order). */
+  augments: AugmentId[];
+  /** Open 3-card offer, or null. */
+  offer: AugOffer | null;
+  rerolls: number;
+}
+
+export interface AugOffer {
+  round: number;
+  tier: AugTier;
+  cards: AugmentId[];
+  /** Tick it auto-picks the first card. */
+  deadline: number;
 }
 
 interface PendingHit {
@@ -143,6 +174,10 @@ interface PendingHit {
   siege: number;
   steal: number;
   kind: UnitKind | null;
+  /** Shooter unit id (lifesteal), -1 for turrets. */
+  src?: number;
+  /** Bounces left (연쇄 사격). */
+  chain?: number;
 }
 
 export interface Strike {
@@ -192,6 +227,11 @@ export type FxEvent =
   | { t: "sell"; side: Side; slot: number }
   | { t: "slot"; side: Side; slot: number }
   | { t: "specialReady"; side: Side }
+  | { t: "augOffer"; side: Side; round: number; tier: AugTier }
+  | { t: "augment"; side: Side; id: AugmentId; auto: boolean }
+  | { t: "augReroll"; side: Side }
+  | { t: "revive"; side: Side; id: number; x: number }
+  | { t: "twin"; side: Side; kind: UnitKind }
   | { t: "suddenDeath" }
   | { t: "end"; winner: Side | "draw" };
 
@@ -202,7 +242,9 @@ export type Command =
   | { t: "turret"; slot: number; kind: TurretKind }
   | { t: "sell"; slot: number }
   | { t: "slot" }
-  | { t: "special" };
+  | { t: "special" }
+  | { t: "augment"; pick: number }
+  | { t: "reroll" };
 
 export interface SeatCommand {
   side: Side;
@@ -221,6 +263,8 @@ export interface EraMarchState {
   events: FxEvent[];
   suddenDeath: boolean;
   winner: Side | "draw" | null;
+  /** Augment rounds already opened. */
+  augRound?: number;
 }
 
 /* ── rng ─────────────────────────────────────────────────────────────── */
@@ -250,6 +294,9 @@ function newPlayer(loadout?: Loadout): PlayerState {
     baseHp: 0,
     baseMax: 0,
     stats: { trained: 0, kills: 0, lost: 0, goldEarned: 0, damage: 0, specials: 0 },
+    augments: [],
+    offer: null,
+    rerolls: AUG_REROLLS,
   };
   p.baseMax = p.baseHp = baseHpFor(p, 0);
   if (p.plan === "blitz") p.gold += 150;
@@ -276,6 +323,7 @@ export function startGame(seed: number, loadouts?: readonly [Loadout, Loadout]):
     events: [],
     suddenDeath: false,
     winner: null,
+    augRound: 0,
   };
 }
 
@@ -291,34 +339,51 @@ export const wallX = (side: Side) => (side === 0 ? BASE_FRONT : LANE - BASE_FRON
 export const has = (p: PlayerState, d: DoctrineId) => p.doctrines.includes(d);
 export const hasItem = (p: PlayerState, i: ItemId) => (p.items ?? []).includes(i);
 
+type NumFx = { [K in keyof AugFx]-?: NonNullable<AugFx[K]> extends number ? K : never }[keyof AugFx];
+
+/** Sum of one augment knob over everything this side picked. */
+export function aug(p: PlayerState, k: NumFx): number {
+  let v = 0;
+  for (const id of p.augments ?? []) v += (AUGMENTS[id]?.fx[k] as number | undefined) ?? 0;
+  return v;
+}
+
+export const popCapOf = (p: PlayerState) => POP_CAP + aug(p, "pop");
+
 export function baseHpFor(p: PlayerState, era: Era): number {
-  const m = p.plan === "fortress" ? 1.15 : 1;
+  const m = (p.plan === "fortress" ? 1.15 : 1) * (1 + aug(p, "baseHp"));
   return Math.round(ERAS[era].baseHp * m);
 }
 
 /** Unit attack multiplier (plan). */
-export const atkMul = (p: PlayerState) => (p.plan === "blitz" ? 1.15 : 1);
+export const atkMul = (p: PlayerState) => (p.plan === "blitz" ? 1.15 : 1) * (1 + aug(p, "atk"));
+
+/** One unit's hit (plan + augments + 광전사 while under half HP). */
+function unitAtk(p: PlayerState, u: Unit): number {
+  const b = u.hp < u.maxHp * 0.5 ? 1 + aug(p, "berserk") : 1;
+  return UNITS[u.kind].atk * atkMul(p) * b;
+}
 
 /** XP multiplier (plan). */
-export const xpMul = (p: PlayerState) => (p.plan === "scholar" ? 1.35 : 1);
+export const xpMul = (p: PlayerState) => (p.plan === "scholar" ? 1.35 : 1) * (1 + aug(p, "xp"));
 
 /** Spawn HP multiplier for this unit (doctrine + plan + items). */
 export function hpMul(p: PlayerState, kind: UnitKind): number {
   let m = UNITS[kind].role === "charge" && has(p, "iron") ? 1.3 : 1;
   if (hasItem(p, "armor")) m *= 1.08;
   if (p.plan === "merchant") m *= 0.92;
-  return m;
+  return m * (1 + aug(p, "hp"));
 }
 
 export function unitRange(p: PlayerState, kind: UnitKind): number {
   const def = UNITS[kind];
   if (def.role !== "ranged" && def.role !== "support") return def.range;
-  return def.range * (has(p, "aim") ? 1.2 : 1) * (hasItem(p, "sharp") ? 1.1 : 1);
+  return def.range * (has(p, "aim") ? 1.2 : 1) * (hasItem(p, "sharp") ? 1.1 : 1) * (1 + aug(p, "range"));
 }
 
 export function unitSpeed(p: PlayerState, kind: UnitKind): number {
   const def = UNITS[kind];
-  return def.speed * (def.role === "charge" && has(p, "chariot") ? 1.25 : 1) * (p.plan === "blitz" ? 1.15 : 1);
+  return def.speed * (def.role === "charge" && has(p, "chariot") ? 1.25 : 1) * (p.plan === "blitz" ? 1.15 : 1) * (1 + aug(p, "speed"));
 }
 
 export function trainTicks(p: PlayerState, kind: UnitKind): number {
@@ -326,11 +391,12 @@ export function trainTicks(p: PlayerState, kind: UnitKind): number {
   if (p.plan === "fortress") m *= 1.15;
   if (p.plan === "blitz") m *= 0.8;
   if (hasItem(p, "drill")) m *= 0.9;
+  m *= Math.max(0.4, 1 - aug(p, "train"));
   return Math.max(1, Math.round(UNITS[kind].trainTicks * m));
 }
 
 export function specialCdMax(p: PlayerState): number {
-  return has(p, "overload") ? Math.round(SPECIAL_CD * 0.7) : SPECIAL_CD;
+  return Math.round(SPECIAL_CD * (has(p, "overload") ? 0.7 : 1) * Math.max(0.4, 1 - aug(p, "specialCd")));
 }
 
 /** Units this side may train right now (current era + its doctrine units). */
@@ -354,7 +420,7 @@ export function frontIncome(s: EraMarchState, side: Side): number {
 
 export function incomeOf(s: EraMarchState, side: Side): number {
   const p = s.players[side];
-  const m = 1 + (p.plan === "merchant" ? 0.15 : 0) + (hasItem(p, "bonds") ? 0.15 : 0);
+  const m = 1 + (p.plan === "merchant" ? 0.15 : 0) + (hasItem(p, "bonds") ? 0.15 : 0) + aug(p, "income");
   return Math.round((ERAS[p.era].income + frontIncome(s, side)) * m * 10) / 10;
 }
 
@@ -374,7 +440,7 @@ export function evolveCost(s: EraMarchState, side: Side): number {
   const n = nextEra(p);
   if (n === null) return 0;
   const behind = s.players[side === 0 ? 1 : 0].era > p.era;
-  return Math.round(ERAS[n].goldCost * (behind ? CATCH_UP_DISCOUNT : 1) * (p.plan === "scholar" ? 0.8 : p.plan === "blitz" ? 1.1 : 1));
+  return Math.round(ERAS[n].goldCost * (behind ? CATCH_UP_DISCOUNT : 1) * (p.plan === "scholar" ? 0.8 : p.plan === "blitz" ? 1.1 : 1) * (1 - aug(p, "evolve")));
 }
 
 /* ── command validation ──────────────────────────────────────────────── */
@@ -418,6 +484,12 @@ export function commandError(s: EraMarchState, side: Side, c: Command): string |
       return p.gold >= SLOT_COST[p.slots] ? null : "골드 부족";
     case "special":
       return p.specialCd > 0 ? "필살기 충전 중" : null;
+    case "augment":
+      if (!p.offer) return "고를 증강 없음";
+      return Number.isInteger(c.pick) && c.pick >= 0 && c.pick < p.offer.cards.length ? null : "없는 증강";
+    case "reroll":
+      if (!p.offer) return "고를 증강 없음";
+      return p.rerolls > 0 ? null : "다시 뽑기 없음";
   }
 }
 
@@ -490,7 +562,68 @@ function applyCommand(s: EraMarchState, side: Side, c: Command) {
     case "special":
       castSpecial(s, side);
       return;
+    case "augment":
+      takeAugment(s, side, p.offer!.cards[c.pick], false);
+      return;
+    case "reroll": {
+      const o = p.offer!;
+      p.rerolls--;
+      const fresh = drawCards(s, p, o.tier, o.cards);
+      if (fresh.length >= o.cards.length) o.cards = fresh;
+      s.events.push({ t: "augReroll", side });
+      return;
+    }
   }
+}
+
+/* ── augments ────────────────────────────────────────────────────────── */
+
+const TIERS: readonly AugTier[] = ["silver", "gold", "prism"];
+
+/** 3 distinct cards of `tier` this side doesn't own yet (neighbouring tiers fill a thin pool). */
+function drawCards(s: { rng: number }, p: PlayerState, tier: AugTier, avoid: readonly AugmentId[] = []): AugmentId[] {
+  const owned = new Set([...(p.augments ?? []), ...avoid]);
+  const ti = TIERS.indexOf(tier);
+  const out: AugmentId[] = [];
+  for (const t of [tier, TIERS[Math.min(2, ti + 1)], TIERS[Math.max(0, ti - 1)]]) {
+    const pool = AUGMENT_LIST.filter((a) => a.tier === t && !owned.has(a.id) && !out.includes(a.id));
+    while (out.length < 3 && pool.length) out.push(pool.splice(Math.floor(nextRandom(s) * pool.length), 1)[0].id);
+    if (out.length >= 3) break;
+  }
+  return out;
+}
+
+function openAugmentRound(s: EraMarchState, round: number) {
+  const odds = AUG_ROUNDS[round].odds;
+  const r = nextRandom(s) * 100;
+  const tier: AugTier = r < odds[0] ? "silver" : r < odds[0] + odds[1] ? "gold" : "prism";
+  for (const side of [0, 1] as const) {
+    const p = s.players[side];
+    if (p.offer) takeAugment(s, side, p.offer.cards[0], true);
+    const cards = drawCards(s, p, tier);
+    if (!cards.length) continue;
+    p.offer = { round, tier, cards, deadline: s.tick + AUG_PICK_SECONDS * TICKS_PER_SEC };
+    s.events.push({ t: "augOffer", side, round, tier });
+  }
+}
+
+function takeAugment(s: EraMarchState, side: Side, id: AugmentId, auto: boolean) {
+  const p = s.players[side];
+  p.offer = null;
+  const def = AUGMENTS[id];
+  if (!def) return;
+  const before = p.baseMax;
+  p.augments = [...(p.augments ?? []), id];
+  if (def.fx.baseHp) {
+    p.baseMax = baseHpFor(p, p.era);
+    p.baseHp = Math.min(p.baseMax, p.baseHp + (p.baseMax - before));
+  }
+  if (def.fx.goldNow) p.gold += def.fx.goldNow * UNITS[ERA_UNITS[p.era][0]].cost;
+  if (def.fx.specialNow && p.specialCd > 0) {
+    p.specialCd = 0;
+    s.events.push({ t: "specialReady", side });
+  } else if (def.fx.specialCd) p.specialCd = Math.min(p.specialCd, specialCdMax(p));
+  s.events.push({ t: "augment", side, id, auto });
 }
 
 function enemiesOf(s: EraMarchState, side: Side): Unit[] {
@@ -549,11 +682,23 @@ function castSpecial(s: EraMarchState, side: Side) {
 function damageTo(s: EraMarchState, u: Unit, dmg: number, role: Role | "turret" | "special"): number {
   const def = UNITS[u.kind];
   const owner = s.players[u.side];
-  let m = role === "turret" || role === "special" ? 1 : roleMul(role, def.role);
+  const att = s.players[u.side === 0 ? 1 : 0];
+  let m = role === "turret" || role === "special" ? 1 : matchMul(att, role, def.role);
   if (def.role === "melee" && has(owner, "shield")) m *= 0.8;
   if ((def.role === "ranged" || def.role === "support") && has(owner, "network")) m *= 0.75;
+  if (u.hp < u.maxHp * EXECUTE_HP) m *= 1 + aug(att, "execute");
+  if (frontIds[u.side] === u.id) m *= 1 - aug(owner, "frontGuard");
   return Math.max(1, Math.round(dmg * m));
 }
+
+/** Role matchup for this attacker (상성 달인 raises the counter bonus). */
+function matchMul(att: PlayerState, a: Role, d: Role): number {
+  const c = aug(att, "counter");
+  return c && BEATS[a] === d ? c : roleMul(a, d);
+}
+
+/** Frontmost unit id per side this tick (선봉 방패). Rebuilt at the start of every step. */
+let frontIds: [number, number] = [-1, -1];
 
 interface Dmg {
   u: Unit;
@@ -561,12 +706,14 @@ interface Dmg {
   by: Side;
   fx: Fx;
   mul: number;
+  /** Attacking unit (lifesteal / thorns). */
+  src?: Unit;
 }
 
-function hitUnit(s: EraMarchState, out: Dmg[], u: Unit, raw: number, role: Role | "turret" | "special", by: Side, fx: Fx) {
+function hitUnit(s: EraMarchState, out: Dmg[], u: Unit, raw: number, role: Role | "turret" | "special", by: Side, fx: Fx, src?: Unit) {
   const amt = damageTo(s, u, raw, role);
-  const mul = role === "turret" || role === "special" ? 1 : roleMul(role, UNITS[u.kind].role);
-  out.push({ u, amt, by, fx, mul });
+  const mul = role === "turret" || role === "special" ? 1 : matchMul(s.players[by], role, UNITS[u.kind].role);
+  out.push({ u, amt, by, fx, mul, src });
 }
 
 function splashAround(s: EraMarchState, out: Dmg[], side: Side, x: number, radius: number, raw: number, role: Role | "turret" | "special", fx: Fx, skip?: Unit) {
@@ -593,6 +740,17 @@ export function stepGame(s: EraMarchState, cmds: readonly SeatCommand[]): void {
 
   for (const c of cmds) applyCommand(s, c.side, c.cmd);
 
+  // 0. augment rounds open on the clock; an untouched offer takes its first card
+  const round = s.augRound ?? 0;
+  if (round < AUG_ROUNDS.length && s.tick >= AUG_ROUNDS[round].sec * TICKS_PER_SEC) {
+    s.augRound = round + 1;
+    openAugmentRound(s, round);
+  }
+  for (const side of [0, 1] as const) {
+    const o = s.players[side].offer;
+    if (o && s.tick >= o.deadline) takeAugment(s, side, o.cards[0], true);
+  }
+
   // 1. production
   for (const side of [0, 1] as const) {
     const p = s.players[side];
@@ -600,7 +758,7 @@ export function stepGame(s: EraMarchState, cmds: readonly SeatCommand[]): void {
     if (!q) continue;
     if (q.left > 0) q.left--;
     if (q.left > 0) continue;
-    if (popOf(s, side) >= POP_CAP) continue;
+    if (popOf(s, side) >= popCapOf(p)) continue;
     const spawnX = fromProgress(side, SPAWN_X);
     if (s.units.some((u) => u.side === side && progress(side, u.x) < SPAWN_X + ALLY_GAP)) continue;
     p.queue.shift();
@@ -610,12 +768,18 @@ export function stepGame(s: EraMarchState, cmds: readonly SeatCommand[]): void {
     s.units.push(u);
     p.stats.trained++;
     s.events.push({ t: "spawn", side, id: u.id, kind: u.kind });
+    const twin = aug(p, "twin");
+    if (twin && !q.twin && def.limit === undefined && nextRandom(s) < twin) {
+      p.queue.unshift({ kind: q.kind, left: 6, total: 6, free: true, twin: true });
+      s.events.push({ t: "twin", side, kind: q.kind });
+    }
   }
 
   // Fronts as of the start of this tick (sorted by progress, front first).
   const bySide: [Unit[], Unit[]] = [[], []];
   for (const u of s.units) bySide[u.side].push(u);
   for (const side of [0, 1] as const) bySide[side].sort((a, b) => progress(side, b.x) - progress(side, a.x) || a.id - b.id);
+  frontIds = [bySide[0][0]?.id ?? -1, bySide[1][0]?.id ?? -1];
 
   const dmgs: Dmg[] = [];
   const attacking = new Set<number>();
@@ -666,14 +830,15 @@ export function stepGame(s: EraMarchState, cmds: readonly SeatCommand[]): void {
     const ranged = def.range > 30;
     if (ranged) {
       const ticks = Math.max(2, Math.ceil(Math.abs(tx - u.x) / PROJ_SPEED));
-      s.hits.push({ due: s.tick + ticks, side: u.side, target: target === "base" ? -1 : target.id, x: tx, dmg: Math.round(def.atk * atkMul(p)), role: def.role, fx: def.fx, splash: def.splash ?? 0, siege: def.siege ?? 1, steal: def.steal ?? 0, kind: u.kind });
+      s.hits.push({ due: s.tick + ticks, side: u.side, target: target === "base" ? -1 : target.id, x: tx, dmg: Math.round(unitAtk(p, u)), role: def.role, fx: def.fx, splash: def.splash ?? 0, siege: def.siege ?? 1, steal: def.steal ?? 0, kind: u.kind, src: u.id, chain: aug(p, "chain") });
       s.events.push({ t: "shot", side: u.side, from: u.x, to: tx, fx: def.fx, ticks, turret: -1, id: u.id, base: target === "base" });
     } else {
       s.events.push({ t: "swing", side: u.side, id: u.id, kind: u.kind });
-      if (target === "base") damageBase(s, foe, def.atk * atkMul(p) * (def.siege ?? 1), def.fx, u.side);
+      const atk = unitAtk(p, u);
+      if (target === "base") damageBase(s, foe, atk * (def.siege ?? 1), def.fx, u.side);
       else {
-        hitUnit(s, dmgs, target, def.atk * atkMul(p), def.role, u.side, def.fx);
-        if (def.splash) splashAround(s, dmgs, u.side, target.x, def.splash, def.atk * atkMul(p) * 0.5, def.role, def.fx, target);
+        hitUnit(s, dmgs, target, atk, def.role, u.side, def.fx, u);
+        if (def.splash) splashAround(s, dmgs, u.side, target.x, def.splash, atk * 0.5, def.role, def.fx, target);
         if (def.steal) stealGold(s, u.side, def.steal, target.x);
       }
     }
@@ -697,7 +862,7 @@ export function stepGame(s: EraMarchState, cmds: readonly SeatCommand[]): void {
       const stand = dist <= LAST_STAND_RANGE ? LAST_STAND_MUL : 1;
       const from = fromProgress(side, 12);
       const ticks = Math.max(3, Math.ceil(Math.abs(nearest.x - from) / PROJ_SPEED));
-      s.hits.push({ due: s.tick + ticks, side, target: nearest.id, x: nearest.x, dmg: Math.round(def.dmg * stand * (p.plan === "fortress" ? 1.15 : 1)), role: "turret", fx: def.fx, splash: def.splash ?? 0, siege: 1, steal: 0, kind: null });
+      s.hits.push({ due: s.tick + ticks, side, target: nearest.id, x: nearest.x, dmg: Math.round(def.dmg * stand * (p.plan === "fortress" ? 1.15 : 1) * (1 + aug(p, "turret"))), role: "turret", fx: def.fx, splash: def.splash ?? 0, siege: 1, steal: 0, kind: null });
       s.events.push({ t: "shot", side, from, to: nearest.x, fx: def.fx, ticks, turret: slot, id: -1, base: false });
     });
   }
@@ -714,8 +879,26 @@ export function stepGame(s: EraMarchState, cmds: readonly SeatCommand[]): void {
     const tu = alive.get(h.target);
     const at = tu && tu.hp > 0 ? tu.x : h.x;
     if (tu && tu.hp > 0) {
-      hitUnit(s, dmgs, tu, h.dmg, h.role, h.side, h.fx);
+      const src = h.src !== undefined && h.src >= 0 ? alive.get(h.src) : undefined;
+      hitUnit(s, dmgs, tu, h.dmg, h.role, h.side, h.fx, src);
       if (h.steal) stealGold(s, h.side, h.steal, at);
+      // 연쇄 사격: bounce to the nearest other enemy
+      let from = tu;
+      const done = new Set([tu.id]);
+      for (let b = 0; b < (h.chain ?? 0); b++) {
+        let next: Unit | null = null;
+        for (const e of s.units) {
+          if (e.side !== foe || e.hp <= 0 || done.has(e.id) || Math.abs(e.x - from.x) > CHAIN_RANGE) continue;
+          const de = Math.abs(e.x - from.x);
+          const dn = next ? Math.abs(next.x - from.x) : Infinity;
+          if (de < dn || (de === dn && next && e.id < next.id)) next = e;
+        }
+        if (!next) break;
+        done.add(next.id);
+        hitUnit(s, dmgs, next, h.dmg * CHAIN_MUL[Math.min(2, h.chain ?? 0)], h.role, h.side, "rail", src);
+        s.events.push({ t: "shot", side: h.side, from: from.x, to: next.x, fx: "rail", ticks: 2, turret: -1, id: 0, base: false });
+        from = next;
+      }
     } else if (!h.splash) {
       s.events.push({ t: "hit", side: foe, id: 0, x: at, dmg: 0, fx: h.fx, mul: 1, base: false });
     }
@@ -757,7 +940,19 @@ export function stepGame(s: EraMarchState, cmds: readonly SeatCommand[]): void {
     d.u.hp -= d.amt;
     s.players[d.by].stats.damage += real;
     s.events.push({ t: "hit", side: d.u.side, id: d.u.id, x: d.u.x, dmg: d.amt, fx: d.fx, mul: d.mul, base: false });
-    if (d.u.hp <= 0) kill(s, d.u, d.by);
+    const src = d.src;
+    if (src && src.hp > 0) {
+      const ls = aug(s.players[d.by], "lifesteal");
+      if (ls) src.hp = Math.min(src.maxHp, src.hp + Math.round(real * ls));
+      const th = aug(s.players[d.u.side], "thorns");
+      if (th && UNITS[src.kind].range <= 30) {
+        const back = Math.max(1, Math.round(d.amt * th));
+        src.hp -= back;
+        s.events.push({ t: "hit", side: src.side, id: src.id, x: src.x, dmg: back, fx: "blade", mul: 1, base: false });
+        if (src.hp <= 0) dieOrRevive(s, src, d.u.side);
+      }
+    }
+    if (d.u.hp <= 0) dieOrRevive(s, d.u, d.by);
   }
   s.units = s.units.filter((u) => u.hp > 0);
 
@@ -796,6 +991,8 @@ export function stepGame(s: EraMarchState, cmds: readonly SeatCommand[]): void {
       p.gold += inc;
       p.stats.goldEarned += inc;
       p.xp += Math.round(ERAS[p.era].income * PASSIVE_XP * xpMul(p));
+      const regen = aug(p, "regen");
+      if (regen && p.baseHp > 0) p.baseHp = Math.min(p.baseMax, p.baseHp + Math.ceil(p.baseMax * regen));
     }
   }
   if (s.tick >= MATCH_TICKS) {
@@ -849,11 +1046,24 @@ function stealGold(s: EraMarchState, thief: Side, amt: number, x: number) {
   s.events.push({ t: "steal", side: thief, x, gold: got });
 }
 
+/** 불사 군단 gets one roll per unit; otherwise it dies. */
+function dieOrRevive(s: EraMarchState, u: Unit, by: Side) {
+  const rv = aug(s.players[u.side], "revive");
+  if (rv && !u.revived && nextRandom(s) < rv) {
+    u.revived = true;
+    u.hp = Math.round(u.maxHp * REVIVE_HP);
+    u.stun = Math.max(u.stun, 6);
+    s.events.push({ t: "revive", side: u.side, id: u.id, x: u.x });
+    return;
+  }
+  kill(s, u, by);
+}
+
 function kill(s: EraMarchState, u: Unit, by: Side) {
   const def = UNITS[u.kind];
   const killer = s.players[by];
   const bonus = def.era > killer.era;
-  const gm = (bonus ? ERA_GAP_BONUS : 1) * (has(killer, "plunder") ? PLUNDER_GOLD : 1) * (killer.plan === "merchant" ? 1.1 : 1);
+  const gm = (bonus ? ERA_GAP_BONUS : 1) * (has(killer, "plunder") ? PLUNDER_GOLD : 1) * (killer.plan === "merchant" ? 1.1 : 1) * (1 + aug(killer, "killGold"));
   const gold = Math.max(1, Math.round(def.cost * KILL_GOLD * gm));
   killer.gold += gold;
   killer.xp += Math.round(def.cost * KILL_XP * (bonus ? ERA_GAP_BONUS : 1) * xpMul(killer));
@@ -862,6 +1072,8 @@ function kill(s: EraMarchState, u: Unit, by: Side) {
   s.players[u.side].stats.lost++;
   s.events.push({ t: "death", side: u.side, id: u.id, kind: u.kind, x: u.x });
   s.events.push({ t: "bounty", side: by, x: u.x, gold, bonus });
+  const blast = aug(s.players[u.side], "deathBlast");
+  if (blast) s.strikes.push({ at: s.tick, due: s.tick + 1, side: u.side, x: u.x, radius: DEATH_BLAST_RADIUS, dmg: Math.round(u.maxHp * blast), stun: 0, push: 0, target: -1, era: 2 });
 }
 
 /** Seconds left before sudden death (0 once it started). */

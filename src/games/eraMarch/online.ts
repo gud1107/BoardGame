@@ -60,6 +60,8 @@ export function checksum(s: EraMarchState): number {
     mix(p.era);
     mix(p.queue.length);
     mix(p.specialCd);
+    mix((p.augments ?? []).length);
+    mix(p.offer ? p.offer.cards.length : -1);
   }
   for (const u of s.units) {
     mix(u.id);
@@ -69,7 +71,7 @@ export function checksum(s: EraMarchState): number {
   return h >>> 0;
 }
 
-const VALID_CMDS = new Set(["train", "cancel", "evolve", "turret", "sell", "slot", "special"]);
+const VALID_CMDS = new Set(["train", "cancel", "evolve", "turret", "sell", "slot", "special", "augment", "reroll"]);
 
 /** Shape check for a command that came over the network (the engine validates the rest). */
 export function sanitizeCommand(v: unknown): Command | null {
@@ -78,6 +80,7 @@ export function sanitizeCommand(v: unknown): Command | null {
   if (typeof c.t !== "string" || !VALID_CMDS.has(c.t)) return null;
   if ("index" in c && typeof c.index !== "number") return null;
   if ("slot" in c && typeof c.slot !== "number") return null;
+  if ("pick" in c && typeof c.pick !== "number") return null;
   if ("kind" in c && typeof c.kind !== "string") return null;
   if ("doctrine" in c && c.doctrine !== undefined && typeof c.doctrine !== "string") return null;
   return c as unknown as Command;

@@ -281,6 +281,15 @@ export class EraMarchSound {
         case "slot":
           if (e.side === viewer) play("slot", 1);
           break;
+        case "augOffer":
+          if (e.side === viewer) play("specialReady", 1, "augOffer");
+          break;
+        case "augment":
+          if (e.side === viewer) play("doctrine", 0.9, "augment");
+          break;
+        case "revive":
+          play("heal", near(e.x) * 0.8, "revive");
+          break;
         case "specialReady":
           if (e.side === viewer) play("specialReady", 0.8);
           break;

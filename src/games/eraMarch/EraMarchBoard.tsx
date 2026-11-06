@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
-import { BEATS, DOCTRINES, ERA_DOCTRINES, ITEMS, PLANS, ERA_TURRETS, ERAS, LANE, POP_CAP, QUEUE_CAP, ROLE_ICON, ROLE_NAME, SELL_REFUND, SLOT_COST, SPECIALS, TICK_MS, TURRETS, UNITS, type DoctrineId, type Era, type Role, type TurretKind } from "./data";
-import { commandError, evolveCost, frontProgress, incomeOf, nextEra, popOf, progress, rosterOf, secondsLeft, specialCdMax, type Command, type EraMarchState, type FxEvent, type Side } from "./engine";
+import { AUG_TIER_COLOR, AUG_TIER_NAME, AUGMENTS, AUG_ROUNDS, BEATS, DOCTRINES, ERA_DOCTRINES, ITEMS, PLANS, ERA_TURRETS, ERAS, LANE, QUEUE_CAP, ROLE_ICON, ROLE_NAME, SELL_REFUND, SLOT_COST, SPECIALS, TICK_MS, TURRETS, UNITS, type DoctrineId, type Era, type Role, type TurretKind } from "./data";
+import { commandError, evolveCost, frontProgress, incomeOf, nextEra, popCapOf, popOf, progress, rosterOf, secondsLeft, specialCdMax, type Command, type EraMarchState, type FxEvent, type Side } from "./engine";
 import { EraMarchSound, eraSuite, playCue, unlockAudio } from "./eraMarchAudio";
 import type { MatchDriver } from "./driver";
 import { BattleScene, TEAM_HEX } from "./three/battleScene";
@@ -121,7 +121,17 @@ export default function EraMarchBoard({ driver, reduceShake, subtitle, onEnd, on
         else toast(`⚠ 상대 필살기: ${sp.emoji} ${sp.name}`, "warn");
       } else if (e.t === "specialReady" && e.side === ME) toast(`${SPECIALS[s.players[ME].era].emoji} 필살기 준비 완료 [R]`, "good");
       else if (e.t === "reject" && e.side === ME && online) toast(e.reason, "warn");
-      else if (e.t === "suddenDeath") setBanner({ title: "⏳ 서든데스", sub: "양쪽 기지가 매초 무너집니다", color: "#f87171" });
+      else if (e.t === "augOffer" && e.side === ME) {
+        // solo: the battle waits while you read the cards
+        if (!online) pausedRef.current = true;
+        toast(`✨ ${AUG_TIER_NAME[e.tier]} 증강 선택!`, "big");
+      } else if (e.t === "augReroll" && e.side === ME && !online) pausedRef.current = true;
+      else if (e.t === "augment") {
+        const a = AUGMENTS[e.id];
+        if (!a) continue;
+        if (e.side === ME) setBanner({ title: `${a.emoji} ${a.name}`, sub: `${e.auto ? "시간 초과 — 자동 선택 · " : ""}${a.desc}`, color: AUG_TIER_COLOR[a.tier] });
+        else toast(`상대 증강: ${a.emoji} ${a.name}`, "warn");
+      } else if (e.t === "suddenDeath") setBanner({ title: "⏳ 서든데스", sub: "양쪽 기지가 매초 무너집니다", color: "#f87171" });
     }
   }, [toast, ME, online]);
 
@@ -286,12 +296,27 @@ export default function EraMarchBoard({ driver, reduceShake, subtitle, onEnd, on
 
   const special = useCallback(() => send({ t: "special" }), [send]);
 
+  const pickAugment = useCallback((pick: number) => {
+    send({ t: "augment", pick });
+    pausedRef.current = paused;
+  }, [send, paused]);
+  const rerollAugment = useCallback(() => {
+    send({ t: "reroll" });
+    // one tick runs to apply it; the reroll event pauses again
+    if (!online) pausedRef.current = false;
+  }, [send, online]);
+
   // keyboard
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       const st = stateRef.current;
       const list = rosterOf(st.players[ME]);
+      if (st.players[ME].offer && doctrinePick === null && !online) {
+        if (/^[1-3]$/.test(e.key)) pickAugment(Number(e.key) - 1);
+        else if (e.key === "r" || e.key === "R") rerollAugment();
+        return;
+      }
       if (doctrinePick !== null) {
         const pair = ERA_DOCTRINES[doctrinePick];
         if (pair && (e.key === "1" || e.key === "2")) pickDoctrine(pair[Number(e.key) - 1]);
@@ -317,7 +342,7 @@ export default function EraMarchBoard({ driver, reduceShake, subtitle, onEnd, on
     window.addEventListener("keydown", down);
     return () => window.removeEventListener("keydown", down);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doctrinePick, paused, send, special, tryEvolve, setPause]);
+  }, [doctrinePick, paused, send, special, tryEvolve, setPause, pickAugment, rerollAugment]);
 
   // drag to pan / wheel + pinch to zoom
   const pointers = useRef(new Map<number, { x: number; y: number }>());
@@ -462,7 +487,7 @@ export default function EraMarchBoard({ driver, reduceShake, subtitle, onEnd, on
               <span className="text-lg sm:text-xl">💰 {Math.floor(me.gold)}</span>
               <span className="text-[11px] font-semibold text-amber-200/70">+{inc}/s{front > LANE / 2 + 99 ? " 🚩" : ""}</span>
             </div>
-            <div className="text-xs text-white/70">👥 {pop}/{POP_CAP}</div>
+            <div className="text-xs text-white/70">👥 {pop}/{popCapOf(me)}</div>
             <div className="order-last flex w-full items-center gap-2 sm:order-none sm:w-auto sm:min-w-[150px] sm:flex-1">
               <div className="relative h-4 flex-1 overflow-hidden rounded-full bg-white/10">
                 <div className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-sky-500 to-violet-400 transition-[width]" style={{ width: `${xpK * 100}%` }} />
@@ -550,11 +575,17 @@ export default function EraMarchBoard({ driver, reduceShake, subtitle, onEnd, on
       )}
       {children}
 
+      {me.offer && doctrinePick === null && (
+        <AugmentPanel s={s} side={ME} online={online} onPick={pickAugment} onReroll={rerollAugment} />
+      )}
+
       {doctrinePick !== null && (
         <DoctrineModal era={doctrinePick} cost={evoCost} online={online} onPick={pickDoctrine} onCancel={() => { setDoctrinePick(null); pausedRef.current = paused; }} />
       )}
 
       <style>{`
+        .em-card{animation:emCard .45s cubic-bezier(.2,1.4,.4,1) both}
+        @keyframes emCard{0%{opacity:0;transform:translateY(30px) rotateY(70deg)}100%{opacity:1;transform:none}}
         .em-ready{animation:emPulse 1.1s ease-in-out infinite}
         @keyframes emPulse{0%,100%{box-shadow:0 0 0 0 rgba(253,224,71,.65)}50%{box-shadow:0 0 0 6px rgba(253,224,71,0)}}
         .em-banner{animation:emBanner 2.3s ease-out both}
@@ -587,6 +618,19 @@ function BaseCard({ side, p, label, right }: { side: Side; p: EraMarchState["pla
         <span className="shrink-0 text-white/70">{era.emoji} <span className="hidden sm:inline">{era.name}</span></span>
         <span className="shrink-0" title={p.plan ? PLANS[p.plan].name : undefined}>{p.plan ? PLANS[p.plan].emoji : ""}{p.doctrines.map((d) => DOCTRINES[d].emoji).join("")}</span>
       </div>
+      {(p.augments ?? []).length > 0 && (
+        <div className={`mt-0.5 flex gap-0.5 ${right ? "flex-row-reverse" : ""}`}>
+          {p.augments.map((id) => {
+            const a = AUGMENTS[id];
+            if (!a) return null;
+            return (
+              <span key={id} title={`${a.name} — ${a.desc}`} className="flex h-5 w-5 items-center justify-center rounded-md bg-black/50 text-[11px] sm:h-6 sm:w-6 sm:text-sm" style={{ boxShadow: `inset 0 0 0 1.5px ${AUG_TIER_COLOR[a.tier]}` }}>
+                {a.emoji}
+              </span>
+            );
+          })}
+        </div>
+      )}
       <div className="relative mt-1 h-3 overflow-hidden rounded-full bg-white/10">
         <div className={`absolute inset-y-0 rounded-full transition-[width] duration-200 ${right ? "right-0" : "left-0"}`} style={{ width: `${k * 100}%`, background: k > 0.5 ? TEAM_HEX[side] : k > 0.25 ? "#f59e0b" : "#dc2626" }} />
         <div className="absolute inset-0 flex items-center justify-center text-[9px] font-black tabular-nums">{Math.ceil(p.baseHp)} / {p.baseMax}</div>
@@ -639,6 +683,53 @@ function TurretPanel({ s, side, onSend }: { s: EraMarchState; side: Side; onSend
           </div>
         );
       })}
+    </div>
+  );
+}
+
+const TIER_BG: Record<string, string> = {
+  silver: "linear-gradient(180deg,rgba(203,213,225,.22),rgba(30,41,59,.9))",
+  gold: "linear-gradient(180deg,rgba(251,191,36,.28),rgba(41,30,10,.92))",
+  prism: "linear-gradient(160deg,rgba(244,114,182,.3),rgba(129,140,248,.3) 45%,rgba(52,211,153,.25)),rgba(20,16,40,.92)",
+};
+
+/** Tier is also spelled out on every card, so colour is never the only cue. */
+function AugmentPanel({ s, side, online, onPick, onReroll }: { s: EraMarchState; side: Side; online: boolean; onPick: (i: number) => void; onReroll: () => void }) {
+  const p = s.players[side];
+  const o = p.offer!;
+  const left = Math.max(0, Math.ceil((o.deadline - s.tick) / 20));
+  const color = AUG_TIER_COLOR[o.tier];
+  return (
+    <div className={`absolute inset-x-0 z-10 flex justify-center px-2 ${online ? "top-[124px] sm:top-[136px]" : "inset-y-0 items-center bg-black/55"}`}>
+      <div className="w-full max-w-2xl rounded-2xl border-2 bg-stone-950/90 p-2.5 shadow-2xl backdrop-blur-sm sm:p-4" style={{ borderColor: color }}>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-[11px] font-bold text-white/60">증강 {o.round + 1} / {AUG_ROUNDS.length}{online ? " · 전투는 계속됩니다" : " · 일시정지"}</div>
+            <div className="text-lg font-black sm:text-2xl" style={{ color }}>✨ {AUG_TIER_NAME[o.tier]} 증강 — 하나를 고르세요</div>
+          </div>
+          {online && <div className={`shrink-0 rounded-lg px-2 py-1 font-mono text-lg font-black tabular-nums ${left <= 5 ? "animate-pulse bg-red-600" : "bg-white/10"}`}>⏱ {left}</div>}
+        </div>
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2.5">
+          {o.cards.map((id, i) => {
+            const a = AUGMENTS[id];
+            if (!a) return null;
+            const c = AUG_TIER_COLOR[a.tier];
+            return (
+              <button key={`${o.round}-${id}`} onClick={() => onPick(i)} className="em-card flex min-h-[150px] flex-col items-center gap-1 rounded-xl border-2 p-2 text-center transition hover:-translate-y-1 active:scale-95 sm:min-h-[190px] sm:p-3" style={{ borderColor: c, background: TIER_BG[a.tier], animationDelay: `${i * 0.08}s` }}>
+                <span className="text-[10px] font-black tracking-widest" style={{ color: c }}>{AUG_TIER_NAME[a.tier]}</span>
+                <span className="text-3xl sm:text-5xl">{a.emoji}</span>
+                <span className="text-sm font-black leading-tight sm:text-base">{a.name}</span>
+                <span className="text-[11px] leading-snug text-white/80 sm:text-xs">{a.desc}</span>
+                {!online && <span className="mt-auto text-[10px] text-white/40">[{i + 1}]</span>}
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+          <span className="min-w-0 truncate text-white/50">{online ? `${left}초 안에 안 고르면 첫 번째 카드가 자동 선택돼요` : "고를 때까지 전투가 멈춰 있어요"}</span>
+          <button onClick={onReroll} disabled={p.rerolls <= 0} className="shrink-0 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 font-bold disabled:opacity-35">🎲 다시 뽑기 ({p.rerolls}){online ? "" : " [R]"}</button>
+        </div>
+      </div>
     </div>
   );
 }

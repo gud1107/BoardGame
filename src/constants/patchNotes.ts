@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.145.0",
+    releaseDate: "2026-11-07",
+    title: "✨ 시대의 진격 증강 모드",
+    changes: [
+      { game: "era-march", type: "FEAT", desc: "✨ 증강 — 0:40·2:00·3:40·5:30에 카드 3장 중 1장, 실버·골드·프리즘 28종(흡혈·연쇄 사격·쌍둥이 징집·불사 군단…)" },
+      { game: "era-march", type: "FEAT", desc: "⚖️ 양쪽은 매번 같은 등급을 받고 🎲 다시 뽑기 1회 · 온라인은 전투 중 20초 안에 고르기 · 상대 증강은 기지 카드에 표시" },
+      { game: "era-march", type: "IMPROVE", desc: "🤖 봇도 레벨에 맞게 증강을 골라요 — 봇끼리 800판으로 증강마다 승률 43~55%가 되게 조정" },
+    ],
+  },
+  {
     version: "v1.144.1",
     releaseDate: "2026-11-06",
     title: "🦎 변신 숨바꼭질 밸런스 · 셀프플레이 AI · VRM",

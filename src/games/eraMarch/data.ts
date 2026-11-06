@@ -340,3 +340,124 @@ export const PLAN_COMBOS: Record<PlanId, ItemId[]> = {
   scholar: ["warmup", "sharp", "vault"],
   merchant: ["bonds", "armor"],
 };
+
+/* ── in-battle augments: 3 cards, pick 1, four rounds a match ──────────── */
+
+export type AugTier = "silver" | "gold" | "prism";
+
+/** Every knob an augment can turn. Fractions add up across a side's augments. */
+export interface AugFx {
+  atk?: number;
+  hp?: number;
+  speed?: number;
+  /** Production time cut. */
+  train?: number;
+  income?: number;
+  killGold?: number;
+  xp?: number;
+  /** Ranged / support reach. */
+  range?: number;
+  turret?: number;
+  baseHp?: number;
+  /** Special cooldown cut. */
+  specialCd?: number;
+  /** Evolve gold cut. */
+  evolve?: number;
+  /** Share of dealt damage healed back. */
+  lifesteal?: number;
+  /** Share of a melee hit bounced back at the attacker. */
+  thorns?: number;
+  /** Extra damage to targets under EXECUTE_HP. */
+  execute?: number;
+  /** Extra attack while the unit is under half HP. */
+  berserk?: number;
+  /** Damage cut for the frontmost unit. */
+  frontGuard?: number;
+  /** Death explosion, as a share of the unit's max HP. */
+  deathBlast?: number;
+  /** Chance a spawn brings a free copy. */
+  twin?: number;
+  /** Chance a dying unit gets back up once at REVIVE_HP. */
+  revive?: number;
+  /** Ranged projectile bounces to this many more enemies. */
+  chain?: number;
+  /** Counter bonus instead of COUNTER_MUL. */
+  counter?: number;
+  pop?: number;
+  /** Base repair per second, share of max HP. */
+  regen?: number;
+  /** One-off gold, × the current era's melee unit cost. */
+  goldNow?: number;
+  /** Special ready right away. */
+  specialNow?: boolean;
+}
+
+export interface AugmentDef {
+  id: string;
+  tier: AugTier;
+  name: string;
+  emoji: string;
+  desc: string;
+  fx: AugFx;
+  /** Bot preference (higher = picked first). */
+  score: number;
+}
+
+const aug = (id: string, tier: AugTier, emoji: string, name: string, desc: string, fx: AugFx, score: number): AugmentDef => ({ id, tier, emoji, name, desc, fx, score });
+
+export const AUGMENT_LIST: readonly AugmentDef[] = [
+  // silver: one plain stat each
+  aug("whet", "silver", "🗡️", "날 선 무기", "모든 유닛 공격력 +8%", { atk: 0.08 }, 6),
+  aug("hide", "silver", "🧥", "두꺼운 가죽", "모든 유닛 HP +10%", { hp: 0.1 }, 6),
+  aug("drums", "silver", "🥁", "행군 북소리", "모든 유닛 이동속도 +18%", { speed: 0.18 }, 4),
+  aug("tax", "silver", "🪙", "세금 징수", "골드 수입 +15%", { income: 0.15 }, 6),
+  aug("loot", "silver", "💰", "전리품 사냥", "처치 골드 +12%", { killGold: 0.12 }, 5),
+  aug("tutor", "silver", "📘", "견습 교관", "XP 획득 +20%", { xp: 0.2 }, 5),
+  aug("watch", "silver", "🏹", "망루 보강", "포탑 피해 +30%", { turret: 0.3 }, 4),
+  aug("wall", "silver", "🧱", "성벽 보수", "기지 최대 HP +20%", { baseHp: 0.2 }, 4),
+  aug("chest", "silver", "🎁", "군자금", "지금 바로 골드 (근접병 6명 값)", { goldNow: 6 }, 3),
+  aug("drill2", "silver", "⏱️", "신속 징병", "생산 시간 −18%", { train: 0.18 }, 5),
+  // gold: changes how fights play out
+  aug("vamp", "gold", "🩸", "흡혈 칼날", "준 피해의 20%만큼 회복", { lifesteal: 0.2 }, 8),
+  aug("thorns", "gold", "🌵", "가시 갑옷", "근접 공격을 받으면 25% 반사", { thorns: 0.25 }, 7),
+  aug("execute", "gold", "🪓", "처형인", "HP 30% 미만 적에게 피해 +60%", { execute: 0.6 }, 7),
+  aug("berserk", "gold", "😤", "광전사", "HP 절반 이하 유닛 공격력 +55%", { berserk: 0.55 }, 7),
+  aug("vanguard", "gold", "🛡️", "선봉 방패", "맨 앞 유닛이 받는 피해 −20%", { frontGuard: 0.2 }, 8),
+  aug("chain", "gold", "⛓️", "연쇄 사격", "원거리 탄이 근처 적 1명에게 튕김 (75%)", { chain: 1 }, 7),
+  aug("martyr", "gold", "💥", "순교자", "유닛이 죽으면 최대 HP 25%로 폭발", { deathBlast: 0.25 }, 6),
+  aug("counter", "gold", "🎯", "상성 달인", "상성 피해 ×1.5 → ×2", { counter: 2 }, 7),
+  aug("wareco", "gold", "📈", "전시 경제", "골드 수입 +20%, 처치 골드 +10%", { income: 0.2, killGold: 0.1 }, 8),
+  aug("sprep", "gold", "☄️", "필살 연구", "필살기 쿨타임 −30%, 지금 바로 충전", { specialCd: 0.3, specialNow: true }, 6),
+  // prism: build-defining
+  aug("twins", "prism", "👯", "쌍둥이 징집", "유닛이 나올 때 30% 확률로 1명 더 (무료)", { twin: 0.3 }, 10),
+  aug("undying", "prism", "👼", "불사 군단", "죽은 유닛이 35% 확률로 HP 40%로 한 번 부활", { revive: 0.35 }, 10),
+  aug("golden", "prism", "👑", "황금 시대", "골드 수입 +30%, 진화 골드 −20%", { income: 0.3, evolve: 0.2 }, 10),
+  aug("giant", "prism", "🗻", "거인화", "HP +25%, 공격력 +15%, 이동속도 −10%", { hp: 0.25, atk: 0.15, speed: -0.1 }, 10),
+  aug("haste", "prism", "⏩", "시간 가속", "생산 시간 −40%, 필살기 쿨타임 −40%", { train: 0.4, specialCd: 0.4 }, 9),
+  aug("horde", "prism", "🐜", "인해전술", "인구 +8, 생산 시간 −20%", { pop: 8, train: 0.2 }, 9),
+  aug("citadel", "prism", "🏰", "요새 심장", "기지 HP +25%, 초당 0.3% 수리, 포탑 피해 +35%", { baseHp: 0.25, regen: 0.003, turret: 0.35 }, 8),
+  aug("storm", "prism", "🌩️", "폭풍 연쇄", "원거리 탄이 2명에게 더 튕김 (70%), 사거리 +10%", { chain: 2, range: 0.1 }, 9),
+];
+
+export type AugmentId = string;
+export const AUGMENTS: Record<AugmentId, AugmentDef> = Object.fromEntries(AUGMENT_LIST.map((a) => [a.id, a]));
+
+export const AUG_TIER_NAME: Record<AugTier, string> = { silver: "실버", gold: "골드", prism: "프리즘" };
+export const AUG_TIER_COLOR: Record<AugTier, string> = { silver: "#cbd5e1", gold: "#fbbf24", prism: "#c084fc" };
+
+/** When offers open (seconds into the match) and the tier odds [silver, gold, prism] in %. Both sides get the same tier each round. */
+export const AUG_ROUNDS: readonly { sec: number; odds: readonly [number, number, number] }[] = [
+  { sec: 40, odds: [70, 30, 0] },
+  { sec: 120, odds: [30, 55, 15] },
+  { sec: 220, odds: [10, 55, 35] },
+  { sec: 330, odds: [0, 40, 60] },
+];
+/** Seconds to pick before the first card is taken automatically. */
+export const AUG_PICK_SECONDS = 20;
+export const AUG_REROLLS = 1;
+export const EXECUTE_HP = 0.3;
+export const REVIVE_HP = 0.4;
+export const CHAIN_RANGE = 90;
+/** Bounce damage share: one bounce (연쇄 사격) / two bounces (폭풍 연쇄). */
+export const CHAIN_MUL = [0, 0.75, 0.7] as const;
+export const DEATH_BLAST_RADIUS = 42;

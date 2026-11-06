@@ -13,8 +13,8 @@
  * Its own rng lives in BotMemory so bots never consume `state.rng`.
  */
 
-import { BEATS, DOCTRINES, ERA_DOCTRINES, ERA_TURRETS, ERAS, ITEM_IDS, ITEMS, LANE, PLAN_COMBOS, PLAN_IDS, POP_CAP, SHOP_BUDGET, SLOT_COST, TURRETS, UNITS, type DoctrineId, type ItemId, type Loadout, type Role, type UnitKind } from "./data";
-import { commandError, evolveCost, nextEra, popOf, progress, rosterOf, type Command, type EraMarchState, type Side } from "./engine";
+import { AUGMENTS, BEATS, DOCTRINES, ERA_DOCTRINES, ERA_TURRETS, ERAS, ITEM_IDS, ITEMS, LANE, PLAN_COMBOS, PLAN_IDS, SHOP_BUDGET, SLOT_COST, TURRETS, UNITS, type DoctrineId, type ItemId, type Loadout, type Role, type UnitKind } from "./data";
+import { commandError, evolveCost, nextEra, popCapOf, popOf, progress, rosterOf, type Command, type EraMarchState, type Side } from "./engine";
 
 export type AiLevel = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 
@@ -85,6 +85,10 @@ export function botThink(s: EraMarchState, side: Side, level: AiLevel, mem: BotM
   const p = s.players[side];
   const foe: Side = side === 0 ? 1 : 0;
   const cmds: Command[] = [];
+  if (p.offer) {
+    cmds.push(pickAugment(p, level, mem));
+    return cmds;
+  }
   let gold = p.gold;
   const ok = (c: Command) => {
     if (commandError({ ...s, players: s.players.map((pl, i) => (i === side ? { ...pl, gold } : pl)) as typeof s.players }, side, c)) return false;
@@ -146,7 +150,7 @@ export function botThink(s: EraMarchState, side: Side, level: AiLevel, mem: BotM
   let queued = p.queue.length;
   const pop = popOf(s, side);
   const spendable = () => (underAttack ? gold : gold - reserve);
-  for (let guard = 0; guard < 4 && queued < queueTarget && pop + queued < POP_CAP; guard++) {
+  for (let guard = 0; guard < 4 && queued < queueTarget && pop + queued < popCapOf(p); guard++) {
     const kind = pickUnit(s, side, roster, level, mem, enemies, mine);
     if (!kind || UNITS[kind].cost > spendable()) break;
     if (!ok({ t: "train", kind })) break;
@@ -190,4 +194,23 @@ function pickUnit(s: EraMarchState, side: Side, roster: UnitKind[], level: numbe
   // higher levels lean to the stronger (pricier) option, lower ones grab whatever
   if (level >= 5 && rand(mem) < 0.6) return pool.reduce((a, b) => (UNITS[b].cost > UNITS[a].cost ? b : a));
   return pool[Math.floor(rand(mem) * pool.length)];
+}
+
+/** Economy cards pay off early and are dead weight late; fighting cards the other way round. */
+const ECO = new Set(["tax", "loot", "tutor", "chest", "wareco", "golden"]);
+
+/** Bot augment pick: Lv.1–2 grab any card, higher levels score them (with less noise as the level rises); Lv.6+ rerolls a weak hand. */
+export function pickAugment(p: EraMarchState["players"][0], level: AiLevel, mem: BotMemory): Command {
+  const o = p.offer!;
+  if (level <= 2) return { t: "augment", pick: Math.floor(rand(mem) * o.cards.length) };
+  const base = o.cards.map((id) => (AUGMENTS[id]?.score ?? 0) + (ECO.has(id) ? (o.round <= 1 ? 2 : o.round >= 3 ? -3 : 0) : 0));
+  if (level >= 6 && p.rerolls > 0 && Math.max(...base) < 6) return { t: "reroll" };
+  const noise = (11 - level) * 0.6;
+  let best = 0;
+  let bestV = -Infinity;
+  base.forEach((v, i) => {
+    const sc = v + rand(mem) * noise;
+    if (sc > bestV) [bestV, best] = [sc, i];
+  });
+  return { t: "augment", pick: best };
 }

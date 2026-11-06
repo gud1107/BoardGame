@@ -218,3 +218,55 @@ describe("era march strategy shop", async () => {
     expect(new Set(l.items).size).toBe(l.items.length);
   });
 });
+
+describe("era march augments", async () => {
+  const { AUG_PICK_SECONDS, AUG_ROUNDS, AUGMENTS, TICKS_PER_SEC } = await import("./data");
+  const { aug, popCapOf, startGame: start, stepGame: step } = await import("./engine");
+  const run = (s: ReturnType<typeof start>, ticks: number) => {
+    for (let i = 0; i < ticks; i++) step(s, []);
+  };
+
+  it("both sides get 3 cards of the same tier when a round opens", () => {
+    const s = start(11);
+    run(s, AUG_ROUNDS[0].sec * TICKS_PER_SEC);
+    const [a, b] = s.players.map((p) => p.offer!);
+    expect(a.cards).toHaveLength(3);
+    expect(new Set(a.cards).size).toBe(3);
+    expect(a.tier).toBe(b.tier);
+    for (const id of a.cards) expect(AUGMENTS[id]).toBeDefined();
+  });
+
+  it("a pick applies at once and a dawdler gets the first card at the deadline", () => {
+    const s = start(12);
+    run(s, AUG_ROUNDS[0].sec * TICKS_PER_SEC);
+    const want = s.players[0].offer!.cards[2];
+    const first1 = s.players[1].offer!.cards[0];
+    step(s, [{ side: 0, cmd: { t: "augment", pick: 2 } }]);
+    expect(s.players[0].augments).toEqual([want]);
+    expect(s.players[0].offer).toBeNull();
+    run(s, AUG_PICK_SECONDS * TICKS_PER_SEC);
+    expect(s.players[1].augments).toEqual([first1]);
+  });
+
+  it("reroll swaps the hand once, never repeats owned cards", () => {
+    const s = start(13);
+    run(s, AUG_ROUNDS[0].sec * TICKS_PER_SEC);
+    const before = [...s.players[0].offer!.cards];
+    step(s, [{ side: 0, cmd: { t: "reroll" } }]);
+    const after = s.players[0].offer!.cards;
+    expect(after.some((c) => before.includes(c))).toBe(false);
+    step(s, [{ side: 0, cmd: { t: "reroll" } }]);
+    expect(s.events.some((e) => e.t === "reject" && e.side === 0)).toBe(true);
+    for (let r = 1; r < AUG_ROUNDS.length; r++) run(s, AUG_ROUNDS[r].sec * TICKS_PER_SEC - s.tick);
+    run(s, AUG_PICK_SECONDS * TICKS_PER_SEC);
+    expect(new Set(s.players[0].augments).size).toBe(AUG_ROUNDS.length);
+  });
+
+  it("stat augments feed the modifiers", () => {
+    const s = start(14);
+    s.players[0].augments = ["horde", "tax"];
+    expect(popCapOf(s.players[0])).toBe(23);
+    expect(aug(s.players[0], "income")).toBeCloseTo(0.15);
+    expect(aug(s.players[1], "income")).toBe(0);
+  });
+});
