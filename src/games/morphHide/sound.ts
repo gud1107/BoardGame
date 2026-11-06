@@ -139,7 +139,10 @@ export function play(s: Sfx, vol = 1) {
 export function speak(line: string, vol = 1) {
   if (muted || vol <= 0.05 || typeof window === "undefined" || !window.speechSynthesis) return;
   try {
-    const u = new SpeechSynthesisUtterance(line);
+    // 음성 엔진은 `~`를 "물결표"라고 읽는다 — 장식 기호는 빼고 읽힌다
+    const text = line.replace(/[~～♪]/g, "").trim();
+    if (!text) return;
+    const u = new SpeechSynthesisUtterance(text);
     u.lang = "ko-KR";
     u.volume = Math.min(1, vol);
     u.rate = 1.15;

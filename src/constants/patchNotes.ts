@@ -68,6 +68,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     releaseDate: "2026-11-06",
     title: "🦎 변신 숨바꼭질 밸런스 · 셀프플레이 AI · VRM",
     changes: [
+      { game: "morph-hide", type: "FIX", desc: "🗣️ 감정표현 음성이 “안녕 물결표”처럼 기호까지 읽던 것 — 물결표를 빼고 자연스럽게" },
       { game: "morph-hide", type: "FIX", desc: "🏠 꼼꼼이 집 지키기 — 기지 원(바닥 노란 점선)을 벗어나는 즉시 잡기 가능, 접속 지연으로 뿅망치가 앞사람을 빗맞히던 것도 보정" },
       { game: "morph-hide", type: "IMPROVE", desc: "🔨 술래 손에 무기가 보여요 — 뿅망치는 치켜들어 내려치고, 총은 겨눠 쏘면 반동·총구 불꽃·날아가는 총알, 새총은 돌멩이" },
       { game: "morph-hide", type: "IMPROVE", desc: "🏁 꼼꼼이 모드를 골목 놀이 ‘꼼꼬미’대로 — 숨는 시간 비공개, “찾는다!”, 술래 몰래 기지 전봇대 찍기, 집 지키기 금지, 잡힌 사람이 다음 술래" },

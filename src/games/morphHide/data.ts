@@ -109,10 +109,10 @@ export interface EmoteDef {
 }
 
 export const EMOTES: readonly EmoteDef[] = [
-  { id: "wave", name: "손 흔들기", icon: "👋", anim: "wave", line: "안녕~", dur: 1.8 },
-  { id: "dance", name: "춤", icon: "💃", anim: "dance", line: "룰루랄라~", dur: 2.6 },
+  { id: "wave", name: "손 흔들기", icon: "👋", anim: "wave", line: "안녕", dur: 1.8 },
+  { id: "dance", name: "춤", icon: "💃", anim: "dance", line: "룰루랄라", dur: 2.6 },
   { id: "laugh", name: "웃기", icon: "😂", anim: "laugh", line: "푸하하!", dur: 1.6 },
-  { id: "taunt", name: "약 올리기", icon: "😜", anim: "taunt", line: "나 여기 있지롱~", dur: 2.0 },
+  { id: "taunt", name: "약 올리기", icon: "😜", anim: "taunt", line: "나 여기 있지롱", dur: 2.0 },
 ];
 
 // ---------------------------------------------------------------------------

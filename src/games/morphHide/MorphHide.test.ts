@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DOORS, FILLER_SLOTS, FIXED_THINGS, NAV_EDGES, NAV_NODES, STATIC_SOLIDS, thingSolid } from "./map";
 import { SolidGrid, groundAt, stepBody, type Body, type CollWorld } from "./physics";
-import { DISGUISES, KKOM_CAMP_MS, KKOM_CAMP_R, SEEKER_HP, weaponSchedule, weaponTier } from "./data";
+import { DISGUISES, EMOTES, KKOM_CAMP_MS, KKOM_CAMP_R, SEEKER_HP, weaponSchedule, weaponTier } from "./data";
 import { BASE } from "./map";
 import { evalMany } from "./selfplay";
 import { hiderParamsFor, seekerParamsFor } from "./botParams";
@@ -279,5 +279,9 @@ describe("bot match", () => {
       strike(rt, seeker, BASE.x, BASE.z + 3.2, [BASE.x - 30, BASE.z]);
       expect(hider.alive).toBe(true);
     });
+  });
+
+  it("감정표현 대사엔 음성이 기호 이름으로 읽을 물결표가 없다", () => {
+    for (const e of EMOTES) expect(e.line).not.toMatch(/[~～]/);
   });
 });
