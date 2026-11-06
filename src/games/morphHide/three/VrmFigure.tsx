@@ -58,5 +58,5 @@ export default function VrmFigure({ look, seed, anim, lowDetail }: { look: Perso
     drive.current.moving = moving;
   });
   const path = useMemo(() => ORIGIN, []);
-  return <HouseFigure look={look} seed={seed} color="#94a3b8" path={path} pathKey="fixed" faceTo={null} pose={animToPose(anim)} lowDetail={lowDetail} drive={drive} speed={anim === "run" ? 4.5 : 2.6} />;
+  return <HouseFigure look={look} seed={seed} color="#94a3b8" path={path} pathKey="fixed" faceTo={null} pose={animToPose(anim)} lowDetail={lowDetail} drive={drive} cull speed={anim === "run" ? 4.5 : 2.6} />;
 }

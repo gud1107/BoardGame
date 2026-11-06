@@ -1074,6 +1074,11 @@ function MiniMap({ snap, buf, mySeat, selfRef, size }: { snap: Snap; buf: SnapBu
   useEffect(() => {
     let raf = 0;
     let last = 0;
+    // 큰 지도 한 장을 계속 다시 쓴다 (예전엔 150ms마다 새 캔버스를 만들어 GC가 잦았다)
+    const full = document.createElement("canvas");
+    full.width = size * 2;
+    full.height = Math.round(size * 2 * ((MAP_Z1 - MAP_Z0) / (MAP_X1 - MAP_X0)));
+    const fctx = full.getContext("2d")!;
     const loop = (t: number) => {
       raf = requestAnimationFrame(loop);
       if (t - last < 150) return;
@@ -1082,10 +1087,8 @@ function MiniMap({ snap, buf, mySeat, selfRef, size }: { snap: Snap; buf: SnapBu
       const ctx = cv?.getContext("2d");
       if (!cv || !ctx) return;
       // 내 주변만 잘라 보여 준다
-      const full = document.createElement("canvas");
-      full.width = size * 2;
-      full.height = Math.round(size * 2 * ((MAP_Z1 - MAP_Z0) / (MAP_X1 - MAP_X0)));
-      const fctx = full.getContext("2d")!;
+      fctx.setTransform(1, 0, 0, 1, 0, 0);
+      fctx.clearRect(0, 0, full.width, full.height);
       drawMap(fctx, full.width, full.height, snapRef.current, buf, mySeat, selfRef.current, false);
       const self = selfRef.current;
       const px = ((self.x - MAP_X0) / (MAP_X1 - MAP_X0)) * full.width;

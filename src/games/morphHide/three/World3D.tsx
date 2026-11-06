@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { createContext, memo, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import ScreenSprite from "@/games/shared/three/ScreenSprite";
@@ -13,6 +13,7 @@ import { rayBox, stepBody, type Body, type CollWorld, type Cyl } from "../physic
 import { bodySize, chestThings, dynamicSolids, npcSize, roundGrid, walkSpeed, type Act, type GameEvent, type PosReport } from "../sim";
 import type { Snap, SnapBuffer, SnapPlayer } from "../net";
 import Thing from "./Things";
+import StaticMerge from "./StaticMerge";
 import { Car, Cat, Dog, Humanoid, Vacuum, type WeaponLook } from "./Figures";
 import VrmFigure, { castLook, seekerLook } from "./VrmFigure";
 import { roomCharacterOf, useRoomCharacters } from "@/lib/character/roomCharacters";
@@ -136,11 +137,6 @@ function StaticBoxes() {
     <>
       {groups.map(([color, list]) => (
         <ColorInstances key={color} color={color} list={list} />
-      ))}
-      {STATIC_SOLIDS.filter((s) => s.id?.startsWith("crate")).map((s) => (
-        <group key={s.id} position={[(s.x0 + s.x1) / 2, s.y0, (s.z0 + s.z1) / 2]} scale={[(s.x1 - s.x0) / 0.9, (s.y1 - s.y0) / 0.9, (s.z1 - s.z0) / 0.9]}>
-          <Thing kind="crate" />
-        </group>
       ))}
     </>
   );
@@ -279,6 +275,32 @@ function DoorsAndWindows({ doors, windows }: { doors: boolean[]; windows: boolea
     </>
   );
 }
+
+/**
+ * 움직이지 않는 맵 전부(바닥·상자·소품·판마다 바뀌는 채움 소품)를 재질별로 합쳐 그린다.
+ * 스냅샷(10번/초)마다 Scene이 다시 그려져도 이 부분은 다시 계산하지 않는다.
+ */
+const MapStatic = memo(function MapStatic({ fillers, bakeKey }: { fillers: PlacedThing[]; bakeKey: string }) {
+  return (
+    <>
+      <Ground />
+      <StaticBoxes />
+      <StaticMerge bakeKey={bakeKey}>
+        {STATIC_SOLIDS.filter((s) => s.id?.startsWith("crate")).map((s) => (
+          <group key={s.id} position={[(s.x0 + s.x1) / 2, s.y0, (s.z0 + s.z1) / 2]} scale={[(s.x1 - s.x0) / 0.9, (s.y1 - s.y0) / 0.9, (s.z1 - s.z0) / 0.9]}>
+            <Thing kind="crate" />
+          </group>
+        ))}
+        {FIXED_THINGS.filter((t) => t.kind !== "trafficLight").map((t) => (
+          <ThingAt key={t.id} t={t} pedLight={false} />
+        ))}
+        {fillers.map((t) => (
+          <ThingAt key={t.id} t={t} pedLight={false} />
+        ))}
+      </StaticMerge>
+    </>
+  );
+});
 
 function ThingAt({ t, pedLight }: { t: PlacedThing; pedLight: boolean }) {
   return (
@@ -910,12 +932,8 @@ function Scene(props: World3DProps) {
           controlsRef.current.moveTo = [e.point.x, e.point.y, e.point.z];
         }}
       >
-        <Ground />
-        <StaticBoxes />
-        {FIXED_THINGS.map((t) => (
-          <ThingAt key={t.id} t={t} pedLight={snap.pedLight} />
-        ))}
-        {round.fillers.map((t) => (
+        <MapStatic fillers={round.fillers} bakeKey={`${snap.seed}:${snap.round}`} />
+        {FIXED_THINGS.filter((t) => t.kind === "trafficLight").map((t) => (
           <ThingAt key={t.id} t={t} pedLight={snap.pedLight} />
         ))}
         {chests.map((t) => (

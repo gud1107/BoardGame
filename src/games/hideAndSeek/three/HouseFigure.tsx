@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useRef, type ReactNode, type RefObject } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useEffect, useMemo, useRef, type ReactNode, type RefObject } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import type { VRMHumanBoneName } from "@pixiv/three-vrm";
 import { blinking, type PersonLook } from "@/games/shared/three/SeatedPerson";
@@ -34,6 +34,11 @@ export interface HouseFigureProps {
   size?: number;
   /** 있으면(active) 경로 대신 이 값을 따른다 — 내 캐릭터를 직접 걷게 할 때 */
   drive?: RefObject<Drive>;
+  /**
+   * 넓은 맵용 시야 절약 (변신 숨바꼭질): 화면 밖이면 VRM을 그리지도 움직이지도 않고,
+   * 멀면 외곽선을 끄고 몸짓을 띄엄띄엄 갱신한다. 없으면 예전처럼 항상 그린다.
+   */
+  cull?: boolean;
   children?: ReactNode;
 }
 
@@ -154,13 +159,34 @@ function face(pose: FigurePose): { surprised: number; happy: number; angry: numb
 const fQ = new THREE.Quaternion();
 const fE = new THREE.Euler();
 const tmp = new THREE.Vector3();
+const cullPos = new THREE.Vector3();
+const cullSphere = new THREE.Sphere();
+const cullMat = new THREE.Matrix4();
+/** 한 프레임에 한 번만 만드는 카메라 시야 (모든 인물이 같이 쓴다) */
+const cullFrustum = { at: -1, f: new THREE.Frustum() };
+/** 이보다 멀면 외곽선 끔 · 몸짓 띄엄띄엄 (m) */
+const OUTLINE_FAR = 16;
+const LOD_FAR = 26;
 
 export default function HouseFigure(props: HouseFigureProps) {
-  const { look, seed, color, path, pathKey, delay = 0, faceTo, pose, lowDetail, speed = 2.6, size = 1, drive } = props;
+  const { look, seed, color, path, pathKey, delay = 0, faceTo, pose, lowDetail, speed = 2.6, size = 1, drive, cull = false } = props;
   const { vrm, morphs } = useVrmAvatar(look, seed, { lowDetail });
   const rootRef = useRef<THREE.Group>(null);
   const bodyRef = useRef<THREE.Group>(null);
-  const st = useRef<{ key: string; start: number; leg: number; yaw: number | null; walk: number; springs: { current: number }; cur: Float32Array; want: Float32Array } | null>(null);
+  const st = useRef<{ key: string; start: number; leg: number; yaw: number | null; walk: number; springs: { current: number }; cur: Float32Array; want: Float32Array; shown: boolean; outline: boolean; lodAcc: number } | null>(null);
+  // 화면 밖이면 안 그리므로, 처음 보이는 순간 셰이더를 컴파일하느라 끊기지 않게 도착하자마자 미리 컴파일
+  const gl = useThree((x) => x.gl);
+  const scene = useThree((x) => x.scene);
+  const camera = useThree((x) => x.camera);
+  useEffect(() => {
+    if (!cull || !vrm) return;
+    try {
+      gl.compile(vrm.scene, camera, scene);
+    } catch {
+      /* 컴파일은 최적화일 뿐 — 실패하면 처음 그릴 때 컴파일된다 */
+    }
+  }, [cull, vrm, gl, scene, camera]);
+  const outlines = useRef<{ of: unknown; list: THREE.Material[] }>({ of: null, list: [] });
   const fit = useMemo(() => {
     if (!vrm) return null;
     const head = vrm.humanoid.getNormalizedBoneNode("head");
@@ -168,13 +194,13 @@ export default function HouseFigure(props: HouseFigureProps) {
     return HEAD_HEIGHT / Math.max(0.5, y);
   }, [vrm]);
 
-  useFrame(({ clock }, dtRaw) => {
+  useFrame(({ clock, camera }, dtRaw) => {
     const root = rootRef.current;
     const body = bodyRef.current;
     if (!root || !body || path.length === 0) return;
     const dt = Math.min(dtRaw, 0.05);
     const t = clock.elapsedTime;
-    const s = (st.current ??= { key: "", start: 0, leg: 0, yaw: null, walk: 0, springs: { current: 0 }, cur: new Float32Array(CHANNELS), want: new Float32Array(CHANNELS) });
+    const s = (st.current ??= { key: "", start: 0, leg: 0, yaw: null, walk: 0, springs: { current: 0 }, cur: new Float32Array(CHANNELS), want: new Float32Array(CHANNELS), shown: true, outline: true, lodAcc: 0 });
     if (s.key !== pathKey) {
       // 새 경로: 지금 서 있는 곳에서 가장 가까운 점부터가 아니라 처음부터 (첫 점 = 직전 도착점)
       if (s.key === "") root.position.copy(path[0]);
@@ -241,6 +267,49 @@ export default function HouseFigure(props: HouseFigureProps) {
     body.position.y = s.cur[HOP] - s.cur[CROUCH] * size;
 
     if (!vrm || !fit) return;
+    let tickDt = dt;
+    if (cull) {
+      if (cullFrustum.at !== clock.elapsedTime) {
+        cullFrustum.at = clock.elapsedTime;
+        camera.updateMatrixWorld();
+        cullFrustum.f.setFromProjectionMatrix(cullMat.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+      }
+      root.getWorldPosition(cullPos);
+      const dist = cullPos.distanceTo(camera.position);
+      cullPos.y += 0.9 * size;
+      cullSphere.set(cullPos, 1.6 * size); // 카메라가 이번 프레임에 돌기 전 시야라 여유를 둔다
+      const inView = cullFrustum.f.intersectsSphere(cullSphere);
+      if (inView !== s.shown) {
+        s.shown = inView;
+        body.visible = inView;
+        // 오래 멈췄다 다시 보이면 머리카락 스프링이 순간이동한 몸을 쫓아 출렁이지 않게
+        if (inView) vrm.springBoneManager?.reset();
+      }
+      if (!inView) return;
+      const wantOutline = !lowDetail && dist < OUTLINE_FAR;
+      const ol = outlines.current;
+      const fresh = ol.of !== vrm;
+      if (fresh) {
+        // 모델이 바뀌면 외곽선 재질 목록을 다시 모으고, 새 모델에도 지금 거리 기준을 적용
+        ol.of = vrm;
+        ol.list = [];
+        vrm.scene.traverse((o) => {
+          const mm = (o as THREE.Mesh).material;
+          for (const m of Array.isArray(mm) ? mm : mm ? [mm] : []) if ((m as { isOutline?: boolean }).isOutline && !ol.list.includes(m)) ol.list.push(m);
+        });
+      }
+      if (fresh || wantOutline !== s.outline) {
+        s.outline = wantOutline;
+        for (const m of ol.list) m.visible = wantOutline;
+      }
+      if (dist > LOD_FAR) {
+        // 먼 사람은 뼈·표정을 ~12번/초만
+        s.lodAcc += dt;
+        if (s.lodAcc < 1 / 12) return;
+        tickDt = s.lodAcc;
+        s.lodAcc = 0;
+      } else s.lodAcc = 0;
+    }
     const vrm0 = vrm.meta.metaVersion === "0";
     for (let i = 0; i < BONES.length; i++) {
       const node = vrm.humanoid.getNormalizedBoneNode(BONES[i]);
@@ -256,7 +325,7 @@ export default function HouseFigure(props: HouseFigureProps) {
       em.setValue("angry", f.angry);
       em.setValue("blink", f.shut ? 1 : f.happy > 0.9 || f.surprised > 0.5 ? 0 : blinking(t, seed) ? 1 : 0);
     }
-    tickVrm(vrm, dt, morphs.current, s.springs, lowDetail);
+    tickVrm(vrm, tickDt, morphs.current, s.springs, lowDetail || (cull && tickDt > dt));
   });
 
   return (
