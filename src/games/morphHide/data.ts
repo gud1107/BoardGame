@@ -199,7 +199,21 @@ export const DEFAULT_OPTIONS: GameOptions = { huntSec: 300, rounds: 3, goalMode:
 export const PICK_SEC = 15;
 export const HIDE_SEC = 30;
 export const ROUND_END_SEC = 7;
-/** 꼼꼼이: 술래 시간의 이 비율이 지나면 찜 장소가 열린다 */
+/**
+ * 꼼꼼이(골목 놀이 "꼼꼬미" 규칙) — 술래 기지 전봇대가 곧 찜 장소다.
+ * - 술래는 숫자를 세지 않고 먼 곳을 찍고 오므로 숨는 시간이 매번 다르고(아래 범위) 숨는 쪽엔 안 보인다.
+ * - "찾는다!" 순간 기지 근처에서 우물쭈물하던 숨는 사람은 아웃.
+ * - 술래가 기지 옆에 오래 붙어 있으면(집 지키기) 그동안은 못 잡는다.
+ * - 잡힌 사람이 다음 술래.
+ */
+export const KKOM_HIDE_MIN = 20;
+export const KKOM_HIDE_MAX = 40;
+export const KKOM_CALL_R = 6;
+export const KKOM_CAMP_R = 6;
+export const KKOM_CAMP_MS = 8000;
+/** 술래가 찍고 오는 곳 (분위기용 이름) */
+export const KKOM_ERRANDS = ["공원 분수", "건널목 신호등", "뒷골목 끝 담벼락", "자판기", "공원 정자"] as const;
+/** (예전 꼼꼼이: 술래 시간의 이 비율이 지나면 찜 장소가 열렸다 — 지금은 안 씀) */
 export const GOAL_OPEN_AT = 0.5;
 export const GOAL_RADIUS = 1.3;
 

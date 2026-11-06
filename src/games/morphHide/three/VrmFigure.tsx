@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, type RefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import HouseFigure, { type Drive, type FigurePose } from "../../hideAndSeek/three/HouseFigure";
+import HouseFigure, { type Drive, type FigurePose, type Strike } from "../../hideAndSeek/three/HouseFigure";
+import HeldWeapon from "./HeldWeapon";
+import type { WeaponLook } from "./Figures";
 import { CHARACTER_PRESETS, resolveLook, type PersonLook } from "@/lib/character/avatar";
 
 /**
@@ -16,6 +18,18 @@ import { CHARACTER_PRESETS, resolveLook, type PersonLook } from "@/lib/character
  */
 
 const ORIGIN = [new THREE.Vector3()];
+
+const GUNS = new Set<WeaponLook>(["sling", "pistol", "shotgun", "sniper"]);
+
+/** 무기를 든 술래: 총은 겨누거나 앞쪽 아래로, 뿅망치는 앞으로 들고 */
+export function heldPose(anim: string, held: WeaponLook | undefined): FigurePose {
+  if (held && GUNS.has(held)) {
+    if (anim === "aim" || anim === "inspect") return "aimGun";
+    if (anim === "idle") return "holdGun";
+  }
+  if (held === "hammer" && (anim === "idle" || anim === "inspect" || anim === "aim")) return "holdMelee";
+  return animToPose(anim);
+}
 
 export function animToPose(anim: string): FigurePose {
   switch (anim) {
@@ -51,12 +65,12 @@ export function seekerLook(seat: number, profile: unknown): PersonLook {
   return resolveLook(seat, ["none"], profile);
 }
 
-export default function VrmFigure({ look, seed, anim, lowDetail }: { look: PersonLook; seed: number; anim: string; lowDetail: boolean }) {
+export default function VrmFigure({ look, seed, anim, lowDetail, held, strike }: { look: PersonLook; seed: number; anim: string; lowDetail: boolean; held?: WeaponLook; strike?: RefObject<Strike> }) {
   const drive = useRef<Drive>({ active: true, x: 0, y: 0, z: 0, yaw: 0, moving: false });
   const moving = anim === "walk" || anim === "run" || anim === "jump";
   useFrame(() => {
     drive.current.moving = moving;
   });
   const path = useMemo(() => ORIGIN, []);
-  return <HouseFigure look={look} seed={seed} color="#94a3b8" path={path} pathKey="fixed" faceTo={null} pose={animToPose(anim)} lowDetail={lowDetail} drive={drive} cull speed={anim === "run" ? 4.5 : 2.6} />;
+  return <HouseFigure look={look} seed={seed} color="#94a3b8" path={path} pathKey="fixed" faceTo={null} pose={heldPose(anim, held)} lowDetail={lowDetail} drive={drive} cull strike={strike} hand={held ? <HeldWeapon kind={held} strike={strike} /> : undefined} speed={anim === "run" ? 4.5 : 2.6} />;
 }

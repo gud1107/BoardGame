@@ -541,15 +541,8 @@ export const CHEST_SLOTS: readonly Slot[] = [
   { x: 11.0, z: 39.2, f: 0 },
 ];
 
-/** 꼼꼼이(찜) 장소 후보 */
-export const GOAL_SLOTS: readonly (Slot & { name: string })[] = [
-  { x: -4.6, z: -3.4, f: 2, name: "다락방" },
-  { x: 10.4, z: -6.6, f: 0, name: "뒷골목 끝" },
-  { x: -14.4, z: 38.2, f: 0, name: "공원 구석" },
-  { x: 9.6, z: 38.2, f: 0, name: "공원 정자" },
-  { x: -13.4, z: 12.4, f: 0, name: "마당 쪽문" },
-  { x: 3.8, z: -6.6, f: 0, name: "부엌 뒤 골목" },
-];
+/** 꼼꼼이 찜 장소 = 술래 기지 전봇대 (꼬미 놀이처럼 술래가 눈 가리던 곳을 몰래 찍는다) */
+export const GOAL_SLOTS: readonly (Slot & { name: string })[] = [{ x: BASE.x, z: BASE.z, f: 0, name: "술래 기지 전봇대" }];
 
 export function slotY(s: Slot): number {
   return FLOOR[s.f];

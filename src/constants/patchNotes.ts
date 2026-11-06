@@ -68,6 +68,8 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     releaseDate: "2026-11-06",
     title: "🦎 변신 숨바꼭질 밸런스 · 셀프플레이 AI · VRM",
     changes: [
+      { game: "morph-hide", type: "IMPROVE", desc: "🔨 술래 손에 무기가 보여요 — 뿅망치는 치켜들어 내려치고, 총은 겨눠 쏘면 반동·총구 불꽃·날아가는 총알, 새총은 돌멩이" },
+      { game: "morph-hide", type: "IMPROVE", desc: "🏁 꼼꼼이 모드를 골목 놀이 ‘꼼꼬미’대로 — 숨는 시간 비공개, “찾는다!”, 술래 몰래 기지 전봇대 찍기, 집 지키기 금지, 잡힌 사람이 다음 술래" },
       { game: "morph-hide", type: "IMPROVE", desc: "⚡ 렉 줄이기 — 화면 밖 사람은 안 그리고 소품을 재질별로 합쳐 그리기 횟수 약 60% 감소(휴대폰 프레임 약 1.6배)" },
       { game: "morph-hide", type: "IMPROVE", desc: "↩ 뒤돌기(R) · 👁 둘러보기(Alt 꾹) — 몸·자세는 그대로 두고 시점만 돌려 주변 살피기, 떼면 원래 방향으로" },
       { game: "morph-hide", type: "IMPROVE", desc: "🧑‍🎤 술래는 내 프로필 VRM 캐릭터로, 행인 NPC와 ‘행인’ 변신은 출연진 VRM 중 랜덤 — 누가 진짜 행인인지 모르게" },

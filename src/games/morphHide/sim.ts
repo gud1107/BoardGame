@@ -31,9 +31,14 @@ import {
   DISGUISES,
   EMOTES,
   FILLER_KINDS,
-  GOAL_OPEN_AT,
   GOAL_RADIUS,
   HIDE_SEC,
+  KKOM_CALL_R,
+  KKOM_CAMP_MS,
+  KKOM_CAMP_R,
+  KKOM_ERRANDS,
+  KKOM_HIDE_MAX,
+  KKOM_HIDE_MIN,
   PICK_SEC,
   REROLLS,
   ROUND_END_SEC,
@@ -113,6 +118,8 @@ export interface PlayerState {
   caughtAt: number | null;
   /** 최근 헛손질 시각들 (연속 가중) */
   wrongAt: number[];
+  /** 꼼꼼이: 기지 옆에 붙어 있던 시간 (ms, 집 지키기) */
+  campMs: number;
   stats: PlayerStats;
 }
 
@@ -155,6 +162,7 @@ export type GameEvent =
   | { id: number; at: number; type: "decoy"; seat: number }
   | { id: number; at: number; type: "tier"; tier: number; weapon: string }
   | { id: number; at: number; type: "goalOpen"; slot: number }
+  | { id: number; at: number; type: "kkomCall"; out: number[] }
   | { id: number; at: number; type: "escape"; seat: number }
   | { id: number; at: number; type: "phase"; phase: Phase; round: number }
   | { id: number; at: number; type: "roundEnd"; winner: "seekers" | "hiders" };
@@ -185,7 +193,7 @@ export interface MatchState {
   doors: boolean[];
   windows: boolean[];
   chests: { slot: number; opened: boolean }[];
-  goal: { slot: number; open: boolean } | null;
+  goal: { slot: number; open: boolean; errand?: number } | null;
   /** 보행 신호 (true = 사람 건너는 신호) */
   pedLight: boolean;
   events: GameEvent[];
@@ -379,6 +387,7 @@ export function createMatch(seed: number, seats: SeatInfo[], options: Partial<Ga
     roundCatches: 0,
     caughtAt: null,
     wrongAt: [],
+    campMs: 0,
     stats: freshStats(),
   }));
   const state: MatchState = {
@@ -524,6 +533,14 @@ export function startRound(rt: HostRuntime) {
   rt.nodeDensity = NAV_NODES.map((n) => rt.thingObs.filter((o) => Math.abs(o.y - n.y) < 1 && Math.hypot(o.x - n.x, o.z - n.z) < 7).length / 4);
   const k = seekerCount(s.seatCount);
   s.seekers = Array.from({ length: k }, (_, i) => ((s.round - 1) * k + i) % s.seatCount);
+  // 꼼꼼이: 잡힌 사람이 다음 술래 (먼저 잡힌 순). 아무도 안 잡혔으면 술래가 한 번 더, 모자라면 순서대로 채운다
+  const last = s.history[s.history.length - 1];
+  if (s.options.goalMode && last) {
+    const caught = s.players.filter((p) => last.hiders.some((h) => h.seat === p.seat && h.result === "caught")).sort((a, b) => (a.caughtAt ?? 0) - (b.caughtAt ?? 0));
+    const next: number[] = caught.map((p) => p.seat).slice(0, k);
+    for (const q of [...last.seekers, ...s.seekers]) if (next.length < k && !next.includes(q)) next.push(q);
+    s.seekers = next;
+  }
   s.decoys = [];
   rt.decoyAi.clear();
   rt.botAi.clear();
@@ -533,7 +550,7 @@ export function startRound(rt: HostRuntime) {
   // 보물 상자 3개, 찜 장소 1곳
   const chestSlots = CHEST_SLOTS.map((_, i) => i).sort(() => rt.rng() - 0.5);
   s.chests = chestSlots.slice(0, 3).map((slot) => ({ slot, opened: false }));
-  s.goal = s.options.goalMode ? { slot: Math.floor(rt.rng() * GOAL_SLOTS.length), open: false } : null;
+  s.goal = s.options.goalMode ? { slot: 0, open: true, errand: Math.floor(rt.rng() * KKOM_ERRANDS.length) } : null;
   let hi = 0;
   const hiders = s.players.filter((p) => !s.seekers.includes(p.seat)).length;
   for (const p of s.players) {
@@ -555,6 +572,7 @@ export function startRound(rt: HostRuntime) {
     p.roundCatches = 0;
     p.caughtAt = null;
     p.wrongAt = [];
+    p.campMs = 0;
     p.vy = 0;
     p.grounded = true;
     if (seeker) {
@@ -816,6 +834,8 @@ function attack(rt: HostRuntime, p: PlayerState, o: [number, number, number], d:
   if (s.phase !== "hunt" || p.role !== "seeker" || !p.alive || s.t < p.nextAtkAt) return;
   const w = currentWeapon(s);
   if (w.kind === "ray" && p.ammo <= 0) return;
+  // 꼼꼼이 집 지키기: 기지 옆에 오래 붙어 있던 술래는 휘둘러도 못 잡는다
+  const camping = !!s.goal && p.campMs >= KKOM_CAMP_MS;
   if (![...o, ...d].every(Number.isFinite)) return;
   const len = Math.hypot(d[0], d[1], d[2]);
   if (len < 1e-6) return;
@@ -895,6 +915,10 @@ function attack(rt: HostRuntime, p: PlayerState, o: [number, number, number], d:
     }
   }
 
+  if (camping) {
+    caught = null;
+    wrongWhat = null;
+  }
   if (caught) {
     const q = s.players[caught.id];
     if (q.alive) {
@@ -955,7 +979,8 @@ export function hostStep(rt: HostRuntime, dtMs: number) {
       if (s.t >= s.phaseEnd || allPicked) {
         // 시간 안에 안 고르면 랜덤
         for (const p of s.players) if (p.role === "hider" && !p.disguise) p.disguise = pick(rt.rng, p.offer);
-        setPhase(rt, "hide", HIDE_SEC);
+        // 꼼꼼이: 술래가 숫자를 세지 않고 먼 곳을 찍고 온다 — 언제 돌아올지 모른다
+        setPhase(rt, "hide", s.options.goalMode ? KKOM_HIDE_MIN + Math.floor(rt.rng() * (KKOM_HIDE_MAX - KKOM_HIDE_MIN + 1)) : HIDE_SEC);
       }
       break;
     }
@@ -978,6 +1003,20 @@ export function hostStep(rt: HostRuntime, dtMs: number) {
         }
         s.tier = 0;
         emit(s, { type: "tier", tier: 0, weapon: w.id });
+        if (s.goal) {
+          // "찾는다!" — 아직 기지 근처에서 우물쭈물하던 사람은 아웃
+          const out: number[] = [];
+          for (const p of s.players) {
+            if (p.role !== "hider" || !visibleOnMap(p, s.phase)) continue;
+            if (Math.hypot(p.x - BASE.x, p.z - BASE.z) <= KKOM_CALL_R && p.y < 1.5) {
+              p.alive = false;
+              p.caughtAt = s.t;
+              p.stats.caught += 1;
+              out.push(p.seat);
+            }
+          }
+          emit(s, { type: "kkomCall", out });
+        }
       }
       break;
     }
@@ -994,10 +1033,13 @@ export function hostStep(rt: HostRuntime, dtMs: number) {
         s.tier = tier;
         emit(s, { type: "tier", tier, weapon: sched[tier] });
       }
-      // 꼼꼼이: 찜 장소 열림 + 도착 판정
-      if (s.goal && !s.goal.open && elapsed >= s.options.huntSec * GOAL_OPEN_AT) {
-        s.goal.open = true;
-        emit(s, { type: "goalOpen", slot: s.goal.slot });
+      // 꼼꼼이: 기지 전봇대 찍기 + 집 지키기
+      if (s.goal) {
+        for (const p of s.players) {
+          if (p.role !== "seeker" || !p.alive) continue;
+          const near = Math.hypot(p.x - BASE.x, p.z - BASE.z) <= KKOM_CAMP_R && p.y < 1.5;
+          p.campMs = near ? Math.min(KKOM_CAMP_MS + 4000, p.campMs + dtMs) : Math.max(0, p.campMs - dtMs * 2);
+        }
       }
       if (s.goal?.open) {
         const g = GOAL_SLOTS[s.goal.slot];
@@ -1014,7 +1056,16 @@ export function hostStep(rt: HostRuntime, dtMs: number) {
       }
       const hidersLeft = s.players.filter((p) => p.role === "hider" && p.alive && !p.escaped).length;
       const seekersLeft = s.players.filter((p) => p.role === "seeker" && p.alive).length;
-      if (hidersLeft === 0 || seekersLeft === 0 || s.t >= s.phaseEnd) endRound(rt, hidersLeft === 0 && !s.players.some((p) => p.escaped) ? "seekers" : "hiders");
+      if (hidersLeft === 0 || seekersLeft === 0 || s.t >= s.phaseEnd) {
+        let winner: "seekers" | "hiders" = hidersLeft === 0 && !s.players.some((p) => p.escaped) ? "seekers" : "hiders";
+        if (s.goal) {
+          // 꼼꼼이: 숨는 쪽 절반 이상이 전봇대를 찍어야 숨는 쪽 승 (숨어서 버티기만 하면 안 된다)
+          const hiders = s.players.filter((p) => p.role === "hider");
+          const esc = hiders.filter((p) => p.escaped).length;
+          winner = seekersLeft === 0 || esc * 2 >= hiders.length ? "hiders" : "seekers";
+        }
+        endRound(rt, winner);
+      }
       break;
     }
     case "roundEnd": {
@@ -1040,7 +1091,8 @@ function endRound(rt: HostRuntime, winner: "seekers" | "hiders") {
       if (p.escaped) result = "escaped";
       else if (p.alive) {
         result = "survived";
-        p.score += 3;
+        // 꼼꼼이에선 끝까지 숨기만 한 건 반쪽 성공
+        p.score += s.goal ? 1 : 3;
         p.stats.survives += 1;
       } else {
         // 오래 버틸수록 위로 점수 (1분마다 1점)
@@ -1491,7 +1543,9 @@ function botHider(rt: HostRuntime, p: PlayerState, ai: WalkerAi, dt: number, w: 
     ai.decoyAt = hp.decoy < 0.33 ? -1 : hp.decoy < 0.66 ? 2 : 0.5;
   }
   // 꼼꼼이
-  if (s.goal?.open && ai.plan !== "goal" && rt.rng() < dt * hp.goalRush) {
+  // 술래가 전봇대 가까이 있으면 안 뛴다 (보는 앞에서 뛰면 잡힌다)
+  const guard = s.goal ? s.players.reduce((m, q) => (q.role === "seeker" && q.alive ? Math.min(m, Math.hypot(q.x - BASE.x, q.z - BASE.z)) : m), Infinity) : 0;
+  if (s.goal?.open && ai.plan !== "goal" && guard > 13 && rt.rng() < dt * hp.goalRush) {
     const g = GOAL_SLOTS[s.goal.slot];
     ai.plan = "goal";
     routeTo(ai, b, [g.x, slotY(g), g.z]);

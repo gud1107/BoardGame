@@ -600,7 +600,7 @@ export default function MorphHideGame({ onComplete }: PlayableGameProps) {
               ]}
               onChange={(v) => setOpt("goalMode", v)}
             />
-            {options.goalMode && <p className="break-keep text-xs text-amber-200/80 light:text-amber-700">술래 시간이 절반 지나면 랜덤 장소에 🏁 찜 장소가 열려요. 숨는 사람이 그곳에 닿으면 탈출 성공(+4점)!</p>}
+            {options.goalMode && <p className="break-keep text-xs text-amber-200/80 light:text-amber-700">골목 놀이 &lsquo;꼼꼬미&rsquo; 규칙 — 술래가 먼 곳을 찍고 오는 동안(20~40초, 비공개) 숨고, 술래 몰래 기지 전봇대를 찍으면 꼼꼬미 성공(+4점). 절반 이상 찍어야 숨는 쪽 승, 잡힌 사람이 다음 술래!</p>}
           </>
         )}
         {formError && <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300">{formError}</p>}

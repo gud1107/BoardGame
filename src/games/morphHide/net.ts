@@ -1,4 +1,4 @@
-import { SPAM_WINDOW_MS, type GameOptions } from "./data";
+import { KKOM_CAMP_MS, SPAM_WINDOW_MS, type GameOptions } from "./data";
 import type { DecoyState, GameEvent, MatchState, NpcKind, Phase, PlayerStats, Role, RoundSummary } from "./sim";
 
 /**
@@ -31,6 +31,8 @@ export interface SnapPlayer {
   catches: number;
   /** 최근 헛손질 횟수 (다음 벌점 가중) */
   wr: number;
+  /** 꼼꼼이 집 지키기 게이지 0~1 (1이면 못 잡음) */
+  camp?: number;
   stats?: PlayerStats;
 }
 
@@ -63,7 +65,7 @@ export interface Snap {
   doors: boolean[];
   windows: boolean[];
   chests: { slot: number; opened: boolean }[];
-  goal: { slot: number; open: boolean } | null;
+  goal: { slot: number; open: boolean; errand?: number } | null;
   pedLight: boolean;
   events: GameEvent[];
   history: RoundSummary[];
@@ -109,6 +111,7 @@ export function makeSnap(s: MatchState, seq: number): Snap {
       score: p.score,
       catches: p.roundCatches,
       wr: p.wrongAt.filter((t) => t > s.t - SPAM_WINDOW_MS).length,
+      ...(p.role === "seeker" && s.goal ? { camp: Math.min(1, Math.round((p.campMs / KKOM_CAMP_MS) * 100) / 100) } : {}),
       ...(over ? { stats: p.stats } : {}),
     })),
     npcs: s.npcs.map((n) => ({ id: n.id, kind: n.kind, x: r2(n.x), y: r2(n.y), z: r2(n.z), yaw: r2(n.yaw), anim: n.anim, look: n.look })),

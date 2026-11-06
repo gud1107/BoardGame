@@ -16,6 +16,8 @@ import Thing from "./Things";
 import StaticMerge from "./StaticMerge";
 import { Car, Cat, Dog, Humanoid, Vacuum, type WeaponLook } from "./Figures";
 import VrmFigure, { castLook, seekerLook } from "./VrmFigure";
+import { strikeKindOf } from "./HeldWeapon";
+import type { Strike } from "../../hideAndSeek/three/HouseFigure";
 import { roomCharacterOf, useRoomCharacters } from "@/lib/character/roomCharacters";
 import { WEAPONS } from "../data";
 
@@ -26,12 +28,19 @@ function castKeyFor(seed: number, round: number, seat: number): number {
   return (seed % 100003) * 31 + round * 7919 + seat * 13 + 1;
 }
 
-/** 술래 = 각자 프로필 VRM */
-function SeekerVrm({ seat, name, anim }: { seat: number; name: string; anim: string }) {
+/** 술래 = 각자 프로필 VRM, 손에 지금 무기 */
+function SeekerVrm({ seat, name, anim, held, strike }: { seat: number; name: string; anim: string; held?: WeaponLook; strike?: RefObject<Strike> }) {
   const chars = useRoomCharacters((st) => st.byName);
   const { low } = useContext(FigCtx);
   const look = useMemo(() => seekerLook(seat, roomCharacterOf(chars, name)), [seat, name, chars]);
-  return <VrmFigure look={look} seed={seat * 5 + 3} anim={anim} lowDetail={low} />;
+  return <VrmFigure look={look} seed={seat * 5 + 3} anim={anim} lowDetail={low} held={held} strike={strike} />;
+}
+
+/** 술래 손에 보일 무기: 숨는 시간엔 빈손(눈 가림), 사냥 땐 지금 단계 무기 */
+function heldOf(snap: Snap): WeaponLook {
+  if (snap.phase !== "hunt") return null;
+  const id = weaponSchedule(snap.options.huntSec)[snap.tier];
+  return id === "hand" ? null : (id as WeaponLook);
 }
 
 /** 행인 = 출연진 중 랜덤 VRM */
@@ -391,8 +400,13 @@ function Bubble({ text, y }: { text: string; y: number }) {
   return <ScreenSprite position={[0, y, 0]} scale={[1.0, 0.25]} map={map} renderOrder={14} />;
 }
 
-function RemotePlayer({ buf, p, snap, name, showName }: { buf: SnapBuffer; p: SnapPlayer; snap: Snap; name: string; showName: boolean }) {
+function RemotePlayer({ buf, p, snap, name, showName, strikeAt }: { buf: SnapBuffer; p: SnapPlayer; snap: Snap; name: string; showName: boolean; strikeAt?: number }) {
   const ref = useRef<THREE.Group>(null);
+  const strike = useRef<Strike>({ at: -1e9, kind: "none" });
+  const wid = snap.phase === "hunt" ? weaponSchedule(snap.options.huntSec)[snap.tier] : null;
+  useEffect(() => {
+    if (strikeAt !== undefined) strike.current = { at: strikeAt, kind: strikeKindOf(wid) };
+  }, [strikeAt, wid]);
   useFrame(() => {
     const pose = buf.player(p.s, performance.now());
     if (!pose || !ref.current) return;
@@ -409,7 +423,7 @@ function RemotePlayer({ buf, p, snap, name, showName }: { buf: SnapBuffer; p: Sn
   return (
     <group ref={ref}>
       <BlobShadow radius={p.role === "seeker" ? 0.42 : Math.max(0.3, (def?.r ?? 0.3) * 1.4)} opacity={0.7} />
-      {p.role === "seeker" ? <SeekerVrm seat={p.s} name={name} anim={anim} /> : <FormModel dg={p.dg} anim={anim} pose={p.pose} look={(p.s * 3 + 1) % 8} castKey={castKeyFor(fig.seed, fig.round, p.s)} />}
+      {p.role === "seeker" ? <SeekerVrm seat={p.s} name={name} anim={anim} held={heldOf(snap)} strike={strike} /> : <FormModel dg={p.dg} anim={anim} pose={p.pose} look={(p.s * 3 + 1) % 8} castKey={castKeyFor(fig.seed, fig.round, p.s)} />}
       {showName && <Tag text={p.role === "seeker" ? `👁️ ${name}${wpn ? ` ${wpn.icon}` : ""}` : name} color={p.role === "seeker" ? "#38bdf8" : "#a7f3d0"} y={h + 0.45} />}
       {em && <Bubble text={`${em.icon} ${em.line}`} y={h + (showName ? 0.85 : 0.5)} />}
       {p.role === "seeker" && snap.phase === "hide" && <Bubble text="🙈 눈 가리는 중…" y={h + 0.85} />}
@@ -457,25 +471,98 @@ function DecoyView({ buf, id, dg, anim, pose, look, owner }: { buf: SnapBuffer; 
 // ---------------------------------------------------------------------------
 // 효과
 
-function Tracer({ from, to, at, color }: { from: [number, number, number]; to: [number, number, number]; at: number; color: string }) {
-  const ref = useRef<THREE.Mesh>(null);
-  const mat = useRef<THREE.MeshBasicMaterial>(null);
-  const { mid, len, quat } = useMemo(() => {
+/**
+ * 총알·새총알: 총구에서 날아가는 탄(밝은 머리 + 꼬리 선) → 맞은 곳에 작은 불꽃 고리.
+ * 새총은 느린 돌멩이만 (선 없음).
+ */
+function Tracer({ from, to, at, color, stone }: { from: [number, number, number]; to: [number, number, number]; at: number; color: string; stone?: boolean }) {
+  const line = useRef<THREE.Mesh>(null);
+  const lineMat = useRef<THREE.MeshBasicMaterial>(null);
+  const head = useRef<THREE.Mesh>(null);
+  const hit = useRef<THREE.Mesh>(null);
+  const hitMat = useRef<THREE.MeshBasicMaterial>(null);
+  const { a, b, mid, len, quat } = useMemo(() => {
     const a = new THREE.Vector3(...from);
     const b = new THREE.Vector3(...to);
     const dir = b.clone().sub(a);
-    return { mid: a.clone().add(b).multiplyScalar(0.5), len: Math.max(0.01, dir.length()), quat: new THREE.Quaternion().setFromUnitVectors(UP, dir.normalize()) };
+    return { a, b, mid: a.clone().add(b).multiplyScalar(0.5), len: Math.max(0.01, dir.length()), quat: new THREE.Quaternion().setFromUnitVectors(UP, dir.normalize()) };
   }, [from, to]);
+  const flight = stone ? Math.min(0.35, len / 30) : Math.min(0.14, len / 120);
   useFrame(() => {
     const e = (performance.now() - at) / 1000;
-    if (ref.current) ref.current.visible = e < 0.25;
-    if (mat.current) mat.current.opacity = Math.max(0, 0.9 - e * 3.6);
+    const k = Math.min(1, e / flight);
+    if (head.current) {
+      head.current.visible = e < flight;
+      head.current.position.lerpVectors(a, b, k);
+      if (stone) head.current.position.y += Math.sin(k * Math.PI) * Math.min(0.6, len * 0.04);
+    }
+    if (line.current) line.current.visible = !stone && e < 0.35;
+    if (lineMat.current) lineMat.current.opacity = Math.max(0, 0.75 - e * 2.2);
+    const he = e - flight;
+    if (hit.current) {
+      hit.current.visible = he > 0 && he < 0.3;
+      hit.current.scale.setScalar(0.2 + he * 2.2);
+    }
+    if (hitMat.current) hitMat.current.opacity = Math.max(0, 1 - he / 0.3);
   });
   return (
-    <mesh ref={ref} position={mid} quaternion={quat}>
-      <cylinderGeometry args={[0.02, 0.02, len, 5]} />
-      <meshBasicMaterial ref={mat} color={color} transparent toneMapped={false} />
-    </mesh>
+    <>
+      {!stone && (
+        <mesh ref={line} position={mid} quaternion={quat}>
+          <cylinderGeometry args={[0.028, 0.028, len, 6]} />
+          <meshBasicMaterial ref={lineMat} color={color} transparent depthWrite={false} toneMapped={false} />
+        </mesh>
+      )}
+      <mesh ref={head} position={from}>
+        <sphereGeometry args={[stone ? 0.07 : 0.055, 8, 6]} />
+        <meshBasicMaterial color={stone ? "#a8a29e" : "#fffbe6"} toneMapped={stone ? true : false} />
+      </mesh>
+      <mesh ref={hit} position={to} visible={false}>
+        <sphereGeometry args={[0.3, 10, 8]} />
+        <meshBasicMaterial ref={hitMat} color={color} transparent depthWrite={false} toneMapped={false} />
+      </mesh>
+    </>
+  );
+}
+
+/** 휘두르기 자국: 술래 앞에 하얀 반달이 쓱 — 뿅망치는 위→아래, 맨손은 옆으로 */
+function Swoosh({ buf, seat, at, weapon }: { buf: SnapBuffer; seat: number; at: number; weapon: string }) {
+  const g = useRef<THREE.Group>(null);
+  const mat = useRef<THREE.MeshBasicMaterial>(null);
+  const label = useRef<THREE.Group>(null);
+  const hammer = weapon === "hammer";
+  const map = useMemo(() => (hammer ? labelTexture("뿅!", "#f472b6", { bg: "rgba(60,0,30,0.85)", fg: "#fce7f3" }) : null), [hammer]);
+  const placed = useRef(false);
+  useFrame(() => {
+    const e = (performance.now() - at) / 1000;
+    const grp = g.current;
+    if (!grp) return;
+    if (!placed.current) {
+      const p = buf.player(seat, performance.now());
+      if (!p) return;
+      grp.position.set(p.x, p.y, p.z);
+      grp.rotation.y = p.yaw;
+      placed.current = true;
+    }
+    grp.visible = e < 0.5;
+    if (mat.current) mat.current.opacity = Math.max(0, (e < 0.12 ? e / 0.12 : 1 - (e - 0.12) / 0.3) * 0.75);
+    if (label.current) {
+      label.current.visible = hammer && e > 0.14 && e < 0.7;
+      label.current.position.y = 1.0 + Math.min(e, 0.5) * 0.6;
+    }
+  });
+  return (
+    <group ref={g} visible={false}>
+      <mesh position={[0, hammer ? 1.25 : 1.3, 0.35]} rotation={hammer ? [0, -Math.PI / 2, 0] : [Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.55, 0.8, 20, 1, hammer ? -Math.PI * 0.15 : Math.PI * 0.15, Math.PI * 0.7]} />
+        <meshBasicMaterial ref={mat} color={hammer ? "#fbcfe8" : "#e2e8f0"} transparent side={THREE.DoubleSide} depthWrite={false} toneMapped={false} />
+      </mesh>
+      {map && (
+        <group ref={label} position={[0, 1, 1.1]} visible={false}>
+          <ScreenSprite position={[0, 0, 0]} scale={[0.6, 0.3]} map={map} renderOrder={16} />
+        </group>
+      )}
+    </group>
   );
 }
 
@@ -509,11 +596,12 @@ function Burst({ pos, at, color, text }: { pos: [number, number, number]; at: nu
   );
 }
 
-function Effects({ fx, snap }: { fx: FxItem[]; snap: Snap }) {
+function Effects({ fx, snap, buf }: { fx: FxItem[]; snap: Snap; buf: SnapBuffer }) {
   return (
     <>
       {fx.map(({ ev, at }) => {
-        if (ev.type === "shot") return <Tracer key={ev.id} from={ev.from} to={ev.to} at={at} color={ev.weapon === "sniper" ? "#f472b6" : "#fde68a"} />;
+        if (ev.type === "shot") return <Tracer key={ev.id} from={ev.from} to={ev.to} at={at} color={ev.weapon === "sniper" ? "#f472b6" : ev.weapon === "shotgun" ? "#fdba74" : "#fde68a"} stone={ev.weapon === "sling"} />;
+        if (ev.type === "swing") return <Swoosh key={ev.id} buf={buf} seat={ev.by} at={at} weapon={ev.weapon} />;
         if (ev.type === "catch") return <Burst key={ev.id} pos={[ev.x, ev.y, ev.z]} at={at} color="#f87171" text="💥 잡혔다!" />;
         if (ev.type === "wrong") return <Burst key={ev.id} pos={[ev.x, ev.y, ev.z]} at={at} color="#94a3b8" text={`✖ ${ev.what}였어! −체력`} />;
         if (ev.type === "escape") {
@@ -548,6 +636,7 @@ function LocalPlayer(props: World3DProps & { gridRef: RefObject<ReturnType<typeo
   const nearTag = useRef("");
   const animState = useRef({ value: "idle", pose: 0 });
   const lastSwing = useRef(0);
+  const strike = useRef<Strike>({ at: -1e9, kind: "none" });
   const faceRef = useRef(0);
 
   useFrame(({ camera }, dtRaw) => {
@@ -720,7 +809,12 @@ function LocalPlayer(props: World3DProps & { gridRef: RefObject<ReturnType<typeo
     // 공격
     if (c.attack) {
       c.attack = false;
-      if (meNow.role === "seeker" && meNow.alive && snapNow.phase === "hunt") {
+      const wid = weaponSchedule(snapNow.options.huntSec)[snapNow.tier];
+      const w = WEAPONS[wid];
+      // 방장이 받아 줄 때만 휘두른다 (쿨타임·탄약) — 안 그러면 연타할 때 헛몸짓만 난다
+      const ready = !!w && performance.now() - lastSwing.current >= w.cooldownMs - 40 && (w.kind !== "ray" || meNow.ammo > 0);
+      if (meNow.role === "seeker" && meNow.alive && snapNow.phase === "hunt" && ready) {
+        strike.current = { at: performance.now(), kind: strikeKindOf(wid) };
         const dir = new THREE.Vector3();
         camera.getWorldDirection(dir);
         onAct({ t: "atk", o: [camera.position.x, camera.position.y, camera.position.z], d: [dir.x, dir.y, dir.z] });
@@ -833,7 +927,7 @@ function LocalPlayer(props: World3DProps & { gridRef: RefObject<ReturnType<typeo
   return (
     <group ref={group}>
       <BlobShadow radius={me.role === "seeker" ? 0.42 : Math.max(0.3, (def?.r ?? 0.3) * 1.4)} opacity={0.7} />
-      <AnimProxy stateRef={animState} render={(a, pose) => (me.role === "seeker" ? <SeekerVrm seat={me.s} name={myName} anim={a} /> : <FormModel dg={me.dg} anim={a} pose={pose} look={(me.s * 3 + 1) % 8} castKey={castKey} />)} />
+      <AnimProxy stateRef={animState} render={(a, pose) => (me.role === "seeker" ? <SeekerVrm seat={me.s} name={myName} anim={a} held={heldOf(buf.latest() ?? snap)} strike={strike} /> : <FormModel dg={me.dg} anim={a} pose={pose} look={(me.s * 3 + 1) % 8} castKey={castKey} />)} />
       {me.em && <Bubble text={`${EMOTES.find((e) => e.id === me.em!.id)?.icon ?? ""} ${EMOTES.find((e) => e.id === me.em!.id)?.line ?? ""}`} y={(def?.h ?? 1.75) + 0.5} />}
     </group>
   );
@@ -913,6 +1007,9 @@ function Scene(props: World3DProps) {
   const me = snap.players[mySeat];
   const meDead = me && (me.role === "seeker" ? !me.alive : !me.alive || me.escaped);
   const chests = chestThings(snap);
+  // 남의 공격 순간 (휘두르기·발사 이벤트를 받은 시각)
+  const strikeAts = new Map<number, number>();
+  for (const f of props.fx) if (f.ev.type === "swing" || f.ev.type === "shot") strikeAts.set(f.ev.by, Math.max(strikeAts.get(f.ev.by) ?? 0, f.at));
   return (
     <>
       <FigCtx.Provider value={figCtx}>
@@ -954,10 +1051,10 @@ function Scene(props: World3DProps) {
         if (!vis || snap.phase === "gameOver") return null;
         // 이름표: 술래는 모두에게, 숨는 사람 이름은 같은 편(또는 탈락자)에게만
         const showName = p.s !== props.spectate && (p.role === "seeker" || meDead || me?.role === "hider");
-        return <RemotePlayer key={`${p.s}:${p.dg}:${p.role}`} buf={buf} p={p} snap={snap} name={names[p.s] ?? `${p.s + 1}번`} showName={showName} />;
+        return <RemotePlayer key={`${p.s}:${p.dg}:${p.role}`} buf={buf} p={p} snap={snap} name={names[p.s] ?? `${p.s + 1}번`} showName={showName} strikeAt={strikeAts.get(p.s)} />;
       })}
       {me && <LocalPlayer key={`${me.role}:${me.dg}`} {...props} gridRef={gridRef} />}
-      <Effects fx={props.fx} snap={snap} />
+      <Effects fx={props.fx} snap={snap} buf={buf} />
       <AdaptiveResolution max={props.lowDetail ? 1.25 : 1.75} />
       {!props.lowDetail && <PostFx bloom={0.42} ao={false} />}
       </FigCtx.Provider>

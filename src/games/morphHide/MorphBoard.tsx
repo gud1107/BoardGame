@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AREAS, CHEST_SLOTS, GOAL_SLOTS, ROOMS, STATIC_SOLIDS, placeName, slotY } from "./map";
-import { DISGUISES, EMOTES, POSES, SEEKER_HP, SPAM_STEP, WEAPONS, disguise, secsToNextTier, weaponSchedule } from "./data";
+import { DISGUISES, EMOTES, HIDE_SEC, KKOM_CALL_R, KKOM_ERRANDS, POSES, SEEKER_HP, SPAM_STEP, WEAPONS, disguise, secsToNextTier, weaponSchedule } from "./data";
 import type { Act, PosReport } from "./sim";
 import type { Snap, SnapBuffer } from "./net";
 import { freshControls, type Controls, type FxItem, type NearInfo, type SelfInfo } from "./three/World3D";
@@ -171,8 +171,13 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
         case "goalOpen":
           play("goal", 1);
           break;
+        case "kkomCall":
+          play("goal", 1);
+          speak(ev.out.includes(mySeat) ? "들켰다!" : "찾는다!", 1);
+          break;
         case "escape":
           play("escape", 0.8);
+          speak("꼼꼬미!", ev.seat === mySeat ? 1 : seatPos(ev.seat));
           break;
         case "decoy":
           if (ev.seat === mySeat) play("decoy", 1);
@@ -196,7 +201,8 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
   // 술래 출발 3초 전 째깍
   const lastTickRef = useRef(-1);
   useEffect(() => {
-    if ((snap.phase === "hide" || snap.phase === "pick") && left <= 3.5 && left > 0) {
+    // 꼼꼼이의 숨는 시간은 비밀 — 째깍 소리도 없다
+    if ((snap.phase === "pick" || (snap.phase === "hide" && !snap.goal)) && left <= 3.5 && left > 0) {
       const s = Math.ceil(left);
       if (s !== lastTickRef.current) {
         lastTickRef.current = s;
@@ -357,6 +363,8 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
 
   const phaseLabel = snap.phase === "pick" ? "변신 고르기" : snap.phase === "hide" ? "숨는 시간" : snap.phase === "hunt" ? "술래 시간" : snap.phase === "roundEnd" ? "라운드 결과" : "게임 끝";
   const urgent = left < 10 && (snap.phase === "hunt" || snap.phase === "hide");
+  /** 꼼꼼이: 숨는 시간은 숨는 쪽에도 술래에게도 안 보인다 */
+  const kkomSecret = !!snap.goal && snap.phase === "hide";
 
   return (
     <div className="flex flex-col gap-2">
@@ -399,7 +407,7 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
           )}
           <div className={`flex items-center gap-2.5 rounded-full px-3.5 py-1 ${GLASS} ${urgent ? "ring-1 ring-rose-400/60" : ""}`}>
             <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/55">{phaseLabel}</span>
-            <span className={`text-base font-black tabular-nums leading-none sm:text-lg ${urgent ? "text-rose-300" : "text-white"}`}>{fmt(left)}</span>
+            <span className={`text-base font-black tabular-nums leading-none sm:text-lg ${urgent && !kkomSecret ? "text-rose-300" : "text-white"}`}>{kkomSecret ? "??:??" : fmt(left)}</span>
             <span className="text-[10px] font-semibold tabular-nums text-white/45">
               R{snap.round}/{snap.options.rounds}
             </span>
@@ -410,8 +418,12 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
                 🫣 <b className="tabular-nums">{hidersLeft}</b>
                 <span className="text-white/45">/{hidersTotal}</span>
               </Chip>
-              {snap.goal?.open && <Chip tone="gold">🏁 {GOAL_SLOTS[snap.goal.slot].name}</Chip>}
-              {snap.goal && !snap.goal.open && <Chip tone="gold">🏁 {fmt(Math.max(0, snap.options.huntSec * 0.5 - elapsed))}</Chip>}
+              {snap.goal?.open && (
+                <Chip tone="gold">
+                  🏁 꼼꼬미 <b className="tabular-nums">{snap.players.filter((p) => p.escaped).length}</b>
+                  <span className="text-white/45">/{Math.ceil(hidersTotal / 2)}</span>
+                </Chip>
+              )}
             </div>
           )}
         </div>
@@ -472,6 +484,11 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
 
         {freeLookUi && playing && (
           <div className={`pointer-events-none absolute left-1/2 top-[38%] -translate-x-1/2 rounded-full px-3 py-1 text-[11px] text-white/90 ${GLASS}`}>👁 둘러보는 중 — 몸·자세는 그대로</div>
+        )}
+        {isSeeker && snap.phase === "hunt" && (me?.camp ?? 0) >= 0.5 && (
+          <div className={`pointer-events-none absolute left-1/2 top-[44%] -translate-x-1/2 rounded-full px-3.5 py-1.5 text-xs font-semibold ${GLASS} ${(me?.camp ?? 0) >= 1 ? "text-rose-200 ring-1 ring-rose-400/70" : "text-amber-100"}`}>
+            {(me?.camp ?? 0) >= 1 ? "🚫 집 지키기 금지 — 전봇대에서 떨어져야 다시 잡을 수 있어요" : "🏠 전봇대 옆에 너무 오래 있으면 못 잡아요"}
+          </div>
         )}
 
         {/* 조준점 (배그식: 가는 십자 + 가운데 점) */}
@@ -573,9 +590,19 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
           <div className="absolute inset-0 grid place-items-center bg-gradient-to-b from-[#0b1026]/95 via-black/95 to-[#0b1026]/95">
             <div className="px-6 text-center text-white">
               <div className="text-[11px] font-semibold uppercase tracking-[0.3em] text-white/45">Blindfolded</div>
-              <div className="mt-2 text-lg font-bold">눈을 가리고 열을 세는 중</div>
-              <div className="mt-2 text-6xl font-black tabular-nums text-white">{Math.ceil(left + (snap.phase === "pick" ? 30 : 0))}</div>
-              <p className="mx-auto mt-4 max-w-xs break-keep text-xs leading-relaxed text-white/55">움직이는 물건, 신호를 안 지키는 행인, 손을 안 내미는 점검원을 찾아내세요.</p>
+              {snap.goal ? (
+                <>
+                  <div className="mt-2 text-lg font-bold">🏃 {KKOM_ERRANDS[snap.goal.errand ?? 0]} 찍고 오는 중…</div>
+                  <div className="mt-2 text-5xl font-black text-white">꼼꼬미</div>
+                  <p className="mx-auto mt-4 max-w-xs break-keep text-xs leading-relaxed text-white/55">돌아오면 &ldquo;찾는다!&rdquo; — 숨는 사람이 몰래 이 전봇대를 찍으면 놓쳐요. 단, 전봇대 옆에 붙어 지키면(8초+) 못 잡아요.</p>
+                </>
+              ) : (
+                <>
+                  <div className="mt-2 text-lg font-bold">눈을 가리고 열을 세는 중</div>
+                  <div className="mt-2 text-6xl font-black tabular-nums text-white">{Math.ceil(left + (snap.phase === "pick" ? HIDE_SEC : 0))}</div>
+                  <p className="mx-auto mt-4 max-w-xs break-keep text-xs leading-relaxed text-white/55">움직이는 물건, 신호를 안 지키는 행인, 손을 안 내미는 점검원을 찾아내세요.</p>
+                </>
+              )}
               <div className="mx-auto mt-4 flex max-w-sm flex-wrap justify-center gap-1.5">
                 {sched.map((w, i) => (
                   <span key={w} className={`rounded-full px-2.5 py-1 text-[11px] ${GLASS}`}>
@@ -593,8 +620,17 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
           <div className={`pointer-events-none absolute left-1/2 top-[32%] -translate-x-1/2 rounded-2xl px-4 py-2 text-center ${GLASS}`}>
             <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/45">Hide</div>
             <div className="text-sm text-white">
-              {def.icon} <b>{def.name}</b>(으)로 변신 — <span className="tabular-nums">{Math.ceil(left)}</span>초 안에 숨으세요
+              {snap.goal ? (
+                <>
+                  {def.icon} <b>{def.name}</b>(으)로 변신 — 술래가 {KKOM_ERRANDS[snap.goal.errand ?? 0]} 찍으러 갔어요. <b>언제 돌아올지 몰라요!</b>
+                </>
+              ) : (
+                <>
+                  {def.icon} <b>{def.name}</b>(으)로 변신 — <span className="tabular-nums">{Math.ceil(left)}</span>초 안에 숨으세요
+                </>
+              )}
             </div>
+            {snap.goal && <div className="mt-1 text-[11px] text-amber-200/90">📢 &ldquo;찾는다!&rdquo; 때 술래 기지 {KKOM_CALL_R}m 안에 있으면 아웃 · 사냥 중에 몰래 전봇대를 찍으면 꼼꼬미 성공(+4)</div>}
           </div>
         )}
 
@@ -1135,7 +1171,7 @@ function BigMap({ snap, buf, mySeat, selfRef, onClose }: { snap: Snap; buf: Snap
 // 피드·결과·점수
 
 function KillFeed({ fx, names, mySeat, now }: { fx: FxItem[]; names: Record<number, string>; mySeat: number; now: number }) {
-  const items = fx.filter((f) => now - f.at < 5000 && ["catch", "escape", "seekerDown", "goalOpen", "tier", "wrong"].includes(f.ev.type)).slice(-5);
+  const items = fx.filter((f) => now - f.at < 5000 && ["catch", "escape", "seekerDown", "goalOpen", "tier", "wrong", "kkomCall"].includes(f.ev.type)).slice(-5);
   const nm = (s: number) => (s === mySeat ? "나" : (names[s] ?? `${s + 1}번`));
   const line = (f: FxItem): ReactNode => {
     const e = f.ev;
@@ -1147,7 +1183,13 @@ function KillFeed({ fx, names, mySeat, now }: { fx: FxItem[]; names: Record<numb
           </>
         );
       case "escape":
-        return <>🏁 {nm(e.seat)} 찜 성공!</>;
+        return <>🏁 {nm(e.seat)} 꼼꼬미!</>;
+      case "kkomCall":
+        return (
+          <>
+            📢 찾는다!{e.out.length > 0 && <> — 🙈 {e.out.map(nm).join(", ")} 기지 근처에서 들켜 아웃</>}
+          </>
+        );
       case "seekerDown":
         return <>😵 술래 {nm(e.seat)} 체력 바닥</>;
       case "goalOpen":
@@ -1239,7 +1281,7 @@ function RuleStrip() {
           <li>🙈 30초 동안 숨기 — 자세 바꾸기(C)로 각도·자세를 맞추고, 분신(G)으로 똑같은 가짜를 세워 두세요.</li>
           <li>👁️ 술래는 🖐️ 맨손 → 🔨 뿅망치 → 🔫 권총 → 🎯 저격총처럼 시간에 따라 무기가 바뀌어요(이전 무기는 다시 못 꺼내요). 엉뚱한 걸 치면 체력이 깎이고 0이 되면 탈락!</li>
           <li>👮 &ldquo;술래인 척&rdquo;은 점검원으로 변신 — 점검원은 손을 앞으로 내밀며 여기저기 점검해요. 어설프게 따라 하세요.</li>
-          <li>🏁 꼼꼼이 모드: 술래 시간 절반이 지나면 찜 장소가 열리고, 도착하면 탈출 성공(+4).</li>
+          <li>🏁 꼼꼼이 모드(골목 놀이 &lsquo;꼼꼬미&rsquo;): 술래는 숫자 대신 먼 곳을 찍고 와서 숨는 시간이 매번 달라요(20~40초, 비공개). &ldquo;찾는다!&rdquo; 때 기지 근처에 있으면 아웃, 사냥 중 몰래 술래 기지 전봇대를 찍으면 꼼꼬미 성공(+4). 숨기만 하고 버티면 +1뿐, 절반 이상 찍어야 숨는 쪽 승. 술래가 전봇대를 8초 넘게 지키면 그동안 못 잡고, 잡힌 사람이 다음 술래.</li>
         </ul>
       )}
     </div>
