@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { DOORS, FILLER_SLOTS, FIXED_THINGS, NAV_EDGES, NAV_NODES, STATIC_SOLIDS, thingSolid } from "./map";
 import { SolidGrid, groundAt, stepBody, type Body, type CollWorld } from "./physics";
-import { DISGUISES, SEEKER_HP, weaponSchedule, weaponTier } from "./data";
+import { DISGUISES, KKOM_CAMP_MS, KKOM_CAMP_R, SEEKER_HP, weaponSchedule, weaponTier } from "./data";
+import { BASE } from "./map";
 import { evalMany } from "./selfplay";
 import { hiderParamsFor, seekerParamsFor } from "./botParams";
-import { applyAct, buildFillers, computeRankings, createHost, createMatch, dynamicSolids, hostStep, type HostRuntime } from "./sim";
+import { applyAct, applyPos, buildFillers, computeRankings, createHost, createMatch, dynamicSolids, hostStep, type HostRuntime } from "./sim";
 
 function worldWith(round = 1, seed = 7): CollWorld {
   const fillers = buildFillers(seed, round);
@@ -224,5 +225,59 @@ describe("bot match", () => {
     }
     expect(s.stats.wrongHits).toBeGreaterThan(5);
     expect(s.hp).toBeLessThan(SEEKER_HP);
+  });
+
+  describe("꼼꼼이 집 지키기 판정 (손님 위치 지연·게이지)", () => {
+    // 사람 2명(술래 1, 숨는 1) — 숨는 사람을 기지 밖에 세워 두고 술래가 바로 앞에서 친다
+    function setup() {
+      const m = createMatch(11, [{ bot: false, level: 5 }, { bot: false, level: 5 }], { goalMode: true, huntSec: 180, rounds: 1 });
+      const rt: HostRuntime = createHost(m);
+      for (let i = 0; i < 20 * 60 && rt.state.phase !== "hunt"; i++) hostStep(rt, 50);
+      expect(rt.state.phase).toBe("hunt");
+      const seeker = rt.state.players.find((p) => p.role === "seeker")!;
+      const hider = rt.state.players.find((p) => p.role === "hider")!;
+      hider.alive = true;
+      const pos = (q: typeof seeker, x: number, z: number) => applyPos(rt, q.seat, { x, y: 0, z, yaw: 0, anim: "idle", pose: 0, tp: q.tp });
+      return { rt, seeker, hider, pos };
+    }
+    const outX = BASE.x - KKOM_CAMP_R - 2; // 기지 밖
+    function camp(rt: HostRuntime, seeker: { seat: number; tp: number }, ms: number) {
+      for (let t = 0; t < ms; t += 50) {
+        applyPos(rt, seeker.seat, { x: BASE.x, y: 0, z: BASE.z + 2, yaw: 0, anim: "idle", pose: 0, tp: seeker.tp });
+        hostStep(rt, 50);
+      }
+    }
+    function strike(rt: HostRuntime, seeker: { seat: number; nextAtkAt: number }, from: number, hiderZ: number, b?: [number, number]) {
+      seeker.nextAtkAt = 0;
+      applyAct(rt, seeker.seat, { t: "atk", o: [from, 1.5, BASE.z], d: [0, 0, Math.sign(hiderZ - BASE.z) || 1], ...(b ? { b } : {}) });
+    }
+
+    it("기지를 떠나면 (오래 지켰어도) 바로 잡을 수 있다", () => {
+      const { rt, seeker, hider, pos } = setup();
+      camp(rt, seeker, 15000);
+      pos(seeker, outX, BASE.z);
+      hostStep(rt, 50);
+      pos(hider, outX, BASE.z + 1.2);
+      strike(rt, seeker, outX, BASE.z + 1.2);
+      expect(hider.alive).toBe(false);
+    });
+
+    it("방장이 아직 옛 위치(기지 안)를 갖고 있어도, 공격에 실린 내 위치가 밖이면 잡힌다", () => {
+      const { rt, seeker, hider, pos } = setup();
+      camp(rt, seeker, KKOM_CAMP_MS + 1000);
+      // 위치 보고가 아직 안 와서 방장 쪽 술래는 기지 경계 바로 안 (손님 화면에선 이미 1m 밖)
+      pos(seeker, BASE.x - KKOM_CAMP_R + 0.5, BASE.z);
+      pos(hider, BASE.x - KKOM_CAMP_R - 1, BASE.z + 1.2);
+      strike(rt, seeker, BASE.x - KKOM_CAMP_R - 1, BASE.z + 1.2, [BASE.x - KKOM_CAMP_R - 1, BASE.z]);
+      expect(hider.alive).toBe(false);
+    });
+
+    it("기지 안에 붙어 있으면 여전히 못 잡고, 공격에 실린 위치를 멀리 속여도 안 통한다", () => {
+      const { rt, seeker, hider, pos } = setup();
+      camp(rt, seeker, KKOM_CAMP_MS + 1000);
+      pos(hider, BASE.x, BASE.z + 3.2);
+      strike(rt, seeker, BASE.x, BASE.z + 3.2, [BASE.x - 30, BASE.z]);
+      expect(hider.alive).toBe(true);
+    });
   });
 });

@@ -7,8 +7,8 @@ import ScreenSprite from "@/games/shared/three/ScreenSprite";
 import { AdaptiveResolution, BlobShadow, PostFx, StudioEnvironment } from "@/games/shared/three/sceneFx";
 import { DUSK, ShadowSetup, Sky, SunLight, surfaceTexture, type SurfaceKind } from "./Atmosphere";
 import { labelTexture } from "@/games/shared/three/tableKit";
-import { CHEST_SLOTS, DOORS, FIXED_THINGS, FLOOR, GOAL_SLOTS, LADDER, ROAD, ROOMS, STATIC_SOLIDS, WINDOWS, slotY, type PlacedThing } from "../map";
-import { EMOTES, RUN_MULT, disguise, poseOf, weaponSchedule } from "../data";
+import { BASE, CHEST_SLOTS, DOORS, FIXED_THINGS, FLOOR, GOAL_SLOTS, LADDER, ROAD, ROOMS, STATIC_SOLIDS, WINDOWS, slotY, type PlacedThing } from "../map";
+import { EMOTES, KKOM_CAMP_R, RUN_MULT, disguise, poseOf, weaponSchedule } from "../data";
 import { rayBox, stepBody, type Body, type CollWorld, type Cyl } from "../physics";
 import { bodySize, chestThings, dynamicSolids, npcSize, roundGrid, walkSpeed, type Act, type GameEvent, type PosReport } from "../sim";
 import type { Snap, SnapBuffer, SnapPlayer } from "../net";
@@ -315,6 +315,24 @@ function ThingAt({ t, pedLight }: { t: PlacedThing; pedLight: boolean }) {
   return (
     <group position={[t.x, t.y, t.z]} rotation-y={t.rot}>
       <Thing kind={t.kind} pedLight={pedLight} />
+    </group>
+  );
+}
+
+/** 꼼꼼이: 술래 기지 6m 경계 (집 지키기 · "찾는다!" 아웃 범위) — 점선 노란 원 */
+function BaseZone() {
+  const dashes = 36;
+  return (
+    <group position={[BASE.x, 0.03, BASE.z]}>
+      {Array.from({ length: dashes }, (_, i) => {
+        const a = (i / dashes) * Math.PI * 2;
+        return (
+          <mesh key={i} position={[Math.cos(a) * KKOM_CAMP_R, 0, Math.sin(a) * KKOM_CAMP_R]} rotation={[-Math.PI / 2, 0, -a]}>
+            <planeGeometry args={[0.12, (Math.PI * 2 * KKOM_CAMP_R) / dashes / 2]} />
+            <meshBasicMaterial color="#fde047" transparent opacity={0.7} depthWrite={false} toneMapped={false} />
+          </mesh>
+        );
+      })}
     </group>
   );
 }
@@ -817,7 +835,7 @@ function LocalPlayer(props: World3DProps & { gridRef: RefObject<ReturnType<typeo
         strike.current = { at: performance.now(), kind: strikeKindOf(wid) };
         const dir = new THREE.Vector3();
         camera.getWorldDirection(dir);
-        onAct({ t: "atk", o: [camera.position.x, camera.position.y, camera.position.z], d: [dir.x, dir.y, dir.z] });
+        onAct({ t: "atk", o: [camera.position.x, camera.position.y, camera.position.z], d: [dir.x, dir.y, dir.z], b: [r2(b.x), r2(b.z)] });
         lastSwing.current = performance.now();
         faceRef.current = Math.atan2(dir.x, dir.z);
       }
@@ -1039,6 +1057,7 @@ function Scene(props: World3DProps) {
         <DoorsAndWindows doors={snap.doors} windows={snap.windows} />
       </group>
       {snap.goal?.open && <GoalBeacon slot={snap.goal.slot} />}
+      {snap.goal && <BaseZone />}
       {snap.npcs.map((n) => (
         <NpcView key={n.id} buf={buf} id={n.id} kind={n.kind} anim={n.anim} look={n.look} />
       ))}

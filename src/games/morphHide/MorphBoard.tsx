@@ -2,8 +2,8 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AREAS, CHEST_SLOTS, GOAL_SLOTS, ROOMS, STATIC_SOLIDS, placeName, slotY } from "./map";
-import { DISGUISES, EMOTES, HIDE_SEC, KKOM_CALL_R, KKOM_ERRANDS, POSES, SEEKER_HP, SPAM_STEP, WEAPONS, disguise, secsToNextTier, weaponSchedule } from "./data";
+import { AREAS, BASE, CHEST_SLOTS, GOAL_SLOTS, ROOMS, STATIC_SOLIDS, placeName, slotY } from "./map";
+import { DISGUISES, EMOTES, HIDE_SEC, KKOM_CALL_R, KKOM_CAMP_R, KKOM_ERRANDS, POSES, SEEKER_HP, SPAM_STEP, WEAPONS, disguise, secsToNextTier, weaponSchedule } from "./data";
 import type { Act, PosReport } from "./sim";
 import type { Snap, SnapBuffer } from "./net";
 import { freshControls, type Controls, type FxItem, type NearInfo, type SelfInfo } from "./three/World3D";
@@ -66,6 +66,17 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
   const lowDetail = useLowDetail();
   const controls = useRef<Controls>(freshControls());
   const selfRef = useRef<SelfInfo>({ x: me?.x ?? 0, y: 0, z: me?.z ?? 0, yaw: 0, camYaw: Math.PI });
+  // 꼼꼼이 집 지키기 경고용: 내 화면(예측) 위치가 기지 원 안인가 — 0.15초마다, 바뀔 때만 다시 그림
+  const [inBaseZone, setInBaseZone] = useState(false);
+  const watchBase = !!snap.goal && snap.phase === "hunt" && me?.role === "seeker";
+  useEffect(() => {
+    if (!watchBase) return;
+    const id = window.setInterval(() => {
+      const p = selfRef.current;
+      setInBaseZone(Math.hypot(p.x - BASE.x, p.z - BASE.z) <= KKOM_CAMP_R && p.y < 1.5);
+    }, 150);
+    return () => window.clearInterval(id);
+  }, [watchBase]);
   const [near, setNear] = useState<NearInfo | null>(null);
   const [full, setFull] = useState(false);
   const [showMap, setShowMap] = useState(false);
@@ -366,6 +377,7 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
   /** 꼼꼼이: 숨는 시간은 숨는 쪽에도 술래에게도 안 보인다 */
   const kkomSecret = !!snap.goal && snap.phase === "hide";
 
+
   return (
     <div className="flex flex-col gap-2">
       {!full && <RuleStrip />}
@@ -485,9 +497,10 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
         {freeLookUi && playing && (
           <div className={`pointer-events-none absolute left-1/2 top-[38%] -translate-x-1/2 rounded-full px-3 py-1 text-[11px] text-white/90 ${GLASS}`}>👁 둘러보는 중 — 몸·자세는 그대로</div>
         )}
-        {isSeeker && snap.phase === "hunt" && (me?.camp ?? 0) >= 0.5 && (
+        {/* 집 지키기 경고 — "기지 안인가"는 내 화면 위치로 (방장 위치는 늦게 온다), 게이지는 방장 값 */}
+        {isSeeker && snap.phase === "hunt" && snap.goal && inBaseZone && (me?.camp ?? 0) >= 0.5 && (
           <div className={`pointer-events-none absolute left-1/2 top-[44%] -translate-x-1/2 rounded-full px-3.5 py-1.5 text-xs font-semibold ${GLASS} ${(me?.camp ?? 0) >= 1 ? "text-rose-200 ring-1 ring-rose-400/70" : "text-amber-100"}`}>
-            {(me?.camp ?? 0) >= 1 ? "🚫 집 지키기 금지 — 전봇대에서 떨어져야 다시 잡을 수 있어요" : "🏠 전봇대 옆에 너무 오래 있으면 못 잡아요"}
+            {(me?.camp ?? 0) >= 1 ? "🚫 집 지키기 금지 — 노란 원 밖으로 나가면 바로 잡을 수 있어요" : "🏠 노란 원 안에 오래 있으면 못 잡아요"}
           </div>
         )}
 

@@ -630,7 +630,8 @@ function spawnNpcs(rt: HostRuntime) {
 export type Act =
   | { t: "pick"; id: string }
   | { t: "reroll" }
-  | { t: "atk"; o: [number, number, number]; d: [number, number, number] }
+  /** b = 쏜 사람 기기에서의 내 몸 위치 [x, z] (방장 위치가 늦게 도착한 만큼 보정, 꼼꼼이 집 지키기 판정용) */
+  | { t: "atk"; o: [number, number, number]; d: [number, number, number]; b?: [number, number] }
   | { t: "door"; id: number }
   | { t: "window"; id: number }
   | { t: "chest"; slot: number }
@@ -691,7 +692,7 @@ export function applyAct(rt: HostRuntime, seat: number, act: Act) {
       return;
     }
     case "atk":
-      attack(rt, p, act.o, act.d);
+      attack(rt, p, act.o, act.d, act.b);
       return;
     case "door": {
       const d = DOORS[act.id];
@@ -829,20 +830,35 @@ function allSolids(rt: HostRuntime): Solid[] {
   return [...rt.grid.all, ...dynamicSolids(rt.state)];
 }
 
-function attack(rt: HostRuntime, p: PlayerState, o: [number, number, number], d: [number, number, number]) {
+/** 술래가 지금 기지(전봇대) 반경 안인가 — 손님 기기가 보낸 위치를 쓰되, 방장이 아는 위치에서 너무 멀면 무시 */
+export function inCampZone(p: Pick<PlayerState, "x" | "y" | "z">, reported?: [number, number]): boolean {
+  let x = p.x;
+  let z = p.z;
+  if (reported && reported.every(Number.isFinite) && Math.hypot(reported[0] - p.x, reported[1] - p.z) <= CAMP_TRUST_M) [x, z] = reported;
+  return Math.hypot(x - BASE.x, z - BASE.z) <= KKOM_CAMP_R && p.y < 1.5;
+}
+/** 위치 보고 지연(0.1초 간격 + 전송) 동안 달릴 수 있는 거리보다 넉넉히 */
+const CAMP_TRUST_M = 2.5;
+
+function attack(rt: HostRuntime, p: PlayerState, o: [number, number, number], d: [number, number, number], b?: [number, number]) {
   const s = rt.state;
   if (s.phase !== "hunt" || p.role !== "seeker" || !p.alive || s.t < p.nextAtkAt) return;
   const w = currentWeapon(s);
   if (w.kind === "ray" && p.ammo <= 0) return;
-  // 꼼꼼이 집 지키기: 기지 옆에 오래 붙어 있던 술래는 휘둘러도 못 잡는다
-  const camping = !!s.goal && p.campMs >= KKOM_CAMP_MS;
+  // 꼼꼼이 집 지키기: 기지 옆에 오래 붙어 있던 술래가 "지금도" 기지 안에서 휘두르면 못 잡는다.
+  // 기지를 벗어나는 순간 바로 풀린다 (게이지가 남아 있어도) — 내 화면 위치(b) 기준.
+  const camping = !!s.goal && p.campMs >= KKOM_CAMP_MS && inCampZone(p, b);
   if (![...o, ...d].every(Number.isFinite)) return;
   const len = Math.hypot(d[0], d[1], d[2]);
   if (len < 1e-6) return;
   const dir: [number, number, number] = [d[0] / len, d[1] / len, d[2] / len];
   p.nextAtkAt = s.t + w.cooldownMs;
   if (w.kind === "ray") p.ammo -= 1;
-  const eye: [number, number, number] = [p.x, p.y + 1.55, p.z];
+  // 내 화면 위치(b)를 믿을 만하면 그 자리에서 휘두른 것으로 — 위치 보고가 늦게 와서 앞에 있는 걸 못 치는 일 방지
+  const trusted = !!b && b.every(Number.isFinite) && Math.hypot(b[0] - p.x, b[1] - p.z) <= CAMP_TRUST_M;
+  const px = trusted ? b![0] : p.x;
+  const pz = trusted ? b![1] : p.z;
+  const eye: [number, number, number] = [px, p.y + 1.55, pz];
   const origin: [number, number, number] = Math.hypot(o[0] - eye[0], o[1] - eye[1], o[2] - eye[2]) <= 7 ? o : eye;
   const targets = targetsFor(s, p.seat);
   const bodies = targets.map((t) => t.body);
@@ -873,8 +889,8 @@ function attack(rt: HostRuntime, p: PlayerState, o: [number, number, number], d:
       let best: Target | null = null;
       let bd = Infinity;
       for (const t of targets) {
-        const dx = t.body.x - p.x;
-        const dz = t.body.z - p.z;
+        const dx = t.body.x - px;
+        const dz = t.body.z - pz;
         const dist = Math.hypot(dx, dz) - t.body.r;
         if (dist > w.range || Math.abs(t.body.y - p.y) > 1.6) continue;
         const ang = Math.acos(Math.max(-1, Math.min(1, (dx * fx + dz * fz) / (Math.hypot(dx, dz) * fl || 1))));
@@ -1038,7 +1054,8 @@ export function hostStep(rt: HostRuntime, dtMs: number) {
         for (const p of s.players) {
           if (p.role !== "seeker" || !p.alive) continue;
           const near = Math.hypot(p.x - BASE.x, p.z - BASE.z) <= KKOM_CAMP_R && p.y < 1.5;
-          p.campMs = near ? Math.min(KKOM_CAMP_MS + 4000, p.campMs + dtMs) : Math.max(0, p.campMs - dtMs * 2);
+          // 8초에서 멈춘다 (넘쳐 쌓이면 떠난 뒤에도 한참 못 잡던 문제)
+          p.campMs = near ? Math.min(KKOM_CAMP_MS, p.campMs + dtMs) : Math.max(0, p.campMs - dtMs * 2);
         }
       }
       if (s.goal?.open) {
