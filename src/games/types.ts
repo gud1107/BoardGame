@@ -100,7 +100,7 @@ export interface GameMeta {
   thumbnail: {
     emoji: string;
     gradient: [string, string];
-    /** Path under `public/`, e.g. `/games/catan.jpg` or `/assets/games/perudo/board.jpg`. */
+    /** Path under `public/`, e.g. `/games/coup.webp` or `/assets/games/perudo/board.jpg`. */
     image?: string;
   };
   tags?: string[];

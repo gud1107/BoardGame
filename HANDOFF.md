@@ -51,6 +51,13 @@
 - **후속 — 증강 전용 효과음(5개 게임)**: 요청 "증강 효과음 + 다른 증강 게임에도". 공통 규칙 = 카드가 뜰 때 등급(실버/골드/프리즘)별로 길고 밝아지는 소리 · 고를 때 · 다시 뽑기, 각 게임 테마로. 죽은척 = `playDeadSound.ts` `augOffer(tier)/augPick/augReroll/augReveal/augTrap/augCounter/augFrag`(남이 고른 건 "commit" 딸깍만 — 무엇을 골랐는지 소리로 안 샘; 카드 뜸·내 선택·다시 뽑기는 보드가 직접 재생, 첫 판은 이전 상태가 없어 cue로 못 잡음). 꽃게 `audio.ts` augOffer/augPick/augReroll(전엔 fanfare/equip/coin 재사용). 시대의 진격 `eraMarchAudio.ts` `augOffer_<tier>`/augPick/augReroll(전엔 specialReady/doctrine, 다시 뽑기 무음). 합성 디펜스 `mergeDefenseAudio.ts`에 SFX 전용 procedural suite(`tracks: []`, 사이트 효과음 볼륨 따름)로 playAugOffer/Pick/Reroll(전엔 무음). 변신 숨바꼭질 `sound.ts` augOffer(+Gold/Prism)/augReroll 추가(고르기는 원래 있었음). 상어는 다른 세션이 190aa36에서 이미 함. 실제 소리는 귀로 확인 못 함.
 - **남은 점**: 청진기·위장복·명배우 같은 블러프/정보형은 봇이 덜 살려서 사람 판 체감 확인 필요.
 
+## 🧹 준비중 카드 11개 제거 (법적 위험 1차) — 2026-11-08
+
+요청: 법적 위험 시안(https://claude.ai/artifact/SmMfaEEz66bhAu7a9jbnkC) 중 "준비중 숨기기"만 진행.
+- `registry.ts`에서 `playable: false` 11개(catan·ticket-to-ride·dominion·codenames·uno·rummikub·halli-galli·agricola·7-wonders·dixit·jenga) **항목 자체를 삭제** + `public/games/catan.jpg` 삭제. `hiddenFromLobby`는 로비에서만 빠지고 `/games/catan` 주소로는 상세 페이지·박스 커버가 그대로 떠서 안 씀. 레지스트리 밖에서 이 id를 참조하는 코드 없음(확인).
+- 이제 `playable: false` 0개. 준비중 UI(`GameCard`·`GamePosterCard`·정렬)는 관리자 "🚧 준비중" 오버라이드가 계속 쓰므로 남김.
+- 남은 시안 항목: 썸네일 18장 교체, 세계관 2종 교체, 원작 이름 13개 개명, 러브레터 카드, 캐릭터 이름.
+
 ## 🔗 온라인 안정성 + 유지보수 정리 — 2026-11-08
 
 요청: 전체 게임 점검(같은 날 앞 세션) 결과 중 "온라인 안정성, 품질과 유지보수" 진행.

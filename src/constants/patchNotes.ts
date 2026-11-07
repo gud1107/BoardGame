@@ -64,6 +64,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.154.1",
+    releaseDate: "2026-11-08",
+    title: "🧹 준비중 게임 카드 정리",
+    changes: [
+      { game: "common", type: "IMPROVE", desc: "🧹 만들 계획만 있던 '준비중' 게임 11종을 허브에서 정리했어요 — 지금 바로 할 수 있는 게임만 보여요" },
+    ],
+  },
+  {
     version: "v1.154.0",
     releaseDate: "2026-11-08",
     title: "🔊 증강 전용 효과음 — 5개 게임",
