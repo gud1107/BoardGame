@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { epicBounty, EPIC_SURVIVE_EVERY, PLAYER_RAGE, USURP_FX, GEAR_RARITY, GEARS, MUTATIONS, roadmap, SHIELDS, SPECIES, STAMINA_MAX, TIERS, tierForLevel, WEAPONS, comboMultiplier, type CrabTier, type MutationKind, type SpeciesId } from "./data";
 import {
   attackReach,
+  chooseAugment,
   createWorld,
   crabRadius,
   endMatch,
@@ -12,6 +13,7 @@ import {
   player,
   rankOf,
   revivePlayer,
+  rerollAugment,
   step,
   summarize,
   type CrabInput,
@@ -20,6 +22,7 @@ import {
 } from "./engine";
 import { drawMinimap, drawWorld, screenToWorld, targetZoom, TILT, updateCamera, type Camera } from "./render";
 import { CrabAudio } from "./audio";
+import { AUG_LEVELS, AUG_TIER, AUGMENTS, type AugTier } from "./augments";
 
 /**
  * requestAnimationFrame host for one match: owns the mutable `World`, turns
@@ -66,6 +69,7 @@ interface Hud {
   nextSurvive: number;
   /** Seconds of my 분노 left (after losing the crown). */
   rage: number;
+  augs: string[];
 }
 
 interface Banner {
@@ -158,6 +162,7 @@ export default function CrabSurvivalCanvas({
   const [down, setDown] = useState<{ by: string; score: number; revives: number } | null>(null);
   const [ended, setEnded] = useState(false);
   const [miniSize, setMiniSize] = useState(132);
+  const [augPick, setAugPick] = useState<{ round: number; tier: AugTier; cards: string[]; rerolls: number } | null>(null);
 
   const pushBanner = useCallback((b: Omit<Banner, "id">) => {
     const id = Date.now() + Math.random();
@@ -222,10 +227,31 @@ export default function CrabSurvivalCanvas({
     };
   }, []);
 
+  const pickAug = useCallback((id: string) => {
+    const w = worldRef.current;
+    if (!w || !chooseAugment(w, id)) return;
+    // A queued round opens straight away; otherwise play resumes.
+    setAugPick(w.augOffer ? { ...w.augOffer, rerolls: w.augRerolls } : null);
+  }, []);
+  const reroll = useCallback(() => {
+    const w = worldRef.current;
+    if (!w || !rerollAugment(w) || !w.augOffer) return;
+    audioRef.current?.coin();
+    setAugPick({ ...w.augOffer, rerolls: w.augRerolls });
+  }, []);
+
   // Keyboard.
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
+      const offer = worldRef.current?.augOffer;
+      if (offer) {
+        const i = ["1", "2", "3"].indexOf(k);
+        if (i >= 0 && offer.cards[i]) pickAug(offer.cards[i]);
+        else if (k === "r") reroll();
+        e.preventDefault();
+        return;
+      }
       if (k === "escape" || k === "p") {
         setPause(!pausedRef.current);
         return;
@@ -255,7 +281,7 @@ export default function CrabSurvivalCanvas({
       window.removeEventListener("blur", blur);
       document.removeEventListener("visibilitychange", vis);
     };
-  }, [setPause]);
+  }, [setPause, pickAug, reroll]);
 
   // Main loop.
   useEffect(() => {
@@ -481,6 +507,31 @@ export default function CrabSurvivalCanvas({
           case "pearl":
             if (ev.player) a?.guard();
             break;
+          case "augOffer": {
+            const o = world.augOffer;
+            if (o) {
+              setAugPick({ ...o, rerolls: world.augRerolls });
+              // Let go of everything so the crab doesn't sprint off when play resumes.
+              input.current.keys.clear();
+              input.current.mouseAttack = input.current.mouseBoost = false;
+              input.current.touchAttack = input.current.touchBoost = input.current.touchSkill = false;
+              a?.fanfare();
+            }
+            break;
+          }
+          case "augPick":
+            if (ev.player) {
+              const d = AUGMENTS[ev.id];
+              a?.equip();
+              if (d) pushBanner({ text: `${d.emoji} 증강: ${d.name}`, sub: d.desc, tone: "level" });
+            }
+            break;
+          case "phoenix":
+            if (ev.player) {
+              a?.recapture();
+              pushBanner({ text: "🔥 불사조 부활!", sub: "치명상을 버텨냈습니다 · 2초 무적", tone: "king" });
+            }
+            break;
           case "kingNew":
             if (ev.recapture) a?.recapture();
             else a?.fanfare();
@@ -529,7 +580,8 @@ export default function CrabSurvivalCanvas({
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       const { w, h, dpr } = sizeRef.current;
-      if (!pausedRef.current && !world.over) {
+      // An open augment pick freezes the island (solo — nobody else is waiting).
+      if (!pausedRef.current && !world.over && !world.augOffer) {
         step(world, readInput(), dt);
         handleEvents();
         updateCamera(camRef.current, world, w, h, dt);
@@ -580,6 +632,7 @@ export default function CrabSurvivalCanvas({
           myBounty: holdsEpic(me) ? epicBounty(me.level, me.epicT) : 0,
           nextSurvive: EPIC_SURVIVE_EVERY - (me.epicT % EPIC_SURVIVE_EVERY),
           rage: me.rageT,
+          augs: me.augs,
         });
       }
       if (world.over && endTimer === null) {
@@ -783,6 +836,20 @@ export default function CrabSurvivalCanvas({
       {/* ── Player status (bottom-left): field weapons + mutations on top ── */}
       {hud && hud.alive && (
         <div className={`pointer-events-none absolute left-2 flex w-[min(62%,300px)] flex-col gap-1 bottom-2`}>
+          {hud.augs.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1">
+              {hud.augs.map((id) => {
+                const d = AUGMENTS[id];
+                if (!d) return null;
+                return (
+                  <div key={id} className="flex items-center gap-0.5 rounded-md bg-slate-950/80 px-1 py-0.5 text-[10px] font-bold text-white" style={{ boxShadow: `0 0 0 1px ${AUG_TIER[d.tier].color}` }} title={`[${AUG_TIER[d.tier].label}] ${d.name} — ${d.desc}`}>
+                    <span className="text-xs leading-none">{d.emoji}</span>
+                    {!compact && <span className="max-w-[64px] truncate" style={{ color: AUG_TIER[d.tier].color }}>{d.name}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
           {(hud.gear.length > 0 || hud.muts.length > 0 || hud.rage > 0) && (
             <div className="flex flex-wrap items-center gap-1">
               {hud.rage > 0 && (
@@ -936,7 +1003,54 @@ export default function CrabSurvivalCanvas({
       )}
 
       {/* Pause */}
-      {paused && !down && !ended && (
+      {augPick && !ended && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 overflow-y-auto bg-slate-950/75 px-3 py-4 backdrop-blur-sm">
+          <div className="text-center">
+            <div className="text-[11px] font-bold tracking-widest text-white/60">
+              증강 {augPick.round + 1}/{AUG_LEVELS.length} · Lv{AUG_LEVELS[augPick.round]} 달성
+            </div>
+            <div className="text-2xl font-black sm:text-3xl" style={{ color: AUG_TIER[augPick.tier].color, textShadow: `0 0 18px ${AUG_TIER[augPick.tier].glow}` }}>
+              ✨ {AUG_TIER[augPick.tier].label} 증강 선택
+            </div>
+            <div className="mt-0.5 text-[11px] text-white/55">하나를 고르면 이번 판 끝까지 유지됩니다 (쓰러져도 유지) · 고르는 동안 섬이 멈춥니다</div>
+          </div>
+          <div className="grid w-full max-w-2xl grid-cols-1 gap-2 sm:grid-cols-3">
+            {augPick.cards.map((id, i) => {
+              const d = AUGMENTS[id];
+              if (!d) return null;
+              const t = AUG_TIER[d.tier];
+              return (
+                <button
+                  key={id}
+                  onClick={() => pickAug(id)}
+                  className="group flex items-center gap-3 rounded-2xl border-2 bg-gradient-to-b from-slate-800 to-slate-950 p-3 text-left text-white transition hover:-translate-y-0.5 hover:brightness-125 sm:flex-col sm:items-center sm:py-4 sm:text-center"
+                  style={{ borderColor: t.color, boxShadow: `0 0 16px ${t.glow}` }}
+                >
+                  <span className="text-4xl leading-none sm:text-5xl">{d.emoji}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[10px] font-bold" style={{ color: t.color }}>
+                      {!isTouch && <kbd className="mr-1 rounded bg-white/15 px-1 font-mono text-white/80">{i + 1}</kbd>}
+                      {t.label} · {d.tag}
+                    </span>
+                    <span className="block text-base font-black">{d.name}</span>
+                    <span className="mt-0.5 block text-xs leading-snug text-white/75">{d.desc}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <button
+            onClick={reroll}
+            disabled={augPick.rerolls <= 0}
+            className="rounded-xl bg-white/10 px-4 py-2 text-sm font-bold text-white hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            🎲 새로고침 {augPick.rerolls > 0 ? `(${augPick.rerolls}회 남음)` : "(다 씀)"}
+            {!isTouch && augPick.rerolls > 0 && <span className="ml-1 text-white/50">[R]</span>}
+          </button>
+        </div>
+      )}
+
+      {paused && !down && !ended && !augPick && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/70 backdrop-blur-sm">
           <div className="text-3xl font-black text-white">일시정지</div>
           <p className="text-xs text-white/60">Esc / P 키로 재개</p>

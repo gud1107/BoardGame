@@ -8,7 +8,7 @@ import type { CrownLogEntry, MatchSummary, MomentEntry } from "./engine";
 
 export const CROWN_ICON: Record<CrownLogEntry["kind"], string> = { crown: "👑", recapture: "🔁", lost: "💔", down: "☠️" };
 export const CROWN_LABEL: Record<CrownLogEntry["kind"], string> = { crown: "등극", recapture: "탈환", lost: "빼앗김", down: "왕관 잃고 쓰러짐" };
-export const MOMENT_ICON: Record<MomentEntry["kind"], string> = { kill: "✂️", evolve: "🧬", epic: "🌟", revenge: "⚔️", death: "☠️", revive: "❤️" };
+export const MOMENT_ICON: Record<MomentEntry["kind"], string> = { kill: "✂️", evolve: "🧬", epic: "🌟", revenge: "⚔️", death: "☠️", revive: "❤️", augment: "✨" };
 
 export interface TimelineRow {
   t: number;

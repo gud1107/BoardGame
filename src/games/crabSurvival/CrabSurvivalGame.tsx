@@ -7,6 +7,7 @@ import { readGameNickname, startingNickname } from "@/lib/identity/myNickname";
 import { recordSoloRun } from "@/lib/stats/soloResult";
 import { CRAB_COLORS, EVO_REVEAL, isUnlocked, MATCH_LENGTHS, roadmap, SHELL_BAND_LABEL, SHELL_PIECE_LABEL, SHELL_STYLE, SPECIES, SPECIES_LIST, type CrabColor, type ShieldKind, type SpeciesId, type WeaponKind } from "./data";
 import type { CrownLogEntry, MatchSummary, MomentEntry } from "./engine";
+import { AUG_TIER, AUGMENTS } from "./augments";
 import { CROWN_ICON, exportMatchCard, MOMENT_ICON, mmss, reignSpans, timelineRows, type TimelineRow } from "./timelineImage";
 import CrabSurvivalCanvas from "./CrabSurvivalCanvas";
 import RulebookModal from "./RulebookModal";
@@ -442,6 +443,22 @@ function ResultsPanel({
         <Stat label="🛡 생존 보상" value={s.stats.survivalBonus ? `+${s.stats.survivalBonus.toLocaleString()}` : "—"} />
         {(s.stats.revenges ?? 0) > 0 && <Stat label="⚔️ 역습 성공" value={`${s.stats.revenges}회`} />}
       </div>
+      {(s.stats.augments?.length ?? 0) > 0 && (
+        <div>
+          <div className="mb-1.5 text-xs font-semibold text-white/50 light:text-slate-500">✨ 고른 증강</div>
+          <div className="flex flex-wrap gap-1.5">
+            {s.stats.augments.map((id) => {
+              const a = AUGMENTS[id];
+              if (!a) return null;
+              return (
+                <span key={id} title={a.desc} className="rounded-full border bg-black/30 px-2 py-0.5 text-[11px] font-bold text-white" style={{ borderColor: AUG_TIER[a.tier].color }}>
+                  {a.emoji} {a.name}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <MatchTimeline s={s} who={{ name, species: `${sp.name}(${sp.role})`, shell: color.shell }} />
       <div>
         <div className="mb-1.5 text-xs font-semibold text-white/50 light:text-slate-500">최종 순위</div>

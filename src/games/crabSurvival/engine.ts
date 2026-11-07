@@ -112,6 +112,40 @@ import {
   type SpeciesId,
   type WeaponKind,
 } from "./data";
+import {
+  AUG_LEVELS,
+  AUG_REROLLS,
+  AUGMENTS,
+  CHAIN_DMG,
+  CHAIN_EVERY,
+  CHAIN_RANGE,
+  CHAIN_TARGETS,
+  COMBO_KING_STEP,
+  CROWN_ARMOR,
+  CROWN_ATK,
+  EXECUTE_HP,
+  FEAST_HEAL,
+  FEAST_RUSH,
+  GHOST_EVERY,
+  GHOST_INVULN,
+  NEUTRAL_MODS,
+  NOVA_DMG,
+  NOVA_RADIUS,
+  PHOENIX_HP,
+  PHOENIX_INVULN,
+  QUAKE_DMG,
+  QUAKE_EVERY,
+  QUAKE_RADIUS,
+  UNDERDOG_ATK,
+  UNDERDOG_SPEED,
+  drawCards,
+  foldMods,
+  hasAug,
+  rollTier,
+  type AugMods,
+  type AugSpecial,
+  type AugTier,
+} from "./augments";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -207,6 +241,18 @@ export interface Crab {
   epicT: number;
   /** Seconds left on the level-up shell-pattern reveal (visual). */
   evoT: number;
+  /** 증강: ids picked this match (kept through death), their folded numbers, rounds claimed. */
+  augs: string[];
+  am: AugMods;
+  augRound: number;
+  /** 불사조 껍질 already spent / swing + hit counters for 지진·천둥 / 유령 걸음 cooldown / 피의 축제 rush. */
+  phoenixUsed: boolean;
+  augSwings: number;
+  augHits: number;
+  ghostCd: number;
+  rushT: number;
+  /** King / bottom half / in between (왕의 위엄, 역전의 용사), refreshed with the leaderboard. */
+  standing: "king" | "low" | "mid";
   brain: Brain | null;
 }
 
@@ -417,6 +463,9 @@ export type GameEvent =
   | { type: "blast"; x: number; y: number; player: boolean }
   | { type: "pearl"; player: boolean }
   | { type: "playerDeath"; by: string }
+  | { type: "augOffer"; tier: AugTier; round: number }
+  | { type: "augPick"; id: string; player: boolean }
+  | { type: "phoenix"; player: boolean }
   | { type: "matchEnd" };
 
 export interface CrownLogEntry {
@@ -430,7 +479,7 @@ export interface CrownLogEntry {
 
 export interface MomentEntry {
   t: number;
-  kind: "kill" | "evolve" | "epic" | "revenge" | "death" | "revive";
+  kind: "kill" | "evolve" | "epic" | "revenge" | "death" | "revive" | "augment";
   label: string;
   /** The player's score right after the moment, and what the moment itself was worth. */
   score: number;
@@ -464,6 +513,8 @@ export interface MatchStats {
   /** Seconds the player carried a legendary, and the 생존 보상 it paid. */
   epicSeconds: number;
   survivalBonus: number;
+  /** Augments the player picked, in order. */
+  augments: string[];
 }
 
 export interface CrabInput {
@@ -529,6 +580,10 @@ export interface World {
   stats: MatchStats;
   over: boolean;
   finalScore: number;
+  /** The player's open augment pick (the UI pauses on it) and rounds waiting behind it. */
+  augOffer: { round: number; tier: AugTier; cards: string[] } | null;
+  augQueue: number[];
+  augRerolls: number;
 }
 
 // ── RNG / helpers ───────────────────────────────────────────────────────────
@@ -554,7 +609,7 @@ export const CLAW_REACH = 26;
 
 export function attackReach(c: Crab): number {
   const wd = c.weapon ? WEAPONS[c.weapon.kind] : UNARMED;
-  return crabRadius(c) + CLAW_REACH * c.scale * wd.reach;
+  return crabRadius(c) + CLAW_REACH * c.scale * wd.reach * c.am.reach;
 }
 
 export function crabDps(c: Crab): number {
@@ -584,7 +639,19 @@ export function atkMult(c: Crab): number {
   for (const s of c.muts) m *= MUTATIONS[s.kind].atk;
   if (c.surge > 0 && c.species === "fiddler") m *= PERK_ATK;
   if (enraged(c)) m *= GRUDGE_ATK;
+  m *= c.am.atk;
+  if (c.augs.length) {
+    if (c.standing === "king" && hasAug(c.augs, "crown")) m *= CROWN_ATK;
+    if (c.standing === "low" && hasAug(c.augs, "underdog")) m *= UNDERDOG_ATK;
+    if (c.combo > 0 && hasAug(c.augs, "comboKing")) m *= 1 + COMBO_KING_STEP * Math.min(10, c.combo);
+  }
   return m;
+}
+export function crabHasAug(c: Crab, special: AugSpecial): boolean {
+  return hasAug(c.augs, special);
+}
+function critMult(c: Crab): number {
+  return CRIT_MULT + c.am.critMult;
 }
 /** 복수의 분노: a bot hunting the crab that took its crown. */
 export function enraged(c: Crab): boolean {
@@ -596,22 +663,24 @@ export function armorMult(c: Crab): number {
   if (enraged(c)) m *= GRUDGE_ARMOR;
   for (const s of c.muts) m *= MUTATIONS[s.kind].armor;
   if (c.surge > 0 && c.species === "snow") m *= PERK_ARMOR;
+  m *= c.am.armor;
+  if (c.standing === "king" && c.augs.length && hasAug(c.augs, "crown")) m *= CROWN_ARMOR;
   return m;
 }
 function critChance(c: Crab, extra: number): number {
   if (hasMut(c, "rum")) return 1;
-  return BASE_CRIT + extra + SPECIES[c.species].crit + (c.surge > 0 && c.species === "hairy" ? PERK_CRIT : 0);
+  return BASE_CRIT + extra + SPECIES[c.species].crit + c.am.crit + (c.surge > 0 && c.species === "hairy" ? PERK_CRIT : 0);
 }
 /** Score multiplier on food (황금 플랑크톤 캡슐 = 300%). */
 function gainMult(c: Crab): number {
-  return hasMut(c, "capsule") ? 3 : 1;
+  return (hasMut(c, "capsule") ? 3 : 1) * c.am.food;
 }
 /** Hidden under the sand or rolling: nothing can touch it. */
 export function untouchable(c: Crab): boolean {
   return c.invuln > 0 || c.burrow > 0;
 }
 export function targetScale(c: Crab): number {
-  return levelDef(c).scale * (hasMut(c, "giant") ? GIANT_SCALE : 1);
+  return levelDef(c).scale * c.am.scale * (hasMut(c, "giant") ? GIANT_SCALE : 1);
 }
 
 export function player(w: World): Crab {
@@ -704,9 +773,12 @@ export function createWorld(opts: MatchOptions): World {
     ranking: [],
     lbTimer: 0,
     spawnTimer: 0,
-    stats: { kills: 0, bestCombo: 0, maxLevel: 1, boxes: 0, eaten: 0, kingSeconds: 0, peakScore: 0, deaths: 0, damageDealt: 0, revenges: 0, bounties: 0, bountyPoints: 0, bestStar: 0, epicSeconds: 0, survivalBonus: 0 },
+    stats: { kills: 0, bestCombo: 0, maxLevel: 1, boxes: 0, eaten: 0, kingSeconds: 0, peakScore: 0, deaths: 0, damageDealt: 0, revenges: 0, bounties: 0, bountyPoints: 0, bestStar: 0, epicSeconds: 0, survivalBonus: 0, augments: [] },
     over: false,
     finalScore: 0,
+    augOffer: null,
+    augQueue: [],
+    augRerolls: AUG_REROLLS,
   };
   generateMap(w);
 
@@ -796,6 +868,15 @@ function makeCrab(w: World, name: string, color: CrabColor, isPlayer: boolean, s
     burnT: 0,
     epicT: 0,
     evoT: 0,
+    augs: [],
+    am: { ...NEUTRAL_MODS },
+    augRound: 0,
+    phoenixUsed: false,
+    augSwings: 0,
+    augHits: 0,
+    ghostCd: 0,
+    rushT: 0,
+    standing: "mid",
     brain: isPlayer
       ? null
       : {
@@ -1000,10 +1081,11 @@ function syncLevel(c: Crab, instant = false) {
   const lv = levelForScore(c.score, c.species);
   if (lv.level === c.level && !instant) return false;
   const oldMax = c.maxHp;
+  const max = Math.round(lv.hp * c.am.hp);
   c.level = lv.level;
-  c.maxHp = lv.hp;
-  c.hp = instant ? lv.hp : Math.min(lv.hp, c.hp * (lv.hp / oldMax) + lv.hp * 0.12);
-  if (instant) c.scale = lv.scale;
+  c.maxHp = max;
+  c.hp = instant ? max : Math.min(max, c.hp * (max / oldMax) + max * 0.12);
+  if (instant) c.scale = lv.scale * c.am.scale;
   return true;
 }
 
@@ -1018,6 +1100,8 @@ export function addScore(w: World, c: Crab, pts: number) {
     burst(w, "star", c.x, c.y, 12, 220, "#fde047", 5, 0.9, 200);
     speciesSurge(w, c);
     c.evoT = EVO_REVEAL;
+    if (c.augs.length && hasAug(c.augs, "nova")) novaBlast(w, c);
+    claimAugRounds(w, c);
     if (c.isPlayer) {
       w.stats.maxLevel = Math.max(w.stats.maxLevel, c.level);
       const tier = tierForLevel(c.level);
@@ -1192,6 +1276,8 @@ function moveCrab(w: World, c: Crab, inp: CrabInput, dt: number) {
   c.rageT = Math.max(0, c.rageT - dt);
   c.evoT = Math.max(0, c.evoT - dt);
   c.burnT = Math.max(0, c.burnT - dt);
+  c.ghostCd = Math.max(0, c.ghostCd - dt);
+  c.rushT = Math.max(0, c.rushT - dt);
   c.sinceHurt += dt;
   tickMutations(w, c, dt);
   if (!c.alive) return;
@@ -1238,7 +1324,7 @@ function moveCrab(w: World, c: Crab, inp: CrabInput, dt: number) {
   const wantBoost = inp.boost && c.moving && c.stamina > 0;
   if (wantBoost) {
     c.boosting = true;
-    c.stamina = Math.max(0, c.stamina - STAMINA_DRAIN * SPECIES[c.species].staminaDrain * dt);
+    c.stamina = Math.max(0, c.stamina - STAMINA_DRAIN * SPECIES[c.species].staminaDrain * c.am.stamina * dt);
     c.staminaDelay = STAMINA_DELAY;
   } else {
     c.boosting = false;
@@ -1249,6 +1335,9 @@ function moveCrab(w: World, c: Crab, inp: CrabInput, dt: number) {
   let speed = lv.speed * (c.boosting ? BOOST_MULT : 1) * TIERS[tierOf(c)].speed;
   for (const m of c.muts) if (!MUTATIONS[m.kind].risk || penaltyLeft(c, m.kind) > 0) speed *= MUTATIONS[m.kind].speed;
   if (enraged(c)) speed *= GRUDGE_SPEED;
+  speed *= c.am.speed;
+  if (c.standing === "low" && c.augs.length && hasAug(c.augs, "underdog")) speed *= UNDERDOG_SPEED;
+  if (c.rushT > 0) speed *= 1.3;
   if (c.burrow > 0) speed *= 0.85;
   if (c.surge > 0 && c.species === "ghost") speed *= PERK_SPEED;
   if (isShallow(c.x, c.y)) speed *= SHALLOW_SLOW;
@@ -1291,7 +1380,7 @@ function moveCrab(w: World, c: Crab, inp: CrabInput, dt: number) {
   }
 
   // Out-of-combat regen.
-  if (c.sinceHurt > REGEN_DELAY && c.hp < c.maxHp) c.hp = Math.min(c.maxHp, c.hp + c.maxHp * REGEN_RATE * SPECIES[c.species].regen * dt);
+  if (c.sinceHurt > REGEN_DELAY && c.hp < c.maxHp) c.hp = Math.min(c.maxHp, c.hp + c.maxHp * REGEN_RATE * SPECIES[c.species].regen * c.am.regen * dt);
 
   if (c.boosting && w.particles.length < 400 && rand(w) < dt * 18) {
     burst(w, "sand", c.x - Math.cos(c.angle) * crabRadius(c), c.y - Math.sin(c.angle) * crabRadius(c), 1, 40, "#e8cf94", 4 * c.scale, 0.5, 40);
@@ -1319,7 +1408,7 @@ function inCone(c: Crab, t: HitTarget, reach: number, arc: number): boolean {
 
 export function swing(w: World, c: Crab) {
   const wd = c.weapon ? WEAPONS[c.weapon.kind] : UNARMED;
-  c.attackCd = wd.cooldown;
+  c.attackCd = wd.cooldown * c.am.atkCd;
   c.swing = Math.min(0.24, wd.cooldown * 0.8);
   c.swingSide = c.weapon ? 1 : c.swingSide === 1 ? -1 : 1;
   const heavy = !!c.weapon && WEAPONS[c.weapon.kind].family === "heavy";
@@ -1338,9 +1427,9 @@ export function swing(w: World, c: Crab) {
     const crit = rand(w) < critChance(c, wd.crit);
     const counter = !!c.counter && c.counter.by === t.id;
     let dmg = atk * wd.dmg * comboMultiplier(nextCombo) * range(w, 0.9, 1.1);
-    if (crit) dmg *= CRIT_MULT;
+    if (crit) dmg *= critMult(c);
     if (counter) {
-      dmg *= COUNTER_MULT;
+      dmg *= COUNTER_MULT + c.am.counter;
       c.counter = null;
     }
     damageCrab(w, t, dmg, c, { crit, counter, knockback: wd.knockback, stun: wd.stun });
@@ -1352,7 +1441,7 @@ export function swing(w: World, c: Crab) {
     if (!inCone(c, { x: cr.x, y: cr.y, r: cr.def.radius }, reach, wd.arc)) continue;
     const crit = rand(w) < critChance(c, wd.crit);
     let dmg = atk * wd.dmg * comboMultiplier(nextCombo) * range(w, 0.9, 1.1);
-    if (crit) dmg *= CRIT_MULT;
+    if (crit) dmg *= critMult(c);
     damageCreature(w, cr, dmg, c, crit, wd.knockback);
     hitLiving = true;
     hitAny = true;
@@ -1369,6 +1458,13 @@ export function swing(w: World, c: Crab) {
     c.comboT = COMBO_WINDOW;
     if (c.isPlayer) w.stats.bestCombo = Math.max(w.stats.bestCombo, c.combo);
     if (c.combo >= 3 && hitLiving) addScore(w, c, Math.min(10, c.combo) * 4 * lv.gain);
+  }
+  if (c.augs.length && c.alive) {
+    if (hasAug(c.augs, "quake") && ++c.augSwings % QUAKE_EVERY === 0) {
+      explode(w, c.x, c.y, QUAKE_RADIUS * c.scale, atk * QUAKE_DMG, c, c.id, { stun: 0.5, knock: 380, color: "#f97316", name: "지진 집게" });
+      if (c.isPlayer) w.shake = Math.max(w.shake, 0.5);
+    }
+    if (hitLiving && hasAug(c.augs, "chain") && ++c.augHits % CHAIN_EVERY === 0) chainLightning(w, c, atk * CHAIN_DMG);
   }
   // Durability: one point per swing that connected with something alive.
   if (hitLiving && c.weapon) {
@@ -1388,9 +1484,18 @@ function damageCrab(
   t: Crab,
   raw: number,
   by: Crab | null,
-  o: { crit: boolean; counter: boolean; knockback: number; stun: number; sourceName?: string; sx?: number; sy?: number; light?: boolean },
+  o: { crit: boolean; counter: boolean; knockback: number; stun: number; sourceName?: string; sx?: number; sy?: number; light?: boolean; thorn?: boolean },
 ) {
   if (t.burrow > 0) return;
+  // 잔상 회피: a clean miss.
+  if (t.am.dodge > 0 && by && rand(w) < t.am.dodge) {
+    floatText(w, t.x, t.y - 24 * t.scale, "💨 회피", "#e2e8f0", o.light ? 12 : 15, 0.7);
+    return;
+  }
+  if (by && by.augs.length) {
+    if (by.am.execute > 0 && t.hp < t.maxHp * EXECUTE_HP) raw *= 1 + by.am.execute;
+    if (by.am.slayer > 0 && t.level > by.level) raw *= 1 + by.am.slayer;
+  }
   const sx = o.sx ?? (by ? by.x : t.x), sy = o.sy ?? (by ? by.y : t.y);
   const dx = t.x - sx, dy = t.y - sy;
   const d = Math.hypot(dx, dy) || 1;
@@ -1431,6 +1536,28 @@ function damageCrab(
   dmg = Math.max(1, Math.round(dmg));
   t.hp -= dmg;
   if (by && by.surge > 0 && by.species === "mitten") by.hp = Math.min(by.maxHp, by.hp + dmg * PERK_LIFESTEAL);
+  if (by && by.am.lifesteal > 0 && by.alive) by.hp = Math.min(by.maxHp, by.hp + dmg * by.am.lifesteal);
+  // 가시 껍질: melee/heavy hits bounce part of the damage back (never thorns-on-thorns).
+  if (by && by !== t && t.am.thorns > 0 && !o.light && !o.thorn && by.alive) {
+    damageCrab(w, by, (dmg * t.am.thorns) / armorMult(by), t, { crit: false, counter: false, knockback: 0, stun: 0, light: true, thorn: true });
+  }
+  // 불사조 껍질: once a match, a lethal blow leaves you standing.
+  if (t.hp <= 0 && t.augs.length && !t.phoenixUsed && hasAug(t.augs, "phoenix")) {
+    t.phoenixUsed = true;
+    t.hp = t.maxHp * PHOENIX_HP;
+    t.invuln = PHOENIX_INVULN;
+    floatText(w, t.x, t.y - 40 * t.scale, "🔥 불사조 부활!", "#fb923c", 22, 1.6);
+    burst(w, "spark", t.x, t.y, 30, 320, "#fb923c", 5, 1, 260);
+    ring(w, t.x, t.y, crabRadius(t) * 3.5, "#f97316", 0.7);
+    w.events.push({ type: "phoenix", player: t.isPlayer });
+    return;
+  }
+  // 유령 걸음: a hit (every 10s at most) turns you into a ghost for a moment.
+  if (t.hp > 0 && t.ghostCd <= 0 && t.augs.length && hasAug(t.augs, "ghostStep")) {
+    t.ghostCd = GHOST_EVERY;
+    t.invuln = Math.max(t.invuln, GHOST_INVULN);
+    burst(w, "streak", t.x, t.y, 8, 200, "#e0e7ff", 4, 0.5, 80);
+  }
   t.sinceHurt = 0;
   t.hitFlash = 0.14;
   if (by) {
@@ -1545,6 +1672,12 @@ function killCrab(w: World, v: Crab, by: Crab | null, sourceName?: string) {
       by.brain.grudgeT = 0;
       floatText(w, by.x, by.y - 70 * by.scale, "⚔️ 역습!", "#fca5a5", 16, 1.4);
     }
+    reward *= by.am.kill;
+    if (by.augs.length && hasAug(by.augs, "feast") && by.alive) {
+      by.hp = Math.min(by.maxHp, by.hp + by.maxHp * FEAST_HEAL);
+      by.rushT = FEAST_RUSH;
+      burst(w, "heal", by.x, by.y, 12, 150, "#f87171", 5, 0.9, 160);
+    }
     addScore(w, by, reward);
     floatText(w, by.x, by.y - 40 * by.scale, `+${Math.round(reward).toLocaleString()}`, "#fde047", wasKing ? 26 : 18, 1.4);
     if (by.isPlayer) {
@@ -1583,6 +1716,7 @@ function damageCreature(w: World, cr: Creature, dmg: number, by: Crab, crit: boo
   const d = Math.max(1, Math.round(dmg));
   cr.hp -= d;
   if (by.surge > 0 && by.species === "mitten") by.hp = Math.min(by.maxHp, by.hp + d * PERK_LIFESTEAL);
+  if (by.am.lifesteal > 0) by.hp = Math.min(by.maxHp, by.hp + d * by.am.lifesteal);
   cr.hitFlash = 0.14;
   cr.aggroId = by.id;
   cr.aggroT = 5;
@@ -1624,6 +1758,11 @@ function damageCreature(w: World, cr: Creature, dmg: number, by: Crab, crit: boo
 
 function hitBox(w: World, b: Box, by: Crab, dmg: number) {
   if (b.kind === "gold") {
+    if (by.augs.length && hasAug(by.augs, "masterKey")) {
+      floatText(w, b.x, b.y - 34, "🗝️ 만능 열쇠!", "#e879f9", 17, 1.2);
+      breakBox(w, b, by);
+      return;
+    }
     if (!by.hasKey) {
       if (by.isPlayer && b.lockedMsgT <= 0) {
         b.lockedMsgT = 1.2;
@@ -1881,7 +2020,7 @@ function tryCollect(w: World, c: Crab, p: Pickup): boolean {
       return true;
     }
     case "coin": {
-      const pts = p.absolute ? p.value : p.value * lv.gain;
+      const pts = p.absolute ? p.value : p.value * lv.gain * c.am.coin;
       addScore(w, c, pts);
       if (c.isPlayer) {
         floatText(w, p.x, p.y - 10, `+${Math.round(pts).toLocaleString()}`, "#fde047", 14, 0.8);
@@ -1944,7 +2083,7 @@ function tryCollect(w: World, c: Crab, p: Pickup): boolean {
 
 function updatePickups(w: World, dt: number) {
   const alive = w.crabs.filter((c) => c.alive);
-  const magnets = alive.filter((c) => hasMut(c, "capsule"));
+  const magnets = alive.filter((c) => hasMut(c, "capsule") || c.am.magnet > 0);
   const keep: Pickup[] = [];
   for (const p of w.pickups) {
     p.age += dt;
@@ -1952,7 +2091,7 @@ function updatePickups(w: World, dt: number) {
     // 황금 플랑크톤 캡슐: food & coins within 3× the pull radius fly to the crab.
     if (magnets.length && (p.type === "food" || p.type === "coin")) {
       for (const c of magnets) {
-        const R = (crabRadius(c) + MAGNET_BASE) * 3;
+        const R = hasMut(c, "capsule") ? (crabRadius(c) + MAGNET_BASE) * 3 : crabRadius(c) + c.am.magnet + 20;
         const dx = c.x - p.x, dy = c.y - p.y, d = Math.hypot(dx, dy);
         if (d < R && d > 1) {
           const v = Math.min(d, 560 * dt);
@@ -2018,6 +2157,16 @@ function applyZones(w: World, dt: number) {
 // ── GameManager: leaderboard + king election ────────────────────────────────
 
 export function updateLeaderboard(w: World, initial = false) {
+  electKing(w, initial);
+  // 왕의 위엄 / 역전의 용사 read these between refreshes.
+  const half = Math.ceil(w.ranking.length / 2);
+  w.ranking.forEach((id, i) => {
+    const c = w.crabs.find((x) => x.id === id);
+    if (c) c.standing = id === w.kingId ? "king" : i >= half ? "low" : "mid";
+  });
+}
+
+function electKing(w: World, initial: boolean) {
   const sorted = [...w.crabs].sort((a, b) => (b.alive ? b.score : -1) - (a.alive ? a.score : -1));
   w.ranking = sorted.map((c) => c.id);
   const top = sorted[0];
@@ -2367,7 +2516,7 @@ function decide(w: World, c: Crab, br: Brain, hpFrac: number) {
       const g = p.gear;
       const rk = GEAR_RARITY[GEARS[g].rarity].rank;
       const dup = c.gear.find((x) => x.kind === g);
-      v = dup ? (dup.lv < GEAR_STACK_MAX ? (1400 + 400 * rk) * lv.gain : 300 * lv.gain) : c.gear.length < MAX_GEAR || c.gear.some((x) => x.t < 8 || GEAR_RARITY[GEARS[x.kind].rarity].rank < rk) ? (1000 + 400 * rk) * lv.gain : 0;
+      v = dup ? (dup.lv < GEAR_STACK_MAX ? (1400 + 400 * rk) * lv.gain : 300 * lv.gain) : c.gear.length < MAX_GEAR + c.am.gearSlots || c.gear.some((x) => x.t < 8 || GEAR_RARITY[GEARS[x.kind].rarity].rank < rk) ? (1000 + 400 * rk) * lv.gain : 0;
     } else if (p.type === "mutation" && p.mutation) {
       const m = MUTATIONS[p.mutation];
       // Bold bots gamble on the risky ones; nobody wants the oil slick.
@@ -2472,20 +2621,20 @@ export function equipGear(w: World, c: Crab, kind: GearKind): boolean {
   const hadEpic = holdsEpic(c);
   // A duplicate upgrades the one you hold (★ up to GEAR_STACK_MAX) and refills its timer.
   if (same) {
-    same.t = def.duration;
+    same.t = def.duration * c.am.gearDur;
     if (same.lv < GEAR_STACK_MAX) {
       same.lv++;
       ring(w, c.x, c.y, crabRadius(c) * 2.6, def.color, 0.5);
       floatText(w, c.x, c.y - 46 * c.scale, `${def.emoji} 강화 ${"★".repeat(same.lv)}`, "#fde68a", c.isPlayer ? 18 : 13, 1.3);
     }
-  } else if (c.gear.length < MAX_GEAR) c.gear.push({ kind, t: def.duration, cd: 0.2, lv: 1 });
+  } else if (c.gear.length < MAX_GEAR + c.am.gearSlots) c.gear.push({ kind, t: def.duration * c.am.gearDur, cd: 0.2, lv: 1 });
   else {
     const rank = (k: GearKind) => GEAR_RARITY[GEARS[k].rarity].rank;
     const worst = c.gear.reduce((a, g) => (rank(g.kind) < rank(a.kind) || (rank(g.kind) === rank(a.kind) && g.t < a.t) ? g : a), c.gear[0]);
     if (rank(kind) <= rank(worst.kind) && worst.t > def.duration * 0.8) return false;
     // A lower tier only gets in once the rarer one is nearly spent.
     if (rank(kind) < rank(worst.kind) && worst.t > GEARS[worst.kind].duration * 0.25) return false;
-    c.gear[c.gear.indexOf(worst)] = { kind, t: def.duration, cd: 0.2, lv: 1 };
+    c.gear[c.gear.indexOf(worst)] = { kind, t: def.duration * c.am.gearDur, cd: 0.2, lv: 1 };
   }
   burst(w, "star", c.x, c.y, 8, 160, def.color, 4, 0.6, 160);
   if (c.isPlayer) {
@@ -2513,7 +2662,7 @@ function gearLv(c: Crab, kind: GearKind): number {
 export function applyMutation(w: World, c: Crab, kind: MutationKind) {
   const def = MUTATIONS[kind];
   c.muts = c.muts.filter((m) => m.kind !== kind);
-  c.muts.push({ kind, t: def.duration });
+  c.muts.push({ kind, t: def.duration * (def.risk ? 1 : c.am.mutDur) });
   if (kind === "pearl") c.pearl = PEARL_CHARGES;
   if (kind === "oil") {
     const sp = levelDef(c).speed * 1.15;
@@ -2582,8 +2731,8 @@ function nearestFoe(w: World, c: Crab, range: number, skip: number[] = [], fromX
 function gearHit(w: World, c: Crab, kind: GearKind, mult = 1): { dmg: number; crit: boolean } {
   const crit = rand(w) < critChance(c, 0);
   const stack = 1 + GEAR_STACK_DMG * (gearLv(c, kind) - 1);
-  let dmg = levelDef(c).atk * GEARS[kind].dmg * stack * atkMult(c) * mult * range(w, 0.9, 1.1);
-  if (crit) dmg *= CRIT_MULT;
+  let dmg = levelDef(c).atk * GEARS[kind].dmg * stack * atkMult(c) * c.am.gearDmg * mult * range(w, 0.9, 1.1);
+  if (crit) dmg *= critMult(c);
   return { dmg, crit };
 }
 
@@ -2893,7 +3042,7 @@ function giantStomp(w: World) {
 export function castSkill(w: World, c: Crab, inp: CrabInput) {
   const tier = tierOf(c);
   const def = TIERS[tier];
-  c.skillCd = def.skillCooldown;
+  c.skillCd = def.skillCooldown * c.am.skillCd;
   const r = crabRadius(c);
   const atk = levelDef(c).atk * atkMult(c);
   w.events.push({ type: "skill", tier, player: c.isPlayer });
@@ -2968,7 +3117,7 @@ export function castSkill(w: World, c: Crab, inp: CrabInput) {
         const a = along(t.x, t.y);
         if (a.t < -crabRadius(t) || a.t > len + crabRadius(t) || a.d > hw + crabRadius(t)) continue;
         const crit = rand(w) < critChance(c, 0);
-        damageCrab(w, t, atk * BEAM_DMG * (crit ? CRIT_MULT : 1), c, { crit, counter: false, knockback: 420, stun: 0.3, sx: x1 + ux * (a.t - 60), sy: y1 + uy * (a.t - 60) });
+        damageCrab(w, t, atk * BEAM_DMG * (crit ? critMult(c) : 1), c, { crit, counter: false, knockback: 420, stun: 0.3, sx: x1 + ux * (a.t - 60), sy: y1 + uy * (a.t - 60) });
       }
       for (const t of w.creatures) {
         if (!t.alive) continue;
@@ -3006,6 +3155,104 @@ function erupt(w: World, c: Crab) {
 
 // ── Summary ─────────────────────────────────────────────────────────────────
 
+// ── 증강 (augments) ─────────────────────────────────────────────────────────
+
+/** Every milestone level reached opens one augment round (once per match, death doesn't refund it). */
+function claimAugRounds(w: World, c: Crab) {
+  while (c.augRound < AUG_LEVELS.length && c.level >= AUG_LEVELS[c.augRound]) {
+    const round = c.augRound++;
+    if (c.isPlayer) {
+      if (w.augOffer) w.augQueue.push(round);
+      else openAugOffer(w, round);
+      continue;
+    }
+    // Bots pick on the spot, uniformly (keeps every card's measured strength honest).
+    const tier = rollTier(round, rand(w));
+    const cards = drawCards(tier, c.augs, () => rand(w));
+    if (cards.length) applyAugment(w, c, cards[Math.floor(rand(w) * cards.length)]);
+  }
+}
+
+function openAugOffer(w: World, round: number) {
+  const me = player(w);
+  const tier = rollTier(round, rand(w));
+  const cards = drawCards(tier, me.augs, () => rand(w));
+  if (!cards.length) return;
+  w.augOffer = { round, tier, cards };
+  w.events.push({ type: "augOffer", tier, round });
+}
+
+export function applyAugment(w: World, c: Crab, id: string) {
+  const def = AUGMENTS[id];
+  if (!def || c.augs.includes(id)) return;
+  const hpFrac = c.maxHp > 0 ? c.hp / c.maxHp : 1;
+  c.augs.push(id);
+  c.am = foldMods(c.augs);
+  // Re-derive max HP / body size from the new numbers, keeping the HP fraction.
+  const lv = levelDef(c);
+  c.maxHp = Math.round(lv.hp * c.am.hp);
+  c.hp = Math.max(1, Math.min(c.maxHp, c.maxHp * hpFrac));
+  ring(w, c.x, c.y, crabRadius(c) * 2.6, def.tier === "prism" ? "#e879f9" : def.tier === "gold" ? "#fbbf24" : "#e2e8f0", 0.7);
+  burst(w, "star", c.x, c.y, c.isPlayer ? 18 : 8, 220, def.tier === "prism" ? "#f0abfc" : "#fde68a", 4, 0.8, 200);
+  floatText(w, c.x, c.y - 48 * c.scale, `${def.emoji} ${def.name}`, def.tier === "prism" ? "#f0abfc" : def.tier === "gold" ? "#fcd34d" : "#e2e8f0", c.isPlayer ? 18 : 12, 1.5);
+  w.events.push({ type: "augPick", id, player: c.isPlayer });
+  if (c.isPlayer) {
+    w.stats.augments.push(id);
+    logMoment(w, "augment", `${def.emoji} ${def.name}`, { detail: `증강 ${w.stats.augments.length}번째 · ${def.desc}` });
+  }
+}
+
+/** The player takes one of the offered cards; the next queued round (if any) opens right after. */
+export function chooseAugment(w: World, id: string): boolean {
+  const offer = w.augOffer;
+  if (!offer || !offer.cards.includes(id)) return false;
+  w.augOffer = null;
+  applyAugment(w, player(w), id);
+  const next = w.augQueue.shift();
+  if (next !== undefined) openAugOffer(w, next);
+  return true;
+}
+
+/** One reroll per match: three fresh cards of the same tier. */
+export function rerollAugment(w: World): boolean {
+  const offer = w.augOffer;
+  if (!offer || w.augRerolls <= 0) return false;
+  const cards = drawCards(offer.tier, player(w).augs, () => rand(w), offer.cards.length, offer.cards);
+  if (!cards.length) return false;
+  w.augRerolls--;
+  w.augOffer = { ...offer, cards };
+  return true;
+}
+
+/** 초신성: every level-up goes off like a bomb. */
+function novaBlast(w: World, c: Crab) {
+  const atk = levelDef(c).atk * atkMult(c);
+  explode(w, c.x, c.y, NOVA_RADIUS * c.scale, atk * NOVA_DMG, c, c.id, { stun: 0.3, knock: 520, color: "#f0abfc", name: "초신성" });
+  if (c.isPlayer) w.shake = Math.max(w.shake, 0.8);
+}
+
+/** 천둥 집게: a lightning hop from the claw to up to 3 nearby foes. */
+function chainLightning(w: World, c: Crab, dmg: number) {
+  const hit: number[] = [];
+  let fx = c.x, fy = c.y;
+  let t = nearestFoe(w, c, CHAIN_RANGE);
+  for (let i = 0; i < CHAIN_TARGETS && t; i++) {
+    w.beams.push({ kind: "zap", x1: fx, y1: fy, x2: t.x, y2: t.y, width: 4 + c.scale, life: 0.32, maxLife: 0.32, lv: 3 });
+    const d = dmg * (1 - i * 0.15);
+    if (t.crab) {
+      hit.push(t.crab.id);
+      damageCrab(w, t.crab, d, c, { crit: false, counter: false, knockback: 60, stun: 0.3, light: true, sx: fx, sy: fy, sourceName: "천둥 집게" });
+    } else if (t.cr) {
+      hit.push(t.cr.id);
+      damageCreature(w, t.cr, d, c, false, 60, true);
+    }
+    burst(w, "spark", t.x, t.y, 8, 220, "#f0abfc", 3.5, 0.35, 90);
+    fx = t.x;
+    fy = t.y;
+    t = nearestFoe(w, c, CHAIN_RANGE, hit, fx, fy);
+  }
+}
+
 export interface MatchSummary {
   score: number;
   rank: number;
@@ -3031,7 +3278,7 @@ export function summarize(w: World): MatchSummary {
     rank: all.findIndex((x) => x.isPlayer) + 1,
     total: all.length,
     seconds: Math.floor(w.time),
-    stats: { ...w.stats },
+    stats: { ...w.stats, augments: [...w.stats.augments] },
     top: all.slice(0, 10),
     endedByDeath: !me.alive,
     killedBy: !me.alive ? (w.deathSnapshot?.by ?? null) : null,

@@ -1,6 +1,7 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
+import { AUG_LEVELS, AUG_ODDS, AUG_REROLLS, AUG_TIER, AUGMENT_LIST } from "./augments";
 import { BOXES, CREATURES, FOODS, GEAR_RARITY, GEAR_STACK_CD, GEAR_STACK_DMG, GEAR_STACK_MAX, gearDropOdds, GEARS, LEVELS, MAX_GEAR, MUTATION_LIST, roadmap, SHIELDS, SPECIES_LIST, TIERS, WEAPONS } from "./data";
 
 const H3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
@@ -245,6 +246,55 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
               </div>
             ))}
           </div>
+        </section>
+
+        <section>
+          <h3 className={H3}>✨ 증강 (레벨 {AUG_LEVELS.join(" · ")} 달성 시)</h3>
+          <p className={`mb-2 text-xs ${P}`}>
+            정해진 레벨에 처음 도달하면 섬이 멈추고 <b>증강 카드 3장</b> 중 하나를 고릅니다(PC: 1·2·3 키). 한 번에 나오는 3장은 같은 등급이며, 판마다 <b>🎲 새로고침 {AUG_REROLLS}회</b>로 같은 등급의 새 카드 3장을 받을 수 있습니다. 고른 증강은 <b>쓰러졌다 부활해도 판 끝까지 유지</b>되고, 같은 레벨을 다시 지나도 새 카드는 나오지 않습니다(라운드당 1회). AI 게들도 같은 규칙으로 증강을 고릅니다.
+          </p>
+          <table className="mb-2 w-full text-left text-xs">
+            <thead>
+              <tr className="text-white/50 light:text-slate-500">
+                <th className="px-2 py-1">라운드</th>
+                <th className="px-2 py-1">실버</th>
+                <th className="px-2 py-1">골드</th>
+                <th className="px-2 py-1">프리즘</th>
+              </tr>
+            </thead>
+            <tbody>
+              {AUG_LEVELS.map((lv, i) => (
+                <tr key={lv}>
+                  <td className={TD}>
+                    {i + 1}차 · Lv{lv}
+                  </td>
+                  {AUG_ODDS[i].map((o, j) => (
+                    <td key={j} className={TD}>
+                      {Math.round(o * 100)}%
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {(["silver", "gold", "prism"] as const).map((tier) => (
+            <div key={tier} className="mb-2">
+              <div className="mb-1 text-xs font-bold" style={{ color: AUG_TIER[tier].color }}>
+                {AUG_TIER[tier].label} ({AUGMENT_LIST.filter((a) => a.tier === tier).length}종)
+              </div>
+              <div className="grid gap-1 text-xs sm:grid-cols-2">
+                {AUGMENT_LIST.filter((a) => a.tier === tier).map((a) => (
+                  <div key={a.id} className="rounded-md bg-white/5 px-2 py-1 light:bg-slate-100">
+                    <b>
+                      {a.emoji} {a.name}
+                    </b>{" "}
+                    <span className="text-white/40 light:text-slate-400">{a.tag}</span>
+                    <div className="text-white/60 light:text-slate-600">{a.desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </section>
 
         <section>

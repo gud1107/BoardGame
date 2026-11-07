@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { BUBBLE_STUN, epicBounty, GRUDGE_ARMOR, GRUDGE_ATK, revengeBonus, gearDropOdds, GEARS, isUnlocked, MUTATIONS, LEVELS, tierForLevel, levelForScore, MAX_LEVEL, PERK_ARMOR, POOL_HEAL_RATE, roadmap, SHIELDS, SPECIES, SPECIES_LIST, STAMINA_MAX } from "./data";
 import { EMPTY_RECORD, nextSpeciesRecord } from "./save";
 import { timelineRows } from "./timelineImage";
-import { addScore, applyMutation, armorMult, atkMult, enraged, botThink, createWorld, equipGear, penaltyLeft, player, revivePlayer, step, summarize, swing, updateLeaderboard, type Crab, type CrabInput, type World } from "./engine";
+import { addScore, applyAugment, applyMutation, armorMult, atkMult, chooseAugment, enraged, botThink, createWorld, equipGear, penaltyLeft, player, rerollAugment, revivePlayer, step, summarize, swing, updateLeaderboard, type Crab, type CrabInput, type World } from "./engine";
+import { AUG_LEVELS, AUG_ODDS, AUGMENT_LIST, AUGMENTS, drawCards, foldMods, PHOENIX_HP } from "./augments";
 
 const idle: CrabInput = { moveX: 0, moveY: 0, boost: false, attack: false };
 
@@ -397,6 +398,8 @@ describe("하이퍼 성장: tiers + special skills", () => {
     swing(w, foe);
     expect(me.hp).toBe(hp);
     const foeHp = foe.hp;
+    // Hold the foe in place so its wander roll can't carry it out of the blast.
+    foe.stun = 5;
     for (let i = 0; i < 100; i++) step(w, idle, 1 / 60);
     expect(me.burrow).toBe(0);
     expect(foe.hp).toBeLessThan(foeHp);
@@ -1045,5 +1048,147 @@ describe("timeline detail", () => {
     );
     expect(rows.map((r) => r.icon)).toEqual(["🧬", "👑"]);
     expect(timelineRows([], [{ t: 10, kind: "kill", label: "A", score: 100 }], true)[0].text).toBe("처치 · A");
+  });
+});
+
+describe("증강 (augments)", () => {
+  const pts = (lv: number) => roadmap("flower")[lv - 1].points;
+
+  it("every augment is well-formed, ids are unique, odds sum to 1", () => {
+    expect(new Set(AUGMENT_LIST.map((a) => a.id)).size).toBe(AUGMENT_LIST.length);
+    expect(AUGMENT_LIST.length).toBeGreaterThanOrEqual(30);
+    for (const a of AUGMENT_LIST) expect(!!a.mods || !!a.special).toBe(true);
+    for (const o of AUG_ODDS) expect(o.reduce((x, y) => x + y, 0)).toBeCloseTo(1);
+    expect(AUG_ODDS).toHaveLength(AUG_LEVELS.length);
+  });
+
+  it("reaching a milestone opens 3 same-tier cards; picking applies and resumes", () => {
+    const w = bare();
+    const me = player(w);
+    addScore(w, me, pts(AUG_LEVELS[0]));
+    const offer = w.augOffer!;
+    expect(offer.cards).toHaveLength(3);
+    expect(new Set(offer.cards.map((id) => AUGMENTS[id].tier))).toEqual(new Set([offer.tier]));
+    expect(chooseAugment(w, "nope")).toBe(false);
+    expect(chooseAugment(w, offer.cards[1])).toBe(true);
+    expect(me.augs).toEqual([offer.cards[1]]);
+    expect(w.augOffer).toBeNull();
+    expect(w.stats.augments).toEqual([offer.cards[1]]);
+  });
+
+  it("a big jump queues every round it skipped, one offer at a time", () => {
+    const w = bare();
+    const me = player(w);
+    addScore(w, me, pts(AUG_LEVELS[2]));
+    expect(w.augOffer?.round).toBe(0);
+    expect(w.augQueue).toEqual([1, 2]);
+    chooseAugment(w, w.augOffer!.cards[0]);
+    expect(w.augOffer?.round).toBe(1);
+    chooseAugment(w, w.augOffer!.cards[0]);
+    chooseAugment(w, w.augOffer!.cards[0]);
+    expect(w.augOffer).toBeNull();
+    expect(me.augs).toHaveLength(3);
+  });
+
+  it("one reroll per match swaps in three new cards of the same tier", () => {
+    const w = bare();
+    addScore(w, player(w), pts(AUG_LEVELS[0]));
+    const before = [...w.augOffer!.cards];
+    expect(rerollAugment(w)).toBe(true);
+    expect(w.augOffer!.cards.some((id) => !before.includes(id))).toBe(true);
+    expect(rerollAugment(w)).toBe(false);
+  });
+
+  it("never offers a card you already own", () => {
+    const owned = AUGMENT_LIST.filter((a) => a.tier === "silver").slice(0, 5).map((a) => a.id);
+    for (let i = 0; i < 50; i++) {
+      let s = i + 1;
+      const cards = drawCards("silver", owned, () => ((s = (s * 16807) % 2147483647) / 2147483647));
+      expect(cards.some((id) => owned.includes(id))).toBe(false);
+    }
+  });
+
+  it("augments survive death + revive, and a milestone pays out only once", () => {
+    const w = bare(1);
+    const [me, foe] = w.crabs;
+    addScore(w, me, pts(AUG_LEVELS[0]));
+    chooseAugment(w, w.augOffer!.cards[0]);
+    const mine = [...me.augs];
+    foe.score = 999_999;
+    me.hp = 1;
+    foe.x = 40;
+    face(foe, me);
+    swing(w, foe);
+    expect(me.alive).toBe(false);
+    expect(revivePlayer(w)).toBe(true);
+    expect(me.augs).toEqual(mine);
+    addScore(w, me, pts(AUG_LEVELS[0]));
+    expect(w.augOffer).toBeNull();
+  });
+
+  it("bots pick their own augment the moment they hit a milestone", () => {
+    const w = bare(1);
+    const bot = w.crabs[1];
+    addScore(w, bot, pts(AUG_LEVELS[1]));
+    expect(bot.augs).toHaveLength(2);
+    expect(w.augOffer).toBeNull();
+  });
+
+  it("stat augments fold into the crab: HP, armor, attack", () => {
+    const w = bare();
+    const me = player(w);
+    const hp = me.maxHp, atk = atkMult(me), arm = armorMult(me);
+    applyAugment(w, me, "body");
+    expect(me.maxHp).toBe(Math.round(hp * 1.15));
+    applyAugment(w, me, "claw");
+    applyAugment(w, me, "shell");
+    expect(atkMult(me)).toBeCloseTo(atk * 1.15);
+    expect(armorMult(me)).toBeCloseTo(arm * 0.88);
+    expect(foldMods(["berserk", "claw"]).atk).toBeCloseTo(1.25 * 1.15);
+  });
+
+  it("불사조 껍질 turns the first lethal hit into a 40% stand-up, once", () => {
+    const w = bare(1);
+    const [me, foe] = w.crabs;
+    applyAugment(w, me, "phoenix");
+    foe.score = 999_999;
+    foe.x = 40;
+    face(foe, me);
+    me.hp = 1;
+    swing(w, foe);
+    expect(me.alive).toBe(true);
+    expect(me.hp).toBeCloseTo(me.maxHp * PHOENIX_HP);
+    expect(me.invuln).toBeGreaterThan(1);
+    me.invuln = 0;
+    me.hp = 1;
+    foe.attackCd = 0;
+    swing(w, foe);
+    expect(me.alive).toBe(false);
+  });
+
+  it("가시 껍질 hurts whoever hits you", () => {
+    const w = bare(1);
+    const [me, foe] = w.crabs;
+    applyAugment(w, me, "thorn");
+    foe.x = 40;
+    face(foe, me);
+    const fh = foe.hp;
+    swing(w, foe);
+    expect(foe.hp).toBeLessThan(fh);
+  });
+
+  it("만능 열쇠 opens a golden chest without a key; 무기고 holds three field weapons", () => {
+    const w = bare();
+    const me = player(w);
+    applyAugment(w, me, "masterKey");
+    w.boxes = [{ id: 999, kind: "gold", alive: true, x: 45, y: 0, hp: 1, maxHp: 1, hitFlash: 0, lockedMsgT: 0 }];
+    me.angle = 0;
+    swing(w, me);
+    expect(w.boxes[0].alive).toBe(false);
+    applyAugment(w, me, "arsenal");
+    equipGear(w, me, "shotgun");
+    equipGear(w, me, "needle");
+    equipGear(w, me, "trident");
+    expect(me.gear).toHaveLength(3);
   });
 });

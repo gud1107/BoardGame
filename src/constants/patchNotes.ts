@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.150.0",
+    releaseDate: "2026-11-07",
+    title: "✨ 꽃게 서바이벌 증강 38종",
+    changes: [
+      { game: "crab-survival", type: "FEAT", desc: "✨ 증강 — Lv3·6·9·11에 처음 오르면 섬이 멈추고 카드 3장 중 1장, 실버·골드·프리즘 38종 · 🎲 새로고침 1회" },
+      { game: "crab-survival", type: "FEAT", desc: "🔥 프리즘 특수 증강 — 불사조 껍질·천둥 집게·지진 집게·초신성·무기고(필드 무기 3개)·만능 열쇠·왕의 위엄·역전의 용사…" },
+      { game: "crab-survival", type: "IMPROVE", desc: "🃏 고른 증강은 쓰러져도 판 끝까지 유지 · 화면 왼쪽 아래와 결과 화면·타임라인에 표시 · AI 게들도 증강을 골라요" },
+    ],
+  },
+  {
     version: "v1.149.0",
     releaseDate: "2026-11-07",
     title: "✨ 랜덤 합성 디펜스 증강",
