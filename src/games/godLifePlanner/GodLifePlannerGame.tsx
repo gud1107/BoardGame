@@ -49,6 +49,7 @@ import {
 } from "@/games/shared/bot/botTakeover";
 import { selfResult } from "@/games/shared/selfResult";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
+import { DESYNC_DIGEST_EVENT, desyncOnDigest, desyncSkipSyncAnswer, useDesyncGuard } from "@/games/shared/room/useDesyncGuard";
 
 /**
  * 갓생 플래너 온라인 대전 진입점 — 라이어를 찾아라와 같은 락스텝 패턴(docs/cloud-sync.md).
@@ -211,6 +212,8 @@ export default function GodLifePlannerGame({ onComplete }: PlayableGameProps) {
   const playerCountRef = useRef(targetPlayerCount);
   const optionsRef = useRef<GameOptions>(options);
   const isHost = intent === "create";
+  // Host broadcasts a digest of its settled state; a drifted client pulls the host's copy back.
+  useDesyncGuard({ channelRef, state: gameState, isHost, active: phase === "playing" });
 
   const gameStateRef = useRef<GameState | null>(null);
   useEffect(() => {
@@ -309,7 +312,9 @@ export default function GodLifePlannerGame({ onComplete }: PlayableGameProps) {
       }
     });
 
-    channel.on("broadcast", { event: "state-request" }, () => {
+    channel.on("broadcast", { event: DESYNC_DIGEST_EVENT }, ({ payload }) => desyncOnDigest(channelRef, payload));
+    channel.on("broadcast", { event: "state-request" }, ({ payload }) => {
+      if (desyncSkipSyncAnswer(channelRef, payload)) return;
       if (gameStateRef.current) {
         channel.send({
           type: "broadcast",

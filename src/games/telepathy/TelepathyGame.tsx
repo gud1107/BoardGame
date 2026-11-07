@@ -50,6 +50,7 @@ import { loadBestRecords, readBestScore, saveBestScore } from "./bestScore";
 import BestRecordsPanel from "./BestRecordsPanel";
 import LeaderboardModal from "./LeaderboardModal";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
+import { DESYNC_DIGEST_EVENT, desyncOnDigest, desyncSkipSyncAnswer, useDesyncGuard } from "@/games/shared/room/useDesyncGuard";
 
 /**
  * 텔레파시 online room. Host-authoritative realtime (see engine.ts): the
@@ -155,6 +156,8 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const isHost = intent === "create";
+  // Host broadcasts a digest of its settled state; a drifted client pulls the host's copy back.
+  useDesyncGuard({ channelRef, state: gameState, isHost, active: phase === "playing" });
   const startSentRef = useRef(false);
   const playerCountRef = useRef(targetPlayerCount);
   const soloStartRef = useRef<BotLevel | null>(null);
@@ -311,7 +314,9 @@ export default function TelepathyGame({ onComplete }: PlayableGameProps) {
       }
     });
 
-    channel.on("broadcast", { event: "state-request" }, () => {
+    channel.on("broadcast", { event: DESYNC_DIGEST_EVENT }, ({ payload }) => desyncOnDigest(channelRef, payload));
+    channel.on("broadcast", { event: "state-request" }, ({ payload }) => {
+      if (desyncSkipSyncAnswer(channelRef, payload)) return;
       if (!isHost) {
         // Lobby-stage roster/options still come from the host only.
         return;

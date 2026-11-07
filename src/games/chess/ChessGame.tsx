@@ -49,6 +49,11 @@ import {
   type BotTakeoverEvent,
   type BotTakeoverState,
 } from "@/games/shared/bot/botTakeover";
+import { DESYNC_DIGEST_EVENT, desyncOnDigest, desyncSkipSyncAnswer, useDesyncGuard } from "@/games/shared/room/useDesyncGuard";
+import { IDLE_VOTE_MS } from "@/games/shared/bot/idleThresholds";
+
+/** Idle-vote trigger for this game's tier — see idleThresholds.ts. */
+const IDLE_VOTE_THRESHOLD_MS = IDLE_VOTE_MS.deep;
 
 /**
  * Online-room entry point for 체스 — the 2-player lockstep wiring of
@@ -169,7 +174,6 @@ export default function ChessGame({ onComplete }: PlayableGameProps) {
   const lastActorRef = useRef<{ actor: Seat | null; since: number }>({ actor: null, since: 0 });
   // §19: a clocked game already punishes stalling (the clock runs out), so the
   // idle vote is only for 무제한 games — and long, since thinking is normal in chess.
-  const IDLE_VOTE_THRESHOLD_MS = 180_000;
   const occupantsRef = useRef<Occupant[]>([]);
   useEffect(() => {
     occupantsRef.current = occupants;
@@ -347,7 +351,9 @@ export default function ChessGame({ onComplete }: PlayableGameProps) {
       }
     });
 
-    channel.on("broadcast", { event: "state-request" }, () => {
+    channel.on("broadcast", { event: DESYNC_DIGEST_EVENT }, ({ payload }) => desyncOnDigest(channelRef, payload));
+    channel.on("broadcast", { event: "state-request" }, ({ payload }) => {
+      if (desyncSkipSyncAnswer(channelRef, payload)) return;
       if (!gameStateRef.current) {
         if (myRole === "p1") {
           channel.send({ type: "broadcast", event: "bot-roster", payload: { botRoles: botRolesRef.current, botLevels: botLevelsRef.current } });
@@ -424,6 +430,8 @@ export default function ChessGame({ onComplete }: PlayableGameProps) {
   }
 
   const isHost = myRole === "p1";
+  // Host broadcasts a digest of its settled state; a drifted client pulls the host's copy back.
+  useDesyncGuard({ channelRef, state: gameState, isHost, active: phase === "playing" });
 
   const sendStart = useCallback((s: RoomSettings) => {
     channelRef.current?.send({

@@ -40,6 +40,10 @@ import {
 import WormCanvas from "./WormCanvas";
 import { selfResult } from "@/games/shared/selfResult";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
+import { IDLE_VOTE_MS } from "@/games/shared/bot/idleThresholds";
+
+/** Idle-vote trigger for this game's tier — see idleThresholds.ts. */
+const IDLE_VOTE_THRESHOLD_MS = IDLE_VOTE_MS.quick;
 
 /**
  * Online-room multiplayer entry point.
@@ -192,7 +196,6 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
   // without needing literal AFK/intent detection.
   const lastInputAtRef = useRef<Record<SeatIndex, number>>({});
   const matchStartedAtRef = useRef(0);
-  const IDLE_VOTE_THRESHOLD_MS = 45_000;
   // A vote this client has already dismissed without voting — re-shown if a
   // *different* vote (different seat or restarted timer) comes in.
   const [dismissedVoteKey, setDismissedVoteKey] = useState<string | null>(null);

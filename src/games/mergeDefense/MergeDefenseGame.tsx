@@ -79,6 +79,7 @@ import WaitingRoomPanel from "./WaitingRoomPanel";
 import RoomSettings from "./RoomSettings";
 import { SEAT_COLORS } from "./render";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
+import { IDLE_VOTE_MS } from "@/games/shared/bot/idleThresholds";
 
 /**
  * Online-room entry point for 랜덤 합성 디펜스.
@@ -116,7 +117,7 @@ type Phase = "choose" | "enter-name" | "connecting" | "waiting" | "playing" | "p
 const GAME_ID = "merge-defense";
 const BROADCAST_INTERVAL_MS = 250;
 const PING_MS = 5000;
-const IDLE_VOTE_THRESHOLD_MS = 45_000;
+const IDLE_VOTE_THRESHOLD_MS = IDLE_VOTE_MS.quick;
 
 function generateRoomCode(): string {
   return String(Math.floor(1000 + Math.random() * 9000));

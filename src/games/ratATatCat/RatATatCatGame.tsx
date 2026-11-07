@@ -47,6 +47,11 @@ import {
 import { selfResult } from "@/games/shared/selfResult";
 import { ratATatCatStatDetails } from "./stats";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
+import { DESYNC_DIGEST_EVENT, desyncOnDigest, desyncSkipSyncAnswer, useDesyncGuard } from "@/games/shared/room/useDesyncGuard";
+import { IDLE_VOTE_MS } from "@/games/shared/bot/idleThresholds";
+
+/** Idle-vote trigger for this game's tier — see idleThresholds.ts. */
+const IDLE_VOTE_THRESHOLD_MS = IDLE_VOTE_MS.quick;
 
 /**
  * Online-room multiplayer entry point, same lockstep pattern as every other
@@ -143,7 +148,6 @@ export default function RatATatCatGame({ onComplete }: PlayableGameProps) {
     phaseRef.current = phase;
   }, [phase]);
   const lastActorRef = useRef<{ actor: SeatIndex | null; since: number }>({ actor: null, since: 0 });
-  const IDLE_VOTE_THRESHOLD_MS = 45_000;
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   function requestStateSync() {
@@ -155,6 +159,8 @@ export default function RatATatCatGame({ onComplete }: PlayableGameProps) {
   const startSentRef = useRef(false);
   const playerCountRef = useRef(targetPlayerCount);
   const isHost = intent === "create";
+  // Host broadcasts a digest of its settled state; a drifted client pulls the host's copy back.
+  useDesyncGuard({ channelRef, state: gameState, isHost, active: phase === "playing" });
 
   const gameStateRef = useRef<RatATatCatState | null>(null);
   useEffect(() => {
@@ -245,7 +251,9 @@ export default function RatATatCatGame({ onComplete }: PlayableGameProps) {
       }
     });
 
-    channel.on("broadcast", { event: "state-request" }, () => {
+    channel.on("broadcast", { event: DESYNC_DIGEST_EVENT }, ({ payload }) => desyncOnDigest(channelRef, payload));
+    channel.on("broadcast", { event: "state-request" }, ({ payload }) => {
+      if (desyncSkipSyncAnswer(channelRef, payload)) return;
       if (gameStateRef.current) {
         channel.send({
           type: "broadcast",

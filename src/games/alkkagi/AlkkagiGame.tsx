@@ -60,6 +60,11 @@ import { selfResult } from "@/games/shared/selfResult";
 import { alkkagiStatDetails } from "./stats";
 import { getAlkkagiSound } from "./alkkagiSound";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
+import { DESYNC_DIGEST_EVENT, desyncOnDigest, desyncSkipSyncAnswer, useDesyncGuard } from "@/games/shared/room/useDesyncGuard";
+import { IDLE_VOTE_MS } from "@/games/shared/bot/idleThresholds";
+
+/** Idle-vote trigger for this game's tier — see idleThresholds.ts. */
+const IDLE_VOTE_THRESHOLD_MS = IDLE_VOTE_MS.quick;
 
 /**
  * Online-room entry point for 알까기 대전 — the same lockstep room pattern as
@@ -173,7 +178,6 @@ export default function AlkkagiGame({ onComplete }: PlayableGameProps) {
     phaseRef.current = phase;
   }, [phase]);
   const lastActorRef = useRef<{ actor: Seat | null; since: number }>({ actor: null, since: 0 });
-  const IDLE_VOTE_THRESHOLD_MS = 45_000;
 
   // The shooter's aim arrow (remote via broadcast, mine via the board) — read by the scene each frame.
   const aimRef = useRef<LiveAim | null>(null);
@@ -191,6 +195,8 @@ export default function AlkkagiGame({ onComplete }: PlayableGameProps) {
   const startSentRef = useRef(false);
   const playerCountRef = useRef(targetPlayerCount);
   const isHost = intent === "create";
+  // Host broadcasts a digest of its settled state; a drifted client pulls the host's copy back.
+  useDesyncGuard({ channelRef, state: gameState, isHost, active: phase === "playing" });
 
   // Same "lowest connected seat drives bots" rule as every other online game (see BluffRouletteGame.tsx).
   const canDriveBots = useMemo(() => {
@@ -334,7 +340,9 @@ export default function AlkkagiGame({ onComplete }: PlayableGameProps) {
       }
     });
 
-    channel.on("broadcast", { event: "state-request" }, () => {
+    channel.on("broadcast", { event: DESYNC_DIGEST_EVENT }, ({ payload }) => desyncOnDigest(channelRef, payload));
+    channel.on("broadcast", { event: "state-request" }, ({ payload }) => {
+      if (desyncSkipSyncAnswer(channelRef, payload)) return;
       if (gameStateRef.current) {
         channel.send({
           type: "broadcast",

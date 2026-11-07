@@ -55,6 +55,7 @@ import {
 import { selfResult } from "@/games/shared/selfResult";
 import { acceptSync, actingHostOf, judgeOrdered, type OrderedCursor } from "./actionOrder";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
+import { DESYNC_DIGEST_EVENT, desyncOnDigest, desyncSkipSyncAnswer, useDesyncGuard } from "@/games/shared/room/useDesyncGuard";
 
 /**
  * 단어 마천루 온라인 대전 진입점 — 라이어를 찾아라와 같은 락스텝 패턴(docs/cloud-sync.md).
@@ -216,6 +217,8 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
   const playerCountRef = useRef(targetPlayerCount);
   const optionsRef = useRef<GameOptions>(options);
   const isHost = intent === "create";
+  // Host broadcasts a digest of its settled state; a drifted client pulls the host's copy back.
+  useDesyncGuard({ channelRef, state: gameState, isHost, active: phase === "playing" });
 
   const gameStateRef = useRef<GameState | null>(null);
   useEffect(() => {
@@ -342,7 +345,9 @@ export default function WordTowerGame({ onComplete }: PlayableGameProps) {
       }
     });
 
-    channel.on("broadcast", { event: "state-request" }, () => {
+    channel.on("broadcast", { event: DESYNC_DIGEST_EVENT }, ({ payload }) => desyncOnDigest(channelRef, payload));
+    channel.on("broadcast", { event: "state-request" }, ({ payload }) => {
+      if (desyncSkipSyncAnswer(channelRef, payload)) return;
       if (gameStateRef.current) {
         channel.send({
           type: "broadcast",

@@ -37,6 +37,11 @@ import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { getMineBgm } from "./mineBgm";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
+import { DESYNC_DIGEST_EVENT, desyncOnDigest, desyncSkipSyncAnswer, useDesyncGuard } from "@/games/shared/room/useDesyncGuard";
+import { IDLE_VOTE_MS } from "@/games/shared/bot/idleThresholds";
+
+/** Idle-vote trigger for this game's tier — see idleThresholds.ts. */
+const IDLE_VOTE_THRESHOLD_MS = IDLE_VOTE_MS.quick;
 
 /**
  * Online-room multiplayer entry point for 망각의 지뢰 — the same lockstep
@@ -149,7 +154,6 @@ export default function MineOfOblivionGame({ onComplete }: PlayableGameProps) {
     phaseRef.current = phase;
   }, [phase]);
   const lastActorRef = useRef<{ actor: Seat | null; since: number }>({ actor: null, since: 0 });
-  const IDLE_VOTE_THRESHOLD_MS = 45_000;
   const occupantsRef = useRef<Occupant[]>([]);
   useEffect(() => {
     occupantsRef.current = occupants;
@@ -283,7 +287,9 @@ export default function MineOfOblivionGame({ onComplete }: PlayableGameProps) {
       }
     });
 
-    channel.on("broadcast", { event: "state-request" }, () => {
+    channel.on("broadcast", { event: DESYNC_DIGEST_EVENT }, ({ payload }) => desyncOnDigest(channelRef, payload));
+    channel.on("broadcast", { event: "state-request" }, ({ payload }) => {
+      if (desyncSkipSyncAnswer(channelRef, payload)) return;
       if (!gameStateRef.current) {
         if (myRole === "p1") {
           channel.send({ type: "broadcast", event: "bot-roster", payload: { botRoles: botRolesRef.current, botLevels: botLevelsRef.current } });
@@ -368,6 +374,8 @@ export default function MineOfOblivionGame({ onComplete }: PlayableGameProps) {
   }
 
   const isHost = myRole === "p1";
+  // Host broadcasts a digest of its settled state; a drifted client pulls the host's copy back.
+  useDesyncGuard({ channelRef, state: gameState, isHost, active: phase === "playing" });
 
   useEffect(() => {
     if (phase !== "waiting" || !isHost || startSentRef.current) return;

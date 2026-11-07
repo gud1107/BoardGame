@@ -61,6 +61,11 @@ import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/
 import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
+import { DESYNC_DIGEST_EVENT, desyncOnDigest, desyncSkipSyncAnswer, useDesyncGuard } from "@/games/shared/room/useDesyncGuard";
+import { IDLE_VOTE_MS } from "@/games/shared/bot/idleThresholds";
+
+/** Idle-vote trigger for this game's tier — see idleThresholds.ts. */
+const IDLE_VOTE_THRESHOLD_MS = IDLE_VOTE_MS.quick;
 
 /** Whose decision `useBotAutoplay` should drive right now. */
 function mddjCurrentActor(state: MalDalliJaState): Seat | null {
@@ -207,7 +212,6 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
   // deliberately-stale placeholder (not `Date.now()`, an impure render-time
   // call) — the first interval tick always rebases it to "now".
   const lastActorRef = useRef<{ actor: Seat | null; since: number }>({ actor: null, since: 0 });
-  const IDLE_VOTE_THRESHOLD_MS = 45_000;
   const occupantsRef = useRef<Occupant[]>([]);
   useEffect(() => {
     occupantsRef.current = occupants;
@@ -467,7 +471,9 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
       setRoomBetting(roomBettingRef.current);
     });
 
-    channel.on("broadcast", { event: "state-request" }, () => {
+    channel.on("broadcast", { event: DESYNC_DIGEST_EVENT }, ({ payload }) => desyncOnDigest(channelRef, payload));
+    channel.on("broadcast", { event: "state-request" }, ({ payload }) => {
+      if (desyncSkipSyncAnswer(channelRef, payload)) return;
       if (!gameStateRef.current) {
         if (myRole === "p1") {
           channel.send({ type: "broadcast", event: "bot-roster", payload: { botRoles: botRolesRef.current, botLevels: botLevelsRef.current } });
@@ -580,6 +586,8 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
   }
 
   const isHost = myRole === "p1";
+  // Host broadcasts a digest of its settled state; a drifted client pulls the host's copy back.
+  useDesyncGuard({ channelRef, state: gameState, isHost, active: phase === "playing" });
 
   // Host deals the opening position as soon as both seats are filled (a
   // role counts as "filled" whether it's a connected human or a bot the

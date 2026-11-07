@@ -48,6 +48,7 @@ import {
 } from "@/games/shared/bot/botTakeover";
 import { selfResult } from "@/games/shared/selfResult";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
+import { DESYNC_DIGEST_EVENT, desyncOnDigest, desyncSkipSyncAnswer, useDesyncGuard } from "@/games/shared/room/useDesyncGuard";
 
 /**
  * 죽은척 대작전 온라인 대전 진입점 — 갓생 플래너와 같은 락스텝 + 커밋-공개 패턴
@@ -209,6 +210,8 @@ export default function PlayDeadGame({ onComplete }: PlayableGameProps) {
   const playerCountRef = useRef(targetPlayerCount);
   const optionsRef = useRef<GameOptions>(options);
   const isHost = intent === "create";
+  // Host broadcasts a digest of its settled state; a drifted client pulls the host's copy back.
+  useDesyncGuard({ channelRef, state: gameState, isHost, active: phase === "playing" });
 
   const gameStateRef = useRef<GameState | null>(null);
   useEffect(() => {
@@ -307,7 +310,9 @@ export default function PlayDeadGame({ onComplete }: PlayableGameProps) {
       }
     });
 
-    channel.on("broadcast", { event: "state-request" }, () => {
+    channel.on("broadcast", { event: DESYNC_DIGEST_EVENT }, ({ payload }) => desyncOnDigest(channelRef, payload));
+    channel.on("broadcast", { event: "state-request" }, ({ payload }) => {
+      if (desyncSkipSyncAnswer(channelRef, payload)) return;
       if (gameStateRef.current) {
         channel.send({
           type: "broadcast",

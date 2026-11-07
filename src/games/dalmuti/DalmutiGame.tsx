@@ -60,6 +60,11 @@ import ChatDrawer from "@/components/chat/ChatDrawer";
 import { selfResult } from "@/games/shared/selfResult";
 import { dalmutiStatDetails } from "./stats";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
+import { DESYNC_DIGEST_EVENT, desyncOnDigest, desyncSkipSyncAnswer, useDesyncGuard } from "@/games/shared/room/useDesyncGuard";
+import { IDLE_VOTE_MS } from "@/games/shared/bot/idleThresholds";
+
+/** Idle-vote trigger for this game's tier — see idleThresholds.ts. */
+const IDLE_VOTE_THRESHOLD_MS = IDLE_VOTE_MS.quick;
 
 /**
  * Whose decision `useBotAutoplay` should drive right now. `taxReturn` can
@@ -223,7 +228,6 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
   // impure render-time call) — the first interval tick always sees `actor`
   // differ from the initial `null` and immediately rebases it to "now".
   const lastActorRef = useRef<{ actor: SeatIndex | null; since: number }>({ actor: null, since: 0 });
-  const IDLE_VOTE_THRESHOLD_MS = 45_000;
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   // Shared by the initial post-subscribe sync and `useBackgroundResync`
@@ -239,6 +243,8 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
   const startSentRef = useRef(false);
   const playerCountRef = useRef(targetPlayerCount);
   const isHost = intent === "create";
+  // Host broadcasts a digest of its settled state; a drifted client pulls the host's copy back.
+  useDesyncGuard({ channelRef, state: gameState, isHost, active: phase === "playing" });
 
   // Bot-turn execution authority — deliberately separate from `isHost`
   // above. `isHost` is frozen at room-entry time ("did I create vs join the
@@ -453,7 +459,9 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
     // A client that (re)joins after the game already started never saw the
     // one-time `game-start` broadcast — same reconnect flow as every other
     // online game here.
-    channel.on("broadcast", { event: "state-request" }, () => {
+    channel.on("broadcast", { event: DESYNC_DIGEST_EVENT }, ({ payload }) => desyncOnDigest(channelRef, payload));
+    channel.on("broadcast", { event: "state-request" }, ({ payload }) => {
+      if (desyncSkipSyncAnswer(channelRef, payload)) return;
       if (gameStateRef.current) {
         channel.send({
           type: "broadcast",

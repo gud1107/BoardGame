@@ -58,6 +58,7 @@ import ChatDrawer from "@/components/chat/ChatDrawer";
 import { selfResult } from "@/games/shared/selfResult";
 import { spotDifferenceStatDetails } from "./stats";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
+import { DESYNC_DIGEST_EVENT, desyncOnDigest, desyncSkipSyncAnswer, useDesyncGuard } from "@/games/shared/room/useDesyncGuard";
 
 /**
  * Pure system-log line formatter for the in-game chat system-log pilot (see
@@ -285,6 +286,8 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
   const diffCountRef = useRef(diffCount);
   const timerSecondsRef = useRef(timerSeconds);
   const isHost = intent === "create";
+  // Host broadcasts a digest of its settled state; a drifted client pulls the host's copy back.
+  useDesyncGuard({ channelRef, state: gameState, isHost, active: phase === "playing" });
 
   const gameStateRef = useRef<SpotDifferenceState | null>(null);
   useEffect(() => {
@@ -498,7 +501,9 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
       }
     });
 
-    channel.on("broadcast", { event: "state-request" }, () => {
+    channel.on("broadcast", { event: DESYNC_DIGEST_EVENT }, ({ payload }) => desyncOnDigest(channelRef, payload));
+    channel.on("broadcast", { event: "state-request" }, ({ payload }) => {
+      if (desyncSkipSyncAnswer(channelRef, payload)) return;
       if (gameStateRef.current) {
         channel.send({
           type: "broadcast",

@@ -23,6 +23,7 @@ import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficul
 import { selfResult } from "@/games/shared/selfResult";
 import { greatLegacyStatDetails } from "./stats";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
+import { DESYNC_DIGEST_EVENT, desyncOnDigest, desyncSkipSyncAnswer, useDesyncGuard } from "@/games/shared/room/useDesyncGuard";
 
 /**
  * Online-room multiplayer entry point, same lockstep pattern as
@@ -141,6 +142,8 @@ export default function GreatLegacyGame({ onComplete }: PlayableGameProps) {
   const timeLimitModeRef = useRef(timeLimitMode);
   const coinVisibilityRef = useRef(coinVisibility);
   const isHost = intent === "create";
+  // Host broadcasts a digest of its settled state; a drifted client pulls the host's copy back.
+  useDesyncGuard({ channelRef, state: gameState, isHost, active: phase === "playing" });
 
   const gameStateRef = useRef<GreatLegacyState | null>(null);
   useEffect(() => {
@@ -219,7 +222,9 @@ export default function GreatLegacyGame({ onComplete }: PlayableGameProps) {
       setGameState((prev) => (prev ? applyAction(prev, action) : prev));
     });
 
-    channel.on("broadcast", { event: "state-request" }, () => {
+    channel.on("broadcast", { event: DESYNC_DIGEST_EVENT }, ({ payload }) => desyncOnDigest(channelRef, payload));
+    channel.on("broadcast", { event: "state-request" }, ({ payload }) => {
+      if (desyncSkipSyncAnswer(channelRef, payload)) return;
       if (gameStateRef.current) {
         channel.send({
           type: "broadcast",

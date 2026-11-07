@@ -55,6 +55,11 @@ import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/
 import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
+import { DESYNC_DIGEST_EVENT, desyncOnDigest, desyncSkipSyncAnswer, useDesyncGuard } from "@/games/shared/room/useDesyncGuard";
+import { IDLE_VOTE_MS } from "@/games/shared/bot/idleThresholds";
+
+/** Idle-vote trigger for this game's tier — see idleThresholds.ts. */
+const IDLE_VOTE_THRESHOLD_MS = IDLE_VOTE_MS.quick;
 
 function memoryFeastChooseAction(state: MemoryFeastState, actor: Seat, level: BotLevel): EngineAction | null {
   return chooseBotAction(state, actor, level);
@@ -163,7 +168,6 @@ export default function MemoryFeastGame({ onComplete }: PlayableGameProps) {
     phaseRef.current = phase;
   }, [phase]);
   const lastActorRef = useRef<{ actor: Seat | null; since: number }>({ actor: null, since: 0 });
-  const IDLE_VOTE_THRESHOLD_MS = 45_000;
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   function requestStateSync() {
@@ -174,6 +178,8 @@ export default function MemoryFeastGame({ onComplete }: PlayableGameProps) {
   }
   const startSentRef = useRef(false);
   const isHost = myRole === "p1";
+  // Host broadcasts a digest of its settled state; a drifted client pulls the host's copy back.
+  useDesyncGuard({ channelRef, state: gameState, isHost, active: phase === "playing" });
 
   const namesRef = useRef<Record<Seat, string>>({ p1: "상대", p2: "상대" });
 
@@ -323,7 +329,9 @@ export default function MemoryFeastGame({ onComplete }: PlayableGameProps) {
       }
     });
 
-    channel.on("broadcast", { event: "state-request" }, () => {
+    channel.on("broadcast", { event: DESYNC_DIGEST_EVENT }, ({ payload }) => desyncOnDigest(channelRef, payload));
+    channel.on("broadcast", { event: "state-request" }, ({ payload }) => {
+      if (desyncSkipSyncAnswer(channelRef, payload)) return;
       if (gameStateRef.current) {
         channel.send({
           type: "broadcast",

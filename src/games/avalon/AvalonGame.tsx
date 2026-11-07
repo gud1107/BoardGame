@@ -39,6 +39,11 @@ import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/
 import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
+import { DESYNC_DIGEST_EVENT, desyncOnDigest, desyncSkipSyncAnswer, useDesyncGuard } from "@/games/shared/room/useDesyncGuard";
+import { IDLE_VOTE_MS } from "@/games/shared/bot/idleThresholds";
+
+/** Idle-vote trigger for this game's tier — see idleThresholds.ts. */
+const IDLE_VOTE_THRESHOLD_MS = IDLE_VOTE_MS.strategy;
 
 /**
  * Pure system-log line formatter for the in-game chat system-log pilot (see
@@ -188,7 +193,6 @@ export default function AvalonGame({ onComplete }: PlayableGameProps) {
   // Tracks how long the current actor has been stuck, for the "idle/무응답"
   // vote trigger — see the dedicated interval effect below.
   const lastActorRef = useRef<{ actor: SeatIndex | null; since: number }>({ actor: null, since: 0 });
-  const IDLE_VOTE_THRESHOLD_MS = 45_000;
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   // Shared by the initial post-subscribe sync and `useBackgroundResync`
@@ -204,6 +208,8 @@ export default function AvalonGame({ onComplete }: PlayableGameProps) {
   const startSentRef = useRef(false);
   const playerCountRef = useRef(targetPlayerCount);
   const isHost = intent === "create";
+  // Host broadcasts a digest of its settled state; a drifted client pulls the host's copy back.
+  useDesyncGuard({ channelRef, state: gameState, isHost, active: phase === "playing" });
 
   // Kept in sync so the `state-request` broadcast handler (registered once,
   // inside the channel-setup effect below) always sees the latest state
@@ -368,7 +374,9 @@ export default function AvalonGame({ onComplete }: PlayableGameProps) {
       }
     });
 
-    channel.on("broadcast", { event: "state-request" }, () => {
+    channel.on("broadcast", { event: DESYNC_DIGEST_EVENT }, ({ payload }) => desyncOnDigest(channelRef, payload));
+    channel.on("broadcast", { event: "state-request" }, ({ payload }) => {
+      if (desyncSkipSyncAnswer(channelRef, payload)) return;
       if (gameStateRef.current) {
         channel.send({
           type: "broadcast",

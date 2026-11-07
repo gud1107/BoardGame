@@ -72,6 +72,10 @@ import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { getInkDuelBgm } from "./inkDuelBgm";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
+import { IDLE_VOTE_MS } from "@/games/shared/bot/idleThresholds";
+
+/** Idle-vote trigger for this game's tier — see idleThresholds.ts. */
+const IDLE_VOTE_THRESHOLD_MS = IDLE_VOTE_MS.quick;
 
 /**
  * Online-room multiplayer entry point for 낙서 결투 — same lockstep pattern
@@ -299,7 +303,6 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
     phaseRef.current = phase;
   }, [phase]);
   const lastActorRef = useRef<{ actor: SeatIndex | null; since: number }>({ actor: null, since: 0 });
-  const IDLE_VOTE_THRESHOLD_MS = 45_000;
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   function requestStateSync() {

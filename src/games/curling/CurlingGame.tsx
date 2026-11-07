@@ -68,6 +68,7 @@ import { selfResult } from "@/games/shared/selfResult";
 import { curlingStatDetails } from "./stats";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 import { seatVoice } from "@/lib/audio/seatVoice";
+import { DESYNC_DIGEST_EVENT, desyncOnDigest, desyncSkipSyncAnswer, useDesyncGuard } from "@/games/shared/room/useDesyncGuard";
 
 /**
  * Online-room entry point for 컬링 파티 — the same lockstep room pattern as
@@ -237,6 +238,8 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
   const startSentRef = useRef(false);
   const playerCountRef = useRef(targetPlayerCount);
   const isHost = intent === "create";
+  // Host broadcasts a digest of its settled state; a drifted client pulls the host's copy back.
+  useDesyncGuard({ channelRef, state: gameState, isHost, active: phase === "playing" });
 
   // Same "lowest connected seat drives bots" rule as every other online game.
   const canDriveBots = useMemo(() => {
@@ -487,7 +490,9 @@ export default function CurlingGame({ onComplete }: PlayableGameProps) {
       }
     });
 
-    channel.on("broadcast", { event: "state-request" }, () => {
+    channel.on("broadcast", { event: DESYNC_DIGEST_EVENT }, ({ payload }) => desyncOnDigest(channelRef, payload));
+    channel.on("broadcast", { event: "state-request" }, ({ payload }) => {
+      if (desyncSkipSyncAnswer(channelRef, payload)) return;
       if (gameStateRef.current) {
         channel.send({
           type: "broadcast",

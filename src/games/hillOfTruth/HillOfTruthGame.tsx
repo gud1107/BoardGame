@@ -40,6 +40,8 @@ import {
 } from "@/games/shared/bot/botTakeover";
 import { selfResult } from "@/games/shared/selfResult";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
+import { DESYNC_DIGEST_EVENT, desyncOnDigest, desyncSkipSyncAnswer, useDesyncGuard } from "@/games/shared/room/useDesyncGuard";
+import { IDLE_VOTE_MS } from "@/games/shared/bot/idleThresholds";
 
 /**
  * 진실의 고개 온라인 대전 진입점 — 다른 게임들과 동일한 락스텝 패턴
@@ -55,7 +57,7 @@ import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 
 const MIN_PLAYERS = 2;
 const MAX_PLAYERS = 8;
-const IDLE_VOTE_THRESHOLD_MS = 45_000;
+const IDLE_VOTE_THRESHOLD_MS = IDLE_VOTE_MS.strategy;
 
 /** 방 생성 시 호스트가 고르는 난이도 3단계(2026-09-03 세션) — scenarios.ts §
  * Difficulty 계약과 동일한 값을 쓴다. */
@@ -171,6 +173,8 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
   const playerCountRef = useRef(targetPlayerCount);
   const difficultyRef = useRef<Difficulty>(difficulty);
   const isHost = intent === "create";
+  // Host broadcasts a digest of its settled state; a drifted client pulls the host's copy back.
+  useDesyncGuard({ channelRef, state: gameState, isHost, active: phase === "playing" });
 
   const gameStateRef = useRef<GameState | null>(null);
   useEffect(() => {
@@ -280,7 +284,9 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
       }
     });
 
-    channel.on("broadcast", { event: "state-request" }, () => {
+    channel.on("broadcast", { event: DESYNC_DIGEST_EVENT }, ({ payload }) => desyncOnDigest(channelRef, payload));
+    channel.on("broadcast", { event: "state-request" }, ({ payload }) => {
+      if (desyncSkipSyncAnswer(channelRef, payload)) return;
       if (gameStateRef.current) {
         channel.send({
           type: "broadcast",
