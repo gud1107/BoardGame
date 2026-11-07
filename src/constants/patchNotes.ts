@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.151.0",
+    releaseDate: "2026-11-07",
+    title: "🧬 배고픈 상어 잠수 증강 32종",
+    changes: [
+      { game: "hungry-shark", type: "FEAT", desc: "🧬 잠수 증강 — 생존 0:45·2:00·4:00·6:30·9:30에 바다가 멈추고 카드 3장 중 1장, 실버·골드·프리즘 32종 · 🔄 다시 뽑기 1회" },
+      { game: "hungry-shark", type: "FEAT", desc: "🔥 불사조 부활·⛓️ 먹이사슬 역행(한 티어 위 먹이)·💛 황금 심장·🏔️ 거대화 등 — 이번 잠수만 유지, 잠수 중 진화해도 이어져요" },
+      { game: "hungry-shark", type: "IMPROVE", desc: "📋 HUD에 보유 증강·다음 증강까지 남은 초, 일시정지·결과 화면에 증강 목록 · 봇 64판씩 측정해 튀던 카드 하향" },
+    ],
+  },
+  {
     version: "v1.150.1",
     releaseDate: "2026-11-07",
     title: "✨ 랜덤 합성 디펜스 증강 체감 수치 · 비교 창",

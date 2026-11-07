@@ -36,6 +36,7 @@ import {
   type UpgradeKind,
 } from "./data";
 import type { RunSummary } from "./engine";
+import { AugList } from "./AugmentPicker";
 import HungrySharkCanvas from "./HungrySharkCanvas";
 import RulebookModal from "./RulebookModal";
 import BestiaryPanel from "./BestiaryPanel";
@@ -1239,6 +1240,12 @@ function ResultsPanel({
           ))}
         </div>
       </div>
+      {(s.augs?.length ?? 0) > 0 && (
+        <div>
+          <div className="mb-1.5 text-xs font-semibold text-white/50 light:text-slate-500">🧬 이번 잠수 증강</div>
+          <AugList augs={s.augs} themed />
+        </div>
+      )}
       {eaten.length > 0 && (
         <div>
           <div className="mb-1.5 text-xs font-semibold text-white/50 light:text-slate-500">먹은 것들</div>

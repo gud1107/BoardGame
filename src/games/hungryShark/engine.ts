@@ -60,6 +60,7 @@ import {
   type UpgradeLevels,
 } from "./data";
 import { ICE_TOP, insideAny, nearestHole, resolveCircle, type Circle } from "./mapGeometry";
+import { AUG_N, AUG_TIMES, applyAugStats, rollCards, rollTier, type AugmentId, type AugTier } from "./augments";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -155,6 +156,9 @@ export type GameEvent =
   | { type: "skillReady" }
   | { type: "preyFx"; label: string }
   | { type: "evolve"; sharkId: string }
+  | { type: "augOffer"; tier: AugTier }
+  | { type: "augPick"; id: AugmentId }
+  | { type: "phoenix" }
   | { type: "death"; cause: string };
 
 export interface MissionState {
@@ -264,6 +268,18 @@ export interface World {
   skill: SkillState;
   beams: Beam[];
   rings: Ring[];
+  /** Upgrades the current form was built with (augment picks re-derive `stats` from them). */
+  upgrades: UpgradeLevels;
+  /** 🧬 잠수 증강 owned this dive (augments.ts). */
+  augs: AugmentId[];
+  /** Open 3-card offer — while set, `step` does nothing (the dive is paused). */
+  augOffer: { round: number; tier: AugTier; cards: AugmentId[] } | null;
+  /** Index into AUG_TIMES of the next offer; AUG_TIMES.length = no more. */
+  augRound: number;
+  augRerolls: number;
+  /** Offers only open when the host asks for them (tests/sims leave it off). */
+  augEnabled: boolean;
+  phoenixUsed: boolean;
 }
 
 export interface SharkInput {
@@ -306,11 +322,12 @@ export function createWorld(
   upgrades: UpgradeLevels,
   seed = Date.now() & 0x7fffffff,
   mapId: MapId = "deepBlue",
-  opts: { missionStreak?: number } = {},
+  opts: { missionStreak?: number; augments?: boolean; forceAugs?: AugmentId[] } = {},
 ): World {
   const map = mapById(mapId);
   setActiveMap(map);
-  const stats = effectiveStats(def, upgrades);
+  const startAugs = [...(opts.forceAugs ?? [])];
+  const stats = applyAugStats(effectiveStats(def, upgrades), startAugs);
   const w: World = {
     map,
     seed,
@@ -381,6 +398,13 @@ export function createWorld(
     skill: { id: def.skill.id, cooldown: 0, active: 0, ambush: false, reveal: 0, vortex: null },
     beams: [],
     rings: [],
+    upgrades,
+    augs: startAugs,
+    augOffer: null,
+    augRound: 0,
+    augRerolls: 1,
+    augEnabled: !!opts.augments,
+    phoenixUsed: false,
   };
 
   // Three distinct missions, goal difficulty scaled by tier.
@@ -494,7 +518,12 @@ export function isEdible(w: World, e: Entity): boolean {
   if (w.gold.active && w.gold.mega) return true;
   // 크러시 바이트: mines / jellies / torpedoes get chewed up instead of hurting.
   if (w.skill.id === "crush" && w.skill.active > 0 && e.def.requiredTier >= NEVER && e.kind !== "rock") return true;
-  return e.def.requiredTier <= w.def.tier;
+  return e.def.requiredTier <= edibleTier(w);
+}
+
+/** Highest prey tier the shark can eat (먹이사슬 역행 adds one). */
+export function edibleTier(w: World): number {
+  return w.def.tier + (w.augs.includes("chainBreaker") ? 1 : 0);
 }
 
 /** Is this entity currently a threat to the player (for AI + drawing warnings)? */
@@ -587,7 +616,7 @@ function floatText(w: World, x: number, y: number, text: string, color: string, 
 // ── Main step ───────────────────────────────────────────────────────────────
 
 export function step(w: World, input: SharkInput, rawDt: number): void {
-  if (w.over) return;
+  if (w.over || w.augOffer) return;
   if (getActiveMap() !== w.map) setActiveMap(w.map);
   const dt = Math.min(0.05, Math.max(0, rawDt));
   w.time += dt;
@@ -619,7 +648,68 @@ export function step(w: World, input: SharkInput, rawDt: number): void {
   w.shake = Math.max(0, w.shake - dt * 30);
   w.bounceCd = Math.max(0, w.bounceCd - dt);
 
-  if (w.shark.hp <= 0) killShark(w, w.deathCause ?? "굶주림");
+  if (w.shark.hp <= 0 && !tryPhoenix(w)) killShark(w, w.deathCause ?? "굶주림");
+  if (!w.over && w.augEnabled && w.augRound < AUG_TIMES.length && w.time >= AUG_TIMES[w.augRound]) openAugOffer(w);
+}
+
+// ── 🧬 잠수 증강 (augments.ts) ────────────────────────────────────────────────
+
+export function hasAug(w: World, id: AugmentId): boolean {
+  return w.augs.includes(id);
+}
+
+function openAugOffer(w: World) {
+  const round = w.augRound++;
+  const tier = rollTier(round, rand(w));
+  w.augOffer = { round, tier, cards: rollCards(tier, w.augs, () => rand(w), [], edibleTier(w)) };
+  w.events.push({ type: "augOffer", tier });
+}
+
+/** Take one of the offered cards; resumes the dive. Returns false for a card that isn't on offer. */
+export function pickAugment(w: World, id: AugmentId): boolean {
+  const o = w.augOffer;
+  if (!o || !o.cards.includes(id) || w.augs.includes(id)) return false;
+  w.augs.push(id);
+  w.augOffer = null;
+  const oldMax = w.stats.maxHealth;
+  w.stats = applyAugStats(effectiveStats(w.def, w.upgrades), w.augs);
+  const s = w.shark;
+  if (w.stats.maxHealth > oldMax) s.hp += w.stats.maxHealth - oldMax;
+  s.hp = Math.min(s.hp, w.stats.maxHealth);
+  s.boost = Math.min(s.boost, w.stats.boostDuration);
+  w.skill.cooldown = Math.min(w.skill.cooldown, w.stats.skillCooldown);
+  // The world froze mid-chase: a short grace so the first resumed frame can't kill.
+  s.invuln = Math.max(s.invuln, 1);
+  w.rings.push({ x: s.x, y: s.y, radius: 380, life: 0.9, maxLife: 0.9, color: "#a78bfa" });
+  w.events.push({ type: "augPick", id });
+  return true;
+}
+
+/** Re-deal the three cards (same tier, other cards where possible) — once per dive. */
+export function rerollAugments(w: World): boolean {
+  const o = w.augOffer;
+  if (!o || w.augRerolls <= 0) return false;
+  w.augRerolls--;
+  o.cards = rollCards(o.tier, w.augs, () => rand(w), o.cards, edibleTier(w));
+  return true;
+}
+
+/** 불사조: the first lethal moment of the dive brings the shark back instead. */
+function tryPhoenix(w: World): boolean {
+  if (w.phoenixUsed || !hasAug(w, "phoenix")) return false;
+  w.phoenixUsed = true;
+  const s = w.shark;
+  s.hp = w.stats.maxHealth * AUG_N.phoenixHp;
+  s.poison = null;
+  s.invuln = Math.max(s.invuln, AUG_N.phoenixInvuln);
+  s.shield = Math.max(s.shield, AUG_N.phoenixInvuln);
+  w.deathCause = null;
+  w.rings.push({ x: s.x, y: s.y, radius: 520, life: 1.2, maxLife: 1.2, color: "#fb923c" });
+  burst(w, "spark", s.x, s.y, 50, 380, "#fb923c", 5, 1.2);
+  floatText(w, s.x, s.y - 70, "🔥 불사조 부활!", "#fdba74", 26);
+  w.shake = Math.max(w.shake, 14);
+  w.events.push({ type: "phoenix" });
+  return true;
 }
 
 function killShark(w: World, cause: string) {
@@ -650,6 +740,8 @@ function stepShark(w: World, input: SharkInput, dt: number) {
     const turnRate = Math.max(2.9, 4.88 - (st.length - 70) * 0.0114);
     let speed = st.swimSpeed * skillSpeedMul(w);
     if (s.poison) speed *= 1 - POISON_SLOW;
+    const winded = hasAug(w, "secondWind") && s.hp < st.maxHealth * AUG_N.secondWindHp;
+    if (winded) speed *= AUG_N.secondWindSpeed;
     const canBoost = input.boost && mag > 0.01 && (w.gold.active || s.boost > 0.05);
     s.boosting = canBoost;
     if (canBoost) {
@@ -671,7 +763,7 @@ function stepShark(w: World, input: SharkInput, dt: number) {
         });
       }
     } else {
-      s.boost = Math.min(st.boostDuration, s.boost + dt * st.boostRegen);
+      s.boost = Math.min(st.boostDuration, s.boost + dt * st.boostRegen * (winded ? 2 : 1));
     }
 
     let targetVx: number, targetVy: number;
@@ -705,7 +797,7 @@ function stepShark(w: World, input: SharkInput, dt: number) {
   if (!wasAirborne && s.y < SURFACE_Y - 2 && !isUnderIce(s.x)) {
     s.airborne = true;
     // Breaching bonus so a boosted jump can actually reach pelicans/helicopters.
-    if (s.vy < 0) s.vy *= s.boosting || w.gold.active ? BREACH_BONUS : 1.1;
+    if (s.vy < 0) s.vy *= (s.boosting || w.gold.active ? BREACH_BONUS : 1.1) * (hasAug(w, "breachMuscle") ? AUG_N.breachJump : 1);
     w.run.jumps++;
     burst(w, "splash", s.x, SURFACE_Y, 18, 260, "#e0f2fe", 4, 0.8, 700);
     w.events.push({ type: "jumpOut" });
@@ -733,7 +825,8 @@ function stepShark(w: World, input: SharkInput, dt: number) {
 
   // Starvation (spec §1-1) — paused during Gold Rush.
   if (!w.gold.active) {
-    s.hp -= drainPerSecond(st.baseDrainRate, w.time) * dt;
+    const deep = hasAug(w, "deepAdapt") && depthMeters(s.y) >= AUG_N.deepAdaptM ? AUG_N.deepAdapt : 1;
+    s.hp -= drainPerSecond(st.baseDrainRate, w.time) * deep * dt;
     if (s.hp <= 0) w.deathCause = w.lastHit && w.time - w.lastHit.time < HIT_CREDIT_SECONDS ? w.lastHit.cause : "굶주림";
   }
 
@@ -1142,7 +1235,8 @@ function resolveBites(w: World) {
   const s = w.shark;
   const m = mouthPos(w);
   const hx = Math.cos(s.angle), hy = Math.sin(s.angle);
-  const reach = w.stats.eatRadius * bodyScale(w);
+  const charging = s.boosting && hasAug(w, "chargeBite");
+  const reach = w.stats.eatRadius * bodyScale(w) * (charging ? AUG_N.chargeReach : 1);
   for (const e of queryGrid(m.x, m.y, reach + 70, scratchB)) {
     if (!e.alive) continue;
     const dx = e.x - m.x, dy = e.y - m.y;
@@ -1158,7 +1252,7 @@ function resolveBites(w: World) {
     } else if (s.biteCooldown <= 0) {
       s.biteCooldown = 0.28;
       s.jaw = 0.22;
-      let dmg = w.stats.biteForce * (w.gold.active ? 2 : 1);
+      let dmg = w.stats.biteForce * (w.gold.active ? 2 : 1) * (charging ? AUG_N.chargeBite : 1);
       if (w.skill.ambush) {
         // 그림자 은신 → 시공 암살: the first bite out of the shadows hits ×5.
         dmg *= 5;
@@ -1171,6 +1265,10 @@ function resolveBites(w: World) {
       burst(w, e.y < SURFACE_Y + 6 ? "chunk" : "blood", e.x, e.y, 6, 150, e.y < SURFACE_Y + 6 ? "#78716c" : "#dc2626", 4, 0.7);
       w.shake = Math.max(w.shake, 4);
       w.events.push({ type: "bite", x: e.x, y: e.y });
+      if (e.hp > 0 && hasAug(w, "vampFang") && !w.gold.active) {
+        s.hp = Math.min(w.stats.maxHealth, s.hp + w.stats.maxHealth * AUG_N.vampFang);
+        floatText(w, s.x, s.y - 34, "🩸", "#fca5a5", 14);
+      }
       if (e.hp <= 0) consume(w, e);
     }
   }
@@ -1184,22 +1282,23 @@ function consume(w: World, e: Entity) {
   const def = e.def;
   const goldOn = w.gold.active;
   w.combo++;
-  w.comboTimer = COMBO_WINDOW;
+  w.comboTimer = COMBO_WINDOW * (hasAug(w, "bloodScent") ? AUG_N.bloodScent : 1) * (hasAug(w, "frenzyLord") ? AUG_N.frenzyLordWindow : 1);
   w.run.bestCombo = Math.max(w.run.bestCombo, w.combo);
   const cm = comboMultiplier(w.combo);
-  const mult = cm * (goldOn ? w.gold.multiplier : 1);
+  const mult = cm * (goldOn ? w.gold.multiplier : 1) * (s.airborne && hasAug(w, "breachMuscle") ? AUG_N.breachScore : 1);
   const points = Math.round(def.score * mult);
   w.score += points;
-  if (!goldOn) w.gold.gauge += def.score * cm * GOLD_GAUGE_RATE;
+  if (!goldOn) w.gold.gauge += def.score * cm * GOLD_GAUGE_RATE * (hasAug(w, "greed") ? AUG_N.greed : 1);
+  if (hasAug(w, "chainFeed") && w.skill.cooldown > 0) w.skill.cooldown = Math.max(0, w.skill.cooldown - AUG_N.chainFeed);
 
   if (goldOn) s.hp = w.stats.maxHealth;
   else s.hp = Math.min(w.stats.maxHealth, s.hp + healGain(def.heal, w.stats.biteLevel) * w.stats.healMul);
 
   // Coins: base drop × frenzy (consecutive eats) × shark gold bonus × Gold Rush ×3.
   let coins = 0;
-  const frenzy = goldOn ? 1 : frenzyMultiplier(w.combo);
+  const frenzy = goldOn ? 1 : frenzyMultiplier(w.combo * (hasAug(w, "frenzyLord") ? AUG_N.frenzyLordCombo : 1));
   if (e.kind === "chest") {
-    coins = Math.round((def.coins + Math.floor(rand(w) * 200)) * w.stats.goldMultiplier * mapCoinBonus(w.map, w.def.tier));
+    coins = Math.round((def.coins + Math.floor(rand(w) * 200)) * w.stats.goldMultiplier * mapCoinBonus(w.map, w.def.tier) * (hasAug(w, "treasureHunter") ? AUG_N.treasureHunter : 1));
     w.run.chests++;
     w.events.push({ type: "chest", amount: coins });
     burst(w, "gold", e.x, e.y, 30, 260, "#facc15", 4, 1.2);
@@ -1207,7 +1306,7 @@ function consume(w: World, e: Entity) {
     let base = 0;
     if (e.kind === "goldenTuna") base = def.coins + Math.floor(rand(w) * 151);
     else if (goldOn) base = Math.max(1, def.coins) * GOLD_RUSH_COIN_MULT * (w.gold.mega ? 2 : 1);
-    else if (rand(w) < def.coinChance) base = def.coins;
+    else if (rand(w) < def.coinChance + (hasAug(w, "scavenger") && def.coins > 0 ? AUG_N.scavenger : 0)) base = def.coins;
     if (base > 0) coins = Math.round(base * frenzy * w.stats.goldMultiplier * mapCoinBonus(w.map, w.def.tier));
   }
   if (frenzy > 1 && coins > 0) floatText(w, e.x, e.y + 14, `🪙×${frenzy} FRENZY`, "#fde047", 13);
@@ -1913,7 +2012,7 @@ function resolveContacts(w: World, dt: number) {
     if (e.def.damageKind === "explode") {
       explode(w, e);
     } else if (e.def.damageKind === "poison") {
-      if (!isInvulnerable(w) && (!s.poison || s.poison.remaining < POISON_DURATION - 0.6)) {
+      if (!isInvulnerable(w) && !hasAug(w, "antidote") && (!s.poison || s.poison.remaining < POISON_DURATION - 0.6)) {
         s.poison = { remaining: POISON_DURATION + (e.kind === "redJelly" ? 0.5 : 0), tick: POISON_TICK, pct: e.def.damage };
         w.events.push({ type: "poison" });
         floatText(w, s.x, s.y - 40, "중독!", "#86efac", 18);
@@ -1923,7 +2022,12 @@ function resolveContacts(w: World, dt: number) {
       if (e.attackCd <= 0 && s.invuln <= 0 && !isInvulnerable(w)) {
         e.attackCd = 1.1;
         s.invuln = 0.3;
-        hurt(w, e.def.damage, e.def.name);
+        const thorns = hasAug(w, "thornSkin");
+        hurt(w, e.def.damage * (thorns ? AUG_N.thornSkin : 1), e.def.name);
+        if (thorns && e.def.behavior !== "rock") {
+          e.stun = Math.max(e.stun, AUG_N.thornStun);
+          burst(w, "spark", e.x, e.y, 10, 160, "#bef264", 3, 0.5);
+        }
         knockback(w, -dx / d, -dy / d, 380);
         if (e.def.behavior === "hunter") e.state = "patrol";
       }
@@ -1963,7 +2067,7 @@ export function explode(w: World, e: Entity) {
   const R = mineExplosionRadius(e.kind);
   const s = w.shark;
   const d = Math.hypot(s.x - e.x, s.y - e.y);
-  const dmg = explosionDamage(e.def.damage, d, R);
+  const dmg = explosionDamage(e.def.damage, d, R) * (hasAug(w, "blastProof") ? AUG_N.blastProof : 1);
   if (dmg > 0) {
     hurt(w, dmg, e.def.name);
     const n = d || 1;
@@ -1995,9 +2099,9 @@ function maybeStartGoldRush(w: World) {
   const g = w.gold;
   if (g.active || g.gauge < g.capacity) return;
   g.count++;
-  g.mega = g.count % MEGA_EVERY === 0;
+  g.mega = g.count % (hasAug(w, "goldHeart") ? AUG_N.goldHeartEvery : MEGA_EVERY) === 0;
   g.active = true;
-  g.duration = g.mega ? MEGA_GOLD_RUSH_DURATION : GOLD_RUSH_DURATION;
+  g.duration = (g.mega ? MEGA_GOLD_RUSH_DURATION : GOLD_RUSH_DURATION) + (hasAug(w, "longRush") ? AUG_N.longRush : 0);
   g.remaining = g.duration;
   g.multiplier = goldRushMultiplier(g.count, g.mega);
   g.gauge = g.capacity;
@@ -2019,7 +2123,8 @@ export function evolveWorld(w: World, def: SharkDef, upgrades: UpgradeLevels) {
   if (w.over) return;
   const s = w.shark;
   w.def = def;
-  w.stats = effectiveStats(def, upgrades);
+  w.upgrades = upgrades;
+  w.stats = applyAugStats(effectiveStats(def, upgrades), w.augs);
   s.hp = w.stats.maxHealth;
   s.boost = w.stats.boostDuration;
   s.poison = null;
@@ -2268,6 +2373,8 @@ export interface RunSummary {
   missions: MissionState[];
   /** All-missions-cleared bonus already included in `coins` (0 if not every mission was done). */
   missionBonus: number;
+  /** 🧬 잠수 증강 picked this dive, in pick order. */
+  augs: AugmentId[];
 }
 
 export function summarize(w: World): RunSummary {
@@ -2281,6 +2388,7 @@ export function summarize(w: World): RunSummary {
     run: w.run,
     missions: w.missions,
     missionBonus: w.missionBonus,
+    augs: [...w.augs],
   };
 }
 

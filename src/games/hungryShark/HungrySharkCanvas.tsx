@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { frenzyMultiplier, mapById, sharkById, ZONES, zoneAt, type MapId, type SharkBranch, type SharkDef, type UpgradeLevels } from "./data";
-import { createWorld, depthMeters, evolveWorld, step, summarize, type MissionState, type RunSummary, type SharkInput, type World } from "./engine";
+import { createWorld, depthMeters, evolveWorld, pickAugment, rerollAugments, step, summarize, type MissionState, type RunSummary, type SharkInput, type World } from "./engine";
+import AugmentPicker, { AugChips, AugList } from "./AugmentPicker";
+import { AUG_BY_ID, AUG_TIMES, type AugmentId, type AugTier } from "./augments";
 import { drawWorld, updateCamera, viewHeightFor, type Camera } from "./render";
 import { SharkAudio } from "./audio";
 import BestiaryPanel, { type DeathStats } from "./BestiaryPanel";
@@ -50,7 +52,7 @@ interface Banner {
   id: number;
   text: string;
   sub?: string;
-  tone: "gold" | "mega" | "mission" | "chest" | "evolve";
+  tone: "gold" | "mega" | "mission" | "chest" | "evolve" | "aug";
 }
 
 const JOY_R = 52;
@@ -136,6 +138,28 @@ export default function HungrySharkCanvas({
   const [fullscreen, setFullscreen] = useState(false);
   const [dead, setDead] = useState<string | null>(null);
   const [bestiary, setBestiary] = useState<{ eaten: World["run"]["eaten"] } | null>(null);
+  // 🧬 잠수 증강: mirrors world.augOffer (the engine freezes itself while it's set).
+  const [offer, setOffer] = useState<{ round: number; tier: AugTier; cards: AugmentId[]; rerolls: number } | null>(null);
+  const [augs, setAugs] = useState<AugmentId[]>([]);
+  const syncOffer = useCallback(() => {
+    const w = worldRef.current;
+    const o = w?.augOffer;
+    setOffer(o && w ? { round: o.round, tier: o.tier, cards: [...o.cards], rerolls: w.augRerolls } : null);
+    if (w) setAugs([...w.augs]);
+  }, []);
+  const takeAug = useCallback(
+    (id: AugmentId) => {
+      const w = worldRef.current;
+      if (!w || w.over || pausedRef.current || evolveRef.current || bestiaryRef.current) return;
+      if (pickAugment(w, id)) syncOffer();
+    },
+    [syncOffer],
+  );
+  const reroll = useCallback(() => {
+    const w = worldRef.current;
+    if (!w || pausedRef.current || evolveRef.current || bestiaryRef.current) return;
+    if (rerollAugments(w)) syncOffer();
+  }, [syncOffer]);
 
   const openBestiary = useCallback((open: boolean) => {
     const w = worldRef.current;
@@ -233,6 +257,18 @@ export default function HungrySharkCanvas({
         if (k === "escape") openEvolve(false);
         return;
       }
+      const o = worldRef.current?.augOffer;
+      if (o && !pausedRef.current && !bestiaryRef.current) {
+        const n = ["1", "2", "3"].indexOf(k);
+        if (n >= 0 && o.cards[n]) {
+          takeAug(o.cards[n]);
+          return;
+        }
+        if (k === "r") {
+          reroll();
+          return;
+        }
+      }
       if (k === "escape" || k === "p") {
         // Esc inside the bestiary just closes it (stays paused).
         if (bestiaryRef.current) openBestiary(false);
@@ -263,7 +299,7 @@ export default function HungrySharkCanvas({
       window.removeEventListener("blur", blur);
       document.removeEventListener("visibilitychange", vis);
     };
-  }, [setPause, openBestiary, openEvolve]);
+  }, [setPause, openBestiary, openEvolve, takeAug, reroll]);
 
   // Main loop.
   useEffect(() => {
@@ -271,7 +307,7 @@ export default function HungrySharkCanvas({
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const world = createWorld(def, upgrades, undefined, mapId, { missionStreak });
+    const world = createWorld(def, upgrades, undefined, mapId, { missionStreak, augments: true });
     worldRef.current = world;
     const { h } = sizeRef.current;
     camRef.current = { x: world.shark.x, y: world.shark.y, zoom: h / viewHeightFor(def) };
@@ -351,6 +387,20 @@ export default function HungrySharkCanvas({
             break;
           case "chest": pushBanner({ text: "보물 상자 발견!", sub: `+${ev.amount}🪙`, tone: "chest" }); break;
           case "death": a?.death(); break;
+          case "augOffer":
+            a?.mission();
+            syncOffer();
+            break;
+          case "augPick": {
+            a?.skillReady();
+            const ad = AUG_BY_ID[ev.id];
+            pushBanner({ text: `${ad.icon} ${ad.name}`, sub: ad.desc, tone: "aug" });
+            break;
+          }
+          case "phoenix":
+            a?.goldRush(true);
+            pushBanner({ text: "🔥 불사조 부활!", sub: "체력 50% · 3초 무적", tone: "aug" });
+            break;
           case "evolve": {
             a?.goldRush(true);
             const nd = sharkById(ev.sharkId);
@@ -372,7 +422,7 @@ export default function HungrySharkCanvas({
         handleEvents();
         updateCamera(camRef.current, world, w, h, dt);
         const hpFrac = world.shark.hp / world.stats.maxHealth;
-        if (hpFrac < 0.25 && !world.over && !world.gold.active) audioRef.current?.heartbeat(now, 1 - hpFrac / 0.25);
+        if (hpFrac < 0.25 && !world.over && !world.gold.active && !world.augOffer) audioRef.current?.heartbeat(now, 1 - hpFrac / 0.25);
       }
       const markers = markersOnRef.current ? selectMarkers(world) : [];
       // Danger-approach beep: only when a new threat first enters the reticle set.
@@ -554,6 +604,15 @@ export default function HungrySharkCanvas({
                 {hud.skillCd <= 0 ? (isTouch ? cur.def.skill.name : `[Space] ${cur.def.skill.name}`) : `${hud.skillCd.toFixed(1)}s`}
               </span>
             </div>
+            <div className="flex items-center gap-1">
+              <AugChips augs={augs} />
+              {(() => {
+                const next = AUG_TIMES.find((t) => t > hud.time);
+                return next !== undefined ? (
+                  <span className="text-[9px] font-bold text-violet-200/80 drop-shadow">🧬 {Math.ceil(next - hud.time)}s</span>
+                ) : null;
+              })()}
+            </div>
           </div>
 
           <div className="pointer-events-none absolute top-2 left-1/2 flex w-[min(34%,240px)] -translate-x-1/2 flex-col items-center gap-0.5">
@@ -641,6 +700,7 @@ export default function HungrySharkCanvas({
                 : b.tone === "gold" ? "text-yellow-300"
                 : b.tone === "chest" ? "text-amber-300"
                 : b.tone === "evolve" ? "bg-gradient-to-r from-amber-200 via-orange-300 to-rose-300 bg-clip-text text-transparent"
+                : b.tone === "aug" ? "text-2xl text-violet-200 sm:text-4xl"
                 : "text-emerald-300"
               }`}
             >
@@ -702,6 +762,12 @@ export default function HungrySharkCanvas({
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/70 backdrop-blur-sm">
           <div className="text-3xl font-black text-white">일시정지</div>
           <p className="text-xs text-white/60">Esc / P 키로 재개 · B 먹이 도감</p>
+          {augs.length > 0 && (
+            <div className="max-h-40 w-[min(92%,380px)] overflow-y-auto rounded-xl bg-black/40 p-2.5">
+              <div className="mb-1 text-[11px] font-bold text-violet-200">🧬 이번 잠수 증강</div>
+              <AugList augs={augs} />
+            </div>
+          )}
           <button onClick={() => setPause(false)} className="w-48 rounded-xl bg-sky-500 py-2.5 font-bold text-white hover:bg-sky-400">
             ▶ 계속하기
           </button>
@@ -712,6 +778,10 @@ export default function HungrySharkCanvas({
             📖 먹이 도감
           </button>
         </div>
+      )}
+
+      {offer && !paused && !dead && !bestiary && !evolveOpen && (
+        <AugmentPicker round={offer.round} tier={offer.tier} cards={offer.cards} rerolls={offer.rerolls} owned={augs} onPick={takeAug} onReroll={reroll} />
       )}
 
       {bestiary && !dead && (

@@ -1162,3 +1162,88 @@ describe("각성 + 내 빌드", () => {
     expect(s.decodeSave(s.encodeSave({ ...dec, buildBranch: null })).buildBranch).toBeNull();
   });
 });
+
+describe("🧬 잠수 증강", () => {
+  it("opens a 3-card offer at the first AUG_TIMES mark that freezes the dive until a card is picked", async () => {
+    const { pickAugment } = await import("./engine");
+    const { AUG_TIMES, AUG_BY_ID, AUGMENTS } = await import("./augments");
+    const w = createWorld(sharkById("reef"), NO_UPGRADES, 5, "deepBlue", { augments: true });
+    w.shark.hp = 1e9; // don't starve while we wait
+    w.stats.maxHealth = 1e9;
+    for (let i = 0; i < 60 * 60 && !w.augOffer; i++) step(w, idle, 1 / 60);
+    expect(w.augOffer).not.toBeNull();
+    expect(w.time).toBeGreaterThanOrEqual(AUG_TIMES[0]);
+    const o = w.augOffer!;
+    expect(new Set(o.cards).size).toBe(3);
+    for (const c of o.cards) expect(AUG_BY_ID[c].tier).toBe(o.tier);
+    const t = w.time;
+    step(w, idle, 1 / 60);
+    expect(w.time).toBe(t); // frozen
+    const notOffered = AUGMENTS.find((x) => !o.cards.includes(x.id))!.id;
+    expect(pickAugment(w, notOffered)).toBe(false);
+    expect(pickAugment(w, o.cards[1])).toBe(true);
+    expect(w.augs).toEqual([o.cards[1]]);
+    expect(w.augOffer).toBeNull();
+    step(w, idle, 1 / 60);
+    expect(w.time).toBeGreaterThan(t);
+  });
+
+  it("is off unless the host asks for it (tests/sims keep the old flow)", () => {
+    const w = createWorld(sharkById("reef"), NO_UPGRADES, 5);
+    w.shark.hp = 1e9;
+    w.stats.maxHealth = 1e9;
+    for (let i = 0; i < 60 * 60; i++) step(w, idle, 1 / 60);
+    expect(w.augOffer).toBeNull();
+  });
+
+  it("reroll deals other cards of the same tier, once per dive", async () => {
+    const { rerollAugments } = await import("./engine");
+    const { AUG_TIMES } = await import("./augments");
+    const w = createWorld(sharkById("reef"), NO_UPGRADES, 9, "deepBlue", { augments: true });
+    w.time = AUG_TIMES[0] - 0.01;
+    w.shark.hp = 1e9;
+    w.stats.maxHealth = 1e9;
+    step(w, idle, 1 / 60);
+    const before = [...w.augOffer!.cards];
+    expect(rerollAugments(w)).toBe(true);
+    expect(w.augOffer!.cards.some((c) => !before.includes(c))).toBe(true);
+    expect(rerollAugments(w)).toBe(false);
+  });
+
+  it("stat augments survive a mid-dive evolution; 두꺼운 가죽 raises max HP", async () => {
+    const { evolveWorld } = await import("./engine");
+    const base = createWorld(sharkById("reef"), NO_UPGRADES, 1).stats.maxHealth;
+    const w = createWorld(sharkById("reef"), NO_UPGRADES, 1, "deepBlue", { forceAugs: ["thickHide"] });
+    expect(w.stats.maxHealth).toBe(Math.round(base * 1.25));
+    evolveWorld(w, sharkById("sandTiger"), NO_UPGRADES);
+    const tigerBase = createWorld(sharkById("sandTiger"), NO_UPGRADES, 1).stats.maxHealth;
+    expect(w.stats.maxHealth).toBe(Math.round(tigerBase * 1.25));
+    expect(summarize(w).augs).toEqual(["thickHide"]);
+  });
+
+  it("불사조 revives once; the second lethal moment kills", () => {
+    const w = createWorld(sharkById("reef"), NO_UPGRADES, 3, "deepBlue", { forceAugs: ["phoenix"] });
+    isolate(w);
+    w.shark.hp = -5;
+    step(w, idle, 1 / 60);
+    expect(w.over).toBe(false);
+    expect(w.shark.hp).toBeCloseTo(w.stats.maxHealth * 0.5, 0);
+    w.shark.hp = -5;
+    step(w, idle, 1 / 60);
+    expect(w.over).toBe(true);
+  });
+
+  it("먹이사슬 역행 makes one tier higher edible; 해독 간 blocks jelly poison", () => {
+    const plain = createWorld(sharkById("reef"), NO_UPGRADES, 3);
+    const w = createWorld(sharkById("reef"), NO_UPGRADES, 3, "deepBlue", { forceAugs: ["chainBreaker", "antidote"] });
+    isolate(w);
+    isolate(plain);
+    const t2 = Object.keys(ENTITY_DEFS).find((k) => ENTITY_DEFS[k as keyof typeof ENTITY_DEFS].requiredTier === 2) as keyof typeof ENTITY_DEFS;
+    expect(isEdible(plain, place(plain, t2, 0, 0))).toBe(false);
+    expect(isEdible(w, place(w, t2, 0, 0))).toBe(true);
+    expect(isEdible(w, place(w, "mineS", 0, 0))).toBe(false);
+    place(w, "greenJelly", w.shark.x, w.shark.y);
+    for (let i = 0; i < 10; i++) step(w, idle, 1 / 60);
+    expect(w.shark.poison).toBeNull();
+  });
+});

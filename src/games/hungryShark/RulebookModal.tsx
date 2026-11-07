@@ -5,6 +5,7 @@ import Overlay from "@/components/Overlay";
 import { ALL_MISSIONS_BONUS_RATE, allMissionsBonusRate, MISSION_STREAK_CAP, MISSION_STREAK_STEP, BRANCH_INFO, ENTITY_DEFS, MAPS, FRENZY_STEPS, mapCoinBonus, MISSIONS, NEVER, PREY_EFFECTS, preyEffectLabel, SHARKS, sharksOfTier, TREE_ORDER, type EntityKind, type MapDef } from "./data";
 import { mapExclusives } from "./markers";
 import MapProfile from "./MapProfile";
+import { AUG_TIER_LABEL, AUG_TIMES, AUGMENTS, tierOdds } from "./augments";
 
 /** Level layout + map-only rules, one line each (data-driven where the numbers live in MapDef). */
 const MAP_FEATURES: Record<MapDef["id"], string[]> = {
@@ -143,6 +144,39 @@ export default function RulebookModal({ onClose, focusMap }: { onClose: () => vo
             이번 잠수 코인에서 빠집니다. 진화하면 그 자리에서 체력·부스트가 가득 찬 새 상어로 바뀌고 점수·미션·골드 게이지는 그대로 이어집니다.
             이미 보유한 상어로는 비용 없이 바꿀 수 있습니다.
           </p>
+        </section>
+
+        <section>
+          <h3 className={H3}>🧬 잠수 증강</h3>
+          <p className={`mb-2 ${P}`}>
+            생존 <b>{AUG_TIMES.map((t) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`).join(" · ")}</b>에 바다가 멈추고 같은 등급의
+            카드 <b>3장 중 1장</b>을 고릅니다(PC는 1·2·3 키). 고른 증강은 <b>이번 잠수 동안만</b> 유지되고 잠수 중 진화해도 이어집니다. 잠수마다{" "}
+            <b>다시 뽑기 1번</b>(R 키). 오래 버틸수록 높은 등급이 잘 나옵니다:
+          </p>
+          <div className={`mb-2 flex flex-wrap gap-1 text-[11px] ${P}`}>
+            {AUG_TIMES.map((t, i) => {
+              const [sv, g, pr] = tierOdds(i);
+              return (
+                <span key={t} className="rounded bg-black/20 px-1.5 py-0.5 light:bg-slate-100">
+                  {i + 1}번째 — 실버 {Math.round(sv * 100)}% · 골드 {Math.round(g * 100)}% · 프리즘 {Math.round(pr * 100)}%
+                </span>
+              );
+            })}
+          </div>
+          {(["silver", "gold", "prism"] as const).map((tier) => (
+            <div key={tier} className="mb-2">
+              <div className="mb-1 text-xs font-bold text-white/70 light:text-slate-700">
+                {AUG_TIER_LABEL[tier]} {tier === "silver" ? "— 숫자를 조금씩" : tier === "gold" ? "— 새 규칙 하나" : "— 판을 바꾸는 한 장"}
+              </div>
+              <ul className={`grid gap-x-3 gap-y-0.5 text-[11px] sm:grid-cols-2 ${P}`}>
+                {AUGMENTS.filter((x) => x.tier === tier).map((x) => (
+                  <li key={x.id}>
+                    {x.icon} <b>{x.name}</b> <span className="opacity-60">[{x.tag}]</span> {x.desc}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </section>
 
         <section>
