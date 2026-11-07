@@ -9,7 +9,7 @@ import { DUSK, ShadowSetup, Sky, SunLight, surfaceTexture, type SurfaceKind } fr
 import { labelTexture } from "@/games/shared/three/tableKit";
 import { BASE, CHEST_SLOTS, DOORS, FIXED_THINGS, FLOOR, GOAL_SLOTS, LADDER, ROAD, ROOMS, STATIC_SOLIDS, WINDOWS, slotY, type PlacedThing } from "../map";
 import { EMOTES, KKOM_CAMP_R, RUN_MULT, disguise, poseOf, weaponSchedule } from "../data";
-import { augCooldownMult, augSpeedMult } from "../augments";
+import { AUG_N, augCooldownMult, augSpeedMult } from "../augments";
 import { rayBox, stepBody, type Body, type CollWorld, type Cyl } from "../physics";
 import { bodySize, chestThings, dynamicSolids, npcSize, roundGrid, walkSpeed, type Act, type GameEvent, type PosReport } from "../sim";
 import type { Snap, SnapBuffer, SnapPlayer } from "../net";
@@ -807,7 +807,7 @@ function LocalPlayer(props: World3DProps & { gridRef: RefObject<ReturnType<typeo
         mz /= len;
       }
       const run = c.run || (c.moveTo !== null && Math.hypot(c.moveTo[0] - b.x, c.moveTo[2] - b.z) > 6);
-      const speed = walkSpeed({ role: meNow.role, disguise: meNow.dg }) * (run ? RUN_MULT : 1) * (meNow.role === "seeker" ? augSpeedMult(meNow.aug, meNow.hu) : 1);
+      const speed = walkSpeed({ role: meNow.role, disguise: meNow.dg }) * (run ? RUN_MULT : 1) * augSpeedMult(meNow.aug, meNow.hu, Math.hypot(b.x - BASE.x, b.z - BASE.z) <= AUG_N.hHomeR);
       if (grid) {
         const now = performance.now();
         const bodies: Cyl[] = [];

@@ -43,6 +43,12 @@ export interface SnapPlayer {
   sh?: number;
   hu?: boolean;
   sn?: boolean;
+  /** 증강 다음 발동 시각 (레이더·냄새·마지막 사냥, 시뮬 ms) · 불굴 썼나 · 재변신 남은 횟수 */
+  an?: Record<string, number>;
+  ru?: boolean;
+  rm?: number;
+  /** 숨는 사람을 잡은 술래 자리 (-1 = 꼼꼼이 "찾는다!") */
+  cb?: number;
   stats?: PlayerStats;
 }
 
@@ -123,11 +129,25 @@ export function makeSnap(s: MatchState, seq: number): Snap {
       em: p.emote,
       score: p.score,
       catches: p.roundCatches,
+      ...(p.caughtBy !== null ? { cb: p.caughtBy } : {}),
       wr: p.wrongAt.filter((t) => t > s.t - SPAM_WINDOW_MS).length,
       ...(p.role === "seeker" && s.goal ? { camp: Math.min(1, Math.round((p.campMs / KKOM_CAMP_MS) * 100) / 100) } : {}),
       ...(p.role === "seeker"
-        ? { aug: p.augs, ao: p.augOffer, arr: p.augRerolls, mhp: p.maxHp, tr: p.traps, sk: p.shocks, sh: p.shieldLeft, hu: s.t < p.hunterUntil, sn: p.sense }
-        : {}),
+        ? {
+            aug: p.augs,
+            ao: p.augOffer,
+            arr: p.augRerolls,
+            mhp: p.maxHp,
+            tr: p.traps,
+            sk: p.shocks,
+            sh: p.shieldLeft,
+            hu: s.t < p.hunterUntil,
+            sn: p.sense,
+            ru: p.resolveUsed,
+            an: { radar: p.augT.radar ?? 0, scent: p.augT.scent ?? 0, last: p.augT.last ?? 0 },
+          }
+        : // 숨는 쪽 증강 (술래 화면엔 안 그린다 — 개발자도구로는 보이는 기존 한계와 같다)
+          { aug: p.augs, ao: p.augOffer, arr: p.augRerolls, sh: p.shieldLeft, rm: p.remorphs, sn: p.sense }),
       ...(over ? { stats: p.stats } : {}),
     })),
     npcs: s.npcs.map((n) => ({ id: n.id, kind: n.kind, x: r2(n.x), y: r2(n.y), z: r2(n.z), yaw: r2(n.yaw), anim: n.anim, look: n.look })),

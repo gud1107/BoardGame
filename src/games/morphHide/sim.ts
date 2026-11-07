@@ -60,7 +60,7 @@ import {
 } from "./data";
 import { SolidGrid, lineOfSight, raycast, stepBody, type Body, type CollWorld, type Cyl, type RayBody } from "./physics";
 import { hiderParamsFor, seekerParamsFor, type HiderParams, type SeekerParams } from "./botParams";
-import { AUG_N, AUG_PICKS, AUG_REROLLS, aug, augAmmo, augCooldownMult, augMaxHp, augSpeedMult, hasAug, rollAugOffer } from "./augments";
+import { AUG_N, AUG_PICKS, AUG_REROLLS, HIDER_AUG_PICKS, aug, augAmmo, augCooldownMult, augMaxHp, augSpeedMult, hasAug, rollAugOffer } from "./augments";
 
 /**
  * 변신 숨바꼭질 — 방장 시뮬레이션.
@@ -117,6 +117,8 @@ export interface PlayerState {
   score: number;
   roundCatches: number;
   caughtAt: number | null;
+  /** 이번 라운드에 나를 잡은 술래 (-1 = 꼼꼼이 "찾는다!"에 아웃) */
+  caughtBy: number | null;
   /** 최근 헛손질 시각들 (연속 가중) */
   wrongAt: number[];
   /** 꼼꼼이: 기지 옆에 붙어 있던 시간 (ms, 집 지키기) */
@@ -133,6 +135,8 @@ export interface PlayerState {
   resolveUsed: boolean;
   /** 추격 본능이 끝나는 시각 */
   hunterUntil: number;
+  /** 숨는 쪽 재변신 남은 횟수 (shieldLeft는 숨는 쪽에선 갑옷) */
+  remorphs: number;
   /** 육감: 2m 안에 숨은 사람이 있다 */
   sense: boolean;
   /** 증강 타이머 (다음 레이더·냄새 등 시각) */
@@ -435,6 +439,7 @@ export function createMatch(seed: number, seats: SeatInfo[], options: Partial<Ga
     score: 0,
     roundCatches: 0,
     caughtAt: null,
+    caughtBy: null,
     wrongAt: [],
     campMs: 0,
     augs: [],
@@ -446,6 +451,7 @@ export function createMatch(seed: number, seats: SeatInfo[], options: Partial<Ga
     shocks: 0,
     resolveUsed: false,
     hunterUntil: 0,
+    remorphs: 0,
     sense: false,
     augT: {},
     stats: freshStats(),
@@ -537,8 +543,8 @@ export interface HostRuntime {
   nodeDensity: number[];
   /** 정보원 증강: 술래 자리 → 이번 판 변신 id 목록 (봇 판단용) */
   dossier: Map<number, string[]>;
-  /** 밸런스 측정용: 봇 술래가 이 증강만 (순서대로) 고른다 — 빈 배열이면 증강 없음 */
-  forceAugs?: string[];
+  /** 밸런스 측정용: 봇이 이 증강만 (순서대로) 고른다 — 빈 배열이면 증강 없음 */
+  forceAugs?: { seeker?: string[]; hider?: string[] };
 }
 
 export function createHost(state: MatchState): HostRuntime {
@@ -645,10 +651,11 @@ export function startRound(rt: HostRuntime) {
     p.anim = "idle";
     p.roundCatches = 0;
     p.caughtAt = null;
+    p.caughtBy = null;
     p.wrongAt = [];
     p.campMs = 0;
     p.augs = [];
-    p.augOffer = seeker ? rollAugOffer(rt.rng, 0, s.options.goalMode, []) : [];
+    p.augOffer = seeker ? rollAugOffer(rt.rng, 0, s.options.goalMode, []) : rollAugOffer(rt.rng, 0, s.options.goalMode, [], [], "hider");
     p.augRerolls = AUG_REROLLS;
     p.maxHp = SEEKER_HP;
     p.shieldLeft = 0;
@@ -656,6 +663,7 @@ export function startRound(rt: HostRuntime) {
     p.shocks = 0;
     p.resolveUsed = false;
     p.hunterUntil = 0;
+    p.remorphs = 0;
     p.sense = false;
     p.augT = {};
     p.vy = 0;
@@ -726,7 +734,9 @@ export type Act =
   | { t: "aug"; id: string }
   | { t: "augReroll" }
   | { t: "trap" }
-  | { t: "shock" };
+  | { t: "shock" }
+  /** 숨는 쪽 재변신 증강: 처음 받은 카드 중 다른 모양으로 */
+  | { t: "remorph"; id: string };
 
 export interface PosReport {
   x: number;
@@ -809,7 +819,7 @@ export function applyAct(rt: HostRuntime, seat: number, act: Act) {
       c.opened = true;
       p.stats.chests += 1;
       if (p.role === "hider") {
-        p.decoys += 1;
+        p.decoys += hasAug(p, "h_chest") ? 2 : 1;
         emit(s, { type: "chest", seat, slot: c.slot, reward: "decoy" });
       } else {
         const big = hasAug(p, "chest");
@@ -835,16 +845,31 @@ export function applyAct(rt: HostRuntime, seat: number, act: Act) {
     }
     case "aug": {
       if (s.phase !== "pick" && s.phase !== "hide") return;
-      if (p.role !== "seeker" || !p.augOffer.includes(act.id) || p.augs.length >= AUG_PICKS) return;
+      if (!p.augOffer.includes(act.id)) return;
+      if (p.role === "hider") {
+        if (p.augs.length < HIDER_AUG_PICKS) takeAug(rt, p, act.id);
+        return;
+      }
+      if (p.augs.length >= AUG_PICKS) return;
       // 1번째는 고르기·숨기 단계 아무 때나, 2번째는 숨는 시간에만
       if (s.phase === "pick" && p.augs.length >= 1) return;
       takeAug(rt, p, act.id);
       return;
     }
     case "augReroll": {
-      if ((s.phase !== "pick" && s.phase !== "hide") || p.role !== "seeker" || p.augRerolls <= 0 || p.augOffer.length === 0) return;
+      if ((s.phase !== "pick" && s.phase !== "hide") || p.augRerolls <= 0 || p.augOffer.length === 0) return;
       p.augRerolls -= 1;
-      p.augOffer = rollAugOffer(rt.rng, p.augs.length, s.options.goalMode, p.augs, p.augOffer);
+      p.augOffer = rollAugOffer(rt.rng, p.augs.length, s.options.goalMode, p.augs, p.augOffer, p.role);
+      return;
+    }
+    case "remorph": {
+      if ((s.phase !== "hide" && s.phase !== "hunt") || p.role !== "hider" || !visibleOnMap(p, s.phase) || p.remorphs <= 0) return;
+      if (!p.offer.includes(act.id) || act.id === p.disguise) return;
+      p.remorphs -= 1;
+      p.disguise = act.id;
+      p.pose = 0;
+      rt.movedAt.set(seat, s.t);
+      emit(s, { type: "intel", seat, icon: "🎭", text: `재변신 — ${disguise(act.id)?.name ?? "?"}(으)로 바꿨어요` });
       return;
     }
     case "trap": {
@@ -897,6 +922,13 @@ function takeAug(rt: HostRuntime, p: PlayerState, id: string) {
   if (!aug(id) || p.augs.includes(id)) return;
   p.augs.push(id);
   p.augOffer = [];
+  if (p.role === "hider") {
+    if (id === "h_decoy") p.decoys += 1;
+    if (id === "h_armor") p.shieldLeft = 1;
+    if (id === "h_remorph") p.remorphs = 1;
+    // 숨는 쪽 증강은 술래에게 안 알린다 (이벤트 없음)
+    return;
+  }
   // 몸에 바로 붙는 것
   const nextMax = augMaxHp(SEEKER_HP, p.augs);
   p.hp += nextMax - p.maxHp;
@@ -914,8 +946,9 @@ function takeAug(rt: HostRuntime, p: PlayerState, id: string) {
 /** 봇·시간 초과: 3장 중 하나 (봇은 선호도 + 레벨이 낮을수록 막 고른다) */
 function autoAug(rt: HostRuntime, p: PlayerState) {
   if (p.augOffer.length === 0) return;
-  if (rt.forceAugs && p.bot) {
-    const id = rt.forceAugs.find((x) => !p.augs.includes(x));
+  const forced = rt.forceAugs?.[p.role];
+  if (forced && p.bot) {
+    const id = forced.find((x) => !p.augs.includes(x));
     if (id) takeAug(rt, p, id);
     p.augOffer = [];
     return;
@@ -949,8 +982,8 @@ export function wrongPenalty(s: Pick<MatchState, "t">, p: PlayerState, w: Weapon
   return Math.round(w.penalty * m);
 }
 
-function hidersNear(s: MatchState, x: number, y: number, z: number, r: number, dy = 2.4): PlayerState[] {
-  return s.players.filter((q) => q.role === "hider" && visibleOnMap(q, s.phase) && Math.hypot(q.x - x, q.z - z) <= r && Math.abs(q.y - y) < dy);
+function hidersNear(s: MatchState, x: number, y: number, z: number, r: number, dy = 2.4, immune?: string): PlayerState[] {
+  return s.players.filter((q) => q.role === "hider" && visibleOnMap(q, s.phase) && Math.hypot(q.x - x, q.z - z) <= r && Math.abs(q.y - y) < dy && !(immune && hasAug(q, immune)));
 }
 
 /** 사냥이 시작될 때: 연장전·탄창·정찰·정보원·덫·충격파 */
@@ -985,7 +1018,15 @@ function augHuntTick(rt: HostRuntime) {
   const s = rt.state;
   s.pings = s.pings.filter((g) => g.until > s.t);
   const alive = s.players.filter((q) => q.role === "hider" && visibleOnMap(q, s.phase));
+  // 숨는 쪽 위험 감지: 술래가 10m 안에서 나를 보고 있나 (0.25초마다)
+  for (const q of alive) {
+    if (!hasAug(q, "h_danger") || s.t < (q.augT.danger ?? 0)) continue;
+    q.augT.danger = s.t + 250;
+    const { h } = bodySize(q);
+    q.sense = seekersSeeing(rt, q.x, q.y, q.z, h).some((k) => Math.hypot(k.x - q.x, k.z - q.z) <= AUG_N.hDangerR);
+  }
   for (const p of s.players) {
+    if (p.role === "hider") continue;
     if (p.role !== "seeker" || !p.alive || p.augs.length === 0) {
       p.sense = false;
       continue;
@@ -994,11 +1035,11 @@ function augHuntTick(rt: HostRuntime) {
     p.sense = hasAug(p, "sixth") && alive.some((q) => Math.hypot(q.x - p.x, q.z - p.z) <= AUG_N.sixthR && Math.abs(q.y - p.y) < 2);
     if (hasAug(p, "radar") && s.t >= T.radar) {
       T.radar = s.t + AUG_N.radarMs;
-      emit(s, { type: "intel", seat: p.seat, icon: "📡", text: `레이더 — 반경 15m 안 숨은 사람 ${hidersNear(s, p.x, p.y, p.z, AUG_N.radarR, 99).length}명` });
+      emit(s, { type: "intel", seat: p.seat, icon: "📡", text: `레이더 — 반경 15m 안 숨은 사람 ${hidersNear(s, p.x, p.y, p.z, AUG_N.radarR, 99, "h_perfume").length}명` });
     }
     if (hasAug(p, "ear") && s.t >= T.ear) {
       T.ear = s.t + AUG_N.earMs;
-      const movers = hidersNear(s, p.x, p.y, p.z, AUG_N.earR).filter((q) => s.t - (rt.movedAt.get(q.seat) ?? -1e9) < 1200);
+      const movers = hidersNear(s, p.x, p.y, p.z, AUG_N.earR, 2.4, "h_silent").filter((q) => s.t - (rt.movedAt.get(q.seat) ?? -1e9) < 1200);
       if (movers.length) {
         const q = movers.reduce((a, b) => (Math.hypot(a.x - p.x, a.z - p.z) <= Math.hypot(b.x - p.x, b.z - p.z) ? a : b));
         const [x, z] = fuzzPing(rt, q.x, q.z, AUG_N.earPingR);
@@ -1006,14 +1047,15 @@ function augHuntTick(rt: HostRuntime) {
         emit(s, { type: "ping", seat: p.seat, kind: "ear", notify: [] });
       }
     }
-    if (hasAug(p, "scent") && s.t >= T.scent && alive.length) {
+    const smelly = alive.filter((q) => !hasAug(q, "h_perfume"));
+    if (hasAug(p, "scent") && s.t >= T.scent && smelly.length) {
       T.scent = s.t + AUG_N.scentMs;
-      const q = pick(rt.rng, alive);
+      const q = pick(rt.rng, smelly);
       const [x, z] = fuzzPing(rt, q.x, q.z, AUG_N.scentR);
       addPing(s, p.seat, "scent", x, q.y, z, AUG_N.scentR, 9000);
       emit(s, { type: "ping", seat: p.seat, kind: "scent", notify: [q.seat] });
     }
-    if (hasAug(p, "lastone") && alive.length === 1 && s.t >= T.last) {
+    if (hasAug(p, "lastone") && alive.length === 1 && smelly.length === 1 && s.t >= T.last) {
       T.last = s.t + AUG_N.lastMs;
       const q = alive[0];
       const [x, z] = fuzzPing(rt, q.x, q.z, AUG_N.lastR);
@@ -1030,7 +1072,7 @@ function augHuntTick(rt: HostRuntime) {
   }
   // 덫: 숨은 사람이 밟으면 딸랑
   for (const tr of [...s.traps]) {
-    const q = alive.find((h) => Math.hypot(h.x - tr.x, h.z - tr.z) <= AUG_N.trapR && Math.abs(h.y - tr.y) < 1.2);
+    const q = alive.find((h) => !hasAug(h, "h_silent") && Math.hypot(h.x - tr.x, h.z - tr.z) <= AUG_N.trapR && Math.abs(h.y - tr.y) < 1.2);
     if (!q) continue;
     s.traps = s.traps.filter((t) => t.id !== tr.id);
     const [x, z] = fuzzPing(rt, q.x, q.z, 3);
@@ -1248,11 +1290,21 @@ function attack(rt: HostRuntime, p: PlayerState, o: [number, number, number], d:
     caught = null;
     wrongWhat = null;
   }
-  if (caught) {
+  const armored = caught ? s.players[caught.id] : null;
+  if (armored && hasAug(armored, "h_armor") && armored.shieldLeft > 0) {
+    // 갑옷: 한 번 막아 준다 — 술래에겐 근처라고 알린다 (벌점 없음)
+    armored.shieldLeft = 0;
+    const [x, z] = fuzzPing(rt, armored.x, armored.z, 3);
+    addPing(s, p.seat, "trap", x, armored.y, z, 3, 6000);
+    emit(s, { type: "intel", seat: p.seat, icon: "🛡️", text: "뭔가 단단한 걸 쳤어요! 근처에 숨어 있어요" });
+    emit(s, { type: "intel", seat: armored.seat, icon: "🛡️", text: "갑옷이 막아 줬어요 — 지금 도망쳐요!" });
+    emit(s, { type: "ping", seat: p.seat, kind: "trap", notify: [armored.seat] });
+  } else if (caught) {
     const q = s.players[caught.id];
     if (q.alive) {
       q.alive = false;
       q.caughtAt = s.t;
+      q.caughtBy = p.seat;
       q.stats.caught += 1;
       p.roundCatches += 1;
       p.stats.catches += 1;
@@ -1264,6 +1316,8 @@ function attack(rt: HostRuntime, p: PlayerState, o: [number, number, number], d:
   } else if (wrongWhat) {
     p.wrongAt = p.wrongAt.filter((t) => s.t - t < SPAM_WINDOW_MS);
     let penalty = wrongPenalty(s, p, w, wrongKind);
+    const thornOwner = wrongDecoy !== null ? s.decoys.find((d) => d.id === wrongDecoy)?.owner : undefined;
+    if (thornOwner !== undefined && hasAug(s.players[thornOwner], "h_thorn")) penalty = Math.round(penalty * AUG_N.hThorn);
     if (wrongDecoy !== null && hasAug(p, "decoyx")) {
       // 분신 감별: 분신을 터뜨리고 벌점 절반, 주인이 가까이 있는지 알려 준다
       penalty = Math.round(penalty * AUG_N.decoyPen);
@@ -1280,7 +1334,7 @@ function attack(rt: HostRuntime, p: PlayerState, o: [number, number, number], d:
     p.stats.wrongHits += 1;
     emit(s, { type: "wrong", by: p.seat, x: r2(p.x), y: r2(p.y), z: r2(p.z), hp: p.hp, what: wrongWhat });
     if (hasAug(p, "mark")) {
-      const n = hidersNear(s, wrongAt[0], wrongAt[1], wrongAt[2], AUG_N.markR).length;
+      const n = hidersNear(s, wrongAt[0], wrongAt[1], wrongAt[2], AUG_N.markR, 2.4, "h_perfume").length;
       emit(s, { type: "intel", seat: p.seat, icon: "📍", text: n ? `헛손질 단서 — 여기 8m 안에 ${n}명 숨어 있어요` : "헛손질 단서 — 8m 안엔 아무도 없어요" });
     }
     if (p.hp <= 0 && hasAug(p, "resolve") && !p.resolveUsed) {
@@ -1325,10 +1379,14 @@ export function hostStep(rt: HostRuntime, dtMs: number) {
   switch (s.phase) {
     case "pick": {
       // 사람 술래가 아직 증강을 안 골랐으면 일찍 끝내지 않는다 (봇들이 바로 골라 버려 술래가 고를 틈이 없던 문제)
-      const allPicked = s.players.every((p) => (p.role === "seeker" ? p.bot || p.augs.length > 0 : !!p.disguise));
+      // 봇 숨는 사람은 증강을 바로 고른다
+      for (const p of s.players) if (p.role === "hider" && p.bot && p.augs.length === 0) autoAug(rt, p);
+      // 사람이 아직 증강을 안 골랐으면 일찍 끝내지 않는다 (봇들이 바로 골라 버려 고를 틈이 없던 문제)
+      const allPicked = s.players.every((p) => (p.role === "seeker" ? p.bot || p.augs.length > 0 : !!p.disguise && (p.bot || p.augs.length > 0)));
       if (s.t >= s.phaseEnd || allPicked) {
         // 시간 안에 안 고르면 랜덤
         for (const p of s.players) if (p.role === "hider" && !p.disguise) p.disguise = pick(rt.rng, p.offer);
+        for (const p of s.players) if (p.role === "hider" && p.augs.length === 0) autoAug(rt, p);
         // 술래 증강 1번째: 안 골랐으면 자동, 그리고 2번째 3장
         for (const p of s.players) {
           if (p.role !== "seeker") continue;
@@ -1376,6 +1434,7 @@ export function hostStep(rt: HostRuntime, dtMs: number) {
             if (Math.hypot(p.x - BASE.x, p.z - BASE.z) <= KKOM_CALL_R && p.y < 1.5) {
               p.alive = false;
               p.caughtAt = s.t;
+              p.caughtBy = -1;
               p.stats.caught += 1;
               out.push(p.seat);
             }
@@ -1459,7 +1518,7 @@ function endRound(rt: HostRuntime, winner: "seekers" | "hiders") {
       else if (p.alive) {
         result = "survived";
         // 꼼꼼이에선 끝까지 숨기만 한 건 반쪽 성공
-        p.score += s.goal ? 1 : 3;
+        p.score += (s.goal ? 1 : 3) + (hasAug(p, "h_survive") ? AUG_N.hSurvive : 0);
         p.stats.survives += 1;
       } else {
         // 오래 버틸수록 위로 점수 (1분마다 1점)
@@ -1955,7 +2014,8 @@ function botHider(rt: HostRuntime, p: PlayerState, ai: WalkerAi, dt: number, w: 
         ai.mode = "walk";
       }
     } else if (ai.idx < ai.path.length || ai.goal) {
-      const r = followPath(ai, b, def.speed * (ai.run ? RUN_MULT : 1), dt, w, rt.rng, () => p.tp++);
+      const nearBase = Math.hypot(b.x - BASE.x, b.z - BASE.z) <= AUG_N.hHomeR;
+      const r = followPath(ai, b, def.speed * (ai.run ? RUN_MULT : 1) * augSpeedMult(p.augs, false, nearBase), dt, w, rt.rng, () => p.tp++);
       openDoorsNear(rt, b.x, b.y, b.z);
       moving = r === "moving";
       if (r === "arrived") {

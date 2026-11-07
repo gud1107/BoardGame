@@ -39,12 +39,12 @@ describe.skipIf(!process.env.MH_AUG)("augment balance", () => {
     const lines: string[] = [];
     const h = hiderParamsFor(10);
     const sk = seekerParamsFor(10);
-    lines.push(`${"없음".padEnd(14)} ${fmt(evalMany(seeds, h, sk, {}, 5, []))}`);
+    lines.push(`${"없음".padEnd(14)} ${fmt(evalMany(seeds, h, sk, {}, 5, { seeker: [], hider: [] }))}`);
     for (const a of AUGS) {
       if (a.mode === "kkom") continue;
       // MH_AUG_ONLY=ear,dossier 처럼 일부만
       if (process.env.MH_AUG_ONLY && !process.env.MH_AUG_ONLY.split(",").includes(a.id)) continue;
-      lines.push(`${`${a.icon}${a.name}`.padEnd(14)} ${fmt(evalMany(seeds, h, sk, {}, 5, [a.id]))}`);
+      lines.push(`${`${a.icon}${a.name}`.padEnd(14)} ${fmt(evalMany(seeds, h, sk, {}, 5, a.side === "hider" ? { seeker: [], hider: [a.id] } : { seeker: [a.id], hider: [] }))}`);
     }
     writeFileSync(process.env.MH_OUT ?? "aug.txt", lines.join("\n"));
   }, 3_600_000);

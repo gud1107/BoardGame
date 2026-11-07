@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DOORS, FILLER_SLOTS, FIXED_THINGS, NAV_EDGES, NAV_NODES, STATIC_SOLIDS, thingSolid } from "./map";
 import { SolidGrid, groundAt, stepBody, type Body, type CollWorld } from "./physics";
-import { DISGUISES, EMOTES, KKOM_CAMP_MS, KKOM_CAMP_R, SEEKER_HP, weaponSchedule, weaponTier } from "./data";
+import { DISGUISES, EMOTES, KKOM_CAMP_MS, KKOM_CAMP_R, PICK_SEC, SEEKER_HP, weaponSchedule, weaponTier } from "./data";
 import { BASE } from "./map";
 import { evalMany } from "./selfplay";
 import { hiderParamsFor, seekerParamsFor } from "./botParams";
@@ -148,7 +148,7 @@ describe("trained bots + balance rules", () => {
   it("spamming wrong hits escalates the penalty, catching heals", () => {
     const m = createMatch(4, [{ bot: false, level: 5 }, { bot: false, level: 5 }], { huntSec: 180, rounds: 1 });
     const rt = createHost(m);
-    for (let i = 0; i < (15 + 30 + 1) * 20; i++) hostStep(rt, 50);
+    for (let i = 0; i < 20 * 80 && rt.state.phase !== "hunt"; i++) hostStep(rt, 50);
     const s = rt.state.players[rt.state.seekers[0]];
     clearAugs(s);
     const npc = rt.state.npcs.find((n) => n.kind === "ped")!;
@@ -206,7 +206,7 @@ describe("bot match", () => {
     const m = createMatch(3, [{ bot: false, level: 5 }, { bot: false, level: 5 }, { bot: false, level: 5 }], { huntSec: 180, rounds: 1 });
     const rt: HostRuntime = createHost(m);
     const seeker = rt.state.seekers[0];
-    for (let i = 0; i < (15 + 5) * 20; i++) hostStep(rt, 50);
+    for (let i = 0; i < (PICK_SEC + 5) * 20; i++) hostStep(rt, 50);
     expect(rt.state.phase).toBe("hide");
     for (const p of rt.state.players) if (p.role === "hider") expect(p.offer).toContain(p.disguise);
     expect(Math.hypot(rt.state.players[seeker].x - 9, rt.state.players[seeker].z - 9.5)).toBeLessThan(1.5);
@@ -221,7 +221,7 @@ describe("bot match", () => {
   it("a seeker that keeps hitting the wrong things goes down", () => {
     const m = createMatch(4, [{ bot: false, level: 5 }, { bot: false, level: 5 }], { huntSec: 180, rounds: 1 });
     const rt = createHost(m);
-    for (let i = 0; i < (15 + 30 + 1) * 20; i++) hostStep(rt, 50);
+    for (let i = 0; i < 20 * 80 && rt.state.phase !== "hunt"; i++) hostStep(rt, 50);
     expect(rt.state.phase).toBe("hunt");
     const s = rt.state.players[rt.state.seekers[0]];
     clearAugs(s);
@@ -325,7 +325,7 @@ describe("술래 증강", () => {
     expect(seeker.augs).toEqual([first]);
     // 고르기 단계에선 2번째를 못 고른다
     expect(seeker.augOffer).toHaveLength(0);
-    for (let i = 0; i < 16 * 20 && rt.state.phase === "pick"; i++) hostStep(rt, 50);
+    for (let i = 0; i < (PICK_SEC + 1) * 20 && rt.state.phase === "pick"; i++) hostStep(rt, 50);
     expect(rt.state.phase).toBe("hide");
     expect(seeker.augOffer).toHaveLength(3);
     expect(seeker.augOffer).not.toContain(first);
@@ -363,7 +363,7 @@ describe("술래 증강", () => {
 
   it("급한 술래는 숨는 시간을 5초 줄인다 (숨는 시간에 골라도)", () => {
     const { rt, seeker } = fresh();
-    for (let i = 0; i < 16 * 20 && rt.state.phase === "pick"; i++) hostStep(rt, 50);
+    for (let i = 0; i < (PICK_SEC + 1) * 20 && rt.state.phase === "pick"; i++) hostStep(rt, 50);
     const end = rt.state.phaseEnd;
     seeker.augOffer = ["hasty"];
     applyAct(rt, seeker.seat, { t: "aug", id: "hasty" });
@@ -460,5 +460,108 @@ describe("술래 증강 — 고르기 단계 길이", () => {
     applyAct(rt, seeker.seat, { t: "aug", id: seeker.augOffer[0] });
     hostStep(rt, 50);
     expect(rt.state.phase).toBe("hide");
+  });
+});
+
+describe("숨는 쪽 증강", () => {
+  function fresh(seed = 41) {
+    const m = createMatch(seed, [{ bot: false, level: 5 }, { bot: false, level: 5 }], { huntSec: 180, rounds: 1 });
+    const rt: HostRuntime = createHost(m);
+    rt.state.npcs = rt.state.npcs.filter((n) => n.kind === "car");
+    const seeker = rt.state.players[rt.state.seekers[0]];
+    const hider = rt.state.players.find((p) => p.role === "hider")!;
+    return { rt, seeker, hider };
+  }
+  const toHunt = (rt: HostRuntime) => {
+    for (let i = 0; i < 20 * 80 && rt.state.phase !== "hunt"; i++) hostStep(rt, 50);
+    expect(rt.state.phase).toBe("hunt");
+  };
+
+  it("숨는 사람은 숨는 쪽 카드만 3장 받고, 고를 때까지 고르기 단계가 이어진다", () => {
+    const { rt, seeker, hider } = fresh();
+    expect(hider.augOffer).toHaveLength(3);
+    for (const id of hider.augOffer) expect(id.startsWith("h_")).toBe(true);
+    for (const id of seeker.augOffer) expect(id.startsWith("h_")).toBe(false);
+    applyAct(rt, seeker.seat, { t: "aug", id: seeker.augOffer[0] });
+    applyAct(rt, hider.seat, { t: "pick", id: hider.offer[0] });
+    hostStep(rt, 50);
+    expect(rt.state.phase).toBe("pick");
+    applyAct(rt, hider.seat, { t: "aug", id: hider.augOffer[0] });
+    expect(hider.augs).toHaveLength(1);
+    // 두 번은 못 고른다
+    applyAct(rt, hider.seat, { t: "aug", id: "h_swift" });
+    expect(hider.augs).toHaveLength(1);
+    hostStep(rt, 50);
+    expect(rt.state.phase).toBe("hide");
+  });
+
+  it("갑옷: 처음 한 대는 막고 술래에게 근처를 알린다, 두 번째엔 잡힌다", () => {
+    const { rt, seeker, hider } = fresh();
+    toHunt(rt);
+    clearAugs(seeker);
+    hider.alive = true;
+    hider.disguise = "person";
+    hider.augs = ["h_armor"];
+    hider.shieldLeft = 1;
+    applyPos(rt, hider.seat, { x: 4, y: 0, z: 31, yaw: 0, anim: "idle", pose: 0, tp: hider.tp });
+    const hit = () => {
+      seeker.x = 4;
+      seeker.z = 30;
+      seeker.y = 0;
+      seeker.nextAtkAt = 0;
+      applyAct(rt, seeker.seat, { t: "atk", o: [4, 1.55, 30], d: [0, -0.3, 1] });
+    };
+    hit();
+    expect(hider.alive).toBe(true);
+    expect(seeker.hp).toBe(SEEKER_HP);
+    expect(rt.state.pings.length).toBeGreaterThan(0);
+    hit();
+    expect(hider.alive).toBe(false);
+    expect(hider.caughtBy).toBe(seeker.seat);
+  });
+
+  it("재변신: 처음 받은 카드 중 다른 것으로 한 번만", () => {
+    const { rt, hider } = fresh();
+    toHunt(rt);
+    hider.alive = true;
+    hider.augs = ["h_remorph"];
+    hider.remorphs = 1;
+    const other = hider.offer.find((id) => id !== hider.disguise)!;
+    applyAct(rt, hider.seat, { t: "remorph", id: "nope" });
+    expect(hider.remorphs).toBe(1);
+    applyAct(rt, hider.seat, { t: "remorph", id: other });
+    expect(hider.disguise).toBe(other);
+    const third = hider.offer.find((id) => id !== other)!;
+    applyAct(rt, hider.seat, { t: "remorph", id: third });
+    expect(hider.disguise).toBe(other);
+  });
+
+  it("고양이 발걸음: 방울 덫을 밟아도 안 울린다", () => {
+    const { rt, seeker, hider } = fresh();
+    toHunt(rt);
+    seeker.traps = 1;
+    seeker.x = 4;
+    seeker.z = 30;
+    seeker.y = 0;
+    applyAct(rt, seeker.seat, { t: "trap" });
+    hider.alive = true;
+    hider.augs = ["h_silent"];
+    applyPos(rt, hider.seat, { x: 4.2, y: 0, z: 30.1, yaw: 0, anim: "walk", pose: 0, tp: hider.tp });
+    hostStep(rt, 50);
+    expect(rt.state.traps).toHaveLength(1);
+  });
+
+  it("분신술은 분신 +1, 버티기 장인은 끝까지 숨으면 +2점", () => {
+    const { rt, seeker, hider } = fresh();
+    applyAct(rt, hider.seat, { t: "pick", id: hider.offer[0] });
+    hider.augOffer = ["h_decoy"];
+    applyAct(rt, hider.seat, { t: "aug", id: "h_decoy" });
+    expect(hider.decoys).toBe(3);
+    hider.augs.push("h_survive");
+    toHunt(rt);
+    clearAugs(seeker);
+    for (let i = 0; i < 20 * 300 && rt.state.phase === "hunt"; i++) hostStep(rt, 50);
+    const sum = rt.state.history[0].hiders.find((h) => h.seat === hider.seat)!;
+    if (sum.result === "survived") expect(hider.score).toBe(3 + 2);
   });
 });

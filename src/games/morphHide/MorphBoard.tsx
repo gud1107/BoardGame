@@ -7,7 +7,7 @@ import { DISGUISES, EMOTES, HIDE_SEC, KKOM_CALL_R, KKOM_CAMP_R, KKOM_ERRANDS, PO
 import type { Act, PosReport } from "./sim";
 import type { Snap, SnapBuffer } from "./net";
 import { freshControls, type Controls, type FxItem, type NearInfo, type SelfInfo } from "./three/World3D";
-import { AUG_PICKS, AUG_TIER_STYLE, aug } from "./augments";
+import { AUG_N, AUG_PICKS, AUG_TIER_STYLE, HIDER_AUG_PICKS, aug } from "./augments";
 import { falloff, isMuted, play, setMuted, speak } from "./sound";
 
 const World3D = dynamic(() => import("./three/World3D"), { ssr: false });
@@ -83,6 +83,7 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
   const [showMap, setShowMap] = useState(false);
   const [showBoard, setShowBoard] = useState(false);
   const [emoteOpen, setEmoteOpen] = useState(false);
+  const [remorphOpen, setRemorphOpen] = useState(false);
   const [locked, setLocked] = useState(false);
   const [mutedUi, setMutedUi] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -273,10 +274,34 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
   }, []);
 
   // --- 키보드 ------------------------------------------------------------
+  // 증강 카드가 떠 있나 (술래: 눈 가린 동안 / 숨는 사람: 변신을 고른 뒤)
+  const myOffer = me?.ao ?? [];
+  const augPickOpen = (snap.phase === "pick" || snap.phase === "hide") && myOffer.length > 0 && (isSeeker || !!me?.dg);
   const keys = useRef(new Set<string>());
-  const actRef = useRef({ cyclePose, decoy: () => onAct({ t: "decoy" }), emote: (id: string) => onAct({ t: "emote", id }), trap: () => onAct({ t: "trap" }), shock: () => onAct({ t: "shock" }) });
+  const actRef = useRef({ cyclePose, decoy: () => onAct({ t: "decoy" }), trap: () => onAct({ t: "trap" }), shock: () => onAct({ t: "shock" }), num: (n: number) => onAct({ t: "emote", id: EMOTES[n - 1].id }) });
   useEffect(() => {
-    actRef.current = { cyclePose, decoy: () => onAct({ t: "decoy" }), emote: (id: string) => onAct({ t: "emote", id }), trap: () => onAct({ t: "trap" }), shock: () => onAct({ t: "shock" }) };
+    actRef.current = {
+      cyclePose,
+      decoy: () => onAct({ t: "decoy" }),
+      trap: () => onAct({ t: "trap" }),
+      shock: () => onAct({ t: "shock" }),
+      // 숫자 키: 증강·변신 카드가 떠 있으면 그 카드 고르기, 아니면 감정표현
+      num: (n: number) => {
+        if (augPickOpen) {
+          const id = myOffer[n - 1];
+          if (id) {
+            play("augPick", 1);
+            onAct({ t: "aug", id });
+          }
+        } else if (!isSeeker && snap.phase === "pick" && me && !me.dg) {
+          const id = me.offer[n - 1];
+          if (id) {
+            play("pick", 1);
+            onAct({ t: "pick", id });
+          }
+        } else if (EMOTES[n - 1]) onAct({ t: "emote", id: EMOTES[n - 1].id });
+      },
+    };
   });
   useEffect(() => {
     const typing = (e: KeyboardEvent) => {
@@ -313,7 +338,7 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
       else if (k === "q") actRef.current.shock();
       else if (k === "m") setShowMap((v) => !v);
       else if (k === "tab") setShowBoard(true);
-      else if (["1", "2", "3", "4"].includes(k)) actRef.current.emote(EMOTES[Number(k) - 1].id);
+      else if (["1", "2", "3", "4"].includes(k)) actRef.current.num(Number(k));
       sync();
     };
     const up = (e: KeyboardEvent) => {
@@ -392,6 +417,13 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
   const intels = fx.filter((f) => f.ev.type === "intel" && f.ev.seat === mySeat && nowPerf - f.at < (f.ev.text.length > 30 ? 9000 : 5000)).slice(-2);
   const spotted = !isSeeker && [...fx].reverse().find((f) => f.ev.type === "ping" && f.ev.notify.includes(mySeat) && nowPerf - f.at < 3500);
   const seekerAugs = snap.players.filter((p) => p.role === "seeker").flatMap((p) => p.aug ?? []);
+  // 카드를 눌러야 하는 화면에선 마우스 시점 고정을 푼다 (고정된 채면 커서가 안 보여 카드를 못 누르던 문제)
+  const needCursor = (isSeeker && (snap.phase === "pick" || snap.phase === "hide")) || (!isSeeker && snap.phase === "pick") || snap.phase === "roundEnd" || snap.phase === "gameOver" || showBoard;
+  useEffect(() => {
+    if (needCursor && document.pointerLockElement) document.exitPointerLock?.();
+  }, [needCursor]);
+  const myAugs = me?.aug ?? [];
+  const showAugStatus = !!me && myAugs.length > 0 && (snap.phase === "hunt" || (!isSeeker && snap.phase === "hide")) && visible;
   const playing = visible && (snap.phase === "hide" || snap.phase === "hunt") && !(isSeeker && snap.phase === "hide");
 
   const phaseLabel = snap.phase === "pick" ? "변신 고르기" : snap.phase === "hide" ? "숨는 시간" : snap.phase === "hunt" ? "술래 시간" : snap.phase === "roundEnd" ? "라운드 결과" : "게임 끝";
@@ -464,9 +496,10 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
           {!isSeeker && snap.phase === "hide" && seekerAugs.length > 0 && <AugChips ids={seekerAugs} label="술래 증강" />}
         </div>
 
-        {/* 왼쪽 위: 나 */}
+        {/* 왼쪽 위: 나 + 내 증강 */}
         {me && (
-          <div data-hud className={`pointer-events-none absolute left-2 top-2 max-w-[38%] rounded-2xl px-3 py-2 text-[11px] leading-snug text-white/90 sm:max-w-[26%] ${GLASS}`}>
+          <div data-hud className="pointer-events-none absolute left-2 top-2 flex max-w-[46%] flex-col items-start gap-1.5 sm:max-w-[28%]">
+          <div className={`max-w-full rounded-2xl px-3 py-2 text-[11px] leading-snug text-white/90 ${GLASS}`}>
             <div className="flex items-center gap-1.5">
               <span className={`rounded-md px-1.5 py-px text-[9px] font-bold tracking-wide ${isSeeker ? "bg-sky-400/20 text-sky-200" : "bg-emerald-400/20 text-emerald-200"}`}>{isSeeker ? "SEEKER" : "HIDER"}</span>
               <span className="truncate font-semibold">{myName}</span>
@@ -492,6 +525,11 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
               )}
             </div>
           </div>
+          {showAugStatus && <AugStatus me={me} snap={snap} simNow={simNow} hidersLeft={hidersLeft} />}
+          </div>
+        )}
+        {!isSeeker && snap.phase === "hunt" && visible && me?.sn && (
+          <div className={`pointer-events-none absolute left-1/2 top-[40%] -translate-x-1/2 animate-pulse rounded-full px-4 py-1.5 text-sm font-bold text-rose-100 ${GLASS} ring-2 ring-rose-400/70`}>⚠️ 술래가 나를 보고 있어요!</div>
         )}
 
         {/* 오른쪽 위: 버튼 + 미니맵 */}
@@ -617,10 +655,41 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
             shocks={isSeeker ? (me?.sk ?? 0) : 0}
             onTrap={() => onAct({ t: "trap" })}
             onShock={() => onAct({ t: "shock" })}
-            onEmote={() => setEmoteOpen((v) => !v)}
+            remorphs={!isSeeker ? (me?.rm ?? 0) : 0}
+            onRemorph={() => {
+              setEmoteOpen(false);
+              setRemorphOpen((v) => !v);
+            }}
+            onEmote={() => {
+              setRemorphOpen(false);
+              setEmoteOpen((v) => !v);
+            }}
             onFreeLook={setFreeLookUi}
             locked={locked}
           />
+        )}
+        {remorphOpen && playing && !isSeeker && me && (me.rm ?? 0) > 0 && (
+          <div data-hud className="absolute bottom-44 right-3 flex flex-col items-end gap-1.5 sm:bottom-32">
+            <div className={`rounded-full px-3 py-1 text-[11px] text-white/70 ${GLASS}`}>🎭 무엇으로 바꿀까요? (1번)</div>
+            {me.offer
+              .filter((id) => id !== me.dg)
+              .map((id) => {
+                const d = disguise(id);
+                return d ? (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => {
+                      onAct({ t: "remorph", id });
+                      setRemorphOpen(false);
+                    }}
+                    className={`flex min-h-11 items-center gap-2 rounded-full px-4 text-sm font-semibold text-white ${GLASS} hover:bg-white/15`}
+                  >
+                    {d.icon} {d.name}
+                  </button>
+                ) : null;
+              })}
+          </div>
         )}
         {emoteOpen && (
           <div data-hud className="absolute bottom-44 right-3 flex flex-col gap-1.5 sm:bottom-32">
@@ -705,7 +774,7 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
         )}
 
         {snap.phase === "roundEnd" && <RoundResult snap={snap} names={names} mySeat={mySeat} />}
-        {(showBoard || snap.phase === "gameOver") && <ScoreBoard snap={snap} names={names} mySeat={mySeat} onClose={() => setShowBoard(false)} />}
+        {(showBoard || snap.phase === "gameOver") && <ScoreBoard snap={snap} names={names} mySeat={mySeat} simNow={simNow} onClose={() => setShowBoard(false)} />}
         {showMap && <BigMap snap={snap} buf={buf} mySeat={mySeat} selfRef={selfRef} onClose={() => setShowMap(false)} />}
         {!touch && !locked && playing && settings.mode === "pubg" && (
           <div className={`pointer-events-none absolute left-1/2 top-1/2 mt-10 -translate-x-1/2 rounded-full px-3.5 py-1.5 text-[11px] text-white/85 ${GLASS}`}>🖱️ 화면을 클릭하면 마우스로 둘러봐요 · ESC 해제</div>
@@ -746,12 +815,74 @@ function AugChips({ ids, label }: { ids: string[]; label: string }) {
   );
 }
 
-/** 술래 증강 고르기 — 3장 중 1장, 라운드당 두 번 (눈 가린 동안) */
-function AugPicker({ me, phase, left, kkom, onAct }: { me: Snap["players"][number]; phase: Snap["phase"]; left: number; kkom: boolean; onAct: (a: Act) => void }) {
+/** 증강 지금 상태 한 줄 (위쪽 패널·Tab) */
+function augStatusText(id: string, me: Snap["players"][number], snap: Snap, simNow: number, hidersLeft: number): { text: string; hot?: boolean; off?: boolean } {
+  const hunt = snap.phase === "hunt";
+  const secTo = (t: number | undefined) => Math.max(0, Math.ceil(((t ?? 0) - simNow) / 1000));
+  switch (id) {
+    case "radar":
+    case "scent":
+      return hunt ? { text: `${secTo(me.an?.[id])}초 뒤`, hot: secTo(me.an?.[id]) <= 3 } : { text: "사냥 때 시작" };
+    case "lastone":
+      return !hunt ? { text: "사냥 때" } : hidersLeft === 1 ? { text: `${secTo(me.an?.last)}초 뒤`, hot: true } : { text: `${hidersLeft}명 남음` };
+    case "trap":
+      return hunt ? { text: `덫 ${me.tr ?? 0}개`, off: (me.tr ?? 0) === 0 } : { text: "사냥 때 3개" };
+    case "shock":
+      return hunt ? { text: `${me.sk ?? 0}회 남음`, off: (me.sk ?? 0) === 0 } : { text: "사냥 때 2회" };
+    case "shield":
+      return { text: `${me.sh ?? 0}회 남음`, off: (me.sh ?? 0) === 0 };
+    case "hunter":
+      return me.hu ? { text: "발동 중!", hot: true } : { text: "대기" };
+    case "resolve":
+      return me.ru ? { text: "사용함", off: true } : { text: "대기" };
+    case "h_armor":
+      return (me.sh ?? 0) > 0 ? { text: "대기" } : { text: "사용함", off: true };
+    case "h_remorph":
+      return (me.rm ?? 0) > 0 ? { text: "1회 남음" } : { text: "사용함", off: true };
+    case "h_danger":
+      return !hunt ? { text: "사냥 때" } : me.sn ? { text: "보고 있어요!", hot: true } : { text: "안전" };
+    case "h_tracker": {
+      if (!hunt) return { text: "사냥 때" };
+      const cyc = (simNow - snap.phaseStart) % AUG_N.hTrackEvery;
+      const showFrom = AUG_N.hTrackEvery - AUG_N.hTrackShow;
+      return cyc >= showFrom ? { text: "지도에 표시 중", hot: true } : { text: `${Math.ceil((showFrom - cyc) / 1000)}초 뒤` };
+    }
+    default:
+      return { text: "적용 중" };
+  }
+}
+
+/** 사냥 중 왼쪽 위: 내 증강 + 언제 발동하나 + 지금 상태 */
+function AugStatus({ me, snap, simNow, hidersLeft }: { me: Snap["players"][number]; snap: Snap; simNow: number; hidersLeft: number }) {
+  return (
+    <div className={`w-full rounded-2xl px-2.5 py-1.5 text-white ${GLASS}`}>
+      <div className="text-[9px] font-semibold uppercase tracking-[0.18em] text-fuchsia-200/70">내 증강 · Tab 자세히</div>
+      {(me.aug ?? []).map((id) => {
+        const a = aug(id);
+        if (!a) return null;
+        const st = augStatusText(id, me, snap, simNow, hidersLeft);
+        return (
+          <div key={id} className={`mt-1 ${st.off ? "opacity-45" : ""}`}>
+            <div className="flex items-center gap-1 text-[11px] leading-tight">
+              <span style={{ textShadow: `0 0 6px ${AUG_TIER_STYLE[a.tier].color}` }}>{a.icon}</span>
+              <span className="truncate font-semibold">{a.name}</span>
+              <span className={`ml-auto shrink-0 rounded-full px-1.5 py-px text-[9px] font-bold tabular-nums ${st.hot ? "bg-rose-400/30 text-rose-100" : "bg-white/10 text-white/80"}`}>{st.text}</span>
+            </div>
+            <div className="break-keep text-[9px] leading-snug text-white/50 sm:text-[10px]">{a.when}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 증강 고르기 — 3장 중 1장. 술래는 라운드당 두 번(눈 가린 동안), 숨는 사람은 변신을 고른 뒤 한 번 */
+function AugPicker({ me, phase, left, kkom, onAct, hider }: { me: Snap["players"][number]; phase: Snap["phase"]; left: number; kkom: boolean; onAct: (a: Act) => void; hider?: boolean }) {
   const owned = me.aug ?? [];
   const offer = me.ao ?? [];
-  const step = Math.min(owned.length + 1, AUG_PICKS);
-  const done = owned.length >= AUG_PICKS;
+  const total = hider ? HIDER_AUG_PICKS : AUG_PICKS;
+  const step = Math.min(owned.length + 1, total);
+  const done = owned.length >= total;
   // 꼼꼼이는 숨는 시간이 비밀 — 남은 초를 보여 주지 않는다
   const showLeft = !(kkom && phase === "hide");
   return (
@@ -759,13 +890,13 @@ function AugPicker({ me, phase, left, kkom, onAct }: { me: Snap["players"][numbe
       <div className="flex items-center justify-center gap-2 text-xs text-white/60">
         <span className="font-semibold uppercase tracking-[0.2em] text-fuchsia-200/80">Augment</span>
         <span>
-          {done ? "증강 2개 완료 — 곧 출발!" : <>증강 고르기 <b className="text-white">{step}/{AUG_PICKS}</b></>}
+          {done ? (hider ? "증강 완료 — 곧 숨기 시작!" : "증강 2개 완료 — 곧 출발!") : <>{hider ? "숨는 사람 증강" : "증강 고르기"} <b className="text-white">{step}/{total}</b></>}
           {!done && showLeft && <span className="text-white/45"> · {Math.ceil(left)}초 안에 안 고르면 랜덤</span>}
         </span>
       </div>
       {offer.length > 0 && (
         <div className="mt-2 grid grid-cols-3 gap-2 sm:gap-3">
-          {offer.map((id) => {
+          {offer.map((id, i) => {
             const a = aug(id);
             if (!a) return null;
             const st = AUG_TIER_STYLE[a.tier];
@@ -773,24 +904,30 @@ function AugPicker({ me, phase, left, kkom, onAct }: { me: Snap["players"][numbe
               <button
                 key={id}
                 type="button"
-                onClick={() => onAct({ t: "aug", id })}
-                className="group relative flex min-h-36 flex-col items-center gap-1 overflow-hidden rounded-2xl border bg-white/[0.04] p-2 text-center backdrop-blur-md transition duration-200 hover:-translate-y-1.5 sm:min-h-44 sm:p-3"
+                onClick={() => {
+                  play("augPick", 1);
+                  onAct({ t: "aug", id });
+                }}
+                className={`group relative flex cursor-pointer flex-col items-center gap-1 overflow-hidden rounded-2xl border bg-white/[0.04] p-2 text-center backdrop-blur-md transition duration-200 hover:-translate-y-1.5 hover:bg-white/10 active:scale-95 sm:p-3 ${hider ? "min-h-28 sm:min-h-32" : "min-h-36 sm:min-h-44"}`}
                 style={{ borderColor: `${st.color}66`, boxShadow: `0 0 28px -10px ${st.color}` }}
               >
                 <span className="absolute inset-x-0 top-0 h-0.5" style={{ background: st.color }} />
+                <span className="absolute left-1.5 top-1.5 hidden h-5 min-w-5 place-items-center rounded-md border border-white/25 bg-white/10 text-[10px] font-bold text-white/80 sm:grid">{i + 1}</span>
                 <span className="rounded-full px-2 py-px text-[9px] font-bold tracking-wide" style={{ color: st.color, background: `${st.color}22` }}>
                   {st.name}
                 </span>
-                <span className="text-3xl drop-shadow sm:text-4xl">{a.icon}</span>
+                <span className={`drop-shadow ${hider ? "text-2xl sm:text-3xl" : "text-3xl sm:text-4xl"}`}>{a.icon}</span>
                 <span className="break-keep text-[13px] font-bold leading-tight text-white sm:text-sm">{a.name}</span>
                 <span className="break-keep text-[10px] leading-snug text-white/65 sm:text-[11px]">{a.desc}</span>
+                <span className="break-keep text-[9px] leading-snug text-fuchsia-200/70 sm:text-[10px]">⏱ {a.when}</span>
                 {a.kind === "active" && <span className="mt-auto rounded-full bg-white/10 px-1.5 py-px text-[9px] text-white/70">직접 쓰는 기술</span>}
               </button>
             );
           })}
         </div>
       )}
-      {offer.length === 0 && !done && phase === "pick" && <div className="mt-3 text-xs text-white/55">숨는 시간이 되면 2번째 증강 3장이 나와요 (높은 등급이 잘 나와요)</div>}
+      {offer.length > 0 && <div className="mt-1.5 hidden text-[10px] text-white/40 sm:block">카드를 누르거나 숫자 키 1·2·3</div>}
+      {offer.length === 0 && !done && phase === "pick" && !hider && <div className="mt-3 text-xs text-white/55">숨는 시간이 되면 2번째 증강 3장이 나와요 (높은 등급이 잘 나와요)</div>}
       <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
         {offer.length > 0 && (me.arr ?? 0) > 0 && (
           <button type="button" onClick={() => onAct({ t: "augReroll" })} className={`rounded-full px-3.5 py-1.5 text-xs font-semibold text-white/85 transition hover:bg-white/15 ${GLASS}`}>
@@ -945,6 +1082,8 @@ function ControlPad(props: {
   joyActive: React.RefObject<boolean>;
   onPose: () => void;
   onDecoy: () => void;
+  remorphs: number;
+  onRemorph: () => void;
   traps: number;
   shocks: number;
   onTrap: () => void;
@@ -968,6 +1107,11 @@ function ControlPad(props: {
               <button type="button" disabled={props.decoys <= 0} onClick={props.onDecoy} className={`${big} h-11 min-w-11 border-white/10 bg-slate-950/50 px-2.5 text-[11px] font-semibold disabled:opacity-40`}>
                 {!props.touch && <Key k="G" />} 👯 분신 {props.decoys}
               </button>
+              {props.remorphs > 0 && (
+                <button type="button" onClick={props.onRemorph} className={`${big} h-11 min-w-11 border-fuchsia-300/40 bg-fuchsia-500/25 px-2.5 text-[11px] font-semibold`}>
+                  🎭 재변신
+                </button>
+              )}
             </>
           )}
           {props.isSeeker && props.hunt && (props.traps > 0 || props.shocks > 0) && (
@@ -1116,7 +1260,7 @@ function PickCards({ snap, mySeat, left, onAct }: { snap: Snap; mySeat: number; 
   const offer = me.offer;
   const seekerAugs = snap.players.filter((p) => p.role === "seeker").flatMap((p) => (p.aug ?? []).map((id) => ({ id, s: p.s })));
   return (
-    <div data-hud className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gradient-to-b from-[#0b1026]/95 via-[#151b3d]/92 to-[#2a1f3d]/95 p-3 backdrop-blur-sm">
+    <div data-hud className="absolute inset-0 flex flex-col items-center justify-center gap-3 overflow-y-auto bg-gradient-to-b from-[#0b1026]/95 via-[#151b3d]/92 to-[#2a1f3d]/95 p-3 backdrop-blur-sm">
       <div className="text-center">
         <div className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/45">Choose your disguise</div>
         <div className="mt-1 text-lg font-bold text-white sm:text-2xl">무엇으로 변신할까요?</div>
@@ -1173,7 +1317,24 @@ function PickCards({ snap, mySeat, left, onAct }: { snap: Snap; mySeat: number; 
           🔄 다시 뽑기 ({me.rr}번 남음)
         </button>
       )}
-      {picked && <div className="text-sm font-bold text-cyan-200">✔ 골랐어요! 다른 사람을 기다리는 중…</div>}
+      {picked && (me.ao?.length ?? 0) > 0 && (
+        <div className="w-full max-w-2xl">
+          <AugPicker me={me} phase={snap.phase} left={left} kkom={!!snap.goal} onAct={onAct} hider />
+        </div>
+      )}
+      {picked && (me.ao?.length ?? 0) === 0 && (
+        <div className="text-center text-sm font-bold text-cyan-200">
+          ✔ 골랐어요! 다른 사람을 기다리는 중…
+          {(me.aug ?? []).map((id) => {
+            const a = aug(id);
+            return a ? (
+              <div key={id} className="mt-1 text-xs font-medium text-white/75">
+                {a.icon} {a.name} — {a.desc}
+              </div>
+            ) : null;
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1248,6 +1409,24 @@ function drawMap(ctx: CanvasRenderingContext2D, w: number, h: number, snap: Snap
   // 같은 편
   const me = snap.players[mySeat];
   const now = performance.now();
+  // 숨는 쪽 술래 추적기: 25초마다 5초 동안 술래 위치
+  if (me?.role === "hider" && me.aug?.includes("h_tracker") && snap.phase === "hunt") {
+    const cyc = (buf.simNow(now) - snap.phaseStart) % AUG_N.hTrackEvery;
+    if (cyc >= AUG_N.hTrackEvery - AUG_N.hTrackShow) {
+      for (const p of snap.players) {
+        if (p.role !== "seeker" || !p.alive) continue;
+        const pp = buf.player(p.s, now);
+        if (!pp) continue;
+        ctx.fillStyle = "#f43f5e";
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(X(pp.x), Z(pp.z), big ? 6 : 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+  }
   // 술래 증강 표시 (냄새·덫·귀·충격파 원) — 술래 화면에만
   if (me?.role === "seeker") {
     const simT = buf.simNow(now);
@@ -1454,21 +1633,119 @@ function RoundResult({ snap, names, mySeat }: { snap: Snap; names: Record<number
   );
 }
 
-function ScoreBoard({ snap, names, mySeat, onClose }: { snap: Snap; names: Record<number, string>; mySeat: number; onClose: () => void }) {
+/**
+ * Tab / 🏆 — 점수 + 이번 라운드 + 내 증강 설명.
+ * 이번 라운드: 숨는 사람(또는 탈락자)은 살아 있는 사람·변신·술래별 잡은 수까지,
+ * 술래는 "내가 잡은 사람"만 (살아 있는 숨는 사람의 변신은 술래에게 숨긴다).
+ */
+function ScoreBoard({ snap, names, mySeat, simNow, onClose }: { snap: Snap; names: Record<number, string>; mySeat: number; simNow: number; onClose: () => void }) {
   const rows = [...snap.players].sort((a, b) => b.score - a.score);
+  const me = snap.players[mySeat];
+  const isSeeker = me?.role === "seeker";
+  const nm = (s: number) => (s === mySeat ? "나" : (names[s] ?? `${s + 1}번`));
+  const hiders = snap.players.filter((p) => p.role === "hider");
+  const seekers = snap.players.filter((p) => p.role === "seeker");
+  const hidersLeft = hiders.filter((p) => p.alive && !p.escaped).length;
+  const inRound = snap.phase === "hide" || snap.phase === "hunt";
+  const myCaught = hiders.filter((p) => p.cb === mySeat);
+  const status = (p: Snap["players"][number]) => (p.escaped ? "🏁 찜" : p.alive ? "🫣 숨는 중" : p.cb === -1 ? "📢 찾는다! 아웃" : p.cb !== undefined ? `💥 ${nm(p.cb)}에게 잡힘` : "💥 잡힘");
   return (
-    <div data-hud className="absolute inset-0 z-20 grid place-items-center bg-black/60 p-3" onClick={onClose}>
-      <div className="w-full max-w-xs rounded-3xl border border-white/10 bg-slate-950/70 p-5 text-white shadow-2xl shadow-black/50 backdrop-blur-xl">
-        <div className="mb-3 text-center font-bold">{snap.phase === "gameOver" ? "🏁 최종 점수" : "🏆 점수"}</div>
-        {rows.map((p, i) => (
-          <div key={p.s} className={`flex items-center justify-between rounded-xl px-3 py-1.5 text-sm ${p.s === mySeat ? "bg-white/15" : ""}`}>
-            <span>
-              {i + 1}. {p.role === "seeker" ? "👁️" : "🫣"} {names[p.s]}
-            </span>
-            <b className="tabular-nums">{p.score}</b>
-          </div>
-        ))}
-        <p className="mt-2 text-center text-[10px] text-white/50">끝까지 숨기 +3 · 찜 +4 · 버틴 1분마다 +1 · 술래 잡기 +2 · 술래 전원 검거 +2</p>
+    <div data-hud className="absolute inset-0 z-20 flex items-center justify-center overflow-y-auto bg-black/60 p-3" onClick={onClose}>
+      <div className="flex max-h-full w-full max-w-2xl flex-col gap-3 overflow-y-auto sm:flex-row">
+        {/* 점수 */}
+        <div className="rounded-3xl border border-white/10 bg-slate-950/75 p-4 text-white shadow-2xl shadow-black/50 backdrop-blur-xl sm:w-60 sm:shrink-0">
+          <div className="mb-2 text-center font-bold">{snap.phase === "gameOver" ? "🏁 최종 점수" : "🏆 점수"}</div>
+          {rows.map((p, i) => (
+            <div key={p.s} className={`flex items-center justify-between rounded-xl px-3 py-1.5 text-sm ${p.s === mySeat ? "bg-white/15" : ""}`}>
+              <span className="truncate">
+                {i + 1}. {p.role === "seeker" ? "👁️" : "🫣"} {names[p.s]}
+              </span>
+              <b className="tabular-nums">{p.score}</b>
+            </div>
+          ))}
+          <p className="mt-2 text-center text-[10px] text-white/50">끝까지 숨기 +3 · 찜 +4 · 버틴 1분마다 +1 · 술래 잡기 +2 · 술래 전원 검거 +2</p>
+        </div>
+
+        <div className="flex min-w-0 flex-1 flex-col gap-3">
+          {/* 이번 라운드 */}
+          {snap.phase !== "gameOver" && (
+            <div className="rounded-3xl border border-white/10 bg-slate-950/75 p-4 text-white shadow-2xl shadow-black/50 backdrop-blur-xl">
+              <div className="mb-2 flex items-baseline justify-between">
+                <span className="font-bold">📋 라운드 {snap.round}</span>
+                <span className="text-xs text-white/60">
+                  숨은 사람 <b className="text-white">{hidersLeft}</b>/{hiders.length} 남음
+                </span>
+              </div>
+              {isSeeker ? (
+                <>
+                  <div className="text-xs text-white/60">내가 잡은 사람 {myCaught.length}명</div>
+                  {myCaught.length === 0 ? (
+                    <div className="mt-1 rounded-xl bg-white/5 px-3 py-2 text-xs text-white/50">{inRound ? "아직 아무도 못 잡았어요" : "이번 라운드엔 못 잡았어요"}</div>
+                  ) : (
+                    myCaught.map((p) => {
+                      const d = disguise(p.dg);
+                      return (
+                        <div key={p.s} className="mt-1 flex items-center justify-between rounded-xl bg-white/5 px-3 py-1.5 text-sm">
+                          <span className="truncate">💥 {nm(p.s)}</span>
+                          <span className="shrink-0 text-xs text-white/70">{d ? `${d.icon} ${d.name}` : "?"}</span>
+                        </div>
+                      );
+                    })
+                  )}
+                  <p className="mt-2 text-[10px] text-white/40">살아 있는 사람의 변신은 술래에게 보이지 않아요</p>
+                </>
+              ) : (
+                <>
+                  {hiders.map((p) => {
+                    const d = disguise(p.dg);
+                    return (
+                      <div key={p.s} className={`mt-1 flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm ${p.s === mySeat ? "bg-white/15" : "bg-white/5"} ${p.alive && !p.escaped ? "" : "opacity-60"}`}>
+                        <span className="min-w-0 flex-1 truncate">{nm(p.s)}</span>
+                        <span className="shrink-0 text-xs text-white/80">{d ? `${d.icon} ${d.name}` : "고르는 중"}</span>
+                        <span className="w-24 shrink-0 truncate text-right text-[11px] text-white/60">{status(p)}</span>
+                      </div>
+                    );
+                  })}
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {seekers.map((p) => (
+                      <span key={p.s} className="rounded-full bg-sky-400/15 px-2.5 py-1 text-[11px] text-sky-100">
+                        👁️ {nm(p.s)} — 잡은 사람 <b className="tabular-nums">{p.catches}</b>명{p.alive ? "" : " · 😵 탈락"}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* 내 증강 설명 */}
+          {me && (me.aug?.length ?? 0) > 0 && (
+            <div className="rounded-3xl border border-white/10 bg-slate-950/75 p-4 text-white shadow-2xl shadow-black/50 backdrop-blur-xl">
+              <div className="mb-1 font-bold">🃏 내 증강</div>
+              {(me.aug ?? []).map((id) => {
+                const a = aug(id);
+                if (!a) return null;
+                const st = augStatusText(id, me, snap, simNow, hidersLeft);
+                const tier = AUG_TIER_STYLE[a.tier];
+                return (
+                  <div key={id} className="mt-1.5 rounded-xl bg-white/5 px-3 py-2">
+                    <div className="flex items-center gap-1.5 text-sm">
+                      <span>{a.icon}</span>
+                      <b>{a.name}</b>
+                      <span className="rounded-full px-1.5 py-px text-[9px] font-bold" style={{ color: tier.color, background: `${tier.color}22` }}>
+                        {tier.name}
+                      </span>
+                      {inRound && <span className={`ml-auto rounded-full px-1.5 py-px text-[10px] ${st.hot ? "bg-rose-400/30 text-rose-100" : "bg-white/10 text-white/75"}`}>{st.text}</span>}
+                    </div>
+                    <div className="mt-0.5 break-keep text-xs text-white/75">{a.desc}</div>
+                    <div className="mt-0.5 break-keep text-[11px] text-fuchsia-200/75">⏱ {a.when}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <p className="text-center text-[10px] text-white/45">아무 데나 누르면 닫혀요 · PC는 Tab을 떼면 닫혀요</p>
+        </div>
       </div>
     </div>
   );
@@ -1484,10 +1761,10 @@ function RuleStrip() {
       </button>
       {open && (
         <ul className="mt-2 list-disc space-y-1 pl-4 break-keep">
-          <li>🎴 숨는 사람은 카드 3장 중 하나로 변신(15초, 안 고르면 랜덤). 맵에는 같은 물건·행인·강아지·점검원이 원래 섞여 있어요.</li>
+          <li>🎴 숨는 사람은 카드 3장 중 하나로 변신하고, 이어서 숨는 사람 증강도 3장 중 1장 골라요(20초, 안 고르면 랜덤 · 숫자 키 1·2·3). 맵에는 같은 물건·행인·강아지·점검원이 원래 섞여 있어요.</li>
           <li>🙈 30초 동안 숨기 — 자세 바꾸기(C)로 각도·자세를 맞추고, 분신(G)으로 똑같은 가짜를 세워 두세요.</li>
           <li>👁️ 술래는 🖐️ 맨손 → 🔨 뿅망치 → 🔫 권총 → 🎯 저격총처럼 시간에 따라 무기가 바뀌어요(이전 무기는 다시 못 꺼내요). 엉뚱한 걸 치면 체력이 깎이고 0이 되면 탈락!</li>
-          <li>🃏 술래 증강: 눈을 가린 동안 3장 중 하나씩 두 번 골라요(실버·골드·프리즘, 다시 뽑기 1번). 체력·속도 같은 능력치, 레이더·냄새 추적 같은 단서(정확한 위치는 안 줘요), 방울 덫(T)·충격파(Q) 같은 기술이 있어요. 숨는 사람도 술래가 뭘 골랐는지 볼 수 있어요.</li>
+          <li>🃏 술래 증강: 눈을 가린 동안 3장 중 하나씩 두 번 골라요(실버·골드·프리즘, 다시 뽑기 1번). 체력·속도 같은 능력치, 레이더·냄새 추적 같은 단서(정확한 위치는 안 줘요), 방울 덫(T)·충격파(Q) 같은 기술이 있어요. 숨는 사람도 술래가 뭘 골랐는지 볼 수 있어요. 사냥 중 왼쪽 위에 내 증강과 언제 발동하는지가 계속 보이고, Tab(🏆)을 누르면 이번 라운드 상황과 증강 설명이 나와요.</li>
           <li>👮 &ldquo;술래인 척&rdquo;은 점검원으로 변신 — 점검원은 손을 앞으로 내밀며 여기저기 점검해요. 어설프게 따라 하세요.</li>
           <li>🏁 꼼꼼이 모드(골목 놀이 &lsquo;꼼꼬미&rsquo;): 술래는 숫자 대신 먼 곳을 찍고 와서 숨는 시간이 매번 달라요(20~40초, 비공개). &ldquo;찾는다!&rdquo; 때 기지 근처에 있으면 아웃, 사냥 중 몰래 술래 기지 전봇대를 찍으면 꼼꼬미 성공(+4). 숨기만 하고 버티면 +1뿐, 절반 이상 찍어야 숨는 쪽 승. 술래가 전봇대를 8초 넘게 지키면 그동안 못 잡고, 잡힌 사람이 다음 술래.</li>
         </ul>

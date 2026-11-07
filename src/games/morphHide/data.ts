@@ -196,7 +196,8 @@ export interface GameOptions {
 
 export const DEFAULT_OPTIONS: GameOptions = { huntSec: 300, rounds: 3, goalMode: false };
 
-export const PICK_SEC = 15;
+/** 변신 + 숨는 쪽 증강을 고르는 시간 (11-07: 증강이 생겨 15 → 20) */
+export const PICK_SEC = 20;
 export const HIDE_SEC = 30;
 export const ROUND_END_SEC = 7;
 /**

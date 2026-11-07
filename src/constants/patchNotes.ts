@@ -64,6 +64,17 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.148.0",
+    releaseDate: "2026-11-07",
+    title: "🦎 변신 숨바꼭질 숨는 쪽 증강 · Tab 라운드 현황",
+    changes: [
+      { game: "morph-hide", type: "FIX", desc: "🖱️ 마우스 시점 고정 상태로 넘어가면 증강 카드가 안 눌리던 것 — 카드 화면에선 자동으로 풀고, 숫자 키 1·2·3으로도 골라요" },
+      { game: "morph-hide", type: "FEAT", desc: "🫣 숨는 사람 증강 12종 — 변신 고른 뒤 1장(갑옷·향수·재변신·술래 추적기·위험 감지·고양이 발걸음…), 고르기 15 → 20초" },
+      { game: "morph-hide", type: "IMPROVE", desc: "🃏 사냥 중 왼쪽 위에 내 증강 · 언제 발동하는지 · 남은 시간/횟수가 계속 보여요" },
+      { game: "morph-hide", type: "IMPROVE", desc: "📋 Tab(🏆)에 이번 라운드 현황 — 숨는 쪽은 생존자·변신·술래별 잡은 수, 술래는 내가 잡은 사람만 · 내 증강 설명" },
+    ],
+  },
+  {
     version: "v1.147.0",
     releaseDate: "2026-11-07",
     title: "🧬 시대의 진격 증강 51종 · 증강 비교 창",
