@@ -1,4 +1,5 @@
 import { seededRng } from "@/lib/rng";
+import { AUG_BY_ID, AUG_N, AUG_REROLLS, AUG_ROUNDS, rollAugOffer, rollAugTier, type AugId, type AugTier } from "./augments";
 
 /**
  * 죽은척 대작전 — 전장에서 동시에 장전·엄폐·사격을 내는 2~6인 게임에 "죽은 척"을 얹었다.
@@ -58,15 +59,16 @@ export const DMG: Record<"shot" | "burst" | "grenade" | "pierce" | "ambush" | "a
   ambushLooter: [2, 3],
   finish: [1, 2],
 };
-const BLAST_DMG: Record<number, DmgRange> = { 1: DMG.shot, 2: DMG.burst, 3: DMG.grenade };
 
 export interface GameOptions {
   /** 행동 고르기 제한 시간(초). 0 = 무제한 */
   chooseSeconds: number;
   /** 0 = 인원에 맞춰 자동 (`maxRoundsFor`) */
   maxRounds: number;
+  /** 🧬 증강(정해진 라운드 전에 3장 중 1장). 빠진 값 = 꺼짐(구버전 방장 호환) */
+  augments?: boolean;
 }
-export const DEFAULT_OPTIONS: GameOptions = { chooseSeconds: 15, maxRounds: 0 };
+export const DEFAULT_OPTIONS: GameOptions = { chooseSeconds: 15, maxRounds: 0, augments: false };
 
 /** 인원이 많을수록 다 쓰러뜨리는 데 오래 걸린다 — 셀프플레이로 맞춘 최대 라운드 */
 export function maxRoundsFor(seatCount: number): number {
@@ -89,6 +91,13 @@ export interface SeatState {
   diedRound: number | null;
   /** 개인 기록용 집계 */
   tally: Tally;
+  /** 공개: 고른 증강 */
+  augs: AugId[];
+  /** 공개: 남은 "다음 타격 피해 −1" 횟수(방탄모·방탄조끼) */
+  shield: number;
+  rerollsUsed: number;
+  /** 🩺 청진기로 몰래 안 생사 — 이 자리 화면/봇만 쓴다. hits = 알아낸 때의 맞은 횟수 */
+  intel: Record<number, { dead: boolean; hits: number }>;
 }
 
 export interface Tally {
@@ -113,7 +122,9 @@ export type RoundEvent =
   | { t: "loot"; seat: Seat; target: Seat; took: number; foiled: boolean }
   | { t: "finish"; seat: Seat; target: Seat; result: "dead" | "exposed" | "countered"; hit?: Hit }
   | { t: "rise"; seat: Seat; reason: "choice" | "breath" }
-  | { t: "fall"; seats: Seat[] };
+  | { t: "fall"; seats: Seat[] }
+  /** 증강 효과로 들어간 타격: 부비트랩(seat=누운 몸 → target=턴 사람), 카운터 저격, 파편 */
+  | { t: "aug"; id: AugId; seat: Seat; target: Seat; hit: Hit };
 
 /** 한 번의 타격: 공개 범위 lo~hi, 실제 값 dmg(맞은 사람 화면에만 보여 준다) */
 export interface Hit {
@@ -122,7 +133,16 @@ export interface Hit {
   dmg: number;
 }
 
-export type Phase = "choosing" | "revealing" | "resolved" | "ended";
+export type Phase = "augment" | "choosing" | "revealing" | "resolved" | "ended";
+
+/** 증강 고르기 회차 — 같은 등급, 자리별 3장 */
+export interface AugRound {
+  tier: AugTier;
+  offers: AugId[][];
+  /** 고른 카드(전원이 다 고르기 전엔 화면이 남의 것을 보여 주지 않는다) */
+  picks: (AugId | null)[];
+  done: boolean[];
+}
 
 export interface GameState {
   seed: number;
@@ -140,12 +160,16 @@ export interface GameState {
   events: RoundEvent[];
   ready: boolean[];
   idleStreak: number[];
+  /** 증강 고르기 중일 때만 */
+  aug?: AugRound | null;
 }
 
 export type EngineAction =
   | { type: "COMMIT"; seat: Seat; round: number; hash: string }
   | { type: "REVEAL"; seat: Seat; round: number; move: Move; salt: string }
   | { type: "READY"; seat: Seat; round: number }
+  | { type: "AUG_PICK"; seat: Seat; round: number; id: AugId }
+  | { type: "AUG_REROLL"; seat: Seat; round: number }
   | { type: "TIMEOUT"; stage: number };
 
 // ---------------------------------------------------------------------------
@@ -174,11 +198,26 @@ export function moveHash(move: Move, salt: string): string {
 
 export function startGame(seatCount: number, seed: number, options: GameOptions = DEFAULT_OPTIONS): GameState {
   const n = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, seatCount));
-  return {
+  const state: GameState = {
     seed,
     seatCount: n,
     options: { ...options, maxRounds: options.maxRounds > 0 ? options.maxRounds : maxRoundsFor(n) },
-    seats: Array.from({ length: n }, () => ({ hp: START_HP, ammo: 0, down: false, dead: false, confirmed: false, lie: 0, coverStreak: 0, hits: [], diedRound: null, tally: { ...EMPTY_TALLY } })),
+    seats: Array.from({ length: n }, () => ({
+      hp: START_HP,
+      ammo: 0,
+      down: false,
+      dead: false,
+      confirmed: false,
+      lie: 0,
+      coverStreak: 0,
+      hits: [],
+      diedRound: null,
+      tally: { ...EMPTY_TALLY },
+      augs: [],
+      shield: 0,
+      rerollsUsed: 0,
+      intel: {},
+    })),
     round: 1,
     phase: "choosing",
     stage: 0,
@@ -188,6 +227,108 @@ export function startGame(seatCount: number, seed: number, options: GameOptions 
     events: [],
     ready: Array(n).fill(false),
     idleStreak: Array(n).fill(0),
+    aug: null,
+  };
+  return isAugRound(state, 1) ? openAug(state) : state;
+}
+
+// ---------------------------------------------------------------------------
+// 증강
+
+export function hasAug(s: SeatState, id: AugId): boolean {
+  return !!s.augs?.includes(id);
+}
+export function maxAmmoOf(s: SeatState): number {
+  return hasAug(s, "bandolier") ? AUG_N.bandolierMax : MAX_AMMO;
+}
+/** 공격 탄약 비용(화력 등급과 별개 — 중화기는 수류탄을 2발에 던진다) */
+export function costOf(s: SeatState, kind: MoveKind): number {
+  if (kind === "grenade" && hasAug(s, "heavy")) return AUG_N.heavyGrenadeCost;
+  if (kind === "finish") return hasAug(s, "coroner") ? 0 : FINISH_COST;
+  return BLAST_TIER[kind] ?? 0;
+}
+export function coverLimitOf(s: SeatState): number {
+  return hasAug(s, "coverPro") ? AUG_N.coverProStreak : MAX_COVER_STREAK;
+}
+/** 공개: 이 자리가 누워 버틸 수 있는 라운드 수 — 넘게 누워 있으면 시체 */
+export function lieLimitOf(s: SeatState): number {
+  return MAX_LIE + (hasAug(s, "camo") ? AUG_N.camoLie : 0) + (hasAug(s, "understudy") ? AUG_N.understudyLie : 0);
+}
+/** 쓰러졌다 일어날 때 받는 탄약(아드레날린·위장복) */
+export function riseAmmo(s: SeatState): number {
+  return (hasAug(s, "adrenaline") ? AUG_N.adrenalineAmmo : 0) + (hasAug(s, "camo") ? AUG_N.camoRiseAmmo : 0);
+}
+/** 확인사살로 받는 피해 범위(위장복 −1, 최소 1) */
+export function finishRange(s: SeatState): DmgRange {
+  return hasAug(s, "camo") ? [Math.max(1, DMG.finish[0] - 1), Math.max(1, DMG.finish[1] - 1)] : DMG.finish;
+}
+export function reloadGain(s: SeatState): number {
+  return hasAug(s, "ammoCrate") && s.ammo <= AUG_N.ammoCrateBelow ? AUG_N.ammoCrateReload : 1;
+}
+export function lootTakeOf(s: SeatState): number {
+  return LOOT_TAKE + (hasAug(s, "pickpocket") ? AUG_N.pickpocketTake : 0);
+}
+/** 내가 쓰는 공격의 기본 피해 범위(총공세 전) */
+export function attackRange(s: SeatState, kind: "shot" | "burst" | "grenade" | "ambush" | "ambushLooter"): DmgRange {
+  if (kind === "shot") return hasAug(s, "sniper") ? [1, 2] : DMG.shot;
+  if (kind === "burst" || kind === "grenade") return DMG[kind];
+  const plus = (hasAug(s, "ambusher") ? AUG_N.ambusherDmg : 0) + (hasAug(s, "understudy") ? AUG_N.understudyDmg : 0);
+  const base = DMG[kind];
+  return [base[0] + plus, base[1] + plus];
+}
+/** 공개: 다음 타격이 이 자리에 실제로 들어올 범위(방탄판·방탄모 반영) */
+export function defendedRange(s: SeatState, range: DmgRange): DmgRange {
+  let [lo, hi] = range;
+  if (hasAug(s, "plate")) hi = Math.max(lo, hi - 1);
+  if (shieldApplies(s, [lo, hi])) [lo, hi] = [Math.max(1, lo - 1), hi - 1];
+  return [lo, hi];
+}
+/** 방탄모·조끼는 2 이상 들어올 수 있는 타격에만 쓰인다(1짜리 사격에 낭비되지 않게) */
+function shieldApplies(s: SeatState, range: DmgRange): boolean {
+  const r = hasAug(s, "plate") ? Math.max(range[0], range[1] - 1) : range[1];
+  return s.shield > 0 && r >= AUG_N.shieldFrom;
+}
+
+function isAugRound(state: GameState, round: number): boolean {
+  return !!state.options.augments && (AUG_ROUNDS as readonly number[]).includes(round);
+}
+
+function openAug(state: GameState): GameState {
+  const tier = rollAugTier(state.seed, state.round);
+  const offers = state.seats.map((s, i) => (s.confirmed ? [] : rollAugOffer(state.seed, state.round, i, tier, s.augs, 0)));
+  return {
+    ...state,
+    phase: "augment",
+    aug: { tier, offers, picks: state.seats.map(() => null), done: state.seats.map((s, i) => s.confirmed || offers[i].length === 0) },
+  };
+}
+
+/** 전원이 고르면 효과를 한꺼번에 적용하고 행동 고르기로 */
+function finishAug(state: GameState): GameState {
+  const aug = state.aug!;
+  const seats = state.seats.map((s, i) => {
+    const id = aug.picks[i];
+    if (!id) return s;
+    const next = { ...s, augs: [...s.augs, id] };
+    if (id === "bandolier") next.ammo = Math.min(maxAmmoOf(next), next.ammo + AUG_N.bandolierNow);
+    if (id === "supply") next.ammo = Math.min(maxAmmoOf(next), next.ammo + AUG_N.supplyNow);
+    if (id === "helmet") next.shield += AUG_N.helmetHits;
+    if (id === "vest") next.shield += AUG_N.vestHits;
+    return next;
+  });
+  return { ...toChoosing({ ...state, seats }), aug: null };
+}
+
+function toChoosing(state: GameState): GameState {
+  const n = state.seatCount;
+  return {
+    ...state,
+    phase: "choosing",
+    stage: state.stage + 1,
+    commits: state.seats.map((s) => (s.confirmed ? "x" : null)),
+    moves: Array(n).fill(null),
+    events: [],
+    ready: Array(n).fill(false),
   };
 }
 
@@ -208,13 +349,13 @@ export function legalMoves(state: GameState, seat: Seat): Move[] {
   const bodies = others.filter((i) => state.seats[i].down && !state.seats[i].confirmed);
   if (me.down) return [{ kind: "hold" }, { kind: "rise" }, ...standing.map((target) => ({ kind: "ambush" as const, target }))];
   const out: Move[] = [{ kind: "reload" }];
-  if (me.coverStreak < MAX_COVER_STREAK) out.push({ kind: "cover" });
+  if (me.coverStreak < coverLimitOf(me)) out.push({ kind: "cover" });
   for (const kind of ["shot", "burst", "grenade"] as const) {
-    if (me.ammo >= BLAST_TIER[kind]!) for (const target of standing) out.push({ kind, target });
+    if (me.ammo >= costOf(me, kind)) for (const target of standing) out.push({ kind, target });
   }
   for (const target of bodies) {
     out.push({ kind: "loot", target });
-    if (me.ammo >= FINISH_COST) out.push({ kind: "finish", target });
+    if (me.ammo >= costOf(me, "finish")) out.push({ kind: "finish", target });
   }
   return out;
 }
@@ -238,7 +379,7 @@ function resolveRound(state: GameState): GameState {
     const m = state.moves[i];
     return m && isLegal(state, i, m) ? m : defaultMove(state, i);
   });
-  const seats = state.seats.map((s) => ({ ...s, tally: { ...s.tally } }));
+  const seats = state.seats.map((s) => ({ ...s, tally: { ...s.tally }, intel: { ...s.intel } }));
   /** 이번 라운드에 누가 누구를 때렸나 (처치 집계용) */
   const strikers: Seat[][] = state.seats.map(() => []);
   const startDown = seats.map((s) => s.down);
@@ -248,14 +389,33 @@ function resolveRound(state: GameState): GameState {
   // 피해 굴림은 시드+라운드로 결정 — 모든 기기가 같은 값을 얻는다
   const roll = seededRng((state.seed ^ Math.imul(state.round, 2654435761)) >>> 0);
   const surge = surgeAt(state.round);
+  const struck = Array(n).fill(false);
+  /** 증강으로 얻는 탄약(전리품·아드레날린·엄폐 보급) — 장전 뒤에 한꺼번에 */
+  const bonusAmmo = Array(n).fill(0);
   const strike = (target: Seat, base: DmgRange, by: Seat): Hit => {
     strikers[target].push(by);
-    const range: DmgRange = [base[0] + surge, base[1] + surge];
+    // 방탄 효과는 공개 범위 자체를 줄여 기록한다 — 증강이 공개라 추리도 그대로 맞는다
+    const raw: DmgRange = [base[0] + surge, base[1] + surge];
+    const range = defendedRange(seats[target], raw);
+    // 방탄은 다음 타격에 무조건 소모된다(작은 타격이면 효과 없이)
+    if (seats[target].shield > 0) seats[target].shield -= 1;
     const [lo, hi] = range;
     const value = lo + Math.floor(roll() * (hi - lo + 1));
     dmg[target] += value;
+    struck[target] = true;
     newHits[target].push(range);
     return { lo, hi, dmg: value };
+  };
+  const augStrike = (id: AugId, owner: Seat, target: Seat, base: DmgRange | readonly [number, number]) => {
+    events.push({ t: "aug", id, seat: owner, target, hit: strike(target, base, owner) });
+  };
+  /** 엄폐로 막아 냈을 때의 증강 (라운드당 한 번씩) */
+  const blockedOnce = Array(n).fill(false);
+  const onBlocked = (owner: Seat, shooter: Seat) => {
+    if (hasAug(seats[owner], "riposte") && !blockedOnce[owner]) bonusAmmo[owner] += AUG_N.ripostePlus;
+    if (hasAug(seats[owner], "counterSniper") && !blockedOnce[owner]) augStrike("counterSniper", owner, shooter, AUG_N.counterSniperDmg);
+    if (hasAug(seats[owner], "coverPro") && !blockedOnce[owner]) seats[shooter].ammo = Math.max(0, seats[shooter].ammo - AUG_N.coverProDrain);
+    blockedOnce[owner] = true;
   };
   const rose = Array(n).fill(false);
   const blocking = moves.map((m, i) => !startDown[i] && m.kind === "cover");
@@ -265,9 +425,7 @@ function resolveRound(state: GameState): GameState {
   // 비용 지불 (공개 정보)
   moves.forEach((m, i) => {
     if (startDown[i]) return;
-    const tier = BLAST_TIER[m.kind];
-    if (tier) seats[i].ammo -= tier;
-    if (m.kind === "finish") seats[i].ammo -= FINISH_COST;
+    if (BLAST_TIER[m.kind] || m.kind === "finish") seats[i].ammo -= costOf(seats[i], m.kind);
   });
 
   // 1) 쓰러진 사람을 둘러싼 일
@@ -280,19 +438,21 @@ function resolveRound(state: GameState): GameState {
       if (finishers.length) {
         seats[k].confirmed = true;
         for (const f of finishers) events.push({ t: "finish", seat: f, target: k, result: "dead" });
+        if (hasAug(seats[k], "tripwire")) for (const f of finishers) augStrike("tripwire", k, f, AUG_N.tripwireDmg);
       }
       lootBody(seats, k, looters, events);
+      if (looters.length && hasAug(seats[k], "tripwire")) for (const l of looters) augStrike("tripwire", k, l, AUG_N.tripwireDmg);
       continue;
     }
     if (fm.kind === "ambush" && finishers.includes(fm.target!)) {
       rose[k] = true;
-      events.push({ t: "finish", seat: fm.target!, target: k, result: "countered", hit: strike(k, DMG.finish, fm.target!) });
+      events.push({ t: "finish", seat: fm.target!, target: k, result: "countered", hit: strike(k, finishRange(seats[k]), fm.target!) });
       for (const l of looters) events.push({ t: "loot", seat: l, target: k, took: 0, foiled: true });
       continue;
     }
     if (fm.kind === "ambush" && looters.includes(fm.target!) && finishers.length === 0) {
       rose[k] = true;
-      events.push({ t: "ambush", seat: k, target: fm.target!, result: "looter", hit: strike(fm.target!, DMG.ambushLooter, k) });
+      events.push({ t: "ambush", seat: k, target: fm.target!, result: "looter", hit: strike(fm.target!, attackRange(seats[k], "ambushLooter"), k) });
       seats[k].tally.ambushHits++;
       for (const l of looters) if (l !== fm.target) events.push({ t: "loot", seat: l, target: k, took: 0, foiled: true });
       continue;
@@ -300,23 +460,32 @@ function resolveRound(state: GameState): GameState {
     if (finishers.length) {
       // 살아 있었다 — 정체 폭로, 맞고 다시 쓰러진다
       rose[k] = true;
-      const hit = strike(k, DMG.finish, finishers[0]);
+      const hit = strike(k, finishRange(seats[k]), finishers[0]);
       for (const f of finishers) seats[f].tally.exposes++;
+      if (hasAug(seats[k], "tripwire")) for (const f of finishers) augStrike("tripwire", k, f, AUG_N.tripwireDmg);
       finishers.forEach((f, idx) => events.push({ t: "finish", seat: f, target: k, result: "exposed", ...(idx === 0 ? { hit } : {}) }));
       for (const l of looters) events.push({ t: "loot", seat: l, target: k, took: 0, foiled: true });
       continue;
     }
-    if (fm.kind === "hold") lootBody(seats, k, looters, events);
-    else for (const l of looters) events.push({ t: "loot", seat: l, target: k, took: 0, foiled: true });
+    if (fm.kind === "hold") {
+      lootBody(seats, k, looters, events);
+      if (looters.length && hasAug(seats[k], "tripwire")) for (const l of looters) augStrike("tripwire", k, l, AUG_N.tripwireDmg);
+    } else for (const l of looters) events.push({ t: "loot", seat: l, target: k, took: 0, foiled: true });
     if (fm.kind === "rise") {
       rose[k] = true;
       events.push({ t: "rise", seat: k, reason: "choice" });
     } else if (fm.kind === "ambush") {
       rose[k] = true;
       const t = fm.target!;
-      if (blocking[t]) events.push({ t: "ambush", seat: k, target: t, result: "blocked" });
-      else {
-        events.push({ t: "ambush", seat: k, target: t, result: "hit", hit: strike(t, DMG.ambush, k) });
+      if (blocking[t] && hasAug(seats[k], "ambusher")) {
+        // 매복: 엄폐해도 1
+        events.push({ t: "ambush", seat: k, target: t, result: "hit", hit: strike(t, DMG.pierce, k) });
+        seats[k].tally.ambushHits++;
+      } else if (blocking[t]) {
+        events.push({ t: "ambush", seat: k, target: t, result: "blocked" });
+        onBlocked(t, k);
+      } else {
+        events.push({ t: "ambush", seat: k, target: t, result: "hit", hit: strike(t, attackRange(seats[k], "ambush"), k) });
         seats[k].tally.ambushHits++;
       }
     }
@@ -329,7 +498,14 @@ function resolveRound(state: GameState): GameState {
     if (!b || cancelled[b.seat]) continue;
     const back = blasts[b.target];
     if (!back || back.target !== b.seat || cancelled[b.target]) continue;
-    if (back.tier === b.tier) {
+    const qa = hasAug(seats[b.seat], "quickdraw");
+    const qb = hasAug(seats[back.seat], "quickdraw");
+    if (back.tier === b.tier && qa !== qb) {
+      // 속사: 같은 화력이면 먼저 쏜다
+      const lo = qa ? back : b;
+      cancelled[lo.seat] = true;
+      events.push({ t: "blast", seat: lo.seat, target: lo.target, tier: lo.tier, result: "overpowered" });
+    } else if (back.tier === b.tier) {
       cancelled[b.seat] = cancelled[b.target] = true;
       events.push({ t: "blast", seat: b.seat, target: b.target, tier: b.tier, result: "clash" });
     } else {
@@ -340,20 +516,32 @@ function resolveRound(state: GameState): GameState {
   }
   for (const b of blasts) {
     if (!b || cancelled[b.seat]) continue;
-    if (blocking[b.target] && b.tier >= 3) events.push({ t: "blast", seat: b.seat, target: b.target, tier: b.tier, result: "pierce", hit: strike(b.target, DMG.pierce, b.seat) });
-    else if (blocking[b.target]) events.push({ t: "blast", seat: b.seat, target: b.target, tier: b.tier, result: "blocked" });
-    else events.push({ t: "blast", seat: b.seat, target: b.target, tier: b.tier, result: "hit", hit: strike(b.target, BLAST_DMG[b.tier], b.seat) });
-    if (!blocking[b.target] || b.tier >= 3) seats[b.seat].tally.blastHits++;
+    const pierces = b.tier >= 3 || (b.tier === 2 && hasAug(seats[b.seat], "apRounds"));
+    const kind = b.tier === 1 ? "shot" : b.tier === 2 ? "burst" : "grenade";
+    if (blocking[b.target] && pierces) events.push({ t: "blast", seat: b.seat, target: b.target, tier: b.tier, result: "pierce", hit: strike(b.target, DMG.pierce, b.seat) });
+    else if (blocking[b.target]) {
+      events.push({ t: "blast", seat: b.seat, target: b.target, tier: b.tier, result: "blocked" });
+      onBlocked(b.target, b.seat);
+    } else events.push({ t: "blast", seat: b.seat, target: b.target, tier: b.tier, result: "hit", hit: strike(b.target, attackRange(seats[b.seat], kind), b.seat) });
+    if (!blocking[b.target] || pierces) {
+      seats[b.seat].tally.blastHits++;
+      if (b.tier >= 2 && hasAug(seats[b.seat], "scavenger")) bonusAmmo[b.seat] += AUG_N.scavengerAmmo;
+      if (b.tier === 3 && hasAug(seats[b.seat], "frag")) {
+        const near = seats.map((_, i) => i).filter((i) => i !== b.seat && i !== b.target && !startDown[i] && !blocking[i] && !seats[i].confirmed);
+        for (const t of near) augStrike("frag", b.seat, t, [AUG_N.fragDmg, AUG_N.fragDmg]);
+      }
+    }
   }
 
   // 3) 장전 / 엄폐 기록
   moves.forEach((m, i) => {
     if (startDown[i]) return;
     if (m.kind === "reload") {
-      seats[i].ammo = Math.min(MAX_AMMO, seats[i].ammo + 1);
+      seats[i].ammo = Math.min(maxAmmoOf(seats[i]), seats[i].ammo + (reloadGain(seats[i])));
       events.push({ t: "reload", seat: i });
     }
-    seats[i].coverStreak = m.kind === "cover" ? seats[i].coverStreak + 1 : 0;
+    // 엄폐 보급: 막아 냈으면 다음 라운드에도 엄폐 가능
+    seats[i].coverStreak = m.kind === "cover" && !(blockedOnce[i] && hasAug(seats[i], "riposte")) ? seats[i].coverStreak + 1 : 0;
     if (m.kind === "cover") events.push({ t: "cover", seat: i });
   });
 
@@ -362,24 +550,30 @@ function resolveRound(state: GameState): GameState {
     if (rose[i]) {
       seats[i].down = false;
       seats[i].lie = 0;
+      bonusAmmo[i] += riseAmmo(seats[i]);
     } else if (startDown[i] && !seats[i].dead && !seats[i].confirmed) {
       seats[i].lie += 1;
       seats[i].tally.fakeRounds++;
-      if (seats[i].lie >= MAX_LIE && dmg[i] === 0) {
+      if (seats[i].lie >= lieLimitOf(seats[i]) && !struck[i]) {
         seats[i].down = false;
         seats[i].lie = 0;
+        bonusAmmo[i] += riseAmmo(seats[i]);
         events.push({ t: "rise", seat: i, reason: "breath" });
       }
-    } else if (startDown[i] && seats[i].dead) {
+    } else if (startDown[i] && seats[i].dead && !seats[i].confirmed) {
       // 진짜 시체도 공개 카운터는 똑같이 오른다
       seats[i].lie += 1;
     }
   }
 
-  // 5) 피해 → 무조건 쓰러짐
+  // 🎭 명배우: 누워 있던 라운드마다 탄약 — 시체도 똑같이 받아서 정체가 새지 않는다
+  for (let i = 0; i < n; i++) if (startDown[i] && !rose[i] && !seats[i].confirmed && hasAug(seats[i], "understudy")) seats[i].ammo = Math.min(maxAmmoOf(seats[i]), seats[i].ammo + AUG_N.understudyAmmo);
+  for (let i = 0; i < n; i++) if (bonusAmmo[i] > 0 && !seats[i].dead) seats[i].ammo = Math.min(maxAmmoOf(seats[i]), seats[i].ammo + bonusAmmo[i]);
+
+  // 5) 피해 → 무조건 쓰러짐 (방탄으로 0이 돼도 맞았으면 쓰러진다)
   const fallen: Seat[] = [];
   for (let i = 0; i < n; i++) {
-    if (dmg[i] <= 0) continue;
+    if (!struck[i]) continue;
     seats[i].hits = [...seats[i].hits, ...newHits[i]];
     seats[i].hp = Math.max(0, seats[i].hp - dmg[i]);
     if (!seats[i].down) fallen.push(i);
@@ -392,6 +586,15 @@ function resolveRound(state: GameState): GameState {
     }
   }
   if (fallen.length) events.push({ t: "fall", seats: fallen });
+
+  // 6) 🩺 청진기 — 쓰러진 상대 중 아직 모르는 1명의 생사를 몰래
+  for (let i = 0; i < n; i++) {
+    if (!hasAug(seats[i], "stethoscope") || seats[i].confirmed) continue;
+    const unknown = seats.map((_, k) => k).filter((k) => k !== i && seats[k].down && !seats[k].confirmed && !intelValid(seats[i], k, seats[k]));
+    if (!unknown.length) continue;
+    const k = unknown[Math.floor(roll() * unknown.length)];
+    seats[i].intel[k] = { dead: seats[k].dead, hits: seats[k].hits.length };
+  }
 
   const lastMoves = moves.map((m, i) => (startDown[i] || state.seats[i].confirmed ? null : m));
   const alive = seats.filter((s) => !s.dead).length;
@@ -408,9 +611,17 @@ function resolveRound(state: GameState): GameState {
   };
 }
 
+/** 청진기로 안 정보가 아직 맞는가 — 시체는 영원히, 산 사람은 그 뒤로 안 맞았을 때만 */
+export function intelValid(viewer: SeatState, seat: Seat, target: SeatState): boolean {
+  const it = viewer.intel?.[seat];
+  if (!it) return false;
+  return it.dead || it.hits === target.hits.length;
+}
+
 function lootBody(seats: SeatState[], k: Seat, looters: Seat[], events: RoundEvent[]) {
   for (const l of looters) {
-    const took = Math.min(LOOT_TAKE, seats[k].ammo, MAX_AMMO - seats[l].ammo);
+    // 🌿 위장복: 누운 몸에서 탄약을 못 찾는다(시체여도 똑같이)
+    const took = hasAug(seats[k], "camo") ? 0 : Math.max(0, Math.min(lootTakeOf(seats[l]), seats[k].ammo, maxAmmoOf(seats[l]) - seats[l].ammo));
     seats[k].ammo -= took;
     seats[l].ammo += took;
     seats[l].tally.ammoLooted += took;
@@ -429,21 +640,41 @@ function maybeResolve(state: GameState): GameState {
 }
 
 function nextRound(state: GameState): GameState {
-  const n = state.seatCount;
-  return {
-    ...state,
-    round: state.round + 1,
-    phase: "choosing",
-    stage: state.stage + 1,
-    commits: state.seats.map((s) => (s.confirmed ? "x" : null)),
-    moves: Array(n).fill(null),
-    events: [],
-    ready: Array(n).fill(false),
-  };
+  const next = { ...state, round: state.round + 1 };
+  if (isAugRound(next, next.round)) {
+    const n = state.seatCount;
+    return openAug({ ...next, stage: state.stage + 1, commits: Array(n).fill(null), moves: Array(n).fill(null), events: [], ready: Array(n).fill(false) });
+  }
+  return toChoosing(next);
 }
 
 export function applyAction(state: GameState, action: EngineAction): GameState {
   switch (action.type) {
+    case "AUG_PICK": {
+      const aug = state.aug;
+      if (state.phase !== "augment" || !aug || action.round !== state.round || aug.done[action.seat] !== false) return state;
+      if (!aug.offers[action.seat]?.includes(action.id) || !AUG_BY_ID[action.id]) return state;
+      const next: AugRound = {
+        ...aug,
+        picks: aug.picks.map((p, i) => (i === action.seat ? action.id : p)),
+        done: aug.done.map((d, i) => (i === action.seat ? true : d)),
+      };
+      const idleStreak = state.idleStreak.map((v, i) => (i === action.seat ? 0 : v));
+      const s = { ...state, aug: next, idleStreak };
+      return next.done.every(Boolean) ? finishAug(s) : s;
+    }
+    case "AUG_REROLL": {
+      const aug = state.aug;
+      const me = state.seats[action.seat];
+      if (state.phase !== "augment" || !aug || !me || action.round !== state.round || aug.done[action.seat] !== false) return state;
+      if (me.rerollsUsed >= AUG_REROLLS) return state;
+      const offer = rollAugOffer(state.seed, state.round, action.seat, aug.tier, me.augs, 1 + me.rerollsUsed, aug.offers[action.seat]);
+      return {
+        ...state,
+        seats: state.seats.map((s, i) => (i === action.seat ? { ...s, rerollsUsed: s.rerollsUsed + 1 } : s)),
+        aug: { ...aug, offers: aug.offers.map((o, i) => (i === action.seat ? offer : o)) },
+      };
+    }
     case "COMMIT": {
       if (state.phase !== "choosing" || action.round !== state.round) return state;
       if (!isActing(state, action.seat) || state.commits[action.seat] !== null) return state;
@@ -468,6 +699,12 @@ export function applyAction(state: GameState, action: EngineAction): GameState {
     }
     case "TIMEOUT": {
       if (action.stage !== state.stage) return state;
+      if (state.phase === "augment" && state.aug) {
+        const aug = state.aug;
+        const idleStreak = state.idleStreak.map((v, i) => (aug.done[i] ? v : v + 1));
+        const picks = aug.picks.map((p, i) => (aug.done[i] ? p : (aug.offers[i][0] ?? null)));
+        return finishAug({ ...state, idleStreak, aug: { ...aug, picks, done: aug.done.map(() => true) } });
+      }
       if (state.phase === "choosing") {
         const idleStreak = state.idleStreak.map((v, i) => (state.commits[i] === null ? v + 1 : v));
         const moves = state.moves.map((m, i) => (state.commits[i] === null ? defaultMove(state, i) : m));
@@ -486,6 +723,8 @@ export function applyAction(state: GameState, action: EngineAction): GameState {
 export function pendingSeats(state: GameState): Seat[] {
   const all = state.seats.map((_, i) => i);
   switch (state.phase) {
+    case "augment":
+      return all.filter((i) => state.aug?.done[i] === false);
     case "choosing":
       return all.filter((i) => state.commits[i] === null);
     case "revealing":
@@ -521,7 +760,9 @@ export function aliveChance(state: GameState, seat: Seat, viewer?: Seat): number
   if (s.confirmed) return 0;
   if (!s.down) return 1;
   // 살아 있으면 숨 참기 한도에서 강제로 일어난다 — 그 이상 누워 있으면 시체
-  if (s.lie >= MAX_LIE) return 0;
+  if (s.lie >= lieLimitOf(s)) return 0;
+  // 🩺 청진기로 몰래 안 생사
+  if (viewer !== undefined && state.seats[viewer] && intelValid(state.seats[viewer], seat, s)) return state.seats[viewer].intel[seat].dead ? 0 : 1;
   return survivalChance(s.hits);
 }
 

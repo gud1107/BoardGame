@@ -27,7 +27,8 @@ import {
   type Move,
   type Seat,
 } from "./engine";
-import { chooseBotMove } from "./bot";
+import { chooseBotAugment, chooseBotMove } from "./bot";
+import { AUG_ROUNDS, type AugId } from "./augments";
 import { RESOLVED_MS } from "./show";
 import PlayDeadBoard from "./PlayDeadBoard";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
@@ -67,6 +68,8 @@ import { DESYNC_DIGEST_EVENT, desyncOnDigest, desyncSkipSyncAnswer, useDesyncGua
 
 function phaseDurationMs(state: GameState): number {
   switch (state.phase) {
+    case "augment":
+      return state.options.chooseSeconds > 0 ? Math.max(AUG_SECONDS, state.options.chooseSeconds) * 1000 : 0;
     case "choosing":
       return state.options.chooseSeconds > 0 ? state.options.chooseSeconds * 1000 : 0;
     case "revealing":
@@ -78,6 +81,8 @@ function phaseDurationMs(state: GameState): number {
   }
 }
 const IDLE_STREAK_FOR_VOTE = 2;
+/** 증강 고르기 최소 시간(초) — 카드 3장을 읽을 시간 */
+const AUG_SECONDS = 20;
 const CHOOSE_SECONDS = [10, 15, 20, 30, 0];
 
 type Occupant = {
@@ -163,7 +168,8 @@ export default function PlayDeadGame({ onComplete }: PlayableGameProps) {
   const [identity, setIdentity] = useState<RoomIdentityValue>({ name: "" });
   const [codeInput, setCodeInput] = useState(roomFromUrl ?? "");
   const [targetPlayerCount, setTargetPlayerCount] = useState(4);
-  const [options, setOptions] = useState<GameOptions>(DEFAULT_OPTIONS);
+  // 새 방은 🧬 증강을 켠 채로 연다(엔진 기본값은 꺼짐 — 옵션이 빠진 구버전 방장과 맞추려고)
+  const [options, setOptions] = useState<GameOptions>(() => ({ ...DEFAULT_OPTIONS, augments: true }));
   const [formError, setFormError] = useState<string | null>(null);
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
@@ -593,6 +599,10 @@ export default function PlayDeadGame({ onComplete }: PlayableGameProps) {
       return stored ? { type: "REVEAL", seat: actor, round: state.round, move: stored.move, salt: stored.salt } : null;
     }
     if (state.phase === "resolved") return { type: "READY", seat: actor, round: state.round };
+    if (state.phase === "augment") {
+      const id = chooseBotAugment(state, actor, level);
+      return id ? { type: "AUG_PICK", seat: actor, round: state.round, id } : null;
+    }
     return null;
   }, []);
 
@@ -704,6 +714,19 @@ export default function PlayDeadGame({ onComplete }: PlayableGameProps) {
     });
   }, [gameState, mySeat, roomCode]);
   const myCommittedMove = gameState && myCommitted && myCommitted.key === `${gameState.seed}:${gameState.round}` ? myCommitted.move : null;
+  const sendAugPick = useCallback(
+    (id: AugId) => {
+      const state = gameStateRef.current;
+      if (!state || mySeat === null || state.phase !== "augment" || state.aug?.done[mySeat] !== false) return;
+      channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action: { type: "AUG_PICK", seat: mySeat, round: state.round, id } } });
+    },
+    [mySeat],
+  );
+  const sendAugReroll = useCallback(() => {
+    const state = gameStateRef.current;
+    if (!state || mySeat === null || state.phase !== "augment" || state.aug?.done[mySeat] !== false) return;
+    channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action: { type: "AUG_REROLL", seat: mySeat, round: state.round } } });
+  }, [mySeat]);
   const sendReady = useCallback(() => {
     const state = gameStateRef.current;
     if (!state || mySeat === null || state.phase !== "resolved") return;
@@ -942,6 +965,15 @@ export default function PlayDeadGame({ onComplete }: PlayableGameProps) {
               options={CHOOSE_SECONDS.map((sec) => ({ value: sec, label: sec === 0 ? "무제한" : `${sec}초` }))}
               onChange={(v) => setOpt("chooseSeconds", v)}
             />
+            <OptionRow
+              label={`🧬 증강 (${AUG_ROUNDS.join("·")}라운드 전에 3장 중 1장)`}
+              value={options.augments ? "on" : "off"}
+              options={[
+                { value: "on", label: "켜기" },
+                { value: "off", label: "끄기" },
+              ]}
+              onChange={(v) => setOpt("augments", v === "on")}
+            />
           </>
         )}
         {formError && <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300 light:bg-rose-50 light:text-rose-700">{formError}</p>}
@@ -971,7 +1003,9 @@ export default function PlayDeadGame({ onComplete }: PlayableGameProps) {
               🔗 초대 링크 복사
             </button>
             {isHost && (
-              <p className="break-keep text-xs text-white/40 light:text-slate-400">행동 고르기 {options.chooseSeconds === 0 ? "무제한" : `${options.chooseSeconds}초`}</p>
+              <p className="break-keep text-xs text-white/40 light:text-slate-400">
+                행동 고르기 {options.chooseSeconds === 0 ? "무제한" : `${options.chooseSeconds}초`} · 🧬 증강 {options.augments ? "켬" : "끔"}
+              </p>
             )}
             <p className="text-xs text-white/50 light:text-slate-500">
               {filled} / {knownTargetPlayerCount}명 참여 중
@@ -1051,6 +1085,8 @@ export default function PlayDeadGame({ onComplete }: PlayableGameProps) {
           committedMove={myCommittedMove}
           onCommit={commitMove}
           onReady={sendReady}
+          onAugPick={sendAugPick}
+          onAugReroll={sendAugReroll}
           onGameEnd={handleGameEnd}
         />
       </>,

@@ -5,15 +5,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { preferLowDetail, webglAvailable } from "@/games/shared/three/viewPref";
 import {
   aliveChance,
-  BLAST_TIER,
+  attackRange,
   computeRankings,
+  costOf,
+  coverLimitOf,
   DMG,
-  FINISH_COST,
+  hasAug,
+  intelValid,
   isLegal,
-  LOOT_TAKE,
-  MAX_COVER_STREAK,
-  MAX_AMMO,
-  MAX_LIE,
+  lieLimitOf,
+  lootTakeOf,
+  maxAmmoOf,
+  reloadGain,
   START_HP,
   surgeAt,
   SURGE_ROUND,
@@ -27,6 +30,8 @@ import {
 import { buildFx, chantAt, describeEvents, fightersAt, MOVE_LABEL, SHOW } from "./show";
 import { SEAT_COLORS } from "./three/PlayDeadArena3D";
 import HowToPlay from "./HowToPlay";
+import AugmentPicker, { AugChips, nextAugRound } from "./AugmentPicker";
+import type { AugId } from "./augments";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { getPlayDeadSound, playDeadIntensity, playDeadSoundCues } from "./playDeadSound";
@@ -49,21 +54,38 @@ export interface PlayDeadBoardProps {
   committedMove: Move | null;
   onCommit: (move: Move) => void;
   onReady: () => void;
+  onAugPick: (id: AugId) => void;
+  onAugReroll: () => void;
   onGameEnd: () => void;
 }
 
-const CARD_HELP: Record<MoveKind, string> = {
-  reload: `탄약 +1발 (최대 ${MAX_AMMO}발). 일어나 장전하는 동안은 무방비예요`,
-  cover: `사격·연사를 피해요. 수류탄은 1만 들어와요. 두 라운드 연속은 못 써요`,
-  shot: `탄약 1발 · 피해 ${DMG.shot[0]}`,
-  burst: `탄약 2발 · 피해 ${DMG.burst[0]}~${DMG.burst[1]}`,
-  grenade: `탄약 3발 · 피해 ${DMG.grenade[0]}~${DMG.grenade[1]} · 엄폐해도 1이 들어가요`,
-  loot: `쓰러진 몸에서 탄약 ${LOOT_TAKE}발을 챙겨요. 살아 있던 상대가 기습하면 ${DMG.ambushLooter[0]}~${DMG.ambushLooter[1]} 피해!`,
-  finish: `탄약 ${FINISH_COST}발 · 죽은 척이면 ${DMG.finish[0]}~${DMG.finish[1]} 피해+정체 폭로, 진짜 시체면 사망 확인`,
-  hold: `계속 누워 있어요. 누운 사람은 사격·연사·수류탄의 표적이 안 돼요 (최대 ${MAX_LIE}라운드)`,
-  rise: "털고 일어나요. 살아 있다는 게 드러나요",
-  ambush: `일어나며 ${DMG.ambush[0]}~${DMG.ambush[1]} 피해. 나를 털러 온 사람이면 ${DMG.ambushLooter[0]}~${DMG.ambushLooter[1]}!`,
-};
+const rg = (r: readonly [number, number]) => (r[0] === r[1] ? `${r[0]}` : `${r[0]}~${r[1]}`);
+
+/** 행동 카드 설명 — 내 증강(비용·피해·한도)을 반영한다 */
+function cardHelp(me: SeatState, k: MoveKind): string {
+  switch (k) {
+    case "reload":
+      return `탄약 +${reloadGain(me)}발 (최대 ${maxAmmoOf(me)}발). 일어나 장전하는 동안은 무방비예요`;
+    case "cover":
+      return `사격·연사를 피해요. 수류탄은 1만 들어와요. ${coverLimitOf(me) > 1 ? `${coverLimitOf(me)}라운드까지 연속 가능` : "두 라운드 연속은 못 써요"}`;
+    case "shot":
+      return `탄약 ${costOf(me, "shot")}발 · 피해 ${rg(attackRange(me, "shot"))}`;
+    case "burst":
+      return `탄약 ${costOf(me, "burst")}발 · 피해 ${rg(attackRange(me, "burst"))}${hasAug(me, "apRounds") ? " · 엄폐해도 1" : ""}`;
+    case "grenade":
+      return `탄약 ${costOf(me, "grenade")}발 · 피해 ${rg(attackRange(me, "grenade"))} · 엄폐해도 1이 들어가요`;
+    case "loot":
+      return `쓰러진 몸에서 탄약 ${lootTakeOf(me)}발을 챙겨요. 살아 있던 상대가 기습하면 ${rg(DMG.ambushLooter)}+ 피해!`;
+    case "finish":
+      return `탄약 ${costOf(me, "finish")}발 · 죽은 척이면 ${rg(DMG.finish)} 피해+정체 폭로, 진짜 시체면 사망 확인`;
+    case "hold":
+      return `계속 누워 있어요. 누운 사람은 사격·연사·수류탄의 표적이 안 돼요 (최대 ${lieLimitOf(me)}라운드)`;
+    case "rise":
+      return "털고 일어나요. 살아 있다는 게 드러나요";
+    case "ambush":
+      return `일어나며 ${rg(attackRange(me, "ambush"))} 피해. 나를 털러 온 사람이면 ${rg(attackRange(me, "ambushLooter"))}!`;
+  }
+}
 
 const STANDING_KINDS: MoveKind[] = ["reload", "cover", "shot", "burst", "grenade", "loot", "finish"];
 const DOWN_KINDS: MoveKind[] = ["hold", "rise", "ambush"];
@@ -71,10 +93,9 @@ const needsTarget = (k: MoveKind) => k === "shot" || k === "burst" || k === "gre
 
 function disabledReason(state: GameState, seat: Seat, kind: MoveKind): string | null {
   const me = state.seats[seat];
-  const tier = BLAST_TIER[kind];
-  if (tier && me.ammo < tier) return `탄약 ${tier}발 필요`;
-  if (kind === "finish" && me.ammo < FINISH_COST) return `탄약 ${FINISH_COST}발 필요`;
-  if (kind === "cover" && me.coverStreak >= MAX_COVER_STREAK) return "연속 엄폐 불가";
+  const cost = costOf(me, kind);
+  if (cost > 0 && me.ammo < cost) return `탄약 ${cost}발 필요`;
+  if (kind === "cover" && me.coverStreak >= coverLimitOf(me)) return "연속 엄폐 불가";
   if (needsTarget(kind) && !state.seats.some((_, t) => t !== seat && isLegal(state, seat, { kind, target: t }))) return kind === "loot" || kind === "finish" ? "쓰러진 사람 없음" : "대상 없음";
   return null;
 }
@@ -160,6 +181,22 @@ export default function PlayDeadBoard(props: PlayDeadBoardProps) {
   });
 
   const secsLeft = deadlineMs ? Math.max(0, Math.ceil((deadlineMs - nowMs) / 1000)) : null;
+  // 증강 카드: PC 1·2·3 키
+  const { onAugPick } = props;
+  const augOffer = state.phase === "augment" && state.aug && !state.aug.done[me] ? state.aug.offers[me] : null;
+  useEffect(() => {
+    if (!augOffer?.length) return;
+    const onKey = (ev: KeyboardEvent) => {
+      const t = ev.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      const i = Number(ev.key) - 1;
+      if (i >= 0 && i < augOffer.length) onAugPick(augOffer[i]);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [augOffer, onAugPick]);
+  const augOn = !!state.options.augments;
+  const nextAug = augOn ? nextAugRound(state.round) : null;
   const surge = surgeAt(state.round);
   const log = useMemo(() => (showing ? describeEvents(state, names, me) : []), [showing, state, names, me]);
   // don't spoil the reveal: the log and table switch to the new round once bodies have hit the floor
@@ -181,9 +218,11 @@ export default function PlayDeadBoard(props: PlayDeadBoardProps) {
           ) : (
             <span className="text-xs text-white/40 light:text-slate-400">{SURGE_ROUND}라운드부터 🔥 총공세</span>
           )}
+          {nextAug !== null && state.phase !== "augment" && <span className="text-xs text-fuchsia-200/70 light:text-fuchsia-700">🧬 {nextAug}라운드 전 증강</span>}
         </div>
         <div className="flex items-center gap-1.5 text-xs">
           <SuiteSoundHud suite={getPlayDeadSound} icon="🪖" label="No Man's Land" preview="surge" />
+          {state.phase === "augment" && <span className="rounded-full bg-fuchsia-400 px-2.5 py-1 font-semibold text-slate-900">🧬 증강</span>}
           {(["choosing", "resolved"] as const).map((ph, i) => (
             <span
               key={ph}
@@ -202,7 +241,9 @@ export default function PlayDeadBoard(props: PlayDeadBoardProps) {
         </div>
       </div>
 
-      <HowToPlay startOpen={state.round === 1} />
+      <HowToPlay startOpen={state.round === 1} augments={augOn} />
+
+      {state.phase === "augment" && <AugmentPicker state={state} me={me} secsLeft={secsLeft} onPick={onAugPick} onReroll={props.onAugReroll} />}
 
       {/* 전장 */}
       <div className="relative h-[clamp(300px,58vw,500px)] overflow-hidden rounded-2xl border border-white/10 bg-[#15111f]">
@@ -253,11 +294,13 @@ export default function PlayDeadBoard(props: PlayDeadBoardProps) {
         </span>
         <span>
           내 탄약 <span className="font-mono font-bold text-amber-300 light:text-amber-600">{"●".repeat(mine.ammo)}</span>
-          <span className="font-mono text-white/25 light:text-slate-300">{"○".repeat(MAX_AMMO - mine.ammo)}</span>
+          <span className="font-mono text-white/25 light:text-slate-300">{"○".repeat(Math.max(0, maxAmmoOf(mine) - mine.ammo))}</span>
         </span>
+        {mine.shield > 0 && <span className="text-xs text-sky-200 light:text-sky-700">🦺 방탄 {mine.shield}회</span>}
+        <AugChips seat={mine} />
         {mine.down && !mine.confirmed && (
           <span className="text-xs text-white/60 light:text-slate-500">
-            {mine.dead ? "🔒 진짜로 쓰러졌어요 — 남들은 몰라요. 끝까지 연기하세요!" : `🤫 죽은 척 중 · 누운 지 ${mine.lie}/${MAX_LIE}`}
+            {mine.dead ? "🔒 진짜로 쓰러졌어요 — 남들은 몰라요. 끝까지 연기하세요!" : `🤫 죽은 척 중 · 누운 지 ${mine.lie}/${lieLimitOf(mine)}`}
           </span>
         )}
       </div>
@@ -285,7 +328,7 @@ export default function PlayDeadBoard(props: PlayDeadBoardProps) {
                       <span className="text-sm font-bold text-white light:text-slate-900">
                         {MOVE_LABEL[k].icon} {MOVE_LABEL[k].label}
                       </span>
-                      <span className="break-keep text-[11.5px] leading-snug text-white/55 light:text-slate-500">{reason ?? CARD_HELP[k]}</span>
+                      <span className="break-keep text-[11.5px] leading-snug text-white/55 light:text-slate-500">{reason ?? cardHelp(mine, k)}</span>
                     </button>
                   );
                 })}
@@ -363,16 +406,25 @@ export default function PlayDeadBoard(props: PlayDeadBoardProps) {
             {tableState.seats.map((s, seat) => {
               const [lo, hi] = takenRange(s);
               const p = aliveChance(tableState, seat, me);
+              const lim = lieLimitOf(s);
+              const known = seat !== me && intelValid(tableState.seats[me], seat, s);
               return (
                 <tr key={seat} className="border-t border-white/5 text-white/80 light:border-slate-100 light:text-slate-700">
                   <td className="px-3 py-1.5">
                     <span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full align-middle" style={{ background: SEAT_COLORS[seat % SEAT_COLORS.length] }} />
                     {nm(seat)}
+                    {s.augs?.length > 0 && (
+                      <div className="mt-0.5">
+                        <AugChips seat={s} small />
+                      </div>
+                    )}
                   </td>
                   <td className="px-2 py-1.5 font-mono text-amber-300 light:text-amber-600">{s.ammo}</td>
-                  <td className="px-2 py-1.5">{s.confirmed ? "☠ 사망 확인" : s.down ? (s.lie >= MAX_LIE ? "💀 미동도 없음" : `💀 쓰러짐 (${s.lie}/${MAX_LIE})`) : "🧍 서 있음"}</td>
+                  <td className="px-2 py-1.5">{s.confirmed ? "☠ 사망 확인" : s.down ? (s.lie >= lim ? "💀 미동도 없음" : `💀 쓰러짐 (${s.lie}/${lim})`) : "🧍 서 있음"}</td>
                   <td className="px-2 py-1.5 font-mono">{seat === me ? `${START_HP - s.hp}` : s.hits.length === 0 ? "0" : lo === hi ? `${lo}` : `${lo}~${hi}`}</td>
-                  <td className="px-2 py-1.5">{seat === me ? "—" : s.confirmed ? "0%" : !s.down ? "서 있음" : `${Math.round(p * 100)}%`}</td>
+                  <td className="px-2 py-1.5">
+                    {seat === me ? "—" : s.confirmed ? "0%" : !s.down ? "서 있음" : known ? <span className="font-semibold text-sky-200 light:text-sky-700">🩺 {p > 0 ? "살아 있음" : "진짜 시체"}</span> : `${Math.round(p * 100)}%`}
+                  </td>
                 </tr>
               );
             })}

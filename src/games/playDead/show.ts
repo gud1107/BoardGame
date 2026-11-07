@@ -1,3 +1,4 @@
+import { AUG_BY_ID } from "./augments";
 import { type GameState, type Hit, type MoveKind, type RoundEvent, type Seat, type SeatState } from "./engine";
 import type { ArenaFighter, ArenaFx } from "./three/PlayDeadArena3D";
 import type { FighterPose } from "./three/VrmFighter";
@@ -48,7 +49,7 @@ export function statusOf(s: SeatState): string | null {
 function hitTargets(events: RoundEvent[]): Set<Seat> {
   const out = new Set<Seat>();
   for (const e of events) {
-    if ((e.t === "blast" || e.t === "ambush" || e.t === "finish") && e.hit) out.add(e.t === "finish" && e.result === "countered" ? e.target : e.target);
+    if ((e.t === "blast" || e.t === "ambush" || e.t === "finish" || e.t === "aug") && e.hit) out.add(e.target);
   }
   return out;
 }
@@ -129,7 +130,7 @@ export function buildFx(state: GameState, viewer: Seat): ArenaFx[] {
     const key = `${tag}:${i}`;
     switch (ev.t) {
       case "reload":
-        fx.push({ key, kind: "text", seat: ev.seat, text: "🔄 +1발", color: "#fde047", at: SHOW.impact });
+        fx.push({ key, kind: "text", seat: ev.seat, text: "🔄 장전", color: "#fde047", at: SHOW.impact });
         break;
       case "blast": {
         const wind = ev.tier >= 3 ? 0.4 : 0.3;
@@ -179,6 +180,12 @@ export function buildFx(state: GameState, viewer: Seat): ArenaFx[] {
       case "rise":
         if (ev.reason === "breath") fx.push({ key, kind: "text", seat: ev.seat, text: "헉헉… 숨이 차서 벌떡", color: "#e2e8f0", at: SHOW.fall });
         break;
+      case "aug": {
+        const a = AUG_BY_ID[ev.id];
+        fx.push({ key: `${key}b`, kind: "burst", seat: ev.target, color: "#c084fc", at: SHOW.impact + 0.15 });
+        fx.push({ key, kind: "text", seat: ev.target, text: `${a.icon}${a.name}! ${dmgText(ev.hit, ev.target, viewer)}`, color: "#e9d5ff", at: SHOW.impact + 0.15 });
+        break;
+      }
       case "fall":
         ev.seats.forEach((seat) => fx.push({ key: `${key}:${seat}`, kind: "text", seat, text: "털썩!", color: "#e2e8f0", at: SHOW.fall + 0.2 }));
         break;
@@ -205,7 +212,7 @@ export function describeEvents(state: GameState, names: Record<Seat, string>, vi
       }
       case "ambush":
         out.push({
-          text: ev.result === "blocked" ? `⚡ ${nm(ev.seat)}의 벌떡 기습! ${nm(ev.target)}이(가) 막았다` : `⚡ 쓰러져 있던 ${nm(ev.seat)}의 벌떡 기습! ${nm(ev.target)} ${dmgText(ev.hit!, ev.target, viewer)}${ev.result === "looter" ? " (기 뺏으러 왔다가)" : ""}`,
+          text: ev.result === "blocked" ? `⚡ ${nm(ev.seat)}의 벌떡 기습! ${nm(ev.target)}이(가) 막았다` : `⚡ 쓰러져 있던 ${nm(ev.seat)}의 벌떡 기습! ${nm(ev.target)} ${dmgText(ev.hit!, ev.target, viewer)}${ev.result === "looter" ? " (탄약 뺏으러 왔다가)" : ""}`,
           mine: ev.target === viewer,
         });
         break;
@@ -226,6 +233,12 @@ export function describeEvents(state: GameState, names: Record<Seat, string>, vi
       case "rise":
         out.push({ text: ev.reason === "breath" ? `😮‍💨 ${nm(ev.seat)}이(가) 숨이 차서 벌떡 일어났다 (살아 있었다!)` : `🧍 ${nm(ev.seat)}이(가) 털고 일어났다` });
         break;
+      case "aug": {
+        const a = AUG_BY_ID[ev.id];
+        const why = ev.id === "tripwire" ? `${nm(ev.seat)}의 몸에 설치된 ${a.icon} 부비트랩이 터졌다!` : ev.id === "counterSniper" ? `${nm(ev.seat)}의 ${a.icon} 카운터 저격!` : `${nm(ev.seat)}의 ${a.icon} 파편이 튀었다!`;
+        out.push({ text: `🧬 ${why} ${nm(ev.target)} ${dmgText(ev.hit, ev.target, viewer)}`, mine: ev.target === viewer });
+        break;
+      }
       case "fall":
         out.push({ text: `💀 ${ev.seats.map(nm).join(", ")} 털썩 쓰러졌다! 진짜 죽었을까?` });
         break;

@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.153.0",
+    releaseDate: "2026-11-08",
+    title: "🧬 죽은척 대작전 증강 23종",
+    changes: [
+      { game: "play-dead", type: "FEAT", desc: "🧬 증강 — 1·4·7라운드 전에 같은 등급 카드 3장 중 1장(실버·골드·프리즘 23종) · 🎲 다시 뽑기 1번 · 방 옵션으로 끌 수 있어요" },
+      { game: "play-dead", type: "FEAT", desc: "🪤 부비트랩·🎭 명배우는 진짜 시체에서도 똑같이 작동, 🩺 청진기는 쓰러진 사람 1명의 진짜 생사를 몰래 알려 줘요" },
+      { game: "play-dead", type: "IMPROVE", desc: "📊 고른 증강은 다 고른 뒤 참가자 표에 공개 — 방탄·위장복 효과까지 ‘살아 있을 확률’에 그대로 반영돼요" },
+    ],
+  },
+  {
     version: "v1.152.0",
     releaseDate: "2026-11-08",
     title: "🔗 온라인 판 어긋남 자동 복구 · 장고 게임 잠수 기준 완화 · 새 BGM 2곡",

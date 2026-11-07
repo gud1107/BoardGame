@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { DMG, FINISH_COST, LOOT_TAKE, MAX_AMMO, MAX_LIE, START_HP, SURGE_ROUND } from "./engine";
+import { AUG_ROUNDS } from "./augments";
 
 /**
  * 📖 게임 방법 — 게임 화면 안에서 펼쳐 보는 규칙 요약. 첫 라운드엔 펼쳐서 시작한다.
@@ -22,7 +23,7 @@ function Row({ icon, name, cost, text }: { icon: string; name: string; cost?: st
   );
 }
 
-export default function HowToPlay({ startOpen }: { startOpen: boolean }) {
+export default function HowToPlay({ startOpen, augments }: { startOpen: boolean; augments?: boolean }) {
   const [open, setOpen] = useState(startOpen);
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white">
@@ -71,6 +72,14 @@ export default function HowToPlay({ startOpen }: { startOpen: boolean }) {
               <li className="break-keep">🔥 {SURGE_ROUND}라운드부터 총공세 — 모든 피해 +1.</li>
             </ul>
           </section>
+          {augments && (
+            <section className="sm:col-span-2">
+              <p className="break-keep rounded-lg bg-fuchsia-500/10 px-2 py-1.5 text-fuchsia-100 light:bg-fuchsia-50 light:text-fuchsia-800">
+                🧬 <b>증강</b> — {AUG_ROUNDS.join("·")}라운드를 시작하기 전에 3장 중 1장을 골라요(다시 뽑기 1번). 그 회차엔 모두 같은 등급(실버·골드·프리즘)이고, 고른 증강은
+                다 고른 뒤 참가자 표에 공개돼요. 방탄 증강은 공개 피해 범위에 그대로 반영되고, 위장복·명배우는 그 사람의 누워 버티기 한도를 늘려요.
+              </p>
+            </section>
+          )}
         </div>
       )}
     </div>
