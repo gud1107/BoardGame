@@ -43,3 +43,20 @@ describe("play-dead sound cues", () => {
     expect(playDeadSoundCues(s, s)).toEqual([]);
   });
 });
+
+describe("play-dead augment sound cues", () => {
+  it("a pick only clicks (never says which card), the last pick blows the reveal call", () => {
+    let s = startGame(2, 5, { chooseSeconds: 15, maxRounds: 0, augments: true });
+    const a = applyAction(s, { type: "AUG_PICK", seat: 0, round: 1, id: s.aug!.offers[0][0] });
+    expect(names(playDeadSoundCues(s, a))).toEqual(["commit"]);
+    s = applyAction(a, { type: "AUG_PICK", seat: 1, round: 1, id: a.aug!.offers[1][0] });
+    expect(names(playDeadSoundCues(a, s))).toEqual(["augReveal"]);
+  });
+
+  it("augment triggers in a reveal get their own sound", () => {
+    let s = startGame(3, 6);
+    s = { ...s, seats: s.seats.map((x, i) => (i === 0 ? { ...x, augs: ["tripwire" as const], down: true, ammo: 2 } : x)) };
+    const cues = names(cuesOf(commitAll(s, { 0: { kind: "hold" }, 1: { kind: "loot", target: 0 }, 2: { kind: "reload" } })));
+    expect(cues).toContain("augTrap");
+  });
+});

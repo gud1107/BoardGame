@@ -5,7 +5,7 @@
  * 거리 감쇠는 부르는 쪽이 `vol`(0~1)로 넘긴다. 감정표현 대사는 브라우저 TTS.
  */
 
-export type Sfx = "shot" | "sniper" | "shotgun" | "swing" | "catch" | "wrong" | "door" | "window" | "chest" | "tier" | "goal" | "escape" | "tick" | "start" | "decoy" | "pick" | "jump" | "seekerDown" | "augPick" | "intel" | "bell" | "shock" | "sniff";
+export type Sfx = "shot" | "sniper" | "shotgun" | "swing" | "catch" | "wrong" | "door" | "window" | "chest" | "tier" | "goal" | "escape" | "tick" | "start" | "decoy" | "pick" | "jump" | "seekerDown" | "augPick" | "augOffer" | "augOfferGold" | "augOfferPrism" | "augReroll" | "intel" | "bell" | "shock" | "sniff";
 
 let ctx: AudioContext | null = null;
 let muted = false;
@@ -136,6 +136,21 @@ export function play(s: Sfx, vol = 1) {
       // 증강 카드: 반짝이는 아르페지오
       [784, 1175, 1568, 2093].forEach((f, i) => tone(c, f, 0.22, "sine", v * 0.35, i * 0.05));
       tone(c, 392, 0.4, "triangle", v * 0.25, 0.05);
+      break;
+    case "augOffer":
+    case "augOfferGold":
+    case "augOfferPrism": {
+      // 증강 카드가 뜸: 낮은 "둥" + 등급만큼 길고 밝아지는 반짝임
+      tone(c, 220, 0.35, "sine", v * 0.3, 0, 330);
+      const run = s === "augOfferPrism" ? [1047, 1319, 1568, 2093, 2637] : s === "augOfferGold" ? [988, 1319, 1568] : [880, 1175];
+      run.forEach((f, i) => tone(c, f, 0.2, "triangle", v * 0.22, 0.18 + i * 0.06));
+      if (s === "augOfferPrism") noise(c, 0.5, v * 0.08, 0.2, 9000);
+      break;
+    }
+    case "augReroll":
+      // 카드 섞기: 사르륵 + 짧은 틱
+      noise(c, 0.25, v * 0.18, 0, 2500);
+      tone(c, 660, 0.06, "triangle", v * 0.25, 0.2, 990);
       break;
     case "intel":
       tone(c, 1320, 0.07, "sine", v * 0.3);

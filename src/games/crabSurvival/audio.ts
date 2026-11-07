@@ -278,6 +278,30 @@ export class CrabAudio {
         break;
     }
   }
+  /** 🧬 Augment cards wash ashore: a conch-shell call, then a marimba sparkle that grows with the tier. */
+  augOffer(tier: "silver" | "gold" | "prism") {
+    if (!this.ctx) return;
+    const at = this.now;
+    this.tone(196, at, 0.55, "sine", 0.22, undefined, 262);
+    this.tone(392, at + 0.04, 0.5, "triangle", 0.07, undefined, 523);
+    const run = tier === "prism" ? [784, 988, 1175, 1568, 1976] : tier === "gold" ? [659, 784, 988] : [587, 784];
+    run.forEach((f, i) => this.marimba(f, at + 0.35 + i * 0.08, 0.22));
+    if (tier === "prism") this.noise(0.6, 4200, 0.7, 0.12, "highpass");
+  }
+  /** 🧬 Augment taken: a claw snap and a bright marimba fifth. */
+  augPick() {
+    if (!this.ctx) return;
+    const at = this.now;
+    this.noise(0.05, 2600, 1.2, 0.3, "bandpass");
+    this.tone(880, at + 0.03, 0.06, "square", 0.06);
+    [523, 784, 1047].forEach((f, i) => this.marimba(f, at + 0.08 + i * 0.06, 0.26));
+  }
+  /** 🧬 Reroll: sand swish as the cards shuffle. */
+  augReroll() {
+    if (!this.ctx) return;
+    this.noise(0.3, 800, 0.8, 0.22, "bandpass", 2600);
+    this.marimba(660, this.now + 0.2, 0.16);
+  }
   counter() {
     if (!this.ctx) return;
     this.tone(1760, this.now, 0.15, "sawtooth", 0.08, undefined, 880);

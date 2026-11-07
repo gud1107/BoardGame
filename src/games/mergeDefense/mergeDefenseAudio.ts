@@ -1,4 +1,5 @@
 import { getSoundEngine } from "@/lib/audio/soundEngine";
+import { defineSuite, fx, type SfxPart } from "@/lib/audio/proceduralSuite";
 import { isSfxEffectivelyMuted, useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import type { UnitKind, SkillId } from "./engine";
 
@@ -6,6 +7,38 @@ import type { UnitKind, SkillId } from "./engine";
  * Maps 랜덤 합성 디펜스 moments onto the project's shared, code-synthesized
  * SFX (src/lib/audio/soundEngine.ts — no mp3 assets). Reuses existing cues only.
  */
+
+/**
+ * ✨ 증강 전용 — 공용 효과음 재사용 대신 이 게임만의 마법진 소리(하프 글리산도 + 차임).
+ * 사이트 효과음 볼륨/음소거를 그대로 따르는 SFX 전용 procedural suite.
+ */
+const shift = (parts: SfxPart[], by: number): SfxPart[] => parts.map((p) => ({ ...p, at: (p.at ?? 0) + by }));
+const getAugSfx = defineSuite({
+  bpm: 100,
+  tracks: [],
+  sfx: {
+    /** arg = 1 실버 · 2 골드 · 3 프리즘: 하프가 쓸어 올라가고, 등급이 높을수록 차임이 길고 밝다 */
+    offer: (tier: number) => [
+      fx.whoosh(400, 2400, 0.35, 0.05),
+      ...fx.arp("harp", ["A4", "C#5", "E5", "A5"], 0.045, 0.6, 0.7),
+      ...shift(fx.arp("glock", tier >= 3 ? ["E6", "A6", "C#7", "E7", "A7"] : tier === 2 ? ["E6", "A6", "C#7"] : ["E6", "A6"], 0.07, 0.6, 0.6), 0.25),
+      ...(tier >= 3 ? fx.chord("choir", ["A4", "E5", "C#6"], 1.4, 0.45, 0.3) : []),
+    ],
+    pick: [fx.pop(500, 1400, 0.16), ...fx.chord("bell", ["A5", "E6"], 0.9, 0.6, 0.05), ...shift(fx.arp("musicbox", ["A6", "C#7", "E7"], 0.05, 0.5, 0.5), 0.1)],
+    reroll: [fx.cardSlide(0, 0.12), fx.cardSlide(0.07, 0.1), fx.cardSlide(0.14, 0.08), fx.whoosh(1800, 600, 0.22, 0.06, 0.04)],
+  },
+});
+const AUG_TIER_NUM = { silver: 1, gold: 2, prism: 3 } as const;
+
+export function playAugOffer(tier: "silver" | "gold" | "prism") {
+  getAugSfx().play("offer", AUG_TIER_NUM[tier] ?? 1);
+}
+export function playAugPick() {
+  getAugSfx().play("pick");
+}
+export function playAugReroll() {
+  getAugSfx().play("reroll");
+}
 
 export function playSummon(lucky: boolean) {
   const sfx = getSoundEngine();

@@ -37,6 +37,24 @@ const SFX = {
   rise: [fx.whoosh(300, 900, 0.3, 0.07, SHOW.act)],
   fall: [fx.thud(80, 0.45, 0.55, SHOW.fall)],
   surge: [...fx.chord("brass", ["E3", "B3", "E4"], 1.1, 0.8), fx.thud(55, 0.8, 0.5)],
+  // 🧬 증강 — 보급 무전(카드가 뜸) → 상자 걸쇠(내가 고름) → 나팔(모두 공개)
+  /** arg = tier 1 실버 · 2 골드 · 3 프리즘: 무전 잡음 뒤 나팔 음이 등급만큼 길고 밝아진다. */
+  augOffer: (tier: number) => [
+    fx.buzz(1900, 1300, 0.14, 0.05),
+    fx.click(2400, 0.1, 0.02),
+    fx.click(2400, 0.1, 0.1),
+    ...at(fx.arp("brass", tier >= 3 ? ["E4", "G4", "B4", "E5"] : tier === 2 ? ["E4", "G4", "B4"] : ["E4", "B4"], 0.1, 0.45, 0.7), 0.22),
+    ...(tier >= 3 ? fx.chord("strings", ["E5", "B5"], 1.1, 0.45, 0.6) : []),
+  ],
+  augPick: [fx.thud(110, 0.25, 0.5), fx.click(2200, 0.14, 0.08), fx.click(1500, 0.12, 0.16), ...fx.chord("brass", ["B3", "E4"], 0.5, 0.55, 0.2)],
+  augReroll: [fx.cardSlide(0, 0.12), fx.cardSlide(0.08, 0.1), fx.cardSlide(0.16, 0.08), fx.whoosh(500, 1500, 0.2, 0.07, 0.05)],
+  augReveal: [fx.thud(70, 0.4, 0.45), ...fx.chord("brass", ["E3", "B3", "G4"], 0.9, 0.7, 0.05)],
+  /** 부비트랩: 인계철선 "팅" → 폭발 */
+  augTrap: [fx.click(3200, 0.12, SHOW.impact + 0.05), fx.thud(55, 0.6, 0.7, SHOW.impact + 0.25), ...fx.crack(SHOW.impact + 0.25, 0.45)],
+  /** 카운터 저격: 먼 곳에서 날아오는 한 발 */
+  augCounter: [fx.whoosh(5000, 2500, 0.15, 0.1, SHOW.impact + 0.05), ...fx.crack(SHOW.impact + 0.15, 0.5)],
+  /** 파편 수류탄: 수류탄 폭발 뒤 사방으로 튀는 파편 */
+  augFrag: [0, 0.05, 0.11, 0.18].map((d) => fx.pop(3200, 1400, 0.09, SHOW.impact + 0.2 + d)),
   victory: at([...fx.arp("brass", ["E3", "G3", "B3", "E4"], 0.12, 0.6), ...fx.chord("brass", ["E3", "G#3", "B3", "E4"], 1.8, 0.8, 0.5)], SHOW.end),
 } satisfies Record<string, SfxRecipe>;
 
@@ -69,6 +87,11 @@ export function playDeadSoundCues(prev: GameState, next: GameState): Cue[] {
   const cues: Cue[] = [];
   // The last commit flips the phase to "revealing" in the same update, so gate on prev's phase.
   const committed = (s: GameState) => s.commits.filter((c) => c !== null && c !== "x").length;
+  // 🧬 증강: 누가 골랐다는 것만 딸깍(무엇을 골랐는지는 공개 전까지 소리로도 안 샌다), 다 고르면 공개 나팔.
+  // 카드가 뜨는 소리와 내 선택·다시 뽑기는 보드가 직접 낸다(첫 판 시작 화면엔 이전 상태가 없어서).
+  const picked = (s: GameState) => (s.phase === "augment" && s.aug ? s.aug.done.filter(Boolean).length : 0);
+  if (prev.phase === "augment" && next.phase === "augment" && prev.round === next.round && picked(next) > picked(prev)) cues.push("commit");
+  if (prev.phase === "augment" && next.phase !== "augment") cues.push("augReveal");
   if (prev.phase === "choosing" && prev.round === next.round && committed(next) > committed(prev)) cues.push("commit");
   if (next.phase === "choosing") {
     if (next.round !== prev.round && surgeAt(next.round) > surgeAt(prev.round)) cues.push("surge");
@@ -101,6 +124,9 @@ export function playDeadSoundCues(prev: GameState, next: GameState): Cue[] {
         break;
       case "fall":
         if (ev.seats.length > 0) kinds.add("fall");
+        break;
+      case "aug":
+        kinds.add(ev.id === "tripwire" ? "augTrap" : ev.id === "counterSniper" ? "augCounter" : "augFrag");
         break;
     }
   }

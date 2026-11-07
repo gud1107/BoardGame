@@ -1232,6 +1232,11 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   const interactive = me.alive && state.phase === "playing" && resolvedView === mySeat;
   // ✨ "what each offered card does for my board now" — recomputed only when the board's make-up changes, not every tick.
   const offerCards = me.augOffer?.cards.join(",") ?? "";
+  // ✨ 증강 카드가 뜨면 내 화면에서만 등급별 소리 (회차당 1번 — 다시 뽑기는 따로)
+  const offerSound = interactive && me.augOffer ? `${me.augOffer.round}:${me.augOffer.tier}` : null;
+  useEffect(() => {
+    if (offerSound) audio.playAugOffer(offerSound.split(":")[1] as "silver" | "gold" | "prism");
+  }, [offerSound]);
   const boardKey = `${state.wave}|${me.focus ?? 0}|${me.brace ?? 0}|${me.gems}|${Math.floor(me.gold / 10)}|${me.summons}|${(me.augments ?? []).join(",")}|${me.units.map((u) => (u ? `${u.kind}${u.grade}` : "-")).join("")}|${Object.values(me.upgrades).join("")}`;
   const augPreviews = useMemo(() => {
     if (!offerCards) return undefined;
@@ -1806,7 +1811,15 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           </div>
         )}
         {interactive && me.augOffer && (
-          <AugmentPicker board={me} tick={state.tick} previews={augPreviews} onPick={(id) => onAction({ type: "augment", id })} onReroll={() => onAction({ type: "reroll" })} />
+          <AugmentPicker board={me} tick={state.tick} previews={augPreviews} onPick={(id) => {
+              audio.playAugPick();
+              onAction({ type: "augment", id });
+            }}
+            onReroll={() => {
+              audio.playAugReroll();
+              onAction({ type: "reroll" });
+            }}
+          />
         )}
         {introOn && <MapIntro map={sanitizeMap(state.map)} random={randomMap} best={mapBest} difficulty={sanitizeDifficulty(state.difficulty)} />}
         {selectedMob &&

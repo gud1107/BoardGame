@@ -236,7 +236,7 @@ export default function CrabSurvivalCanvas({
   const reroll = useCallback(() => {
     const w = worldRef.current;
     if (!w || !rerollAugment(w) || !w.augOffer) return;
-    audioRef.current?.coin();
+    audioRef.current?.augReroll();
     setAugPick({ ...w.augOffer, rerolls: w.augRerolls });
   }, []);
 
@@ -515,14 +515,14 @@ export default function CrabSurvivalCanvas({
               input.current.keys.clear();
               input.current.mouseAttack = input.current.mouseBoost = false;
               input.current.touchAttack = input.current.touchBoost = input.current.touchSkill = false;
-              a?.fanfare();
+              a?.augOffer(o.tier);
             }
             break;
           }
           case "augPick":
             if (ev.player) {
               const d = AUGMENTS[ev.id];
-              a?.equip();
+              a?.augPick();
               if (d) pushBanner({ text: `${d.emoji} 증강: ${d.name}`, sub: d.desc, tone: "level" });
             }
             break;

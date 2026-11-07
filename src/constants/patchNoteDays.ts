@@ -18,7 +18,7 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
  */
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
   "2026-11-08": {
-    "play-dead": "🧬 1·4·7라운드 증강 3택 1 — 23종, 시체에서도 작동하는 부비트랩·명배우, 🪖 BGM·효과음",
+    "play-dead": "🧬 1·4·7라운드 증강 3택 1 — 23종, 시체에서도 작동하는 부비트랩·명배우, 🪖 BGM·효과음, 🔊 증강 전용 효과음",
   },
   "2026-11-07": {
     "era-march": "✨ 전투 중 증강 3택 1 — 51종(견제 카드 포함), 같은 등급 공정 추첨, 🔍 증강 비교 창, 🤖 봇 증강 선택",

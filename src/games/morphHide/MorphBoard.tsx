@@ -277,6 +277,13 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
   // 증강 카드가 떠 있나 (술래: 눈 가린 동안 / 숨는 사람: 변신을 고른 뒤)
   const myOffer = me?.ao ?? [];
   const augPickOpen = (snap.phase === "pick" || snap.phase === "hide") && myOffer.length > 0 && (isSeeker || !!me?.dg);
+  // 증강 카드가 뜨면 등급별 소리 — 회차(가진 증강 수)당 1번, 다시 뽑기로는 다시 안 울린다
+  const augOfferKey = augPickOpen ? `${snap.phase}:${me?.aug?.length ?? 0}:${aug(myOffer[0])?.tier ?? "silver"}` : null;
+  useEffect(() => {
+    if (!augOfferKey) return;
+    const tier = augOfferKey.split(":")[2];
+    play(tier === "prism" ? "augOfferPrism" : tier === "gold" ? "augOfferGold" : "augOffer", 1);
+  }, [augOfferKey]);
   const keys = useRef(new Set<string>());
   const actRef = useRef({ cyclePose, decoy: () => onAct({ t: "decoy" }), trap: () => onAct({ t: "trap" }), shock: () => onAct({ t: "shock" }), num: (n: number) => onAct({ t: "emote", id: EMOTES[n - 1].id }) });
   useEffect(() => {
@@ -930,7 +937,12 @@ function AugPicker({ me, phase, left, kkom, onAct, hider }: { me: Snap["players"
       {offer.length === 0 && !done && phase === "pick" && !hider && <div className="mt-3 text-xs text-white/55">숨는 시간이 되면 2번째 증강 3장이 나와요 (높은 등급이 잘 나와요)</div>}
       <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
         {offer.length > 0 && (me.arr ?? 0) > 0 && (
-          <button type="button" onClick={() => onAct({ t: "augReroll" })} className={`rounded-full px-3.5 py-1.5 text-xs font-semibold text-white/85 transition hover:bg-white/15 ${GLASS}`}>
+          <button
+            type="button"
+            onClick={() => {
+              play("augReroll", 1);
+              onAct({ t: "augReroll" });
+            }} className={`rounded-full px-3.5 py-1.5 text-xs font-semibold text-white/85 transition hover:bg-white/15 ${GLASS}`}>
             🔄 다시 뽑기 ({me.arr})
           </button>
         )}

@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { preferLowDetail, webglAvailable } from "@/games/shared/three/viewPref";
 import {
   aliveChance,
@@ -181,8 +181,24 @@ export default function PlayDeadBoard(props: PlayDeadBoardProps) {
   });
 
   const secsLeft = deadlineMs ? Math.max(0, Math.ceil((deadlineMs - nowMs) / 1000)) : null;
-  // 증강 카드: PC 1·2·3 키
-  const { onAugPick } = props;
+  // 증강 카드: PC 1·2·3 키 · 효과음(카드가 뜰 때 / 내가 고를 때 / 다시 뽑기)
+  const { onAugPick: sendAugPick, onAugReroll: sendAugReroll } = props;
+  const onAugPick = useCallback(
+    (id: AugId) => {
+      getPlayDeadSound().play("augPick");
+      sendAugPick(id);
+    },
+    [sendAugPick],
+  );
+  const onAugReroll = useCallback(() => {
+    getPlayDeadSound().play("augReroll");
+    sendAugReroll();
+  }, [sendAugReroll]);
+  const offerKey = state.phase === "augment" && state.aug && !mine.confirmed ? `${state.seed}:${state.round}:${state.aug.tier}` : null;
+  useEffect(() => {
+    if (!offerKey) return;
+    getPlayDeadSound().play("augOffer", Number(offerKey.split(":")[2]));
+  }, [offerKey]);
   const augOffer = state.phase === "augment" && state.aug && !state.aug.done[me] ? state.aug.offers[me] : null;
   useEffect(() => {
     if (!augOffer?.length) return;
@@ -243,7 +259,7 @@ export default function PlayDeadBoard(props: PlayDeadBoardProps) {
 
       <HowToPlay startOpen={state.round === 1} augments={augOn} />
 
-      {state.phase === "augment" && <AugmentPicker state={state} me={me} secsLeft={secsLeft} onPick={onAugPick} onReroll={props.onAugReroll} />}
+      {state.phase === "augment" && <AugmentPicker state={state} me={me} secsLeft={secsLeft} onPick={onAugPick} onReroll={onAugReroll} />}
 
       {/* 전장 */}
       <div className="relative h-[clamp(300px,58vw,500px)] overflow-hidden rounded-2xl border border-white/10 bg-[#15111f]">

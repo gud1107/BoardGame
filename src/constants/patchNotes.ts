@@ -64,6 +64,18 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.154.0",
+    releaseDate: "2026-11-08",
+    title: "🔊 증강 전용 효과음 — 5개 게임",
+    changes: [
+      { game: "play-dead", type: "IMPROVE", desc: "🔊 증강 효과음 — 보급 무전 뒤 등급별 나팔, 상자 걸쇠(고름), 카드 섞기, 다 고르면 공개 나팔 · 부비트랩·카운터 저격·파편 소리" },
+      { game: "crab-survival", type: "IMPROVE", desc: "🔊 증강 효과음 — 소라고둥 호출 뒤 등급만큼 길어지는 마림바, 집게 딸깍(고름), 모래 셔플(다시 뽑기)" },
+      { game: "era-march", type: "IMPROVE", desc: "🔊 증강 효과음 — 팀파니와 등급별 전쟁 나팔(프리즘은 징까지), 인장 찍기(고름), 두루마리 섞기(다시 뽑기)" },
+      { game: "merge-defense", type: "IMPROVE", desc: "🔊 증강 효과음 — 하프 글리산도와 등급별 차임(프리즘은 합창), 마법 종(고름), 카드 섞기(다시 뽑기)" },
+      { game: "morph-hide", type: "IMPROVE", desc: "🔊 증강 카드가 뜰 때 등급별 반짝임, 다시 뽑기 소리 추가" },
+    ],
+  },
+  {
     version: "v1.153.0",
     releaseDate: "2026-11-08",
     title: "🧬 죽은척 대작전 증강 23종",

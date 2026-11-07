@@ -143,6 +143,19 @@ const SFX: Record<string, SfxRecipe> = {
   evolve4: r(() => [{ wave: "sawtooth", freq: 110, to: 880, glide: 0.6, dur: 0.7, peak: 0.08, filter: { type: "lowpass", freq: 600, to: 6000 } }, ...fx.arp("vibes", ["F5", "C6", "F6", "A6"], 0.08, 0.8, 0.9), fx.thud(50, 0.8, 0.6, 0.6)]),
   doctrine: r(() => fx.chord("bell", ["C5", "G5", "E6"], 1.2, 0.6)),
 
+  // 🧬 augments — a war-horn call that climbs with the tier, a seal stamp on pick, a scroll shuffle on reroll
+  augOffer_silver: r(() => [{ inst: "timpani", note: "G2", at: 0, dur: 0.5 }, ...fx.arp("brass", ["G4", "D5"], 0.14, 0.5, 0.8)]),
+  augOffer_gold: r(() => [{ inst: "timpani", note: "G2", at: 0, dur: 0.5 }, { inst: "timpani", note: "G2", at: 0.14, dur: 0.5 }, ...fx.arp("brass", ["G4", "B4", "D5"], 0.13, 0.55, 0.9), ...fx.arp("glock", ["D6", "G6"], 0.08, 0.5, 0.5).map((p) => ({ ...p, at: (p.at ?? 0) + 0.4 }))]),
+  augOffer_prism: r(() => [
+    { inst: "timpani", note: "G2", at: 0, dur: 0.5 },
+    { inst: "timpani", note: "D2", at: 0.14, dur: 0.6 },
+    ...fx.arp("brass", ["G4", "B4", "D5", "G5"], 0.12, 0.6, 1),
+    ...fx.arp("vibes", ["D6", "G6", "B6", "D7"], 0.06, 0.6, 0.6).map((p) => ({ ...p, at: (p.at ?? 0) + 0.45 })),
+    { inst: "gong", note: "G2", at: 0.5, dur: 2 },
+  ]),
+  augPick: r(() => [fx.thud(140, 0.2, 0.55), fx.click(2400, 0.12, 0.03), ...fx.chord("brass", ["G4", "D5"], 0.6, 0.6, 0.12)]),
+  augReroll: r(() => [noise(0.28, 0.1, { type: "bandpass", freq: 1200, to: 3200, q: 1.2 }), fx.click(1900, 0.08, 0.2)]),
+
   // specials
   sp0: r(() => [{ inst: "brass", note: "F2", dur: 0.9, gain: 1.2 }, { wave: "sawtooth", freq: 180, to: 520, glide: 0.5, dur: 0.8, peak: 0.07, vibrato: { rate: 9, depth: 0.04 }, filter: { type: "lowpass", freq: 1600 } }, ...[0, 0.18, 0.36, 0.54, 0.72].map((t) => fx.thud(70, 0.2, 0.4, 0.4 + t))]),
   sp1: r(() => [{ wave: "noise", dur: 0.4, peak: 0.05, filter: { type: "bandpass", freq: 600, q: 4 }, tremolo: 18 }, fx.thud(110, 0.25, 0.5, 0.35), fx.whoosh(400, 1500, 0.5, 0.12, 0.4)]),
@@ -282,10 +295,13 @@ export class EraMarchSound {
           if (e.side === viewer) play("slot", 1);
           break;
         case "augOffer":
-          if (e.side === viewer) play("specialReady", 1, "augOffer");
+          if (e.side === viewer) play(`augOffer_${e.tier}`, 1, "augOffer");
           break;
         case "augment":
-          if (e.side === viewer) play("doctrine", 0.9, "augment");
+          if (e.side === viewer) play("augPick", 1, "augment");
+          break;
+        case "augReroll":
+          if (e.side === viewer) play("augReroll", 1, "augReroll");
           break;
         case "revive":
           play("heal", near(e.x) * 0.8, "revive");
