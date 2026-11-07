@@ -1001,8 +1001,8 @@ function augHuntTick(rt: HostRuntime) {
       const movers = hidersNear(s, p.x, p.y, p.z, AUG_N.earR).filter((q) => s.t - (rt.movedAt.get(q.seat) ?? -1e9) < 1200);
       if (movers.length) {
         const q = movers.reduce((a, b) => (Math.hypot(a.x - p.x, a.z - p.z) <= Math.hypot(b.x - p.x, b.z - p.z) ? a : b));
-        const [x, z] = fuzzPing(rt, q.x, q.z, 3.5);
-        addPing(s, p.seat, "ear", x, q.y, z, 3.5, AUG_N.earMs);
+        const [x, z] = fuzzPing(rt, q.x, q.z, AUG_N.earPingR);
+        addPing(s, p.seat, "ear", x, q.y, z, AUG_N.earPingR, 2500);
         emit(s, { type: "ping", seat: p.seat, kind: "ear", notify: [] });
       }
     }
@@ -1261,17 +1261,19 @@ function attack(rt: HostRuntime, p: PlayerState, o: [number, number, number], d:
       if (hasAug(p, "hunter")) p.hunterUntil = s.t + AUG_N.hunterMs;
       emit(s, { type: "catch", by: p.seat, target: q.seat, x: r2(q.x), y: r2(q.y), z: r2(q.z), weapon: w.id });
     }
-  } else if (wrongWhat && wrongDecoy !== null && hasAug(p, "decoyx")) {
-    // 분신 감별: 벌점 없이 분신만 터뜨리고, 주인이 가까이 있는지 알려 준다
-    const dc = s.decoys.find((d) => d.id === wrongDecoy);
-    s.decoys = s.decoys.filter((d) => d.id !== wrongDecoy);
-    rt.decoyAi.delete(wrongDecoy);
-    const owner = dc ? s.players[dc.owner] : undefined;
-    const near = !!owner && visibleOnMap(owner, s.phase) && Math.hypot(owner.x - wrongAt[0], owner.z - wrongAt[2]) <= AUG_N.decoyR;
-    emit(s, { type: "intel", seat: p.seat, icon: "🪞", text: near ? "분신이었어요! 주인이 15m 안에 있어요" : "분신이었어요 — 주인은 멀리 갔어요" });
   } else if (wrongWhat) {
     p.wrongAt = p.wrongAt.filter((t) => s.t - t < SPAM_WINDOW_MS);
-    const penalty = wrongPenalty(s, p, w, wrongKind);
+    let penalty = wrongPenalty(s, p, w, wrongKind);
+    if (wrongDecoy !== null && hasAug(p, "decoyx")) {
+      // 분신 감별: 분신을 터뜨리고 벌점 절반, 주인이 가까이 있는지 알려 준다
+      penalty = Math.round(penalty * AUG_N.decoyPen);
+      const dc = s.decoys.find((d) => d.id === wrongDecoy);
+      s.decoys = s.decoys.filter((d) => d.id !== wrongDecoy);
+      rt.decoyAi.delete(wrongDecoy);
+      const owner = dc ? s.players[dc.owner] : undefined;
+      const near = !!owner && visibleOnMap(owner, s.phase) && Math.hypot(owner.x - wrongAt[0], owner.z - wrongAt[2]) <= AUG_N.decoyR;
+      emit(s, { type: "intel", seat: p.seat, icon: "🪞", text: near ? "분신이었어요! 주인이 15m 안에 있어요" : "분신이었어요 — 주인은 멀리 갔어요" });
+    }
     if (p.shieldLeft > 0) p.shieldLeft -= 1;
     p.wrongAt.push(s.t);
     p.hp = Math.max(0, p.hp - penalty);
@@ -1322,7 +1324,8 @@ export function hostStep(rt: HostRuntime, dtMs: number) {
 
   switch (s.phase) {
     case "pick": {
-      const allPicked = s.players.every((p) => p.role === "seeker" || p.disguise);
+      // 사람 술래가 아직 증강을 안 골랐으면 일찍 끝내지 않는다 (봇들이 바로 골라 버려 술래가 고를 틈이 없던 문제)
+      const allPicked = s.players.every((p) => (p.role === "seeker" ? p.bot || p.augs.length > 0 : !!p.disguise));
       if (s.t >= s.phaseEnd || allPicked) {
         // 시간 안에 안 고르면 랜덤
         for (const p of s.players) if (p.role === "hider" && !p.disguise) p.disguise = pick(rt.rng, p.offer);
@@ -2079,7 +2082,7 @@ function augHint(rt: HostRuntime, p: PlayerState, o: Obs): number {
       const d = disguise(id);
       return !!d && (d.form === "prop" ? d.thing === o.thing : d.form === o.form);
     });
-    h += hit ? 0.35 : -0.4;
+    h += hit ? 0.3 : -0.15;
   }
   return h;
 }

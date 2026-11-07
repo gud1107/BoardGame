@@ -42,6 +42,8 @@ describe.skipIf(!process.env.MH_AUG)("augment balance", () => {
     lines.push(`${"없음".padEnd(14)} ${fmt(evalMany(seeds, h, sk, {}, 5, []))}`);
     for (const a of AUGS) {
       if (a.mode === "kkom") continue;
+      // MH_AUG_ONLY=ear,dossier 처럼 일부만
+      if (process.env.MH_AUG_ONLY && !process.env.MH_AUG_ONLY.split(",").includes(a.id)) continue;
       lines.push(`${`${a.icon}${a.name}`.padEnd(14)} ${fmt(evalMany(seeds, h, sk, {}, 5, [a.id]))}`);
     }
     writeFileSync(process.env.MH_OUT ?? "aug.txt", lines.join("\n"));

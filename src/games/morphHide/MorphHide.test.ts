@@ -411,7 +411,7 @@ describe("술래 증강", () => {
     expect(rt.state.pings.filter((g) => g.kind === "shock")).toHaveLength(1);
   });
 
-  it("분신 감별: 분신을 치면 벌점 없이 사라진다", () => {
+  it("분신 감별: 분신을 치면 사라지고 벌점은 절반", () => {
     const { rt, seeker, hider } = fresh();
     toHunt(rt);
     clearAugs(seeker);
@@ -432,7 +432,8 @@ describe("술래 증강", () => {
     seeker.nextAtkAt = 0;
     applyAct(rt, seeker.seat, { t: "atk", o: [seeker.x, 1.55, seeker.z], d: [-dx / l, -0.25, -dz / l] });
     expect(rt.state.decoys).toHaveLength(0);
-    expect(seeker.hp).toBe(SEEKER_HP);
+    const w = currentWeapon(rt.state);
+    expect(SEEKER_HP - seeker.hp).toBe(Math.round(w.penalty * AUG_N.decoyPen));
     expect(hider.alive).toBe(true);
   });
 
@@ -445,4 +446,19 @@ describe("술래 증강", () => {
       for (const sk of rt.state.history[0].seekers) expect(rt.state.players[sk].augs).toHaveLength(2);
     }
   }, 60_000);
+});
+
+describe("술래 증강 — 고르기 단계 길이", () => {
+  it("숨는 쪽이 다 골라도 사람 술래가 1번째 증강을 고를 때까지 고르기 단계가 이어진다", () => {
+    const m = createMatch(5, [{ bot: false, level: 5 }, { bot: true, level: 10 }], { huntSec: 180, rounds: 1 });
+    const rt = createHost(m);
+    const seeker = rt.state.players[rt.state.seekers[0]];
+    expect(seeker.bot).toBe(false);
+    for (let i = 0; i < 5 * 20; i++) hostStep(rt, 50);
+    expect(rt.state.players.find((p) => p.role === "hider")!.disguise).toBeTruthy();
+    expect(rt.state.phase).toBe("pick");
+    applyAct(rt, seeker.seat, { t: "aug", id: seeker.augOffer[0] });
+    hostStep(rt, 50);
+    expect(rt.state.phase).toBe("hide");
+  });
 });
