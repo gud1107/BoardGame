@@ -9,9 +9,11 @@ import type { Snap, SnapBuffer } from "./net";
 import { freshControls, type Controls, type FxItem, type NearInfo, type SelfInfo } from "./three/World3D";
 import { AUG_N, AUG_PICKS, AUG_TIER_STYLE, HIDER_AUG_PICKS, aug } from "./augments";
 import { falloff, isMuted, play, setMuted, speak } from "./sound";
+import { speakEmote } from "./emoteVoice";
 
 const World3D = dynamic(() => import("./three/World3D"), { ssr: false });
 const PickPreview = dynamic(() => import("./three/PickPreview"), { ssr: false });
+const DisguiseLineup = dynamic(() => import("./three/DisguiseLineup"), { ssr: false });
 
 /**
  * 변신 숨바꼭질 플레이 화면 — 3D 월드 위에 HUD·조작 버튼·지도·변신 카드.
@@ -199,9 +201,9 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
           play("seekerDown", 0.9);
           break;
         case "emote": {
-          const em = EMOTES.find((e) => e.id === ev.emote);
           const v = ev.seat === mySeat ? 1 : seatPos(ev.seat);
-          if (em) speak(em.line, v);
+          // 그 사람 캐릭터 목소리 + 성격별 대사 (말풍선과 같은 대사)
+          if (!isMuted()) speakEmote(ev.emote, ev.seat, ev.at, names[ev.seat], v);
           break;
         }
         case "phase":
@@ -225,7 +227,7 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
       }
     }
     if (soundedRef.current.size > 500) soundedRef.current = new Set(fx.map((f) => f.ev.id));
-  }, [fx, mySeat, isSeeker, snap.players]);
+  }, [fx, mySeat, isSeeker, snap.players, names]);
   // 술래 출발 3초 전 째깍
   const lastTickRef = useRef(-1);
   useEffect(() => {
@@ -1682,6 +1684,7 @@ function RoundResult({ snap, names, mySeat }: { snap: Snap; names: Record<number
         <div className="text-center text-[10px] font-semibold uppercase tracking-[0.3em] text-white/45">Round {snap.round}</div>
         <div className="mt-1 text-center text-xl font-bold">{h.winner === "seekers" ? "👁️ 술래 승리! 모두 찾았다" : "🫣 숨는 사람 승리!"}</div>
         <div className="mt-1 text-center text-xs text-white/60">술래: {h.seekers.map((s) => names[s]).join(", ")}</div>
+        <HiderLineup snap={snap} names={names} mySeat={mySeat} />
         <ul className="mt-3 flex flex-col gap-1 text-sm">
           {h.hiders.map((x) => {
             const d = disguise(x.disguise);
@@ -1695,6 +1698,33 @@ function RoundResult({ snap, names, mySeat }: { snap: Snap; names: Record<number
             );
           })}
         </ul>
+      </div>
+    </div>
+  );
+}
+
+/** 끝난 라운드의 숨는 사람 변신 모습 — 작은 3D 진열대 + 같은 칸 수의 이름표 */
+function HiderLineup({ snap, names, mySeat }: { snap: Snap; names: Record<number, string>; mySeat: number }) {
+  const h = snap.history[snap.history.length - 1];
+  if (!h || h.hiders.length === 0) return null;
+  const items = h.hiders.map((x) => ({ seat: x.seat, dg: x.disguise, pose: snap.players[x.seat]?.pose ?? 0, caught: x.result === "caught" }));
+  const cols = { gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` };
+  return (
+    <div className="mt-3 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-[#1d2a5c]/70 to-[#0b1026]/80">
+      <div className="h-24 sm:h-28">
+        <DisguiseLineup items={items} seed={snap.seed} round={snap.round} />
+      </div>
+      <div className="grid border-t border-white/10 bg-black/30 px-0.5 py-1" style={cols}>
+        {h.hiders.map((x) => {
+          const d = disguise(x.disguise);
+          return (
+            <div key={x.seat} className={`min-w-0 px-0.5 text-center leading-tight ${x.seat === mySeat ? "text-cyan-200" : "text-white/85"}`}>
+              <div className="truncate text-[10px] font-semibold">{x.seat === mySeat ? "나" : names[x.seat]}</div>
+              <div className="truncate text-[9px] text-white/55">{d ? d.name : "?"}</div>
+              <div className={`text-[9px] ${x.result === "caught" ? "text-rose-300" : x.result === "escaped" ? "text-yellow-300" : "text-emerald-300"}`}>{x.result === "caught" ? "💥 잡힘" : x.result === "escaped" ? "🏁 찜" : "🐦 생존"}</div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1734,6 +1764,13 @@ function ScoreBoard({ snap, names, mySeat, simNow, onClose }: { snap: Snap; name
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-3">
+          {/* 게임 끝: 마지막 라운드에 숨는 사람이 어떤 모습이었나 */}
+          {snap.phase === "gameOver" && snap.history.length > 0 && (
+            <div className="rounded-3xl border border-white/10 bg-slate-950/75 p-4 text-white shadow-2xl shadow-black/50 backdrop-blur-xl">
+              <div className="text-center text-sm font-bold">🎭 마지막 라운드 — 이렇게 숨어 있었어요</div>
+              <HiderLineup snap={snap} names={names} mySeat={mySeat} />
+            </div>
+          )}
           {/* 이번 라운드 */}
           {snap.phase !== "gameOver" && (
             <div className="rounded-3xl border border-white/10 bg-slate-950/75 p-4 text-white shadow-2xl shadow-black/50 backdrop-blur-xl">

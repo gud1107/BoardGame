@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.154.3",
+    releaseDate: "2026-11-08",
+    title: "🦎 변신 숨바꼭질 — 숨은 모습 진열대 · 캐릭터 목소리 감정표현 · 분신 제자리",
+    changes: [
+      { game: "morph-hide", type: "IMPROVE", desc: "🎭 라운드·게임이 끝나면 숨는 사람이 무엇으로 어떤 자세였는지 작은 3D 진열대로 보여 줘요" },
+      { game: "morph-hide", type: "IMPROVE", desc: "🗣️ 감정표현이 내 캐릭터 목소리·말투로 — 성격마다 다른 대사 여러 개, 억양도 사람처럼" },
+      { game: "morph-hide", type: "IMPROVE", desc: "👯 분신이 옆이 아니라 내가 서 있는 그 자리에 생겨요 — 세우고 걸어 나가면 그 자리에 남아요" },
+    ],
+  },
+  {
     version: "v1.154.2",
     releaseDate: "2026-11-08",
     title: "🦎 변신 숨바꼭질 — 증강 고를 때 전체 화면 잠시 해제 · PC 큰 화면",

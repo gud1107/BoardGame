@@ -835,9 +835,9 @@ export function applyAct(rt: HostRuntime, seat: number, act: Act) {
       p.stats.decoys += 1;
       const id = rt.nextDecoyId++;
       const def = disguise(p.disguise)!;
-      // 내 바로 옆(뒤쪽)에 똑같은 모양을 하나 더
-      const ox = p.x - Math.sin(p.yaw) * (def.r * 2 + 0.25);
-      const oz = p.z - Math.cos(p.yaw) * (def.r * 2 + 0.25);
+      // 내가 지금 서 있는 자리에 똑같은 모양을 하나 더 (분신은 몸이 없어 겹쳐도 안 막힌다 — 떠나면 그 자리에 남는다)
+      const ox = p.x;
+      const oz = p.z;
       s.decoys.push({ id, owner: seat, disguise: p.disguise, pose: p.pose, x: ox, y: p.y, z: oz, yaw: p.yaw, anim: def.form === "prop" ? "idle" : "idle" });
       rt.decoyAi.set(id, { ...freshAi(), body: { x: ox, y: p.y, z: oz, vy: 0, grounded: true, r: def.r, h: def.h }, home: [ox, p.y, oz] });
       emit(s, { type: "decoy", seat });

@@ -422,10 +422,14 @@ describe("술래 증강", () => {
     applyAct(rt, hider.seat, { t: "decoy" });
     expect(rt.state.decoys).toHaveLength(1);
     const d = rt.state.decoys[0];
-    // 분신 바로 옆(주인 반대쪽)에서 분신 쪽으로 친다
-    const dx = d.x - hider.x;
-    const dz = d.z - hider.z;
-    const l = Math.hypot(dx, dz) || 1;
+    // 분신은 주인이 서 있던 바로 그 자리에 생긴다
+    expect(d.x).toBeCloseTo(4);
+    expect(d.z).toBeCloseTo(30);
+    // 주인은 걸어 나가고(+z 6m), 분신 반대쪽(-z)에서 분신 쪽으로 친다
+    hider.z = 36;
+    const dx = 0;
+    const dz = -1;
+    const l = 1;
     seeker.x = d.x + (dx / l) * 1;
     seeker.z = d.z + (dz / l) * 1;
     seeker.y = 0;

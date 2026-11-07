@@ -388,9 +388,9 @@ export function nextEmotionLine(seat: number, mood: PersonMood, persona: Persona
 }
 
 /** Queue `text` in `voice`, phrase by phrase (`pace` > 1 = hurried). The caller has already checked sound is on. */
-function say(voice: CharacterVoice, text: string, pace = 1) {
+function say(voice: CharacterVoice, text: string, pace = 1, vol = 1) {
   const synth = window.speechSynthesis;
-  const volume = voice.volume * useAudioSettingsStore.getState().sfxVolume;
+  const volume = Math.min(1, voice.volume * useAudioSettingsStore.getState().sfxVolume * vol);
   try {
     const { voice: v, cross } = pickVoice(voice.gender, voice.slot);
     const shift = cross ? CROSS_VOICE[voice.gender] : { pitch: 1, rate: 1 };
@@ -421,7 +421,7 @@ export function speakEmotion(o: { seat: number; mood: PersonMood; voice: Charact
   say(o.voice, o.text);
 }
 
-const lineQueue = new PassQueue<{ voice: CharacterVoice; text: string }>();
+const lineQueue = new PassQueue<{ voice: CharacterVoice; text: string; vol: number }>();
 const passes = new Map<number, number>();
 let queueTimer: number | null = null;
 
@@ -432,14 +432,14 @@ const voiceBusy = () => window.speechSynthesis.speaking || window.speechSynthesi
  * playing — it waits its turn (see PassQueue) and, having waited, is said a bit quicker to
  * catch up with the table.
  */
-function speakQueued(voice: CharacterVoice, text: string) {
+function speakQueued(voice: CharacterVoice, text: string, vol = 1) {
   if (!canSpeak()) return;
-  const ready = lineQueue.offer({ voice, text }, performance.now() / 1000, voiceBusy());
-  if (ready) return say(ready.voice, ready.text);
+  const ready = lineQueue.offer({ voice, text, vol }, performance.now() / 1000, voiceBusy());
+  if (ready) return say(ready.voice, ready.text, 1, ready.vol);
   if (queueTimer !== null) return;
   queueTimer = window.setInterval(() => {
     const next = lineQueue.take(performance.now() / 1000, voiceBusy());
-    if (next && canSpeak()) say(next.voice, next.text, 1.15);
+    if (next && canSpeak()) say(next.voice, next.text, 1.15, next.vol);
     if (!lineQueue.pending && queueTimer !== null) {
       window.clearInterval(queueTimer);
       queueTimer = null;
@@ -457,6 +457,15 @@ export function speakPass(seat: number, voice: CharacterVoice) {
 /** A game's call (`word`, e.g. "코요테") in this character's voice and manner. Safe to call anywhere. */
 export function speakCall(voice: CharacterVoice, word: string) {
   speakQueued(voice, callLine(voice.persona, word));
+}
+
+/**
+ * Any ready-written line (an emote, a taunt) in this character's voice, with the same phrase
+ * intonation as emotion lines — `vol` scales it (distance falloff). Waits its turn, never cuts.
+ */
+export function speakLineAs(voice: CharacterVoice, text: string, vol = 1) {
+  if (vol <= 0.05) return;
+  speakQueued(voice, text, vol);
 }
 
 /**

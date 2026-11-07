@@ -21,11 +21,12 @@ import { strikeKindOf } from "./HeldWeapon";
 import type { Strike } from "../../hideAndSeek/three/HouseFigure";
 import { roomCharacterOf, useRoomCharacters } from "@/lib/character/roomCharacters";
 import { WEAPONS } from "../data";
+import { emoteLine } from "../emoteVoice";
 
 /** 사람 VRM에 필요한 판 정보 (출연진 랜덤 얼굴은 시드·라운드·자리로 정해 모든 기기가 같다) */
-const FigCtx = createContext({ seed: 0, round: 0, low: false });
+export const FigCtx = createContext({ seed: 0, round: 0, low: false });
 
-function castKeyFor(seed: number, round: number, seat: number): number {
+export function castKeyFor(seed: number, round: number, seat: number): number {
   return (seed % 100003) * 31 + round * 7919 + seat * 13 + 1;
 }
 
@@ -368,7 +369,7 @@ function GoalBeacon({ slot }: { slot: number }) {
 
 
 /** 변신한 모양 하나 (플레이어·분신 공용) */
-function FormModel({ dg, anim, pose, look, held, castKey }: { dg: string | null; anim: string; pose: number; look: number; held?: WeaponLook; castKey?: number }) {
+export function FormModel({ dg, anim, pose, look, held, castKey }: { dg: string | null; anim: string; pose: number; look: number; held?: WeaponLook; castKey?: number }) {
   const def = disguise(dg);
   if (!def) return <Humanoid anim={anim} look={look} uniform held={held ?? "flashlight"} />;
   switch (def.form) {
@@ -445,7 +446,7 @@ function RemotePlayer({ buf, p, snap, name, showName, strikeAt }: { buf: SnapBuf
       <BlobShadow radius={p.role === "seeker" ? 0.42 : Math.max(0.3, (def?.r ?? 0.3) * 1.4)} opacity={0.7} />
       {p.role === "seeker" ? <SeekerVrm seat={p.s} name={name} anim={anim} held={heldOf(snap)} strike={strike} /> : <FormModel dg={p.dg} anim={anim} pose={p.pose} look={(p.s * 3 + 1) % 8} castKey={castKeyFor(fig.seed, fig.round, p.s)} />}
       {showName && <Tag text={p.role === "seeker" ? `👁️ ${name}${wpn ? ` ${wpn.icon}` : ""}` : name} color={p.role === "seeker" ? "#38bdf8" : "#a7f3d0"} y={h + 0.45} />}
-      {em && <Bubble text={`${em.icon} ${em.line}`} y={h + (showName ? 0.85 : 0.5)} />}
+      {em && p.em && <Bubble text={`${em.icon} ${emoteLine(em.id, p.s, p.em.at, name)}`} y={h + (showName ? 0.85 : 0.5)} />}
       {p.role === "seeker" && snap.phase === "hide" && <Bubble text="🙈 눈 가리는 중…" y={h + 0.85} />}
     </group>
   );
@@ -1005,7 +1006,7 @@ function LocalPlayer(props: World3DProps & { gridRef: RefObject<ReturnType<typeo
     <group ref={group}>
       <BlobShadow radius={me.role === "seeker" ? 0.42 : Math.max(0.3, (def?.r ?? 0.3) * 1.4)} opacity={0.7} />
       <AnimProxy stateRef={animState} render={(a, pose) => (me.role === "seeker" ? <SeekerVrm seat={me.s} name={myName} anim={a} held={heldOf(buf.latest() ?? snap)} strike={strike} /> : <FormModel dg={me.dg} anim={a} pose={pose} look={(me.s * 3 + 1) % 8} castKey={castKey} />)} />
-      {me.em && <Bubble text={`${EMOTES.find((e) => e.id === me.em!.id)?.icon ?? ""} ${EMOTES.find((e) => e.id === me.em!.id)?.line ?? ""}`} y={(def?.h ?? 1.75) + 0.5} />}
+      {me.em && <Bubble text={`${EMOTES.find((e) => e.id === me.em!.id)?.icon ?? ""} ${emoteLine(me.em.id, me.s, me.em.at, myName)}`} y={(def?.h ?? 1.75) + 0.5} />}
     </group>
   );
 }
