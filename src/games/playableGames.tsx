@@ -64,4 +64,5 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   "star-rummy": dynamic(() => import("./starRummy/StarRummyGame"), { ssr: false }),
   "hide-and-seek": dynamic(() => import("./hideAndSeek/HideAndSeekGame"), { ssr: false }),
   "morph-hide": dynamic(() => import("./morphHide/MorphHideGame"), { ssr: false }),
+  "time-loop-heist": dynamic(() => import("./timeLoopHeist/TimeLoopHeistGame"), { ssr: false }),
 };

@@ -316,6 +316,15 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["block-5", "🚫", "기둥 지킴이", "찜하러 뛰는 사람 막기 누적 5번", 5, k("blocks")],
     ["helper-5", "🔦", "꼬마 술래", "잡힌 뒤 직접 찾아내기 누적 5번", 5, k("helperCatches")],
     ["close-15", "💓", "심장이 쫄깃", "술래와 같은 방에서 안 들키기 누적 15번", 15, k("closeCalls")],
+  "time-loop-heist": [
+    ["clear-1", "💎", "첫 작전 성공", "작전 하나를 성공하기", 1, k("clears")],
+    ["three-star", "🌟", "완벽한 루프", "별 3개로 작전 성공", 1, k("threeStars")],
+    ["vault-clear", "🏛️", "대금고 털이", "4호 대금고 · 시간의 사슬 성공", 1, k("clears_grand-vault")],
+    ["clean-5", "🧤", "흔적 없는 도둑", "내 자아가 역설·체포 없이 성공 5번", 5, k("cleanClears")],
+    ["solo-1", "🕴️", "혼자서도 도둑단", "혼자(1인) 작전 성공", 1, k("soloClears")],
+    ["gems-30", "💰", "보석 30개", "내 자아가 입금한 보석 누적 30개", 30, k("gemsBanked")],
+    ["stars-30", "⭐", "별 수집가", "작전에서 받은 별 누적 30개", 30, k("stars")],
+  ],
   ],
   "star-rummy": [
     ["rummy-1", "🎉", "첫 러미", "손의 타일을 모두 내려놓아 라운드 끝내기", 1, k("rummyOuts")],

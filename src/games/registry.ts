@@ -815,6 +815,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+  {
+    id: "time-loop-heist",
+    name: "시간 루프 도둑단",
+    nameEn: "Time Loop Heist",
+    description:
+      "같은 30~48틱을 몇 번이고 다시 사는 1~4인 3D 협력 금고 털이. 루프마다 모두 동시에 자기 도둑 한 명의 행동을 한 걸음씩 녹화하면, 다음 루프부터 그 도둑은 유령이 되어 똑같이 움직여요. 지난 루프의 내가 압력 발판을 지키고 레버를 당기고 EMP로 경비 로봇을 멈추는 동안, 새 자아가 열린 문으로 들어가 보석을 들고 탈출 밴으로! 단, 유령이 가던 길을 막으면 ⚠️ 시간 역설로 사라지고, 같은 루프 동료는 서로 안 보여요. 작전 4개, 루프 수·동전으로 별 3개.",
+    players: { min: 1, max: 4 },
+    playTime: { minMinutes: 10, maxMinutes: 25 },
+    category: "party",
+    thumbnail: { emoji: "⏳", gradient: ["#7c3aed", "#0b1026"] },
+    tags: ["협력", "퍼즐", "시간루프", "도둑", "동시녹화", "3D", "AI봇", "1인가능"],
+    genres: ["strategy", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
     id: "prism-five",
     name: "섬광전대 프리즘파이브",
     nameEn: "Prism Five: Flash Squadron",

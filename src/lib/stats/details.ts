@@ -225,6 +225,25 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "찜 막기", value: (d) => n(d.blocks) },
     { label: "꼬마 술래로 찾음", value: (d) => n(d.helperCatches) },
     { label: "술래와 같은 방에서 버팀", value: (d) => n(d.closeCalls) },
+  "time-loop-heist": [
+    { label: "작전 성공 (별 3개)", value: (d) => `${n(d.clears)} (${n(d.threeStars)})` },
+    { label: "받은 별 합계", value: (d) => n(d.stars) },
+    {
+      label: "작전별 최고 별",
+      value: (d) => {
+        const ids: [string, string][] = [
+          ["plates", "1호"],
+          ["two-keys", "2호"],
+          ["patrol", "3호"],
+          ["grand-vault", "4호"],
+        ];
+        const parts = ids.filter(([id]) => d[`maxStars_${id}`]).map(([id, l]) => `${l} ${"⭐".repeat(d[`maxStars_${id}`] ?? 0)}`);
+        return parts.length > 0 ? parts.join(" · ") : null;
+      },
+    },
+    { label: "입금한 보석 / 동전", value: (d) => `${n(d.gemsBanked)} / ${n(d.coinsBanked)}` },
+    { label: "시간 역설 / 체포된 자아", value: (d) => `${n(d.paradoxes)} / ${n(d.caught)}` },
+  ],
   ],
   "star-rummy": [
     { label: "최종 우승 / 라운드 승리", value: (d) => `${n(d.gamesWon)} / ${n(d.roundsWon)}` },

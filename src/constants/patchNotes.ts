@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.155.0",
+    releaseDate: "2026-11-08",
+    title: "⏳ 새 게임 시간 루프 도둑단",
+    changes: [
+      { game: "time-loop-heist", type: "FEAT", desc: "⏳ 새 게임 — 1~4인 협력 금고 털이. 루프마다 동시에 녹화하면 지난 루프의 나는 유령이 되어 똑같이 움직여요" },
+      { game: "time-loop-heist", type: "FEAT", desc: "🟨 발판·🔧 레버·⚡ EMP·🤖 경비 로봇, ⚠️ 시간 역설 — 작전 4개, 루프 수·동전으로 별 3개" },
+      { game: "time-loop-heist", type: "FEAT", desc: "🧊 3D 박물관(2D 격자 전환) · 👁 미리보기 슬라이더 · ↶ 되돌리기 · 🤖 AI 봇 Lv.1~10 · 혼자서도 가능" },
+    ],
+  },
+  {
     version: "v1.154.4",
     releaseDate: "2026-11-08",
     title: "🦎 변신 숨바꼭질 — 꼼꼬미 외침도 캐릭터 목소리",
