@@ -441,6 +441,29 @@ describe("술래 증강", () => {
     expect(hider.alive).toBe(true);
   });
 
+  it("분신과 주인이 같은 자리에 겹쳐 있으면 술래가 칠 때 주인이 잡힌다 (분신은 방패가 아니다)", () => {
+    for (const dg of ["person", DISGUISES.find((d) => d.form === "prop")!.id]) {
+      const { rt, seeker, hider } = fresh();
+      toHunt(rt);
+      clearAugs(seeker);
+      clearAugs(hider);
+      hider.alive = true;
+      hider.disguise = dg;
+      applyPos(rt, hider.seat, { x: 4, y: 0, z: 30, yaw: 0, anim: "idle", pose: 0, tp: hider.tp });
+      applyAct(rt, hider.seat, { t: "decoy" });
+      expect(rt.state.decoys).toHaveLength(1);
+      seeker.x = 4;
+      seeker.z = 29;
+      seeker.y = 0;
+      seeker.nextAtkAt = 0;
+      applyAct(rt, seeker.seat, { t: "atk", o: [4, 1.55, 29], d: [0, -0.25, 1] });
+      expect(hider.alive).toBe(false);
+      // 분신은 그대로 남는다 (헛손질 벌점도 없음)
+      expect(rt.state.decoys).toHaveLength(1);
+      expect(seeker.hp).toBeGreaterThanOrEqual(SEEKER_HP);
+    }
+  });
+
   it("봇 술래끼리 증강을 들고 한 판을 끝까지 (꼼꼼이 포함)", () => {
     for (const goalMode of [false, true]) {
       const m = createMatch(31, Array.from({ length: 6 }, () => ({ bot: true, level: 10 })), { huntSec: 180, rounds: 1, goalMode });

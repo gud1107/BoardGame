@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.154.4",
+    releaseDate: "2026-11-08",
+    title: "🦎 변신 숨바꼭질 — 꼼꼬미 외침도 캐릭터 목소리",
+    changes: [
+      { game: "morph-hide", type: "IMPROVE", desc: "🗣️ \"찾는다!\"·\"들켰다!\"·\"꼼꼬미!\" 외침도 그 사람 캐릭터 목소리와 말투로 — 성격마다 다른 대사" },
+      { game: "morph-hide", type: "IMPROVE", desc: "👯 분신과 딱 겹쳐 서 있으면 술래가 칠 때 주인이 잡혀요 — 분신을 세웠으면 자리를 옮기세요" },
+    ],
+  },
+  {
     version: "v1.154.3",
     releaseDate: "2026-11-08",
     title: "🦎 변신 숨바꼭질 — 숨은 모습 진열대 · 캐릭터 목소리 감정표현 · 분신 제자리",

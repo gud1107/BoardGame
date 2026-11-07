@@ -45,7 +45,40 @@ const LINES: Record<string, Record<Persona | "base", string[]>> = {
     dreamer: ["나 찾아봐라~", "여기 있는데~ 모르겠지~"],
     fidget: ["메롱메롱! 못 잡지롱!", "약 오르지? 약 오르지?"],
   },
+  // --- 꼼꼼이 외침 (감정표현처럼 그 사람 목소리·말투로) ---
+  /** 술래가 돌아와서 외친다 */
+  found: {
+    base: ["찾는다!", "찾았다!"],
+    starer: ["찾았다. 나와.", "거기 있는 거 다 알아."],
+    shy: ["차, 찾았어요!", "저기… 찾았어요!"],
+    scanner: ["찾았다 찾았다!", "어? 거기! 찾았다!"],
+    focused: ["찾았다. 예상대로야.", "거기. 찾았어."],
+    dreamer: ["찾았다~", "어~ 찾았네~"],
+    fidget: ["찾았다아! 딱 걸렸어!", "찾았다! 찾았다!"],
+  },
+  /** "찾는다!"에 걸린 숨는 사람 */
+  busted: {
+    base: ["들켰다!", "앗, 들켰다…"],
+    starer: ["…쳇, 들켰군.", "흠, 여기까지인가."],
+    shy: ["어, 어떡해요… 들켰어요…", "아… 들켰다…"],
+    scanner: ["헉, 어떻게 알았지?", "엥? 들켰어?"],
+    focused: ["들켰군. 다음엔 다르게.", "읽혔네."],
+    dreamer: ["아~ 들켜 버렸네~", "어라~ 들켰다~"],
+    fidget: ["으악, 들켰다!", "안 돼, 안 돼! 들켰어!"],
+  },
+  /** 몰래 전봇대를 찍은 숨는 사람 */
+  kkom: {
+    base: ["꼼꼬미!", "꼼꼬미! 찜!"],
+    starer: ["꼼꼬미. 쉽네.", "찜. 꼼꼬미."],
+    shy: ["꼬, 꼼꼬미…!", "헤헤, 꼼꼬미요!"],
+    scanner: ["꼼꼬미! 봤지 봤지?", "찜! 꼼꼬미!"],
+    focused: ["꼼꼬미. 계획대로.", "꼼꼬미. 끝."],
+    dreamer: ["꼼꼬미~", "찜~ 꼼꼬미~"],
+    fidget: ["꼼꼬미이! 앗싸!", "꼼꼬미! 예스!"],
+  },
 };
+
+export type ShoutKind = "found" | "busted" | "kkom";
 
 const pick = (seat: number, at: number, n: number) => {
   const x = Math.sin(seat * 91.7 + Math.floor(at) * 0.0137) * 43758.5453;
@@ -64,4 +97,9 @@ export function emoteLine(emoteId: string, seat: number, at: number, name: strin
 /** 그 사람의 캐릭터 목소리로 말하기 (`vol` = 거리 감쇠) */
 export function speakEmote(emoteId: string, seat: number, at: number, name: string | null | undefined, vol: number) {
   speakLineAs(seatVoice(seat, name), emoteLine(emoteId, seat, at, name), vol);
+}
+
+/** 꼼꼼이 외침("찾는다!"·"들켰다!"·"꼼꼬미!")을 그 사람 캐릭터 목소리·말투로 */
+export function speakShout(kind: ShoutKind, seat: number, at: number, name: string | null | undefined, vol: number) {
+  speakLineAs(seatVoice(seat, name), emoteLine(kind, seat, at, name), vol);
 }

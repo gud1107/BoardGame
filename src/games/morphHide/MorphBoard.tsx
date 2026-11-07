@@ -8,8 +8,8 @@ import type { Act, PosReport } from "./sim";
 import type { Snap, SnapBuffer } from "./net";
 import { freshControls, type Controls, type FxItem, type NearInfo, type SelfInfo } from "./three/World3D";
 import { AUG_N, AUG_PICKS, AUG_TIER_STYLE, HIDER_AUG_PICKS, aug } from "./augments";
-import { falloff, isMuted, play, setMuted, speak } from "./sound";
-import { speakEmote } from "./emoteVoice";
+import { falloff, isMuted, play, setMuted } from "./sound";
+import { speakEmote, speakShout } from "./emoteVoice";
 
 const World3D = dynamic(() => import("./three/World3D"), { ssr: false });
 const PickPreview = dynamic(() => import("./three/PickPreview"), { ssr: false });
@@ -188,11 +188,16 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
           break;
         case "kkomCall":
           play("goal", 1);
-          speak(ev.out.includes(mySeat) ? "들켰다!" : "찾는다!", 1);
+          if (!isMuted()) {
+            // 걸린 사람은 내 목소리로 "들켰다", 아니면 술래 목소리로 "찾는다"
+            const caller = snap.players.find((p) => p.role === "seeker");
+            if (ev.out.includes(mySeat)) speakShout("busted", mySeat, ev.at, names[mySeat], 1);
+            else if (caller) speakShout("found", caller.s, ev.at, names[caller.s], 1);
+          }
           break;
         case "escape":
           play("escape", 0.8);
-          speak("꼼꼬미!", ev.seat === mySeat ? 1 : seatPos(ev.seat));
+          if (!isMuted()) speakShout("kkom", ev.seat, ev.at, names[ev.seat], ev.seat === mySeat ? 1 : seatPos(ev.seat));
           break;
         case "decoy":
           if (ev.seat === mySeat) play("decoy", 1);
