@@ -103,6 +103,14 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "한 번에 최다", value: (d) => `${n(d.bestShot)}개` },
     { label: "왕 잡기 / 스스로 떨어짐", value: (d) => `${n(d.kingKills)} / ${n(d.selfFalls)}` },
   ],
+  "bowling-mayhem": [
+    { label: "최고 점수 (10프레임 정식)", value: (d) => `${n(d.maxScore)}점 (${n(d.maxScore10)}점)` },
+    { label: "스트라이크 / 스페어", value: (d) => `${n(d.strikes)} / ${n(d.spares)}` },
+    { label: "🦃 터키 / 최장 연속 스트라이크", value: (d) => `${n(d.turkeys)} / ${n(d.maxStreak)}연속` },
+    { label: "스플릿 처리", value: (d) => ratio(d.splitsConverted, d.splits) },
+    { label: "거터 / 던진 공", value: (d) => `${n(d.gutters)} / ${n(d.rolls)}` },
+    { label: "방해 / 방해받고 X·/", value: (d) => `${n(d.sabotages)} / ${n(d.hazardBeaten)}` },
+  ],
   "wobble-tower": [
     { label: "빼기 성공 / 무너뜨림", value: (d) => `${n(d.pulls)} / ${n(d.collapses)}` },
     { label: "🏅 마지막 건축가", value: (d) => n(d.lastBuilder) },
@@ -217,14 +225,6 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "엉뚱한 걸 친 횟수", value: (d) => n(d.wrongHits) },
     { label: "만든 분신", value: (d) => n(d.decoys) },
   ],
-  "hide-and-seek": [
-    { label: "최고 점수", value: (d) => n(d.maxScore) },
-    { label: "찜 / 끝까지 숨음", value: (d) => `${n(d.homes)} / ${n(d.survives)}` },
-    { label: "술래로 찾은 사람 (한 판 최다)", value: (d) => `${n(d.catches)} (${n(d.maxCatches)})` },
-    { label: "싹쓸이", value: (d) => n(d.sweeps) },
-    { label: "찜 막기", value: (d) => n(d.blocks) },
-    { label: "꼬마 술래로 찾음", value: (d) => n(d.helperCatches) },
-    { label: "술래와 같은 방에서 버팀", value: (d) => n(d.closeCalls) },
   "time-loop-heist": [
     { label: "작전 성공 (별 3개)", value: (d) => `${n(d.clears)} (${n(d.threeStars)})` },
     { label: "받은 별 합계", value: (d) => n(d.stars) },
@@ -244,6 +244,14 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "입금한 보석 / 동전", value: (d) => `${n(d.gemsBanked)} / ${n(d.coinsBanked)}` },
     { label: "시간 역설 / 체포된 자아", value: (d) => `${n(d.paradoxes)} / ${n(d.caught)}` },
   ],
+  "hide-and-seek": [
+    { label: "최고 점수", value: (d) => n(d.maxScore) },
+    { label: "찜 / 끝까지 숨음", value: (d) => `${n(d.homes)} / ${n(d.survives)}` },
+    { label: "술래로 찾은 사람 (한 판 최다)", value: (d) => `${n(d.catches)} (${n(d.maxCatches)})` },
+    { label: "싹쓸이", value: (d) => n(d.sweeps) },
+    { label: "찜 막기", value: (d) => n(d.blocks) },
+    { label: "꼬마 술래로 찾음", value: (d) => n(d.helperCatches) },
+    { label: "술래와 같은 방에서 버팀", value: (d) => n(d.closeCalls) },
   ],
   "star-rummy": [
     { label: "최종 우승 / 라운드 승리", value: (d) => `${n(d.gamesWon)} / ${n(d.roundsWon)}` },

@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.156.0",
+    releaseDate: "2026-11-08",
+    title: "🎳 새 게임 볼링 난장판",
+    changes: [
+      { game: "bowling-mayhem", type: "FEAT", desc: "🎳 새 게임 — 3D 볼링장 1~6인, 진짜 텐핀 점수(스트라이크·스페어·마지막 프레임 3구) · 3/5/10프레임 · AI 봇 Lv.1~10" },
+      { game: "bowling-mayhem", type: "FEAT", desc: "📍 위치·🎯 화살표 조준·🌀 훅 회전 + 꾹 눌렀다 떼는 세기 막대, 내 캐릭터가 어프로치해서 릴리스 — 핀은 물리로 와장창" },
+      { game: "bowling-mayhem", type: "FEAT", desc: "🎲 프레임마다 얼음·범퍼·거인 핀·깃털 핀·옆바람 레인, 🎒 상대 레인에 🚧고깔·🛢️기름·🌬️선풍기 — 꼴찌는 아이템 더" },
+    ],
+  },
+  {
     version: "v1.155.0",
     releaseDate: "2026-11-08",
     title: "⏳ 새 게임 시간 루프 도둑단",

@@ -53,12 +53,12 @@ describe("proceduralScore DSL", () => {
 });
 
 describe("game sound suites", () => {
-  it("finds all 39 suites", () => {
+  it("finds all 40 suites", () => {
     // 27 from the 2026-10-11 sound-suite pass + telepathy's BGM + tavern brawl.
     // + word tower (단어 마천루) + wobble tower (와르르 타워) + alkkagi (알까기 대전)
     // + curling (컬링 파티) + chess (체스) + god-life planner (갓생 플래너) + qplay (큐플레이)
-    // + hide-and-seek (한밤의 숨바꼭질).
-    expect(suites.length).toBe(39);
+    // + hide-and-seek (한밤의 숨바꼭질) + bowling mayhem (볼링 난장판).
+    expect(suites.length).toBe(40);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

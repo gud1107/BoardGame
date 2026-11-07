@@ -124,6 +124,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "한 번에 최다", key: "bestShot", unit: "개" },
     { label: "판 1등", key: "roundWins", unit: "번" },
   ],
+  "bowling-mayhem": [
+    { label: "점수", key: "maxScore", unit: "점" },
+    { label: "스트라이크", key: "strikes", unit: "개" },
+    { label: "스페어", key: "spares", unit: "개" },
+    { label: "최장 연속 스트라이크", key: "maxStreak", unit: "연속" },
+  ],
   "wobble-tower": [
     { label: "빼기 성공", key: "pulls", unit: "번" },
     { label: "🏅 마지막 건축가", key: "lastBuilder", unit: "번" },
@@ -293,6 +299,11 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "akg-knocked", label: "떨어뜨린 알", num: "knocked", format: "count", unit: "개" },
     { id: "akg-wins", label: "판 1등", num: "roundWins", format: "count", unit: "번" },
     { id: "akg-double", label: "더블킬", num: "multiKnocks", format: "count", unit: "번" },
+  ],
+  "bowling-mayhem": [
+    { id: "bwl-score", label: "최고 점수", num: "maxScore", format: "count", unit: "점" },
+    { id: "bwl-strikes", label: "스트라이크", num: "strikes", format: "count", unit: "개" },
+    { id: "bwl-turkeys", label: "🦃 터키", num: "turkeys", format: "count", unit: "번" },
   ],
   "wobble-tower": [
     { id: "wbt-pulls", label: "빼기 성공", num: "pulls", format: "count", unit: "번" },
