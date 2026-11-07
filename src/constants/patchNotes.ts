@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.146.0",
+    releaseDate: "2026-11-07",
+    title: "🃏 변신 숨바꼭질 술래 증강",
+    changes: [
+      { game: "morph-hide", type: "FEAT", desc: "🃏 술래 증강 — 눈 가린 동안 3장 중 1장을 두 번(실버·골드·프리즘 28종: 레이더·냄새 추적·방울 덫·충격파·불굴…)" },
+      { game: "morph-hide", type: "FEAT", desc: "🔍 단서 증강은 정확한 위치 대신 개수·대략적인 원만 — 원에 걸린 숨는 사람은 “근처가 드러났어요” 알림 · 술래 증강은 숨는 쪽도 봐요" },
+      { game: "morph-hide", type: "IMPROVE", desc: "⚖️ 숨는 쪽이 유리하던 밸런스를 증강으로 보정 — 봇 Lv10끼리 잡힘 44% → 50%(4인 40→58%, 8인 62→73%)" },
+    ],
+  },
+  {
     version: "v1.145.0",
     releaseDate: "2026-11-07",
     title: "✨ 시대의 진격 증강 모드",

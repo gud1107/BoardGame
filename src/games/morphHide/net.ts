@@ -1,5 +1,5 @@
 import { KKOM_CAMP_MS, SPAM_WINDOW_MS, type GameOptions } from "./data";
-import type { DecoyState, GameEvent, MatchState, NpcKind, Phase, PlayerStats, Role, RoundSummary } from "./sim";
+import type { DecoyState, GameEvent, MatchState, NpcKind, Phase, PingState, PlayerStats, Role, RoundSummary, TrapState } from "./sim";
 
 /**
  * 방장이 ~10번/초 보내는 스냅샷과, 받는 쪽의 보간 버퍼.
@@ -33,6 +33,16 @@ export interface SnapPlayer {
   wr: number;
   /** 꼼꼼이 집 지키기 게이지 0~1 (1이면 못 잡음) */
   camp?: number;
+  /** 술래 증강: 고른 것 · 지금 3장 · 다시 뽑기 · 최대 체력 · 덫 · 충격파 · 보호막 · 추격 본능 중 · 육감 */
+  aug?: string[];
+  ao?: string[];
+  arr?: number;
+  mhp?: number;
+  tr?: number;
+  sk?: number;
+  sh?: number;
+  hu?: boolean;
+  sn?: boolean;
   stats?: PlayerStats;
 }
 
@@ -67,6 +77,9 @@ export interface Snap {
   chests: { slot: number; opened: boolean }[];
   goal: { slot: number; open: boolean; errand?: number } | null;
   pedLight: boolean;
+  /** 술래 증강: 덫·지도 표시 (술래 화면에만 그린다) */
+  traps: TrapState[];
+  pings: PingState[];
   events: GameEvent[];
   history: RoundSummary[];
   winners: number[] | null;
@@ -112,6 +125,9 @@ export function makeSnap(s: MatchState, seq: number): Snap {
       catches: p.roundCatches,
       wr: p.wrongAt.filter((t) => t > s.t - SPAM_WINDOW_MS).length,
       ...(p.role === "seeker" && s.goal ? { camp: Math.min(1, Math.round((p.campMs / KKOM_CAMP_MS) * 100) / 100) } : {}),
+      ...(p.role === "seeker"
+        ? { aug: p.augs, ao: p.augOffer, arr: p.augRerolls, mhp: p.maxHp, tr: p.traps, sk: p.shocks, sh: p.shieldLeft, hu: s.t < p.hunterUntil, sn: p.sense }
+        : {}),
       ...(over ? { stats: p.stats } : {}),
     })),
     npcs: s.npcs.map((n) => ({ id: n.id, kind: n.kind, x: r2(n.x), y: r2(n.y), z: r2(n.z), yaw: r2(n.yaw), anim: n.anim, look: n.look })),
@@ -121,6 +137,8 @@ export function makeSnap(s: MatchState, seq: number): Snap {
     chests: s.chests,
     goal: s.goal,
     pedLight: s.pedLight,
+    traps: s.traps,
+    pings: s.pings,
     events: s.events.filter((e) => e.at >= s.t - 2500),
     history: s.history,
     winners: s.winners,

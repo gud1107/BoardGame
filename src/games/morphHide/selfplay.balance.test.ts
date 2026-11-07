@@ -2,6 +2,7 @@ import { describe, it } from "vitest";
 import { writeFileSync } from "node:fs";
 import { hiderParamsFor, seekerParamsFor } from "./botParams";
 import { evalMany, type RoundStats } from "./selfplay";
+import { AUGS } from "./augments";
 
 /**
  * 밸런스 측정 — 평소 테스트에선 건너뛴다.
@@ -24,5 +25,25 @@ describe.skipIf(!process.env.MH_BALANCE)("balance", () => {
     row("Lv10 vs Lv10 (4인 3분)", evalMany(seeds, hiderParamsFor(10), seekerParamsFor(10), {}, 4));
     row("Lv10 vs Lv10 (8인 3분)", evalMany(seeds, hiderParamsFor(10), seekerParamsFor(10), {}, 8));
     writeFileSync(process.env.MH_OUT ?? "balance.txt", lines.join("\n"));
+  }, 3_600_000);
+});
+
+/**
+ * 증강 하나씩 — 술래 봇이 그 증강만 들고 (Lv10 vs Lv10, 5인 3분). 맨 위 "없음"과 비교한다.
+ *   MH_AUG=1 MH_OUT=aug.txt npx vitest run src/games/morphHide/selfplay.balance.test.ts
+ */
+describe.skipIf(!process.env.MH_AUG)("augment balance", () => {
+  it("measures each augment alone", () => {
+    const n = Number(process.env.MH_N ?? 24);
+    const seeds = Array.from({ length: n }, (_, i) => 70_000 + i);
+    const lines: string[] = [];
+    const h = hiderParamsFor(10);
+    const sk = seekerParamsFor(10);
+    lines.push(`${"없음".padEnd(14)} ${fmt(evalMany(seeds, h, sk, {}, 5, []))}`);
+    for (const a of AUGS) {
+      if (a.mode === "kkom") continue;
+      lines.push(`${`${a.icon}${a.name}`.padEnd(14)} ${fmt(evalMany(seeds, h, sk, {}, 5, [a.id]))}`);
+    }
+    writeFileSync(process.env.MH_OUT ?? "aug.txt", lines.join("\n"));
   }, 3_600_000);
 });

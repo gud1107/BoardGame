@@ -9,6 +9,7 @@ import { DUSK, ShadowSetup, Sky, SunLight, surfaceTexture, type SurfaceKind } fr
 import { labelTexture } from "@/games/shared/three/tableKit";
 import { BASE, CHEST_SLOTS, DOORS, FIXED_THINGS, FLOOR, GOAL_SLOTS, LADDER, ROAD, ROOMS, STATIC_SOLIDS, WINDOWS, slotY, type PlacedThing } from "../map";
 import { EMOTES, KKOM_CAMP_R, RUN_MULT, disguise, poseOf, weaponSchedule } from "../data";
+import { augCooldownMult, augSpeedMult } from "../augments";
 import { rayBox, stepBody, type Body, type CollWorld, type Cyl } from "../physics";
 import { bodySize, chestThings, dynamicSolids, npcSize, roundGrid, walkSpeed, type Act, type GameEvent, type PosReport } from "../sim";
 import type { Snap, SnapBuffer, SnapPlayer } from "../net";
@@ -614,6 +615,62 @@ function Burst({ pos, at, color, text }: { pos: [number, number, number]; at: nu
   );
 }
 
+/** 술래 증강 표시: 바닥에 깜빡이는 원 (냄새·덫·귀) / 충격파는 사람 위에 기둥 */
+function PingRing({ x, y, z, r, color, pillar }: { x: number; y: number; z: number; r: number; color: string; pillar?: boolean }) {
+  const mat = useRef<THREE.MeshBasicMaterial>(null);
+  const col = useRef<THREE.MeshBasicMaterial>(null);
+  useFrame(() => {
+    const k = 0.45 + 0.35 * Math.sin(performance.now() / 170);
+    if (mat.current) mat.current.opacity = k;
+    if (col.current) col.current.opacity = k * 0.55;
+  });
+  return (
+    <group position={[x, y, z]}>
+      <mesh rotation-x={-Math.PI / 2} position-y={0.06} renderOrder={14}>
+        <ringGeometry args={[Math.max(0.2, r - 0.18), r, 48]} />
+        <meshBasicMaterial ref={mat} color={color} transparent depthWrite={false} depthTest={false} toneMapped={false} side={THREE.DoubleSide} />
+      </mesh>
+      {pillar && (
+        <mesh position-y={2.2} renderOrder={14}>
+          <cylinderGeometry args={[0.12, 0.12, 4.4, 8, 1, true]} />
+          <meshBasicMaterial ref={col} color={color} transparent depthWrite={false} depthTest={false} toneMapped={false} />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
+function AugMarks({ snap, buf }: { snap: Snap; buf: SnapBuffer }) {
+  const [perf, setPerf] = useState(0);
+  // 끝난 표시를 지우려고 0.5초마다 다시 그린다
+  useEffect(() => {
+    const id = window.setInterval(() => setPerf(performance.now()), 500);
+    return () => window.clearInterval(id);
+  }, []);
+  const now = perf ? buf.simNow(perf) : 0;
+  return (
+    <>
+      {(snap.pings ?? [])
+        .filter((g) => g.until > now)
+        .map((g) => (
+          <PingRing key={g.id} x={g.x} y={g.y} z={g.z} r={g.r} pillar={g.kind === "shock"} color={g.kind === "shock" ? "#f0abfc" : g.kind === "trap" ? "#fcd34d" : g.kind === "ear" ? "#7dd3fc" : "#f472b6"} />
+        ))}
+      {(snap.traps ?? []).map((t) => (
+        <group key={t.id} position={[t.x, t.y + 0.03, t.z]}>
+          <mesh rotation-x={-Math.PI / 2}>
+            <ringGeometry args={[0.28, 0.4, 20]} />
+            <meshBasicMaterial color="#fcd34d" transparent opacity={0.8} depthWrite={false} toneMapped={false} side={THREE.DoubleSide} />
+          </mesh>
+          <mesh position-y={0.1}>
+            <sphereGeometry args={[0.09, 10, 8]} />
+            <meshStandardMaterial color="#fbbf24" metalness={0.8} roughness={0.25} />
+          </mesh>
+        </group>
+      ))}
+    </>
+  );
+}
+
 function Effects({ fx, snap, buf }: { fx: FxItem[]; snap: Snap; buf: SnapBuffer }) {
   return (
     <>
@@ -622,6 +679,7 @@ function Effects({ fx, snap, buf }: { fx: FxItem[]; snap: Snap; buf: SnapBuffer 
         if (ev.type === "swing") return <Swoosh key={ev.id} buf={buf} seat={ev.by} at={at} weapon={ev.weapon} />;
         if (ev.type === "catch") return <Burst key={ev.id} pos={[ev.x, ev.y, ev.z]} at={at} color="#f87171" text="💥 잡혔다!" />;
         if (ev.type === "wrong") return <Burst key={ev.id} pos={[ev.x, ev.y, ev.z]} at={at} color="#94a3b8" text={`✖ ${ev.what}였어! −체력`} />;
+        if (ev.type === "shock") return <Burst key={ev.id} pos={[ev.x, ev.y, ev.z]} at={at} color="#f0abfc" text="💥 충격파!" />;
         if (ev.type === "escape") {
           const p = snap.players[ev.seat];
           return p ? <Burst key={ev.id} pos={[p.x, p.y, p.z]} at={at} color="#fde047" text="🏁 찜!" /> : null;
@@ -748,7 +806,7 @@ function LocalPlayer(props: World3DProps & { gridRef: RefObject<ReturnType<typeo
         mz /= len;
       }
       const run = c.run || (c.moveTo !== null && Math.hypot(c.moveTo[0] - b.x, c.moveTo[2] - b.z) > 6);
-      const speed = walkSpeed({ role: meNow.role, disguise: meNow.dg }) * (run ? RUN_MULT : 1);
+      const speed = walkSpeed({ role: meNow.role, disguise: meNow.dg }) * (run ? RUN_MULT : 1) * (meNow.role === "seeker" ? augSpeedMult(meNow.aug, meNow.hu) : 1);
       if (grid) {
         const now = performance.now();
         const bodies: Cyl[] = [];
@@ -830,7 +888,7 @@ function LocalPlayer(props: World3DProps & { gridRef: RefObject<ReturnType<typeo
       const wid = weaponSchedule(snapNow.options.huntSec)[snapNow.tier];
       const w = WEAPONS[wid];
       // 방장이 받아 줄 때만 휘두른다 (쿨타임·탄약) — 안 그러면 연타할 때 헛몸짓만 난다
-      const ready = !!w && performance.now() - lastSwing.current >= w.cooldownMs - 40 && (w.kind !== "ray" || meNow.ammo > 0);
+      const ready = !!w && performance.now() - lastSwing.current >= w.cooldownMs * augCooldownMult(meNow.aug) - 40 && (w.kind !== "ray" || meNow.ammo > 0);
       if (meNow.role === "seeker" && meNow.alive && snapNow.phase === "hunt" && ready) {
         strike.current = { at: performance.now(), kind: strikeKindOf(wid) };
         const dir = new THREE.Vector3();
@@ -1074,6 +1132,7 @@ function Scene(props: World3DProps) {
       })}
       {me && <LocalPlayer key={`${me.role}:${me.dg}`} {...props} gridRef={gridRef} />}
       <Effects fx={props.fx} snap={snap} buf={buf} />
+      {me?.role === "seeker" && <AugMarks snap={snap} buf={buf} />}
       <AdaptiveResolution max={props.lowDetail ? 1.25 : 1.75} />
       {!props.lowDetail && <PostFx bloom={0.42} ao={false} />}
       </FigCtx.Provider>

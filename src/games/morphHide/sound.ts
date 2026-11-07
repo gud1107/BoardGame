@@ -5,7 +5,7 @@
  * 거리 감쇠는 부르는 쪽이 `vol`(0~1)로 넘긴다. 감정표현 대사는 브라우저 TTS.
  */
 
-export type Sfx = "shot" | "sniper" | "shotgun" | "swing" | "catch" | "wrong" | "door" | "window" | "chest" | "tier" | "goal" | "escape" | "tick" | "start" | "decoy" | "pick" | "jump" | "seekerDown";
+export type Sfx = "shot" | "sniper" | "shotgun" | "swing" | "catch" | "wrong" | "door" | "window" | "chest" | "tier" | "goal" | "escape" | "tick" | "start" | "decoy" | "pick" | "jump" | "seekerDown" | "augPick" | "intel" | "bell" | "shock" | "sniff";
 
 let ctx: AudioContext | null = null;
 let muted = false;
@@ -131,6 +131,26 @@ export function play(s: Sfx, vol = 1) {
       break;
     case "seekerDown":
       tone(c, 400, 0.6, "sawtooth", v * 0.35, 0, 80);
+      break;
+    case "augPick":
+      // 증강 카드: 반짝이는 아르페지오
+      [784, 1175, 1568, 2093].forEach((f, i) => tone(c, f, 0.22, "sine", v * 0.35, i * 0.05));
+      tone(c, 392, 0.4, "triangle", v * 0.25, 0.05);
+      break;
+    case "intel":
+      tone(c, 1320, 0.07, "sine", v * 0.3);
+      tone(c, 1760, 0.12, "sine", v * 0.3, 0.08);
+      break;
+    case "bell":
+      [2093, 2637, 2093, 2637].forEach((f, i) => tone(c, f, 0.14, "triangle", v * 0.35, i * 0.09));
+      break;
+    case "shock":
+      noise(c, 0.6, v, 0, 600);
+      tone(c, 90, 0.6, "sine", v * 0.7, 0, 35);
+      break;
+    case "sniff":
+      noise(c, 0.12, v * 0.3, 0, 5000);
+      noise(c, 0.12, v * 0.3, 0.16, 5000);
       break;
   }
 }

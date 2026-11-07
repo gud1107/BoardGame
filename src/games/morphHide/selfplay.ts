@@ -29,7 +29,7 @@ export interface RoundStats {
 const EVAL_OPTS: Partial<GameOptions> = { huntSec: 180, rounds: 1, goalMode: false };
 
 /** 한 라운드 (5인: 술래 1 · 숨는 4), 정책을 강제로 지정 */
-export function evalRound(seed: number, hider: HiderParams, seeker: SeekerParams, opts: Partial<GameOptions> = EVAL_OPTS, players = 5): RoundStats {
+export function evalRound(seed: number, hider: HiderParams, seeker: SeekerParams, opts: Partial<GameOptions> = EVAL_OPTS, players = 5, forceAugs?: string[]): RoundStats {
   const m = createMatch(
     seed,
     Array.from({ length: players }, () => ({ bot: true, level: 10 })),
@@ -37,6 +37,7 @@ export function evalRound(seed: number, hider: HiderParams, seeker: SeekerParams
   );
   const rt = createHost(m);
   rt.overrides = { hider, seeker };
+  if (forceAugs) rt.forceAugs = forceAugs;
   let guard = 0;
   let caughtMoving = 0;
   const seen = new Set<number>();
@@ -62,10 +63,10 @@ export function evalRound(seed: number, hider: HiderParams, seeker: SeekerParams
   };
 }
 
-export function evalMany(seeds: number[], hider: HiderParams, seeker: SeekerParams, opts?: Partial<GameOptions>, players?: number): RoundStats {
+export function evalMany(seeds: number[], hider: HiderParams, seeker: SeekerParams, opts?: Partial<GameOptions>, players?: number, forceAugs?: string[]): RoundStats {
   const sum: RoundStats = { catchFrac: 0, seekerWin: 0, seekerDown: 0, escapes: 0, wrongHits: 0, decoys: 0, caughtMoving: 0 };
   for (const sd of seeds) {
-    const r = evalRound(sd, hider, seeker, opts, players);
+    const r = evalRound(sd, hider, seeker, opts, players, forceAugs);
     for (const k of Object.keys(sum) as (keyof RoundStats)[]) sum[k] += r[k];
   }
   for (const k of Object.keys(sum) as (keyof RoundStats)[]) sum[k] /= seeds.length;
