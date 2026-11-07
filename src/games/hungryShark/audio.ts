@@ -269,6 +269,25 @@ export class SharkAudio {
     this.tone(1046, 0.1, "triangle", 0.06, undefined, 0, true);
     this.tone(1568, 0.14, "triangle", 0.06, undefined, 0.07, true);
   }
+  /** 🧬 Augment cards surface: a deep sonar ping, then a shimmer that gets brighter per tier. */
+  augOffer(tier: "silver" | "gold" | "prism") {
+    this.tone(330, 0.5, "sine", 0.12, 660, 0, true);
+    this.tone(990, 0.6, "sine", 0.04, undefined, 0.12, true);
+    const run = tier === "prism" ? [1319, 1568, 1976, 2349, 2637] : tier === "gold" ? [1175, 1480, 1760] : [988, 1319];
+    run.forEach((n, i) => this.tone(n, 0.22, "triangle", 0.05, undefined, 0.3 + i * 0.07, true));
+    if (tier === "prism") this.noise(0.6, 5000, 0.6, 0.06, 9000, "highpass");
+  }
+  /** 🧬 Augment taken: rising bubble chime into a held fifth. */
+  augPick() {
+    [523, 784, 1047, 1568].forEach((n, i) => this.tone(n, 0.16, "triangle", 0.07, undefined, i * 0.06, true));
+    this.tone(784, 0.5, "sine", 0.05, undefined, 0.26, true);
+    this.tone(1175, 0.5, "sine", 0.04, undefined, 0.26, true);
+  }
+  /** 🧬 Reroll: a quick water swish as the cards shuffle. */
+  augReroll() {
+    this.noise(0.28, 900, 0.9, 0.12, 3200);
+    this.tone(660, 0.08, "triangle", 0.05, 990, 0.18, true);
+  }
   death() {
     this.tone(220, 1.2, "sawtooth", 0.2, 40);
   }

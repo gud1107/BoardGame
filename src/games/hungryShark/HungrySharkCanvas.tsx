@@ -158,7 +158,10 @@ export default function HungrySharkCanvas({
   const reroll = useCallback(() => {
     const w = worldRef.current;
     if (!w || pausedRef.current || evolveRef.current || bestiaryRef.current) return;
-    if (rerollAugments(w)) syncOffer();
+    if (rerollAugments(w)) {
+      audioRef.current?.augReroll();
+      syncOffer();
+    }
   }, [syncOffer]);
 
   const openBestiary = useCallback((open: boolean) => {
@@ -388,11 +391,11 @@ export default function HungrySharkCanvas({
           case "chest": pushBanner({ text: "보물 상자 발견!", sub: `+${ev.amount}🪙`, tone: "chest" }); break;
           case "death": a?.death(); break;
           case "augOffer":
-            a?.mission();
+            a?.augOffer(ev.tier);
             syncOffer();
             break;
           case "augPick": {
-            a?.skillReady();
+            a?.augPick();
             const ad = AUG_BY_ID[ev.id];
             pushBanner({ text: `${ad.icon} ${ad.name}`, sub: ad.desc, tone: "aug" });
             break;

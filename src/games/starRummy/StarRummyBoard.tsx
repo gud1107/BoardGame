@@ -20,6 +20,9 @@ import {
   type TileId,
 } from "./engine";
 import { openingScore, solve } from "./bot";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getStarRummySound, starRummyIntensity, starRummySoundCues } from "./starRummySound";
 
 const StarRummyTable3D = dynamic(() => import("./three/StarRummyTable3D"), { ssr: false, loading: () => <Loading3D /> });
 
@@ -132,6 +135,8 @@ function wantsHoldTip(): boolean {
 export default function StarRummyBoard({ state, viewerSeat, names, connectedSeats, isHost, onAction, onGameEnd, onRulebook }: StarRummyBoardProps) {
   const board3d = useBoardView("star-rummy-view");
   const [lowDetail] = useState(preferLowDetail);
+  useSoundCues(state, getStarRummySound, starRummySoundCues);
+  useSuiteBgm(getStarRummySound, state.phase !== "gameOver", starRummyIntensity(state));
   const [sortBy, setSortBy] = useState<"color" | "number">("color");
   const [draft, setDraft] = useState<TileId[][] | null>(null);
   const [selected, setSelected] = useState<TileId[]>([]);
@@ -352,13 +357,14 @@ export default function StarRummyBoard({ state, viewerSeat, names, connectedSeat
   const panel = "rounded-2xl border border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white/90 light:shadow-sm";
 
   return (
-    <div ref={rootRef} className="flex flex-col gap-3">
+    <div ref={rootRef} onPointerDownCapture={() => getStarRummySound().unlock()} className="flex flex-col gap-3">
       {/* header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs font-semibold text-white/70 light:text-slate-600">
           🌌 라운드 {state.round}/{state.totalRounds} · 🎴 남은 타일 {state.pool.length}
         </span>
         <div className="flex items-center gap-1.5">
+          <SuiteSoundHud suite={getStarRummySound} icon="🌌" label="Constellation Table" preview="opened" />
           <ViewToggle board={board3d} />
           <button onClick={onRulebook} className="rounded-full border border-white/10 px-3 py-1 text-[11px] text-white/50 hover:border-white/25 light:border-slate-200 light:text-slate-500">
             📖 룰북

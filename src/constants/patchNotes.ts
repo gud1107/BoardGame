@@ -64,6 +64,19 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.152.0",
+    releaseDate: "2026-11-08",
+    title: "🔗 온라인 판 어긋남 자동 복구 · 장고 게임 잠수 기준 완화 · 새 BGM 2곡",
+    changes: [
+      { game: "common", type: "IMPROVE", desc: "🔗 턴제 온라인 46종 — 방장 화면과 내 화면의 판이 어긋나면(동시에 누른 응답 등) 몇 초 안에 방장 판으로 자동으로 맞춰져요" },
+      { game: "common", type: "FIX", desc: "🔁 판을 다시 맞출 때 방장만 답해요 — 여러 명이 동시에 자기 판을 보내 사람마다 다른 판이 되던 문제" },
+      { game: "common", type: "IMPROVE", desc: "⏳ 스플렌더 듀얼·센추리·반지의 제왕 결투·하나미코지·로스트 시티·아발론 등 오래 생각하는 게임은 무응답 투표가 45초 → 2분 뒤에 떠요" },
+      { game: "play-dead", type: "FEAT", desc: "🪖 BGM “No Man's Land” + 판정 연출에 맞춘 효과음(구호·발사·연사·수류탄·엄폐 튕김·털썩) · 🔥 총공세부터 북소리 추가" },
+      { game: "star-rummy", type: "FEAT", desc: "🌌 BGM “Constellation Table” + 타일 내기·판 재배열·첫 등록·뽑기·손패 비우기 효과음 · 누군가 3장 이하면 템포 업" },
+      { game: "hungry-shark", type: "IMPROVE", desc: "🧬 증강 전용 효과음 — 카드가 뜰 때 등급별 음파 소리, 고를 때 차임, 다시 뽑기 소리" },
+    ],
+  },
+  {
     version: "v1.151.0",
     releaseDate: "2026-11-07",
     title: "🧬 배고픈 상어 잠수 증강 32종",

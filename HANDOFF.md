@@ -40,6 +40,18 @@
 - **2026-11-01 두 번째 정리**: 같은 일이 또 일어나 7,311줄/약 1MB가 됐다. 10-25 이전 날짜 섹션 104개(2026-09-14~10-23, 약 7,000줄)를 `docs/history.md` "Phase 30+" 아카이브로 원문 그대로 옮겼다. 3,500줄이 넘던 "🌗 테마 토글" 섹션도 함께 옮겼다. 한 헤더 밑에 여러 날짜의 후속 세션 기록을 `_이전 갱신: ..._` 식으로 계속 이어 붙이지 말 것.
 - **세션을 마칠 때마다** 내 섹션을 맨 위에 추가하고, 1주일 넘은 섹션은 그 자리에서 history.md 맨 끝 아카이브(현재 Phase 30+, "앞으로 이 문서에 추가할 때" 바로 위)로 옮길 것. 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 🔗 온라인 안정성 + 유지보수 정리 — 2026-11-08
+
+요청: 전체 게임 점검(같은 날 앞 세션) 결과 중 "온라인 안정성, 품질과 유지보수" 진행.
+- **판 어긋남 감지** `src/games/shared/room/useDesyncGuard.ts`: 방장이 판이 1.5초 잠잠해지면 상태 해시(`state-digest`, 키 순서 무관 FNV)를 1번 보냄 → 다른 사람은 자기 판도 0.8초 잠잠할 때만 비교 → 다르면 `state-request { desync: true }`. **desync 요청엔 방장만 답함**(`desyncSkipSyncAnswer`) — 원래는 상태를 가진 모두가 답해서 판이 갈라졌을 때 "마지막 도착이 이김"으로 사람마다 다른 판이 될 수 있었음. 일반 재접속 요청은 그대로. 5초 쿨다운, 60초에 3번 넘게 맞추면 그 세션은 스스로 끔(비결정적 필드가 있는 게임의 무한 리셋 방지).
+  - 46개 `*Game.tsx`에 codemod로 3곳씩(import · `useDesyncGuard(...)` · 채널 effect의 digest 핸들러/state-request 첫 줄). 채널 effect 안에선 `channelRef` 키로 모듈 함수 호출 → deps 경고·선언 순서 문제 없음.
+  - **제외**: liarGame(서버 판정), morphHide·worm·inkDuel·mergeDefense(방장 스냅샷 실시간). eraMarch는 자체 checksum.
+  - 테스트: 판정 로직 + 엔진 16종을 두 벌로 재생(한 벌은 JSON 왕복)해 매 수 해시 일치. 코요테·블러프 룰렛은 라운드 넘김이 방장 행동이라 일찍 멈춤(그래도 거기까지 비교).
+- **잠수 투표 기준 한 곳으로** `src/games/shared/bot/idleThresholds.ts` `IDLE_VOTE_MS` quick 45s / strategy 120s / deep 180s. strategy = splendorDuel·splendor·century·lotrDuel·hanamikoji·lostCities·avalon·summonersRift·destinyWar39·hillOfTruth, deep = chess. 별빛 러미 75s·텔레파시 60s는 원래 값 유지.
+- **별빛 러미 테스트 타임아웃**: 봇은 느리지 않음(Lv.10 평균 41ms·최대 120ms/수). 셀프플레이 6판 중 4판을 1라운드로 줄이고 `SIM_TIMEOUT_MS` 120s.
+- **사운드**: `playDead/playDeadSound.ts`(판정 타임라인 `SHOW`에 맞춰 오프셋을 넣은 SFX — 공개 결과만 소리, 실제 피해량·생존 여부는 안 샘) · `starRummy/starRummySound.ts` · 상어 `audio.ts`에 `augOffer(tier)/augPick/augReroll`. `proceduralSuites.test.ts` 개수 37 → 39.
+- **안 한 것**: `*Game.tsx` 6만 줄 공용 훅 통합(이번엔 공통 두 조각만 분리), 숨김 정보 서버 판정 이전, 라이트 모드 색 토큰, 상어 증강 화면 360px 실기기 확인, 새 BGM 브라우저 청취 확인.
+
 ## 🧬 배고픈 상어 — 잠수 증강 32종 — 2026-11-07
 
 요청: "헝그리 샤크 증강 적용"(같은 날 시대의 진격·변신 숨바꼭질·꽃게·합성 디펜스에 이어). 1인 게임이라 롤 칼바람식 3장 고르기를 **잠수 한 판 안에서만** 유지되게 붙임. 룰북 md §11에 표·측정 결과.

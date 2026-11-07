@@ -27,6 +27,9 @@ import {
 import { buildFx, chantAt, describeEvents, fightersAt, MOVE_LABEL, SHOW } from "./show";
 import { SEAT_COLORS } from "./three/PlayDeadArena3D";
 import HowToPlay from "./HowToPlay";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import { getPlayDeadSound, playDeadIntensity, playDeadSoundCues } from "./playDeadSound";
 
 const PlayDeadArena3D = dynamic(() => import("./three/PlayDeadArena3D"), { ssr: false });
 
@@ -84,6 +87,8 @@ export default function PlayDeadBoard(props: PlayDeadBoardProps) {
   const { state, viewerSeat: me, names, onCommit } = props;
   const mine = state.seats[me];
   const [lowDetail] = useState(preferLowDetail);
+  useSoundCues(state, getPlayDeadSound, playDeadSoundCues);
+  useSuiteBgm(getPlayDeadSound, state.phase !== "ended", playDeadIntensity(state));
   const [gl] = useState(() => webglAvailable());
 
   // --- 판정 연출 타임라인 -------------------------------------------------
@@ -164,7 +169,7 @@ export default function PlayDeadBoard(props: PlayDeadBoardProps) {
   const nm = (s: Seat) => (s === me ? "나" : (names[s] ?? `${s + 1}번`));
 
   return (
-    <div className="flex flex-col gap-3">
+    <div onPointerDownCapture={() => getPlayDeadSound().unlock()} className="flex flex-col gap-3">
       {/* 상단 바 */}
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 light:border-slate-200 light:bg-white">
         <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -178,6 +183,7 @@ export default function PlayDeadBoard(props: PlayDeadBoardProps) {
           )}
         </div>
         <div className="flex items-center gap-1.5 text-xs">
+          <SuiteSoundHud suite={getPlayDeadSound} icon="🪖" label="No Man's Land" preview="surge" />
           {(["choosing", "resolved"] as const).map((ph, i) => (
             <span
               key={ph}
