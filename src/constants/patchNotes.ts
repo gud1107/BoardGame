@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.150.1",
+    releaseDate: "2026-11-07",
+    title: "✨ 랜덤 합성 디펜스 증강 체감 수치 · 비교 창",
+    changes: [
+      { game: "merge-defense", type: "IMPROVE", desc: "📈 증강 카드마다 지금 내 보드 기준 효과 — “내 보드 화력 +12%”, “웨이브마다 약 +32골드”, “탈락 기준 55 → 63마리”" },
+      { game: "merge-defense", type: "FEAT", desc: "✨ 증강 비교 창(위 ✨ 버튼·증강 칩 누르기) — 모두의 증강 이름·설명·합계 효과, 다음 증강 웨이브와 등급 확률" },
+    ],
+  },
+  {
     version: "v1.150.0",
     releaseDate: "2026-11-07",
     title: "✨ 꽃게 서바이벌 증강 38종",

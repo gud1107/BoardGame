@@ -19,7 +19,8 @@ import {
   WAVE_TICKS,
   type MergeDefenseState,
 } from "./engine";
-import { AUG_BALANCE, AUG_PICK_TICKS, AUG_WAVES, AUGMENT_LIST, AUGMENTS, augTotals } from "./augments";
+import { AUG_BALANCE, AUG_PICK_TICKS, AUG_WAVES, AUGMENT_LIST, AUGMENTS, augTotals, describeTotals } from "./augments";
+import { augmentPreview, boardFirepower } from "./augmentPreview";
 
 /** Steps until the tick where wave `w` starts (and its pick round, if any, opens). */
 function toWave(s: MergeDefenseState, w: number): MergeDefenseState {
@@ -170,5 +171,27 @@ describe("merge defense ✨ augments", () => {
       expect(s.boards.some((b) => (b.augments?.length ?? 0) >= 2)).toBe(true);
       expect(computeRankings(s).filter((r) => r.rank === 1).length).toBeGreaterThanOrEqual(1);
     }
+  });
+
+  it("card previews read the actual board", () => {
+    const s = startGame(2, 5, [], "survival", null, "normal", "classic", 3, true);
+    s.wave = 4;
+    const b = s.boards[0];
+    for (let i = 0; i < 6; i++) b.units[i] = { kind: "archer", grade: 2, cd: 0 }; // all 물리
+    expect(boardFirepower(s, b)).toBeGreaterThan(0);
+    expect(augmentPreview(s, b, "sharp")!.text).toMatch(/화력 \+1\d%/);
+    expect(augmentPreview(s, b, "sharp")!.tone).toBe("up");
+    expect(augmentPreview(s, b, "arcane")!.tone).toBe("weak"); // no magic towers
+    expect(augmentPreview(s, b, "specialist")!.text).toMatch(/\+60%/); // every tower is the main kind
+    expect(augmentPreview(s, b, "bulwark")!.text).toContain(`${boardLimit(s, b)} → ${boardLimit(s, b) + 8}`);
+    expect(augmentPreview(s, b, "ascend")!.text).toContain("영웅");
+    expect(augmentPreview(s, b, "pierce")!.text).toMatch(/W12부터/);
+    // Every card has something to say on a normal board.
+    for (const a of AUGMENT_LIST) expect(augmentPreview({ ...s, mode: "versus" }, b, a.id), a.id).not.toBeNull();
+  });
+
+  it("describes summed effects for the comparison panel", () => {
+    expect(describeTotals(augTotals(["sharp", "overclock"]))).toEqual(["물리 피해 +14%", "공격 속도 +22%", "사거리 -10"]);
+    expect(describeTotals(augTotals([]))).toEqual([]);
   });
 });

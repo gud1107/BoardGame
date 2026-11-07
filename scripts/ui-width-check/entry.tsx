@@ -5,6 +5,7 @@
 import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { drawRecordCard } from "@/games/mergeDefense/recordCard";
+import AugmentBook from "@/games/mergeDefense/AugmentBook";
 import MergeDefenseBoard from "@/games/mergeDefense/MergeDefenseBoard";
 import MergeDefenseGame from "@/games/mergeDefense/MergeDefenseGame";
 import MergeDefenseResults from "@/games/mergeDefense/MergeDefenseResults";
@@ -179,6 +180,15 @@ const SCREENS: Record<string, () => ReactNode> = {
       for (let seat = 0; seat < 4; seat++) if (s.boards[seat].augOffer && s.wave < 10) s = applyAction(s, seat, { type: "augment", id: s.boards[seat].augOffer!.cards[0] });
     }
     return <MergeDefenseBoard state={s} mySeat={0} names={names} onAction={noop} />;
+  },
+  "augment-book": () => {
+    const s = startGame(4, 3, [1, 2, 3], "versus", null, "normal", "classic", 3, true);
+    s.wave = 12;
+    s.boards[0].augments = ["sharp", "overclock"];
+    s.boards[1].augments = ["midas", "bulwark", "warchest"];
+    s.boards[2].augments = ["gambler"];
+    s.boards[3].alive = false;
+    return <AugmentBook state={s} mySeat={0} names={{ 0: "나", 1: "아주긴닉네임을가진상대플레이어", 2: "AI 3", 3: "AI 4" }} onClose={noop} />;
   },
   "board-intro": () => <MergeDefenseBoard state={startGame(2, 5, [1], "survival", null, "normal", "plaza")} mySeat={0} names={names} onAction={noop} mapBest={27} />,
   lobby: () => <MergeDefenseGame participants={[]} onComplete={noop} />,

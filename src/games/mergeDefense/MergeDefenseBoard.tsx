@@ -81,6 +81,8 @@ import MapIntro from "./MapIntro";
 import GemGuide from "./GemGuide";
 import EventLog, { TowerName, type LogEntry } from "./EventLog";
 import { AugmentChips, AugmentPicker } from "./AugmentPicker";
+import AugmentBook from "./AugmentBook";
+import { augmentPreview, type AugPreview } from "./augmentPreview";
 import { AUGMENTS, AUG_TIER_INFO, augTotals } from "./augments";
 import { AUTO_DEFAULT, AUTO_PRESET_NAME_MAX, autoPresetLink, describeAutoConfig, sameAutoConfig, upsertAutoPreset, type AutoConfig, type AutoPreset } from "./autoSettings";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
@@ -382,6 +384,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
     waveRef.current = state.wave;
   }, [state.wave]);
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  const [augBookOpen, setAugBookOpen] = useState(false);
   const bannerKey = useRef(0);
   const [goldPop, setGoldPop] = useState<GoldPop | null>(null);
   const bornAtRef = useRef<Record<number, { t: number; big: boolean }>>({});
@@ -1227,6 +1230,16 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   }, [mySeat]);
 
   const interactive = me.alive && state.phase === "playing" && resolvedView === mySeat;
+  // ✨ "what each offered card does for my board now" — recomputed only when the board's make-up changes, not every tick.
+  const offerCards = me.augOffer?.cards.join(",") ?? "";
+  const boardKey = `${state.wave}|${me.focus ?? 0}|${me.brace ?? 0}|${me.gems}|${Math.floor(me.gold / 10)}|${me.summons}|${(me.augments ?? []).join(",")}|${me.units.map((u) => (u ? `${u.kind}${u.grade}` : "-")).join("")}|${Object.values(me.upgrades).join("")}`;
+  const augPreviews = useMemo(() => {
+    if (!offerCards) return undefined;
+    const out: Record<string, AugPreview | null> = {};
+    for (const id of offerCards.split(",")) out[id] = augmentPreview(state, me, id);
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offerCards, boardKey]);
   /** A selected own unit → a big 판매 button sits right next to 소환. */
   const sellable = interactive && selectedUnit != null;
 
@@ -1645,6 +1658,11 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
             )}
           </span>
           <SuiteSoundHud suite={getMergeDefenseBgm} icon="🏰" label="Fortress Pulse" preview="preview" showSfx={false} />
+          {state.augments && (
+            <button onClick={() => setAugBookOpen(true)} title="✨ 증강 비교 — 모두의 증강과 다음 증강 시각" className="rounded-full border border-fuchsia-300/40 px-2 py-0.5 text-[11px] hover:border-fuchsia-300/80 light:border-fuchsia-300">
+              ✨<span className="hidden sm:inline"> 증강</span>
+            </button>
+          )}
           <button onClick={() => setRulebookOpen(true)} className="rounded-full border border-white/15 px-2 py-0.5 text-[11px] hover:border-white/30 light:border-slate-300">
             📖<span className="hidden sm:inline"> 룰</span>
           </button>
@@ -1692,7 +1710,18 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
                   <span className="w-full text-center font-sans font-bold text-rose-300/80 light:text-rose-600">💀 탈락</span>
                 )}
               </div>
-              {state.augments && <AugmentChips ids={b.augments} compact />}
+              {state.augments && (b.augments?.length ?? 0) > 0 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAugBookOpen(true);
+                  }}
+                  aria-label={`${names[seat]}의 증강 보기`}
+                  className="text-left"
+                >
+                  <AugmentChips ids={b.augments} compact />
+                </button>
+              )}
             </div>
           );
         })}
@@ -1777,7 +1806,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           </div>
         )}
         {interactive && me.augOffer && (
-          <AugmentPicker board={me} tick={state.tick} onPick={(id) => onAction({ type: "augment", id })} onReroll={() => onAction({ type: "reroll" })} />
+          <AugmentPicker board={me} tick={state.tick} previews={augPreviews} onPick={(id) => onAction({ type: "augment", id })} onReroll={() => onAction({ type: "reroll" })} />
         )}
         {introOn && <MapIntro map={sanitizeMap(state.map)} random={randomMap} best={mapBest} difficulty={sanitizeDifficulty(state.difficulty)} />}
         {selectedMob &&
@@ -1890,10 +1919,11 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
         </div>
         <p className="text-[10px] leading-tight text-white/45 light:text-slate-400">보스·전쟁군주는 졸개를 다 부르면 광폭화해 타워를 기절시켜요 · 골렘은 쓰러지면 2마리로 갈라져요</p>
         {state.augments && (
-          <div className="flex flex-wrap items-center gap-1 text-[10px] text-white/60 light:text-slate-500">
+          <button onClick={() => setAugBookOpen(true)} className="flex flex-wrap items-center gap-1 text-left text-[10px] text-white/60 light:text-slate-500" title="✨ 증강 비교 열기">
             <span className="font-semibold">✨ 증강</span>
             {me.augments?.length ? <AugmentChips ids={me.augments} /> : <span>웨이브 {"3·10·18"} 시작 때 한 장씩 골라요</span>}
-          </div>
+            <span className="text-[10px] underline decoration-dotted opacity-70">비교</span>
+          </button>
         )}
         <div className="flex items-center justify-between text-sm font-bold text-white light:text-slate-900">
           <span className="relative">
@@ -2098,6 +2128,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
       </div>
 
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
+      {augBookOpen && <AugmentBook state={state} mySeat={mySeat} names={names} onClose={() => setAugBookOpen(false)} />}
     </div>
   );
 }

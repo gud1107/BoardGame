@@ -3,6 +3,13 @@
 import { useState } from "react";
 import { AUGMENTS, AUG_PICK_TICKS, AUG_REROLLS, AUG_TIER_INFO, AUG_WAVES, type AugmentId, type AugTier } from "./augments";
 import type { Board } from "./engine";
+import type { AugPreview } from "./augmentPreview";
+
+const PREVIEW_TONE: Record<AugPreview["tone"], string> = {
+  up: "bg-emerald-400/90 text-emerald-950",
+  info: "bg-sky-300/90 text-sky-950",
+  weak: "bg-black/35 text-white/75",
+};
 
 const TIER_BG: Record<AugTier, string> = {
   silver: "from-slate-600/95 to-slate-800/95",
@@ -15,7 +22,20 @@ const TIER_BG: Record<AugTier, string> = {
  * keeps running underneath, so it can fold into a pill ("접기") and the
  * first card is taken when the timer hits 0.
  */
-export function AugmentPicker({ board, tick, onPick, onReroll }: { board: Board; tick: number; onPick: (id: AugmentId) => void; onReroll: () => void }) {
+export function AugmentPicker({
+  board,
+  tick,
+  onPick,
+  onReroll,
+  previews,
+}: {
+  board: Board;
+  tick: number;
+  onPick: (id: AugmentId) => void;
+  onReroll: () => void;
+  /** "What this card does for my board right now", per offered card. */
+  previews?: Record<AugmentId, AugPreview | null>;
+}) {
   const [folded, setFolded] = useState<number | null>(null);
   const offer = board.augOffer;
   if (!offer) return null;
@@ -35,7 +55,7 @@ export function AugmentPicker({ board, tick, onPick, onReroll }: { board: Board;
     );
   }
   return (
-    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-slate-950/70 p-1.5 backdrop-blur-[2px] sm:gap-2 sm:p-3" role="dialog" aria-label="증강 선택">
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-start gap-1 overflow-y-auto sm:justify-center sm:gap-1.5 rounded-2xl bg-slate-950/70 p-1.5 backdrop-blur-[2px] sm:gap-2 sm:p-3" role="dialog" aria-label="증강 선택">
       <div className="flex w-full max-w-[560px] items-center justify-between gap-2 text-white">
         <p className="text-xs font-black sm:text-sm">
           ✨ 증강 {offer.round + 1}/{AUG_WAVES.length}{" "}
@@ -67,14 +87,19 @@ export function AugmentPicker({ board, tick, onPick, onReroll }: { board: Board;
             <button
               key={`${offer.round}-${id}`}
               onClick={() => onPick(id)}
-              className={`flex min-h-[96px] animate-[md-pop_0.35s_ease-out] flex-col items-center gap-0.5 rounded-xl border-2 bg-gradient-to-b p-1.5 text-center text-white shadow-xl transition hover:-translate-y-0.5 active:scale-95 sm:min-h-[130px] sm:p-2 ${TIER_BG[def.tier]}`}
+              className={`flex animate-[md-pop_0.35s_ease-out] flex-col items-center gap-0.5 rounded-xl border-2 bg-gradient-to-b p-1.5 text-center text-white shadow-xl transition hover:-translate-y-0.5 active:scale-95 sm:min-h-[150px] sm:p-2 ${TIER_BG[def.tier]}`}
               style={{ borderColor: AUG_TIER_INFO[def.tier].color, animationDelay: `${i * 70}ms` }}
             >
-              <span className="text-2xl leading-none sm:text-3xl" aria-hidden>
+              <span className="text-xl leading-none sm:text-3xl" aria-hidden>
                 {def.emoji}
               </span>
               <b className="text-[12px] leading-tight break-keep sm:text-sm">{def.name}</b>
-              <span className="text-[10px] leading-snug break-keep opacity-90 sm:text-[11px]">{def.desc}</span>
+              <span className="text-[10px] leading-snug break-keep opacity-90 max-sm:line-clamp-4 sm:text-[11px]">{def.desc}</span>
+              {previews?.[id] && (
+                <span className={`mt-0.5 w-full rounded-md px-1 py-0.5 text-[10px] leading-tight font-bold break-keep max-sm:line-clamp-2 sm:text-[11px] ${PREVIEW_TONE[previews[id]!.tone]}`}>
+                  {previews[id]!.text}
+                </span>
+              )}
               <span className="mt-auto rounded-full bg-black/30 px-1.5 text-[9px] font-semibold opacity-80">
                 {AUG_TIER_INFO[def.tier].mark} {def.tag}
               </span>

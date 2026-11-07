@@ -206,3 +206,38 @@ export function mergeGoldAt(wave: number): number {
 export function augRoundAt(wave: number): number {
   return AUG_WAVES.indexOf(wave);
 }
+
+const TOTAL_LABELS: { key: keyof AugTotals; label: (v: number) => string }[] = [
+  { key: "phys", label: (v) => `물리 피해 +${Math.round(v * 100)}%` },
+  { key: "magic", label: (v) => `마법 피해 +${Math.round(v * 100)}%` },
+  { key: "low", label: (v) => `일반·희귀 피해 +${Math.round(v * 100)}%` },
+  { key: "high", label: (v) => `전설·신화 피해 +${Math.round(v * 100)}%` },
+  { key: "rainbow", label: (v) => `종류당 피해 +${Math.round(v * 100)}%` },
+  { key: "specialist", label: (v) => `주력 종류 피해 +${Math.round(v * 100)}%` },
+  { key: "crit", label: (v) => `치명타 +${Math.round(v * 100)}%p` },
+  { key: "critMult", label: (v) => `치명 배율 +${v.toFixed(1)}` },
+  { key: "haste", label: (v) => `공격 속도 +${Math.round(v * 100)}%` },
+  { key: "range", label: (v) => `사거리 ${v > 0 ? "+" : ""}${Math.round(v)}` },
+  { key: "pierce", label: (v) => `방어·저항 ${Math.round(v * 100)}% 무시` },
+  { key: "big", label: (v) => `보스 피해 +${Math.round(v * 100)}%` },
+  { key: "slow", label: (v) => `몬스터 감속 ${Math.round(v * 100)}%` },
+  { key: "killGold", label: (v) => `처치 골드 +${Math.round(v * 100)}%` },
+  { key: "waveGold", label: (v) => `웨이브 보너스 +${Math.round(v * 100)}%` },
+  { key: "interest", label: (v) => `이자 ${Math.round(v * 100)}%` },
+  { key: "cheap", label: () => "소환비 +1씩" },
+  { key: "lucky", label: (v) => `희귀 소환 +${Math.round(v * 100)}%p` },
+  { key: "gambleRetry", label: () => "도박 꽝 재굴림" },
+  { key: "mergeGold", label: () => "합성 골드" },
+  { key: "sellAll", label: () => "판매 100%" },
+  { key: "limit", label: (v) => `탈락 기준 +${v}` },
+  { key: "stunCut", label: (v) => `기절 −${Math.round(v * 100)}%` },
+  { key: "sendHp", label: (v) => `보내는 몬스터 체력 +${Math.round(v * 100)}%` },
+  { key: "foeCut", label: (v) => `받는 견제 체력 −${Math.round(v * 100)}%` },
+  { key: "income", label: (v) => `보내기 수입 ×${(1 + v).toFixed(1)}` },
+  { key: "bossGems", label: (v) => `보스 💎 +${v}` },
+];
+
+/** Non-zero summed effects as short Korean labels (for the ✨ 증강 비교 panel). */
+export function describeTotals(t: AugTotals): string[] {
+  return TOTAL_LABELS.filter(({ key }) => t[key] !== 0).map(({ key, label }) => label(t[key]));
+}
