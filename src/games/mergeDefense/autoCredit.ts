@@ -53,7 +53,7 @@ export function autoPowerShare(board: Board, slots: ReadonlySet<number>): number
   let auto = 0;
   board.units.forEach((u, i) => {
     if (!u) return;
-    const dpt = unitDamage(u, board) / unitInterval(u);
+    const dpt = unitDamage(u, board) / unitInterval(u, board);
     all += dpt;
     if (slots.has(i)) auto += dpt;
   });

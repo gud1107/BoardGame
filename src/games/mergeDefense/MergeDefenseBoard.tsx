@@ -6,7 +6,7 @@ import {
   BOARD_W,
   GRADE_COLORS,
   GRADE_NAMES,
-  eliminationLimit,
+  boardLimit,
   MAX_GRADE,
   MAX_UPGRADE,
   PREP_TICKS,
@@ -80,6 +80,8 @@ import RulebookModal from "./RulebookModal";
 import MapIntro from "./MapIntro";
 import GemGuide from "./GemGuide";
 import EventLog, { TowerName, type LogEntry } from "./EventLog";
+import { AugmentChips, AugmentPicker } from "./AugmentPicker";
+import { AUGMENTS, AUG_TIER_INFO, augTotals } from "./augments";
 import { AUTO_DEFAULT, AUTO_PRESET_NAME_MAX, autoPresetLink, describeAutoConfig, sameAutoConfig, upsertAutoPreset, type AutoConfig, type AutoPreset } from "./autoSettings";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
@@ -296,8 +298,8 @@ const slotAt = slotAtPoint;
 /** Attack numbers for one unit on `board` (upgrades included): per hit, hits/s, reach, damage/s. */
 function unitStats(u: Unit, board: Board) {
   const dmg = unitDamage(u, board);
-  const perSec = TICKS_PER_SEC / unitInterval(u);
-  return { dmg, perSec, range: unitRange(u), dps: dmg * perSec, type: DAMAGE_TYPE_LABEL[UNITS[u.kind].dmgType] };
+  const perSec = TICKS_PER_SEC / unitInterval(u, board);
+  return { dmg, perSec, range: unitRange(u, board), dps: dmg * perSec, type: DAMAGE_TYPE_LABEL[UNITS[u.kind].dmgType] };
 }
 const fmt1 = (v: number) => (v >= 100 ? Math.round(v).toLocaleString() : v.toFixed(1).replace(/\.0$/, ""));
 
@@ -735,7 +737,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           const color = MOB_SPARK[m.kind] ?? "#bef264";
           fx.push({ type: "spark", x: p.x, y: p.y, color, t0: now, dur: m.kind === "boss" || m.kind === "warlord" ? 900 : 380, seed: m.id });
           if (m.kind === "boss") fx.push({ type: "ring", x: p.x, y: p.y, color: "#facc15", r0: 10, r1: 70, t0: now, dur: 700 });
-          if (view === mySeat) fx.push({ type: "text", x: p.x, y: p.y - 10, text: `+${killGold(m.kind, state.wave)}`, color: "#fde047", t0: now, dur: 750, size: m.kind === "boss" ? 16 : 11 });
+          if (view === mySeat) fx.push({ type: "text", x: p.x, y: p.y - 10, text: `+${Math.round(killGold(m.kind, state.wave) * (1 + augTotals(state.boards[mySeat]?.augments).killGold))}`, color: "#fde047", t0: now, dur: 750, size: m.kind === "boss" ? 16 : 11 });
         }
       }
     }
@@ -828,6 +830,26 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           if (audible) audio.playSendUnit();
         }
         if (ev.to === view) fx.push({ type: "portal", color: HIRE_FX_COLOR[ev.mob], label: `${HIRES[ev.mob].name} 등장!`, t0: now, dur: 1500, seed: ev.id });
+        continue;
+      }
+      if (ev.type === "aug-round") {
+        const t = AUG_TIER_INFO[ev.tier];
+        showBanner({ text: `✨ 증강 선택! ${t.mark} ${t.name}`, sub: "세 장 중 한 장 — 15초 안에 고르세요", tone: "good" });
+        if (audible) audio.playSummon(true);
+        continue;
+      }
+      if (ev.type === "augment") {
+        const def = AUGMENTS[ev.aug];
+        if (def && ev.seat === mySeat) {
+          fx.push({ type: "ring", x: BOARD_W / 2, y: BOARD_H / 2, color: AUG_TIER_INFO[def.tier].color, r0: 10, r1: 110, t0: now, dur: 700 });
+          fx.push({ type: "text", x: BOARD_W / 2, y: BOARD_H / 2, text: `${def.emoji} ${def.name}${ev.auto ? " (자동)" : ""}`, color: AUG_TIER_INFO[def.tier].color, t0: now, dur: 1500, size: 20 });
+          if (audible) audio.playUpgrade();
+        }
+        if (def && ev.seat !== mySeat) {
+          bannerKey.current += 1;
+          const key = bannerKey.current;
+          setEventLog((l) => [...l, { key, text: `${names[ev.seat] ?? "상대"} ✨ ${def.emoji} ${def.name}`, sub: def.desc, tone: "wave" as const, wave: waveRef.current }].slice(-40));
+        }
         continue;
       }
       if (ev.type === "out") {
@@ -1073,7 +1095,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
             bornAt: bornAtRef.current,
             hits: hitsRef.current,
             firedAt: firedRef.current,
-            limit: eliminationLimit(s),
+            limit: boardLimit(s, s.boards[view]),
           };
           // 3D board: the WebGL scene draws the world, this canvas becomes its
           // overlay (HP bars, labels, effects) through the scene's board→screen map.
@@ -1191,7 +1213,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, w, h);
         ctx.setTransform(k, 0, 0, k, 0, 0);
-        drawBoard(ctx, live.boards[seat], { alpha: live.phase === "playing" ? liveAlpha : 0, now: real, mini: true, limit: eliminationLimit(live) });
+        drawBoard(ctx, live.boards[seat], { alpha: live.phase === "playing" ? liveAlpha : 0, now: real, mini: true, limit: boardLimit(live, live.boards[seat]) });
         const mfx = miniFxRef.current[seat];
         if (mfx && mfx.length) {
           miniFxRef.current[seat] = mfx.filter((f) => real - f.t0 < f.dur);
@@ -1295,7 +1317,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   }
 
   const guideShown = guideVisible(guide, state.wave);
-  const limit = eliminationLimit(state);
+  const limit = boardLimit(state, me);
   const load = fieldLoad(me);
   const loadPct = Math.min(1, load / limit);
   const cost = summonCost(me);
@@ -1634,7 +1656,8 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
         {others.map((seat) => {
           const b = state.boards[seat];
           const oppLoad = fieldLoad(b);
-          const l = Math.min(1, oppLoad / limit);
+          const oppLimit = boardLimit(state, b);
+          const l = Math.min(1, oppLoad / oppLimit);
           return (
             <div
               key={seat}
@@ -1662,13 +1685,14 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
                     <span className="text-white/70 light:text-slate-600">👾 몬스터</span>
                     <span className={`font-bold ${l > 0.75 ? "animate-pulse text-rose-300 light:text-rose-600" : l > 0.5 ? "text-amber-300 light:text-amber-600" : "text-white/80 light:text-slate-700"}`}>
                       {oppLoad}
-                      <span className="text-rose-300/90 light:text-rose-600">/{limit}마리</span>
+                      <span className="text-rose-300/90 light:text-rose-600">/{oppLimit}마리</span>
                     </span>
                   </>
                 ) : (
                   <span className="w-full text-center font-sans font-bold text-rose-300/80 light:text-rose-600">💀 탈락</span>
                 )}
               </div>
+              {state.augments && <AugmentChips ids={b.augments} compact />}
             </div>
           );
         })}
@@ -1751,6 +1775,9 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           <div className="pointer-events-none absolute top-2 left-2 rounded-full bg-black/60 px-2.5 py-1 text-[11px] text-white">
             👀 {names[resolvedView]} 관전 중
           </div>
+        )}
+        {interactive && me.augOffer && (
+          <AugmentPicker board={me} tick={state.tick} onPick={(id) => onAction({ type: "augment", id })} onReroll={() => onAction({ type: "reroll" })} />
         )}
         {introOn && <MapIntro map={sanitizeMap(state.map)} random={randomMap} best={mapBest} difficulty={sanitizeDifficulty(state.difficulty)} />}
         {selectedMob &&
@@ -1862,6 +1889,12 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           </span>
         </div>
         <p className="text-[10px] leading-tight text-white/45 light:text-slate-400">보스·전쟁군주는 졸개를 다 부르면 광폭화해 타워를 기절시켜요 · 골렘은 쓰러지면 2마리로 갈라져요</p>
+        {state.augments && (
+          <div className="flex flex-wrap items-center gap-1 text-[10px] text-white/60 light:text-slate-500">
+            <span className="font-semibold">✨ 증강</span>
+            {me.augments?.length ? <AugmentChips ids={me.augments} /> : <span>웨이브 {"3·10·18"} 시작 때 한 장씩 골라요</span>}
+          </div>
+        )}
         <div className="flex items-center justify-between text-sm font-bold text-white light:text-slate-900">
           <span className="relative">
             <span key={goldPop?.key ?? 0} className={`inline-block ${goldPop ? "animate-[md-gold-glow_0.6s_ease-out] text-amber-300 light:text-amber-600" : ""}`}>
@@ -1960,7 +1993,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
             }`}
           >
             <span className="block whitespace-nowrap">{sellArm === selected ? "정말 판매?" : "💰 판매"}</span>
-            <span className="block font-mono whitespace-nowrap">+🪙{sellValue(selectedUnit)}</span>
+            <span className="block font-mono whitespace-nowrap">+🪙{sellValue(selectedUnit, me)}</span>
             <span className="block text-[10px] leading-tight font-semibold break-keep opacity-90">
               {sellArm === selected ? "한 번 더 누르기" : (selectedUnit.paid ?? 0) === 0 ? "💎도박 유닛 환급 없음" : "쓴 골드 80%"}
             </span>
@@ -2042,7 +2075,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           <span className="flex flex-col leading-tight">
             <span className="text-[12px] font-bold">🎯 집중 {focusLevel}/{FOCUS_MAX}</span>
             <span className="text-[10px] opacity-70">
-              치명타 {Math.round(critStats(focusLevel).chance * 100)}% ×{critStats(focusLevel).mult.toFixed(2)}
+              치명타 {Math.round((critStats(focusLevel).chance + augTotals(me.augments).crit) * 100)}% ×{(critStats(focusLevel).mult + augTotals(me.augments).critMult).toFixed(2)}
             </span>
           </span>
           <span className="font-mono text-[10px] opacity-80">{focusLevel >= FOCUS_MAX ? "MAX" : `🪙${focusCost(focusLevel)}`}</span>

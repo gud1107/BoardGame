@@ -5,6 +5,7 @@ import { COMBO, MAPS, sanitizeMap, type Action, type Difficulty, type GameMode, 
 import RoomSettings, { DIFFICULTY_LABEL } from "./RoomSettings";
 import WaveChart, { type WaveSeries } from "./WaveChart";
 import RecordBurst from "./RecordBurst";
+import { AugmentChips } from "./AugmentPicker";
 import { recordCardBlob, recordCardFileName, type RecordCardInput } from "./recordCard";
 
 export interface MatchRecord {
@@ -115,6 +116,7 @@ export default function MergeDefenseResults({
   settings,
   onLeave,
   onRestart,
+  augments,
 }: {
   rankings: RankedSeat[];
   names: Record<number, string>;
@@ -127,6 +129,8 @@ export default function MergeDefenseResults({
   settings: ComponentProps<typeof RoomSettings>;
   onLeave: () => void;
   onRestart: () => void;
+  /** ✨ 증강 each seat ended with (absent in classic matches). */
+  augments?: Record<number, readonly string[] | undefined>;
 }) {
   const winner = rankings.find((r) => r.rank === 1);
   const iWon = winner?.seat === mySeat;
@@ -258,6 +262,11 @@ export default function MergeDefenseResults({
                 <td className="max-w-[7.5rem] truncate border-b border-white/5 px-1.5 max-[350px]:px-1 py-2 text-left text-white sm:max-w-none sm:px-2" title={names[seat]}>
                   {seat === mySeat && <span className="mr-1 text-amber-200">나</span>}
                   {names[seat]}
+                  {augments?.[seat]?.length ? (
+                    <div className="mt-0.5">
+                      <AugmentChips ids={augments[seat]} compact />
+                    </div>
+                  ) : null}
                 </td>
                 <td className="border-b border-white/5 px-1.5 max-[350px]:px-1 py-2 text-right text-amber-200 sm:px-2">{wave}</td>
                 <td className={`border-b border-white/5 px-1.5 max-[350px]:px-1 py-2 text-right text-white/70 sm:px-2 ${versus ? "max-[420px]:hidden" : "max-[350px]:hidden"}`}>{kills.toLocaleString("ko-KR")}</td>

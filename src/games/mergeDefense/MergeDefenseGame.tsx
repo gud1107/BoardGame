@@ -348,7 +348,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
       autoCreditRef.current = newAutoCredit();
       const startMap = sanitizeMap(payload?.map);
       lastMapRef.current = startMap;
-      const state = startGame(playerCount, seed, botSeats, startMode, sanitizeLimit(payload?.limit), sanitizeDifficulty(payload?.difficulty), startMap, sanitizeAiLevel(payload?.aiLevel));
+      const state = startGame(playerCount, seed, botSeats, startMode, sanitizeLimit(payload?.limit), sanitizeDifficulty(payload?.difficulty), startMap, sanitizeAiLevel(payload?.aiLevel), true);
       simRef.current = state;
       setGameState(state);
       setFinalRankings(null);
@@ -1196,6 +1196,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
         settings={{ ...roomSettingsProps, playerCount }}
         onLeave={handleLeave}
         onRestart={sendGameStart}
+        augments={gameState?.augments ? Object.fromEntries(gameState.boards.map((b, i) => [i, b.augments])) : undefined}
       />,
     );
   }

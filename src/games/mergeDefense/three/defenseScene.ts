@@ -1468,7 +1468,7 @@ export function createDefenseScene(canvas: HTMLCanvasElement, quality: "high" | 
     if (rangeSlot !== null && rangeSlot < SLOTS) {
       const u = board.units[rangeSlot];
       const c = slotCenter(rangeSlot);
-      const r = u ? unitRange(u) : 140;
+      const r = u ? unitRange(u, board) : 140;
       const hex = u ? UNITS[u.kind].color : "#fde047";
       rangeDiscMat.color.set(hex);
       rangeEdgeMat.color.set(hex);

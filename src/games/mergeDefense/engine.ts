@@ -17,6 +17,8 @@
  * prediction matches the host until a remote action arrives.
  */
 
+import { AUGMENTS, AUG_BALANCE, AUG_ODDS, AUG_PICK_TICKS, AUG_REROLLS, AUG_TIERS, AUGMENT_LIST, augRoundAt, augTotals, interestCap, mergeGoldAt, sanitizeAugmentId, type AugTier, type AugTotals, type AugmentId } from "./augments";
+
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 4;
 
@@ -190,20 +192,31 @@ export function sanitizeAiLevel(v: unknown): AiLevel {
 export function botPlan(level: AiLevel | undefined): { every: number; auto: AutoOptions } {
   switch (sanitizeAiLevel(level)) {
     case 1:
-      return { every: 40, auto: { parts: new Set<AutoPart>(["build", "merge"]), placement: "worst", maxUnits: 12 } };
+      return { every: 40, auto: { parts: new Set<AutoPart>(["build", "merge"]), placement: "worst", maxUnits: 12, augmentPick: "first" } };
     case 2:
-      return { every: 24, auto: { parts: new Set<AutoPart>(["build", "merge", "upgrade"]), placement: "middle", maxUnits: 16 } };
+      return { every: 24, auto: { parts: new Set<AutoPart>(["build", "merge", "upgrade"]), placement: "middle", maxUnits: 16, augmentPick: "first" } };
     case 4:
-      return { every: 7, auto: { sellForGamble: true, eagerUpgrade: true } };
+      return { every: 7, auto: { sellForGamble: true, eagerUpgrade: true, augmentPick: "best" } };
     case 5:
-      return { every: 4, auto: { sellForGamble: true, eagerUpgrade: true, eagerBoard: true } };
+      return { every: 4, auto: { sellForGamble: true, eagerUpgrade: true, eagerBoard: true, augmentPick: "best" } };
     default:
-      return { every: 10, auto: {} };
+      return { every: 10, auto: { augmentPick: "best" } };
   }
 }
 
 export function difficultyHp(s: Pick<MergeDefenseState, "difficulty" | "map">): number {
   return DIFFICULTY_HP[difficultyOf(s)] * MAPS[sanitizeMap(s.map)].hp;
+}
+/**
+ * ✨ 증강 matches: monster HP multiplier for `wave`. Boards only gain cards
+ * at AUG_WAVES, so the extra HP ramps in from AUG_BALANCE.from to .to
+ * (full strength early made W9–W18 collapses that classic never has).
+ */
+export function augmentHp(s: { augments?: boolean }, wave: number): number {
+  if (!s.augments) return 1;
+  const b = AUG_BALANCE;
+  const k = Math.max(0, Math.min(1, (wave - b.from) / (b.to - b.from)));
+  return 1 + (b.hp - 1) * k;
 }
 export function difficultyCount(s: Pick<MergeDefenseState, "difficulty">): number {
   return DIFFICULTY_COUNT[difficultyOf(s)];
@@ -223,6 +236,10 @@ export function eliminationLimit(state: Pick<MergeDefenseState, "limit" | "playe
   return state.limit ?? loadLimit(state.playerCount);
 }
 /** Validates a host-sent limit; anything odd falls back to the per-seat default. */
+/** A board's own elimination head count: the room's, plus 🧱 최후의 방벽. */
+export function boardLimit(state: Pick<MergeDefenseState, "limit" | "playerCount">, board: Pick<Board, "augments">): number {
+  return eliminationLimit(state) + augTotals(board.augments).limit;
+}
 export function sanitizeLimit(raw: unknown): number | null {
   return Number.isInteger(raw) && (raw as number) >= LIMIT_MIN && (raw as number) <= LIMIT_MAX ? (raw as number) : null;
 }
@@ -579,8 +596,8 @@ export function unitSkills(u: Pick<Unit, "kind" | "grade">): SkillId[] {
 
 /** Share of a unit's gold (`Unit.paid`) that 판매 gives back. */
 export const SELL_REFUND = 0.8;
-export function sellValue(unit: Unit): number {
-  return Math.floor((unit.paid ?? 0) * SELL_REFUND);
+export function sellValue(unit: Unit, board?: Pick<Board, "augments">): number {
+  return Math.floor((unit.paid ?? 0) * (board && augTotals(board.augments).sellAll > 0 ? 1 : SELL_REFUND));
 }
 
 export type MobKind = "normal" | "fast" | "tank" | "boss" | "elite" | "invader" | "golem" | "wraith" | "warlord" | "knight" | "shaman";
@@ -778,6 +795,12 @@ export interface Board {
   /** Waves from W10 this board started alive, and how many of them paid the combo gold milestone (for /stats). */
   lateWaves?: number;
   comboBonusWaves?: number;
+  /** ✨ 증강 picked so far (order = pick order). Shared immutably between states. */
+  augments?: AugmentId[];
+  /** Open ✨ pick: 3 cards of `tier`, auto-taken (cards[0]) at tick `until`. */
+  augOffer?: { round: number; tier: AugTier; cards: AugmentId[]; until: number };
+  /** Rerolls spent this match (AUG_REROLLS allowed). */
+  augRerolls?: number;
   /** Attacks fired during the most recent tick — for FX only. */
   shots: Shot[];
 }
@@ -811,6 +834,10 @@ export type GameEvent =
   /** A boss / warlord at road distance `trav` just called a minion. */
   | { id: number; tick: number; seat: SeatIndex; type: "call"; trav: number; boss: boolean }
   | { id: number; tick: number; seat: SeatIndex; type: "out" }
+  /** `seat` took ✨ augment `aug` (`auto` = the timer ran out). */
+  | { id: number; tick: number; seat: SeatIndex; type: "augment"; aug: AugmentId; auto?: boolean }
+  /** A ✨ pick round opened for every living board. */
+  | { id: number; tick: number; seat: -1; type: "aug-round"; round: number; tier: AugTier }
   | { id: number; tick: number; seat: -1; type: "wave"; wave: number; boss: boolean };
 
 /**
@@ -834,6 +861,8 @@ export interface MergeDefenseState {
   aiLevel?: AiLevel;
   /** Room-chosen elimination head count; null/absent = `loadLimit(playerCount)`. */
   limit?: number | null;
+  /** ✨ 증강 on (picks at AUG_WAVES); absent = classic. */
+  augments?: boolean;
   tick: number;
   /** 0 during the prep countdown, then 1, 2, … */
   wave: number;
@@ -862,7 +891,11 @@ export type Action =
   /** Buy the next 🎯 집중 level. */
   | { type: "focus" }
   /** 유닛 대결: buy a monster with gold and drop it on `to`'s road. */
-  | { type: "hire"; mob: HireKind; to?: SeatIndex };
+  | { type: "hire"; mob: HireKind; to?: SeatIndex }
+  /** ✨ Take one of the offered augment cards. */
+  | { type: "augment"; id: AugmentId }
+  /** ✨ Redraw the offered cards (AUG_REROLLS per match). */
+  | { type: "reroll" };
 
 export const SEND_COOLDOWN_TICKS = 3 * 20;
 
@@ -937,7 +970,7 @@ function summonKind(s: MergeDefenseState, board: Board, grade: number): UnitKind
 }
 
 export function summonCost(board: Board): number {
-  return 20 + board.summons * 2;
+  return 20 + board.summons * (augTotals(board.augments).cheap > 0 ? 1 : 2);
 }
 
 export function upgradeCost(level: number): number {
@@ -983,15 +1016,35 @@ export function fieldLoad(board: Board): number {
 }
 
 export function unitDamage(unit: Unit, board: Board): number {
-  return UNITS[unit.kind].dmg * TOWER_POWER * Math.pow(GRADE_MULT, unit.grade - 1) * (1 + UPGRADE_STEP * (board.upgrades[unit.kind] ?? 0));
+  return UNITS[unit.kind].dmg * TOWER_POWER * Math.pow(GRADE_MULT, unit.grade - 1) * (1 + UPGRADE_STEP * (board.upgrades[unit.kind] ?? 0)) * augDamageMult(unit, board);
 }
 
-export function unitInterval(unit: Unit): number {
-  return Math.max(4, Math.round(UNITS[unit.kind].interval * (1 - 0.07 * (unit.grade - 1))));
+/** ✨ damage multiplier from the board's augments (1 without any). */
+export function augDamageMult(unit: Pick<Unit, "kind" | "grade">, board: Pick<Board, "augments" | "units">): number {
+  if (!board.augments || board.augments.length === 0) return 1;
+  const t = augTotals(board.augments);
+  let add = UNITS[unit.kind].dmgType === "physical" ? t.phys : t.magic;
+  if (unit.grade <= 2) add += t.low;
+  if (unit.grade >= 4) add += t.high;
+  if (t.rainbow > 0 || t.specialist > 0) {
+    const counts: Partial<Record<UnitKind, number>> = {};
+    for (const u of board.units) if (u) counts[u.kind] = (counts[u.kind] ?? 0) + 1;
+    if (t.rainbow > 0) add += t.rainbow * Object.keys(counts).length;
+    if (t.specialist > 0) {
+      const top = Math.max(0, ...Object.values(counts));
+      if (top > 0 && counts[unit.kind] === top) add += t.specialist;
+    }
+  }
+  return 1 + add;
 }
 
-export function unitRange(unit: Unit): number {
-  return UNITS[unit.kind].range + (unit.grade - 1) * 8;
+export function unitInterval(unit: Unit, board?: Pick<Board, "augments">): number {
+  const haste = board ? augTotals(board.augments).haste : 0;
+  return Math.max(4, Math.round(UNITS[unit.kind].interval * (1 - 0.07 * (unit.grade - 1)) * (1 - haste)));
+}
+
+export function unitRange(unit: Unit, board?: Pick<Board, "augments">): number {
+  return UNITS[unit.kind].range + (unit.grade - 1) * 8 + (board ? augTotals(board.augments).range : 0);
 }
 
 /** Share of the road (0..1) within `range` of a cell — how good a cell is for building. */
@@ -1088,10 +1141,12 @@ export function startGame(
   difficulty: Difficulty = "normal",
   map: MapId = "classic",
   aiLevel: AiLevel = 3,
+  augments = false,
 ): MergeDefenseState {
   const n = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, Math.floor(playerCount)));
   selectMap(map);
   return {
+    ...(augments ? { augments: true } : {}),
     map: sanitizeMap(map),
     aiLevel: sanitizeAiLevel(aiLevel),
     phase: "playing",
@@ -1167,6 +1222,11 @@ export function sanitizeAction(raw: unknown): Action | null {
     return Number.isInteger(a.to) && (a.to as number) >= 0 && (a.to as number) < MAX_PLAYERS ? { type: "hire", mob: a.mob as HireKind, to: a.to as number } : null;
   }
   if (a.type === "upgrade" && UNIT_KINDS.includes(a.kind as UnitKind)) return { type: "upgrade", kind: a.kind as UnitKind };
+  if (a.type === "augment") {
+    const id = sanitizeAugmentId(a.id);
+    return id ? { type: "augment", id } : null;
+  }
+  if (a.type === "reroll") return { type: "reroll" };
   return null;
 }
 
@@ -1187,6 +1247,22 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
   if ("slot" in action && action.slot !== undefined && action.slot >= n) return state;
   if ("a" in action && (action.a >= n || action.b >= n)) return state;
 
+  if (action.type === "augment") {
+    if (!cur.augOffer || !cur.augOffer.cards.includes(action.id)) return state;
+    const s = cloneState(state);
+    takeAugment(s, seat, action.id, false);
+    return s;
+  }
+
+  if (action.type === "reroll") {
+    if (!cur.augOffer || (cur.augRerolls ?? 0) >= AUG_REROLLS) return state;
+    const s = cloneState(state);
+    const board = s.boards[seat];
+    board.augRerolls = (board.augRerolls ?? 0) + 1;
+    board.augOffer = { ...board.augOffer!, cards: drawAugments(s, board, board.augOffer!.tier, board.augOffer!.cards) };
+    return s;
+  }
+
   if (action.type === "summon") {
     if (cur.gold < summonCost(cur) || emptySlots(cur).length === 0) return state;
     if (action.slot !== undefined && cur.units[action.slot]) return state;
@@ -1196,7 +1272,7 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
     board.gold -= paid;
     board.summons += 1;
     const slot = action.slot ?? pick(s, emptySlots(board));
-    const lucky = rand(s) < 0.06;
+    const lucky = rand(s) < 0.06 + augTotals(board.augments).lucky;
     const grade = lucky ? 2 : 1;
     board.units[slot] = { kind: summonKind(s, board, grade), grade, cd: 0, paid };
     pushEvent(s, { seat, type: "summon", slot, grade, lucky });
@@ -1209,8 +1285,13 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
     const s = cloneState(state);
     const board = s.boards[seat];
     board.gems -= GAMBLE_COST;
-    let roll = rand(s) * 100;
-    const grade = (GAMBLE_ODDS.find((o) => (roll -= o.pct) < 0) ?? GAMBLE_ODDS[GAMBLE_ODDS.length - 1]).grade;
+    const rollGrade = () => {
+      let roll = rand(s) * 100;
+      return (GAMBLE_ODDS.find((o) => (roll -= o.pct) < 0) ?? GAMBLE_ODDS[GAMBLE_ODDS.length - 1]).grade;
+    };
+    let grade = rollGrade();
+    // 🎲 승부사: a 꽝 rolls once more.
+    if (grade === 0 && augTotals(board.augments).gambleRetry > 0) grade = rollGrade();
     if (grade === 0) {
       pushEvent(s, { seat, type: "gamble-fail" });
       return s;
@@ -1229,6 +1310,7 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
     const paid = (board.units[action.a]!.paid ?? 0) + (board.units[action.b]!.paid ?? 0);
     board.units[action.a] = null;
     board.units[action.b] = { kind: pick(s, UNIT_KINDS), grade, cd: 0, ...(paid ? { paid } : {}) };
+    if (augTotals(board.augments).mergeGold > 0) earn(board, mergeGoldAt(s.wave));
     pushEvent(s, { seat, type: "merge", slot: action.b, grade, from: action.a });
     return s;
   }
@@ -1238,7 +1320,7 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
     if (!unit) return state;
     const s = cloneState(state);
     const board = s.boards[seat];
-    const gold = sellValue(unit);
+    const gold = sellValue(unit, board);
     board.units[action.slot] = null;
     board.gold += gold;
     pushEvent(s, { seat, type: "sell", slot: action.slot, gold });
@@ -1264,10 +1346,11 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
     const s = cloneState(state);
     const board = s.boards[seat];
     const price = sendCost(unit.grade, s.wave);
+    const gain = augIncome(board, price);
     board.gold -= price;
-    board.income = (board.income ?? 0) + sendIncome(price);
+    board.income = (board.income ?? 0) + gain;
     board.sendCd = SEND_COOLDOWN_TICKS;
-    const hp = Math.round(invaderHp(unit.grade, s.wave) * difficultyHp(s));
+    const hp = Math.round(invaderHp(unit.grade, s.wave) * difficultyHp(s) * augmentHp(s, s.wave) * foeHpMult(board, s.boards[to]));
     s.boards[to].mobs.push({
       id: s.nextMobId++,
       kind: "invader",
@@ -1284,7 +1367,7 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
       grade: unit.grade,
       bornWave: s.wave,
     });
-    pushEvent(s, { seat, type: "invade", to, kind: unit.kind, grade: unit.grade, income: sendIncome(price) });
+    pushEvent(s, { seat, type: "invade", to, kind: unit.kind, grade: unit.grade, income: gain });
     return s;
   }
 
@@ -1330,22 +1413,26 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
     if (to === null) return state;
     const s = cloneState(state);
     const board = s.boards[seat];
+    const gain = augIncome(board, price);
     board.gold -= price;
-    board.income = (board.income ?? 0) + sendIncome(price);
+    board.income = (board.income ?? 0) + gain;
     board.sendCd = SEND_COOLDOWN_TICKS;
     const road = s.boards[to].mobs;
+    const mult = foeHpMult(board, s.boards[to]);
     if (action.mob === "swarm") {
       // Slightly staggered so the flock reads as a line, not one blob.
       for (let i = 0; i < SWARM_SIZE; i++) {
         const m = makeMob(s, "fast", s.wave, seat);
-        m.hp = m.maxHp = Math.round(m.maxHp * 1.3);
+        m.hp = m.maxHp = Math.round(m.maxHp * 1.3 * mult);
         m.trav = (SWARM_SIZE - 1 - i) * 9;
         road.push(m);
       }
     } else {
-      road.push(makeMob(s, action.mob, s.wave, seat));
+      const m = makeMob(s, action.mob, s.wave, seat);
+      m.hp = m.maxHp = Math.round(m.maxHp * mult);
+      road.push(m);
     }
-    pushEvent(s, { seat, type: "hire", to, mob: action.mob, income: sendIncome(price) });
+    pushEvent(s, { seat, type: "hire", to, mob: action.mob, income: gain });
     return s;
   }
 
@@ -1364,8 +1451,94 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
 // Simulation step.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// ✨ 증강.
+// ---------------------------------------------------------------------------
+
+/** 유닛 대결 income for a send / hire of `price`, with 💹 전쟁 자금. */
+function augIncome(board: Board, price: number): number {
+  return Math.max(1, Math.round(sendIncome(price) * (1 + augTotals(board.augments).income)));
+}
+
+/** HP multiplier for a monster `from` sends onto `to`'s road (🏴 약탈 원정 / 🏰 요새화). */
+function foeHpMult(from: Board | undefined, to: Board): number {
+  return (1 + (from ? augTotals(from.augments).sendHp : 0)) * (1 - augTotals(to.augments).foeCut);
+}
+
+/** Up to 3 distinct cards of `tier` the board doesn't own (topped up from other tiers if short). */
+function drawAugments(s: MergeDefenseState, board: Board, tier: AugTier, avoid: readonly AugmentId[] = []): AugmentId[] {
+  const owned = new Set(board.augments ?? []);
+  const fits = (a: (typeof AUGMENT_LIST)[number]) => !owned.has(a.id) && (!a.versusOnly || s.mode === "versus");
+  let pool = AUGMENT_LIST.filter((a) => a.tier === tier && fits(a) && !avoid.includes(a.id)).map((a) => a.id);
+  if (pool.length < 3) pool = AUGMENT_LIST.filter((a) => a.tier === tier && fits(a)).map((a) => a.id);
+  const out: AugmentId[] = [];
+  while (out.length < 3 && pool.length > 0) {
+    const i = Math.floor(rand(s) * pool.length);
+    out.push(pool.splice(i, 1)[0]);
+  }
+  if (out.length < 3) {
+    const rest = AUGMENT_LIST.filter((a) => fits(a) && !out.includes(a.id)).map((a) => a.id);
+    while (out.length < 3 && rest.length > 0) out.push(rest.splice(Math.floor(rand(s) * rest.length), 1)[0]);
+  }
+  return out;
+}
+
+/** Opens round `round` for every living board (one shared tier roll). Any open offer is auto-taken first. */
+function openAugmentRound(s: MergeDefenseState, round: number) {
+  const odds = AUG_ODDS[Math.min(round, AUG_ODDS.length - 1)];
+  let roll = rand(s) * 100;
+  const tier = AUG_TIERS.find((t) => (roll -= odds[t]) < 0) ?? "gold";
+  pushEvent(s, { seat: -1, type: "aug-round", round, tier });
+  s.boards.forEach((board, seat) => {
+    if (!board.alive) return;
+    if (board.augOffer) takeAugment(s, seat, board.augOffer.cards[0], true);
+    board.augOffer = { round, tier, cards: drawAugments(s, board, tier), until: s.tick + AUG_PICK_TICKS };
+  });
+}
+
+/** Adds `id` to the board, runs its one-off effect and closes the offer. */
+function takeAugment(s: MergeDefenseState, seat: SeatIndex, id: AugmentId, auto: boolean) {
+  const board = s.boards[seat];
+  const def = AUGMENTS[id];
+  board.augOffer = undefined;
+  if (!def) return;
+  board.augments = [...(board.augments ?? []), id];
+  const inst = def.instant;
+  if (inst?.kind === "gems") board.gems += inst.n;
+  if (inst?.kind === "focus") {
+    const now = board.focus ?? 0;
+    const next = Math.min(FOCUS_MAX, now + inst.n);
+    board.focus = next;
+    const overflow = inst.n - (next - now);
+    if (overflow > 0) earn(board, 150 * overflow);
+  }
+  if (inst?.kind === "hero") {
+    for (let k = 0; k < inst.n; k++) {
+      let slot = slotPref.find((i) => i < board.units.length && !board.units[i]);
+      if (slot === undefined) {
+        // Full board: the weakest 일반/희귀 on the worst cell makes room.
+        const weak = [...slotPref].reverse().filter((i) => i < board.units.length && (board.units[i]?.grade ?? 9) <= 2);
+        weak.sort((a, b) => board.units[a]!.grade - board.units[b]!.grade);
+        slot = weak[0];
+      }
+      if (slot !== undefined) board.units[slot] = { kind: pick(s, UNIT_KINDS), grade: 3, cd: 0 };
+      else earn(board, 200 + 10 * s.wave);
+    }
+  }
+  if (inst?.kind === "ascend") {
+    const eligible = board.units.map((u, i) => (u && u.grade <= 3 ? i : -1)).filter((i) => i >= 0);
+    // Strongest eligible first (영웅 → 전설 is the big jump); ties by cell order.
+    eligible.sort((a, b) => board.units[b]!.grade - board.units[a]!.grade || a - b);
+    for (const i of eligible.slice(0, inst.n)) board.units[i] = { ...board.units[i]!, grade: board.units[i]!.grade + 1 };
+  }
+  pushEvent(s, { seat, type: "augment", aug: id, ...(auto ? { auto: true } : {}) });
+}
+
+/** Per-board damage context while its towers fire (set in stepGame, read by `damage`). */
+const dmgCtx = { pierce: 0, big: 0 };
+
 function makeMob(s: MergeDefenseState, kind: MobKind, wave: number, from: SeatIndex = -1): Mob {
-  const base = waveHp(Math.max(1, wave)) * difficultyHp(s);
+  const base = waveHp(Math.max(1, wave)) * difficultyHp(s) * augmentHp(s, wave);
   const k = MOB_SPEC[kind];
   const hp = Math.round(base * k.hp);
   return {
@@ -1430,7 +1603,11 @@ function spawnWaves(s: MergeDefenseState) {
     pushEvent(s, { seat: -1, type: "wave", wave, boss });
     for (const board of s.boards) {
       if (!board.alive) continue;
-      if (wave > 1) earn(board, waveBonus(wave - 1) + (board.income ?? 0));
+      if (wave > 1) {
+        const t = augTotals(board.augments);
+        const interest = t.interest > 0 ? Math.min(interestCap(wave), Math.floor(board.gold * t.interest)) : 0;
+        earn(board, Math.round(waveBonus(wave - 1) * (1 + t.waveGold)) + (board.income ?? 0) + interest);
+      }
       if (wave >= LATE_WAVE) board.lateWaves = (board.lateWaves ?? 0) + 1;
       if (wave > 1) {
         // Close out the previous wave's peak (immutable append — states share arrays).
@@ -1439,6 +1616,7 @@ function spawnWaves(s: MergeDefenseState) {
       }
       if (boss) board.mobs.push(makeMob(s, "boss", wave));
     }
+    if (s.augments && augRoundAt(wave) >= 0) openAugmentRound(s, augRoundAt(wave));
   }
   const crowd = difficultyCount(s);
   const gap = Math.max(6, Math.round(SPAWN_GAP / crowd));
@@ -1469,8 +1647,9 @@ function closeWave(board: Board) {
 function damage(mob: Mob, amount: number, type: DamageType, pierce = 0) {
   const vuln = (mob.vulnT ?? 0) > 0 ? (mob.vulnPct ?? 0) : 0;
   const info = MOB_INFO[mob.kind];
-  const def = (type === "physical" ? info.armor : info.resist) * (1 - pierce);
-  mob.hp -= amount * (1 - def) * (1 + vuln);
+  const def = (type === "physical" ? info.armor : info.resist) * (1 - pierce) * (1 - dmgCtx.pierce);
+  const big = dmgCtx.big > 0 && (mob.kind === "boss" || mob.kind === "warlord") ? 1 + dmgCtx.big : 1;
+  mob.hp -= amount * (1 - def) * (1 + vuln) * big;
 }
 
 const isBig = (m: Mob) => m.kind === "boss" || m.kind === "warlord";
@@ -1520,7 +1699,9 @@ function roadGap(a: Mob, b: Mob): number {
 function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, ordered: Mob[], wisdom = 0): number {
   // 사색의 석상 picks the toughest monster in reach; everyone else the one furthest along.
   const target = unit.kind === "thinker" ? ordered.reduce((a, b) => (b.hp > a.hp ? b : a)) : ordered[0];
-  const cs = critStats(board.focus ?? 0);
+  const at = augTotals(board.augments);
+  const base = critStats(board.focus ?? 0);
+  const cs = at.crit || at.critMult ? { chance: base.chance + at.crit, mult: base.mult + at.critMult } : base;
   const crit = rand(s) < cs.chance + wisdom;
   if (crit) {
     const chain = s.tick - (board.lastCritTick ?? -999) <= COMBO.gapTicks ? (board.critChain ?? 0) + 1 : 1;
@@ -1565,7 +1746,8 @@ function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, or
           }
           pushEvent(s, { seat, type: "jam", to, slots: [], blocked: true, ...(reflected !== undefined ? { reflected } : {}) });
         } else if (ticks > 0 && slots.length > 0) {
-          for (const i of slots) foe.units[i]!.stun = Math.max(foe.units[i]!.stun ?? 0, ticks);
+          const cut = Math.round(ticks * (1 - augTotals(foe.augments).stunCut));
+          for (const i of slots) foe.units[i]!.stun = Math.max(foe.units[i]!.stun ?? 0, cut);
           board.jamsSent = (board.jamsSent ?? 0) + 1;
           foe.jamsTaken = (foe.jamsTaken ?? 0) + 1;
           pushEvent(s, { seat, type: "jam", to, slots });
@@ -1853,6 +2035,10 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
 
   s.boards.forEach((board, seat) => {
     if (!board.alive) return;
+    if (board.augOffer && s.tick >= board.augOffer.until) takeAugment(s, seat, board.augOffer.cards[0], true);
+    const aug: AugTotals = augTotals(board.augments);
+    dmgCtx.pierce = aug.pierce;
+    dmgCtx.big = aug.big;
 
     // Movement + status effects. 부식: a 전설+ poison tower makes poisoned monsters 취약.
     const corrodeGrade = board.units.reduce((best, u) => (u && u.kind === "poison" && u.grade >= SKILLS.corrode.grade ? Math.max(best, u.grade) : best), 0);
@@ -1864,7 +2050,7 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
         m.stunT! -= 1;
         if (m.stunT === 0) m.stunGuard = STUN_GUARD;
       } else {
-        m.trav += (m.speed * (1 - slow)) / TICKS_PER_SEC;
+        m.trav += (m.speed * (1 - slow) * (1 - aug.slow)) / TICKS_PER_SEC;
         if ((m.stunGuard ?? 0) > 0) m.stunGuard! -= 1;
       }
       if (m.slowT > 0) m.slowT -= 1;
@@ -1940,7 +2126,7 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
         }
       });
       if (best < 0) continue;
-      const ticks = stunTicks(board.brace ?? 0);
+      const ticks = Math.round(stunTicks(board.brace ?? 0) * (1 - aug.stunCut));
       if (ticks <= 0) continue;
       board.units[best]!.stun = ticks;
       board.smashesTaken = (board.smashesTaken ?? 0) + 1;
@@ -1962,7 +2148,7 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
       if (unit.cd > 0) unit.cd -= 1;
       if (unit.cd > 0) return;
       const c = slotCenter(slot);
-      const r2 = unitRange(unit) * unitRange(unit);
+      const r2 = unitRange(unit, board) ** 2;
       const inRange: Mob[] = [];
       ordered.forEach((m, i) => {
         if (m.hp <= 0) return;
@@ -1972,7 +2158,7 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
       });
       if (inRange.length === 0) return;
       const wait = attack(s, board, slot, unit, inRange, wise[slot]);
-      unit.cd = Math.max(1, Math.round(unitInterval(unit) * wait * (1 - haste[slot])));
+      unit.cd = Math.max(1, Math.round(unitInterval(unit, board) * wait * (1 - haste[slot])));
     });
 
     // Deaths + rewards.
@@ -1983,7 +2169,7 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
         continue;
       }
       board.kills += 1;
-      earn(board, killGold(m.kind, s.wave));
+      earn(board, aug.killGold > 0 ? Math.round(killGold(m.kind, s.wave) * (1 + aug.killGold)) : killGold(m.kind, s.wave));
       const rageGold = m.rage ? Math.round(killGold(m.kind, s.wave) * RAGE_GOLD_BONUS) : 0;
       if (m.rage) {
         board.rageKills = (board.rageKills ?? 0) + 1;
@@ -1999,7 +2185,7 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
         }
       }
       if (m.kind === "boss") {
-        board.gems += 2;
+        board.gems += 2 + aug.bossGems;
         board.bossKills = [...(board.bossKills ?? []), { wave: m.bornWave ?? s.wave, at: s.wave }];
         pushEvent(s, m.rage ? { seat, type: "boss-kill", rage: true, gold: rageGold, gems: 3 } : { seat, type: "boss-kill" });
       } else if (m.kind === "warlord" && m.rage) {
@@ -2014,10 +2200,15 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
     }
     board.mobs = survivors;
   });
+  dmgCtx.pierce = 0;
+  dmgCtx.big = 0;
 
   for (const { from, to } of sends) {
     if (!s.boards[to].alive) continue;
-    s.boards[to].mobs.push(makeMob(s, "elite", Math.max(1, s.wave), from));
+    const elite = makeMob(s, "elite", Math.max(1, s.wave), from);
+    const mult = foeHpMult(s.boards[from], s.boards[to]);
+    if (mult !== 1) elite.hp = elite.maxHp = Math.round(elite.maxHp * mult);
+    s.boards[to].mobs.push(elite);
     pushEvent(s, { seat: from, type: "send", to });
   }
 
@@ -2026,7 +2217,7 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
   // Eliminations — everyone over the limit this tick goes out together.
   const out: SeatIndex[] = [];
   s.boards.forEach((board, seat) => {
-    if (board.alive && fieldLoad(board) >= eliminationLimit(s)) out.push(seat);
+    if (board.alive && fieldLoad(board) >= boardLimit(s, board)) out.push(seat);
   });
   const aliveBefore = s.boards.filter((b) => b.alive).length;
   if (out.length > 0 && out.length === aliveBefore) {
@@ -2170,6 +2361,24 @@ export interface AutoOptions {
   eagerUpgrade?: boolean;
   /** Lobby AI skill only: buy 🎯 집중 / 🛡️ 결속 with less spare gold. */
   eagerBoard?: boolean;
+  /** Take ✨ augment offers: "first" card, or the "best" by botScore + board fit. Absent = leave them to the player / timer. */
+  augmentPick?: "first" | "best";
+}
+
+/** How much a bot likes card `id` on this board (botScore + a little board fit). */
+export function augmentBotValue(state: MergeDefenseState, board: Board, id: AugmentId): number {
+  const def = AUGMENTS[id];
+  if (!def) return -1;
+  let v = def.botScore;
+  const units = board.units.filter((u): u is Unit => !!u);
+  const phys = units.filter((u) => UNITS[u.kind].dmgType === "physical").length;
+  if (def.fx.phys) v += (phys / Math.max(1, units.length) - 0.5) * 4;
+  if (def.fx.magic) v += ((units.length - phys) / Math.max(1, units.length) - 0.5) * 4;
+  if (def.fx.high) v += units.filter((u) => u.grade >= 4).length >= 2 ? 1 : -2;
+  if (def.fx.low) v += state.wave <= 6 ? 1 : -2;
+  if (def.instant?.kind === "focus" && (board.focus ?? 0) >= FOCUS_MAX - 1) v -= 2;
+  if (def.fx.income && state.mode !== "versus") v -= 9;
+  return v;
 }
 /** 🤖 자동 "도박은 보석 N개 모일 때까지 아끼기" choices (1 = gamble right away). */
 export const AUTO_GAMBLE_SAVE = [1, 2, 3, 5];
@@ -2180,6 +2389,12 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex, auto:
   const board = state.boards[seat];
   if (!board || !board.alive || state.phase !== "playing") return null;
   selectMap(state.map);
+  if (board.augOffer && auto.augmentPick) {
+    const cards = board.augOffer.cards;
+    if (auto.augmentPick === "first") return { type: "augment", id: cards[0] };
+    const best = [...cards].sort((a, b) => augmentBotValue(state, board, b) - augmentBotValue(state, board, a))[0];
+    return { type: "augment", id: best };
+  }
   const ok = (p: AutoPart) => (!auto.parts || auto.parts.has(p)) && (p !== "upgrade" || board.gold >= (auto.upgradeMinGold ?? 0));
   const building = ok("build");
   const free = emptySlots(board).length;

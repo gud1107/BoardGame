@@ -366,7 +366,7 @@ export function drawBoard(ctx: Ctx, board: Board, opts: DrawOptions) {
   if (rangeSlot !== null && !mini) {
     const u = board.units[rangeSlot];
     const c = slotCenter(rangeSlot);
-    const r = u ? unitRange(u) : 140;
+    const r = u ? unitRange(u, board) : 140;
     ctx.fillStyle = rgba(u ? UNITS[u.kind].color : "#fde047", 0.07);
     ctx.strokeStyle = rgba(u ? UNITS[u.kind].color : "#fde047", 0.55);
     ctx.lineWidth = 1.5;

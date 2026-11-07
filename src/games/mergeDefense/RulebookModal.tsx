@@ -3,6 +3,7 @@
 import Overlay from "@/components/Overlay";
 import { BOSS_EVERY, DAMAGE_TYPE_LABEL, MOB_INFO, TICKS_PER_SEC, GAMBLE_COST, GAMBLE_ODDS, GRADE_COLORS, GRADE_NAMES, loadLimit, MAP_IDS, MAPS, SEND_EVERY, SKILL_IDS, SKILLS, UNIT_KINDS, UNITS } from "./engine";
 import { MapThumb } from "./RoomSettings";
+import { AUG_ODDS, AUG_PICK_TICKS, AUG_TIER_INFO, AUG_TIERS, AUG_WAVES, AUGMENT_LIST } from "./augments";
 
 export default function RulebookModal({ onClose }: { onClose: () => void }) {
   const h3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
@@ -189,6 +190,37 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
               몬스터를 {SEND_EVERY}마리 잡을 때마다 다음 상대에게 <b>🔥 정예 몬스터</b>가 넘어가요. 잘 막을수록 상대가 힘들어져요.
             </li>
           </ul>
+        </section>
+
+        <section>
+          <h3 className={h3}>✨ 증강</h3>
+          <ul className="list-disc space-y-1.5 pl-4 text-white/70 light:text-slate-600">
+            <li>
+              {AUG_WAVES.join(" · ")}웨이브가 시작될 때 모두에게 증강 카드 3장이 나와요. 한 장을 고르면 그 판 끝까지 효과가 이어져요. 게임은 멈추지 않고, {AUG_PICK_TICKS / TICKS_PER_SEC}초 안에 고르지 않으면 첫 번째 카드가 자동으로 골라져요.
+            </li>
+            <li>카드 등급(◆ 실버 · ◆◆ 골드 · ◆◆◆ 프리즘)은 라운드마다 한 번 굴려서 모두 같은 등급이 나와요 — 카드 자체는 각자 따로 뽑아요. 🔄 새로고침은 한 판에 한 번.</li>
+            <li>
+              등급 확률:{" "}
+              {AUG_ODDS.map((o, i) => (
+                <span key={i} className="mr-2 whitespace-nowrap">
+                  {i + 1}차 {AUG_TIERS.map((t) => `${AUG_TIER_INFO[t].name} ${o[t]}%`).join(" / ")}
+                </span>
+              ))}
+            </li>
+            <li>증강 모드에서는 모두가 강해지는 만큼 8웨이브부터 몬스터 체력이 조금씩 더 올라가요(22웨이브부터 +30%).</li>
+          </ul>
+          <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
+            {AUGMENT_LIST.map((a) => (
+              <div key={a.id} className="flex items-start gap-1.5 rounded-lg border bg-black/20 px-2 py-1 text-[12px] light:bg-white" style={{ borderColor: AUG_TIER_INFO[a.tier].color }}>
+                <span aria-hidden>{a.emoji}</span>
+                <span className="break-keep">
+                  <b>{a.name}</b> <span className="text-[10px] opacity-70">{AUG_TIER_INFO[a.tier].mark} {AUG_TIER_INFO[a.tier].name}{a.versusOnly ? " · 대결 전용" : ""}</span>
+                  <br />
+                  <span className="text-white/65 light:text-slate-500">{a.desc}</span>
+                </span>
+              </div>
+            ))}
+          </div>
         </section>
 
         <section>

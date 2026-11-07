@@ -64,6 +64,17 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.149.0",
+    releaseDate: "2026-11-07",
+    title: "✨ 랜덤 합성 디펜스 증강",
+    changes: [
+      { game: "merge-defense", type: "FEAT", desc: "✨ 증강 — 3·10·18웨이브 시작 때 카드 3장 중 1장, 실버·골드·프리즘 31종(속사·관통탄·외골수·영웅 강림·미다스의 손…)" },
+      { game: "merge-defense", type: "FEAT", desc: "⚖️ 라운드마다 모두 같은 등급 · 🔄 새로고침 1회 · 게임은 안 멈추고 15초 뒤 첫 장 자동 선택 · ▾ 접기로 보드 확인" },
+      { game: "merge-defense", type: "IMPROVE", desc: "👀 내 증강은 몬스터 칸 아래, 상대 증강은 미니맵 아래·결과표에 아이콘으로 · 📖 룰북에 31종 전체 목록" },
+      { game: "merge-defense", type: "IMPROVE", desc: "🤖 봇끼리 2,400판으로 카드마다 승률 42~58% · 강해진 만큼 8웨이브부터 몬스터 체력 최대 +30%라 게임 길이는 그대로" },
+    ],
+  },
+  {
     version: "v1.148.0",
     releaseDate: "2026-11-07",
     title: "🦎 변신 숨바꼭질 숨는 쪽 증강 · Tab 라운드 현황",
