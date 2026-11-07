@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.154.2",
+    releaseDate: "2026-11-08",
+    title: "🦎 변신 숨바꼭질 — 증강 고를 때 전체 화면 잠시 해제 · PC 큰 화면",
+    changes: [
+      { game: "morph-hide", type: "IMPROVE", desc: "🃏 숨는 사람 증강 카드가 뜨면 전체 화면이 잠시 풀리고, 고르고 나면 원래 전체 화면으로 돌아와요" },
+      { game: "morph-hide", type: "IMPROVE", desc: "🖥️ PC 넓은 창에선 게임 화면이 창 크기만큼 커져요(최대 1800px) — 🗗 버튼·⚙️ 설정에서 기본 크기로 바꿀 수 있어요" },
+    ],
+  },
+  {
     version: "v1.154.1",
     releaseDate: "2026-11-08",
     title: "🧹 준비중 게임 카드 정리",

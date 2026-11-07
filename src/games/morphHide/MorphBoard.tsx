@@ -249,6 +249,29 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     }
   }
+  // 숨는 사람 증강 카드가 뜨면 전체 화면을 잠시 풀고, 고르고 나면 원래대로 되돌린다
+  const hiderAugOpen = !isSeeker && snap.phase === "pick" && !!me?.dg && (me?.ao?.length ?? 0) > 0;
+  const fullRef = useRef(full);
+  useEffect(() => {
+    fullRef.current = full;
+  }, [full]);
+  const restoreFullRef = useRef(false);
+  function restoreFull() {
+    if (!restoreFullRef.current) return;
+    restoreFullRef.current = false;
+    setFull(true);
+    // 카드 클릭(사용자 동작) 안에서 부르면 진짜 전체 화면으로, 시간 초과 랜덤이면 창 가득(고정 배치)으로만 돌아온다
+    stageRef.current?.requestFullscreen?.().catch(() => {});
+  }
+  useEffect(() => {
+    if (hiderAugOpen) {
+      if (fullRef.current) {
+        restoreFullRef.current = true;
+        setFull(false);
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      }
+    } else restoreFull();
+  }, [hiderAugOpen]);
   useEffect(() => {
     const onChange = () => {
       if (!document.fullscreenElement) setFull(false);
@@ -414,6 +437,7 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
     if (drag.current?.id === e.pointerId) drag.current = null;
   }
 
+  const wideStage = !touch && settings.wide;
   const myName = names[mySeat] ?? "나";
   const hidersLeft = snap.players.filter((p) => p.role === "hider" && p.alive && !p.escaped).length;
   const hidersTotal = snap.players.filter((p) => p.role === "hider").length;
@@ -452,7 +476,7 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
         onWheel={(e) => {
           controls.current.zoom = Math.max(0.7, Math.min(1.6, controls.current.zoom * (e.deltaY > 0 ? 1.06 : 0.94)));
         }}
-        className={`select-none overflow-hidden bg-[#1d2a5c] font-sans ${full ? "fixed inset-0 z-[80] h-[100dvh] w-screen" : "relative h-[clamp(400px,74vh,780px)] rounded-3xl border border-white/10 shadow-2xl shadow-black/40"}`}
+        className={`select-none overflow-hidden bg-[#1d2a5c] font-sans ${full ? "fixed inset-0 z-[80] h-[100dvh] w-screen" : `relative h-[clamp(400px,74vh,780px)] rounded-3xl border border-white/10 shadow-2xl shadow-black/40 ${wideStage ? WIDE_STAGE : ""}`}`}
         style={{ touchAction: "none" }}
       >
         <World3D
@@ -552,6 +576,11 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
               label="소리"
               icon={mutedUi ? "🔇" : "🔊"}
             />
+            {!touch && !full && (
+              <span className="hidden lg:contents">
+                <HudBtn onClick={() => updateSettings({ ...settings, wide: !settings.wide })} label={settings.wide ? "기본 화면" : "큰 화면"} icon={settings.wide ? "🗗" : "🖥️"} />
+              </span>
+            )}
             <HudBtn onClick={toggleFull} label={full ? "나가기" : "전체 화면"} icon={full ? "✕" : "⛶"} />
           </div>
           <button type="button" onClick={() => setShowMap(true)} aria-label="지도 크게 보기" className={`overflow-hidden rounded-2xl p-1 ${GLASS}`}>
@@ -749,7 +778,7 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
         )}
 
         {/* 변신 고르기 */}
-        {!isSeeker && snap.phase === "pick" && me && <PickCards snap={snap} mySeat={mySeat} left={left} onAct={onAct} />}
+        {!isSeeker && snap.phase === "pick" && me && <PickCards snap={snap} mySeat={mySeat} left={left} onAct={onAct} onHiderAugPicked={restoreFull} />}
         {!isSeeker && snap.phase === "hide" && def && (
           <div className={`pointer-events-none absolute left-1/2 top-[32%] -translate-x-1/2 rounded-2xl px-4 py-2 text-center ${GLASS}`}>
             <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/45">Hide</div>
@@ -884,7 +913,7 @@ function AugStatus({ me, snap, simNow, hidersLeft }: { me: Snap["players"][numbe
 }
 
 /** 증강 고르기 — 3장 중 1장. 술래는 라운드당 두 번(눈 가린 동안), 숨는 사람은 변신을 고른 뒤 한 번 */
-function AugPicker({ me, phase, left, kkom, onAct, hider }: { me: Snap["players"][number]; phase: Snap["phase"]; left: number; kkom: boolean; onAct: (a: Act) => void; hider?: boolean }) {
+function AugPicker({ me, phase, left, kkom, onAct, onPicked, hider }: { me: Snap["players"][number]; phase: Snap["phase"]; left: number; kkom: boolean; onAct: (a: Act) => void; onPicked?: () => void; hider?: boolean }) {
   const owned = me.aug ?? [];
   const offer = me.ao ?? [];
   const total = hider ? HIDER_AUG_PICKS : AUG_PICKS;
@@ -914,6 +943,7 @@ function AugPicker({ me, phase, left, kkom, onAct, hider }: { me: Snap["players"
                 onClick={() => {
                   play("augPick", 1);
                   onAct({ t: "aug", id });
+                  onPicked?.();
                 }}
                 className={`group relative flex cursor-pointer flex-col items-center gap-1 overflow-hidden rounded-2xl border bg-white/[0.04] p-2 text-center backdrop-blur-md transition duration-200 hover:-translate-y-1.5 hover:bg-white/10 active:scale-95 sm:p-3 ${hider ? "min-h-28 sm:min-h-32" : "min-h-36 sm:min-h-44"}`}
                 style={{ borderColor: `${st.color}66`, boxShadow: `0 0 28px -10px ${st.color}` }}
@@ -1024,17 +1054,24 @@ export interface ViewSettings {
   sens: number;
   /** pubg = 클릭하면 마우스 시점 고정 / click = 바닥 클릭으로 걷기 */
   mode: "pubg" | "click";
+  /** PC 넓은 창(1024px+)에서 게임 화면을 창 크기만큼 크게 */
+  wide: boolean;
 }
 
 const SETTINGS_KEY = "morph-hide:view";
+/**
+ * PC 큰 화면: 페이지 기본 칸(2xl)을 벗어나 창 너비 − 양쪽 1.5rem(최대 1800px)까지 넓히고,
+ * 높이는 창 높이에 맞춰(16:9를 넘지 않게) 키운다. lg(1024px+) 창에서만.
+ */
+const WIDE_STAGE = "lg:mx-[max(calc(50%-50vw+1.5rem),calc(50%-900px))] lg:h-[clamp(480px,min(calc(100dvh-7rem),56vw),1000px)]";
 
 function loadSettings(): ViewSettings {
   try {
     const raw = window.localStorage.getItem(SETTINGS_KEY);
     const v = raw ? (JSON.parse(raw) as Partial<ViewSettings>) : {};
-    return { sens: typeof v.sens === "number" ? Math.max(0.3, Math.min(2.5, v.sens)) : 1, mode: v.mode === "click" ? "click" : "pubg" };
+    return { sens: typeof v.sens === "number" ? Math.max(0.3, Math.min(2.5, v.sens)) : 1, mode: v.mode === "click" ? "click" : "pubg", wide: v.wide !== false };
   } catch {
-    return { sens: 1, mode: "pubg" };
+    return { sens: 1, mode: "pubg", wide: true };
   }
 }
 
@@ -1065,6 +1102,24 @@ function SettingsPanel({ settings, onChange, touch }: { settings: ViewSettings; 
             ))}
           </div>
           <span className="text-[10px] leading-snug text-white/45">{settings.mode === "pubg" ? "화면을 클릭하면 마우스로 둘러보고, 좌클릭 공격·우클릭 조준. ESC로 풀어요." : "바닥을 클릭하면 거기로 걸어가요. 드래그로 둘러보기."}</span>
+        </div>
+      )}
+      {!touch && (
+        <div className="mt-3 hidden flex-col gap-1 lg:flex">
+          <span>게임 화면 크기</span>
+          <div className="grid grid-cols-2 gap-1">
+            {(
+              [
+                [true, "🖥️ 큰 화면"],
+                [false, "▭ 기본"],
+              ] as const
+            ).map(([w, l]) => (
+              <button key={l} type="button" onClick={() => onChange({ ...settings, wide: w })} className={`rounded-lg px-2 py-1.5 ${settings.wide === w ? "bg-white text-slate-900" : "bg-white/10 text-white/80 hover:bg-white/15"}`}>
+                {l}
+              </button>
+            ))}
+          </div>
+          <span className="text-[10px] leading-snug text-white/45">큰 화면 = 창 너비만큼 넓게(최대 1800px). 전체 화면(⛶)과는 따로예요.</span>
         </div>
       )}
     </div>
@@ -1266,7 +1321,7 @@ function toneOf(form: string): keyof typeof TONE {
   return form === "prop" ? "prop" : form === "guard" ? "guard" : "living";
 }
 
-function PickCards({ snap, mySeat, left, onAct }: { snap: Snap; mySeat: number; left: number; onAct: (a: Act) => void }) {
+function PickCards({ snap, mySeat, left, onAct, onHiderAugPicked }: { snap: Snap; mySeat: number; left: number; onAct: (a: Act) => void; onHiderAugPicked?: () => void }) {
   const me = snap.players[mySeat];
   const picked = me.dg;
   const offer = me.offer;
@@ -1331,7 +1386,7 @@ function PickCards({ snap, mySeat, left, onAct }: { snap: Snap; mySeat: number; 
       )}
       {picked && (me.ao?.length ?? 0) > 0 && (
         <div className="w-full max-w-2xl">
-          <AugPicker me={me} phase={snap.phase} left={left} kkom={!!snap.goal} onAct={onAct} hider />
+          <AugPicker me={me} phase={snap.phase} left={left} kkom={!!snap.goal} onAct={onAct} onPicked={onHiderAugPicked} hider />
         </div>
       )}
       {picked && (me.ao?.length ?? 0) === 0 && (
