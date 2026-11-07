@@ -168,14 +168,18 @@ describe("bot", () => {
     return s;
   }
 
+  // Self-play sims: Lv.9~10 bots spend ~40ms a move, so give them room when the full suite runs in parallel.
+  const SIM_TIMEOUT_MS = 120_000;
+
   it("self-play always finishes with legal moves", () => {
     for (let seed = 1; seed <= 6; seed++) {
-      const end = playGame(seed, 2 + (seed % 3), [3, 6, 9, 10], 2);
+      // Two seeds play 2 rounds to cover nextRound; the rest 1 round keeps the sim light.
+      const end = playGame(seed, 2 + (seed % 3), [3, 6, 9, 10], seed <= 2 ? 2 : 1);
       expect(end.phase).toBe("gameOver");
-      expect(end.results.length).toBe(2);
+      expect(end.results.length).toBe(seed <= 2 ? 2 : 1);
       expect(computeRankings(end)[0].rank).toBe(1);
     }
-  });
+  }, SIM_TIMEOUT_MS);
 
   it("stronger bots win more often", () => {
     let strong = 0;
@@ -187,5 +191,5 @@ describe("bot", () => {
       if (levels[winner] === 10) strong++;
     }
     expect(strong).toBeGreaterThanOrEqual(games * 0.6);
-  });
+  }, SIM_TIMEOUT_MS);
 });
