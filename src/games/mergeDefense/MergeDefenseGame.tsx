@@ -586,6 +586,11 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     startSentRef.current = true;
     const target = playerCountRef.current;
     const seated = new Set(occupantsRef.current.map((o) => o.seat));
+    // The host is always a person. A practice match starts as soon as the host
+    // has a seat, often before presence sync lists the host, and without this
+    // line the host's own seat became an AI that played their board (and took
+    // their ✨ augment cards instantly).
+    if (mySeatRef.current !== null) seated.add(mySeatRef.current);
     const botSeats = Array.from({ length: target }, (_, i) => i).filter((i) => !seated.has(i));
     botSeatsRef.current = botSeats;
     if (mySeatRef.current !== null) {
