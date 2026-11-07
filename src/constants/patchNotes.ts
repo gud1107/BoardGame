@@ -80,6 +80,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     changes: [
       { game: "morph-hide", type: "FEAT", desc: "🃏 술래 증강 — 눈 가린 동안 3장 중 1장을 두 번(실버·골드·프리즘 28종: 레이더·냄새 추적·방울 덫·충격파·불굴…)" },
       { game: "morph-hide", type: "FEAT", desc: "🔍 단서 증강은 정확한 위치 대신 개수·대략적인 원만 — 원에 걸린 숨는 사람은 “근처가 드러났어요” 알림 · 술래 증강은 숨는 쪽도 봐요" },
+      { game: "morph-hide", type: "IMPROVE", desc: "👮 술래는 경찰 모자를 써요 — 멀리서도 술래인지 보이고, 점검원 NPC·“술래인 척” 변신도 같은 모자라 위장은 그대로" },
       { game: "morph-hide", type: "IMPROVE", desc: "⚖️ 숨는 쪽이 유리하던 밸런스를 증강으로 보정(봇 Lv10끼리 잡힘 44→50%) · 혼자 튀던 분신 감별·예민한 귀·정보원은 하향" },
     ],
   },

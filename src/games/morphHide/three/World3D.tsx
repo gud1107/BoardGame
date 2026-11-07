@@ -34,7 +34,8 @@ function SeekerVrm({ seat, name, anim, held, strike }: { seat: number; name: str
   const chars = useRoomCharacters((st) => st.byName);
   const { low } = useContext(FigCtx);
   const look = useMemo(() => seekerLook(seat, roomCharacterOf(chars, name)), [seat, name, chars]);
-  return <VrmFigure look={look} seed={seat * 5 + 3} anim={anim} lowDetail={low} held={held} strike={strike} />;
+  // 술래 표시: 경찰 모자 (점검원 NPC·"술래인 척"도 같은 모자)
+  return <VrmFigure look={look} seed={seat * 5 + 3} anim={anim} lowDetail={low} held={held} strike={strike} cap />;
 }
 
 /** 술래 손에 보일 무기: 숨는 시간엔 빈손(눈 가림), 사냥 땐 지금 단계 무기 */

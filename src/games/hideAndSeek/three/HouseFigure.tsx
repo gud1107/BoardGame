@@ -47,6 +47,10 @@ export interface HouseFigureProps {
   cull?: boolean;
   /** 오른손에 쥘 것 (손 뼈 기준: T자세에서 팔은 -x, 손등은 +y, 앞은 +z) */
   hand?: ReactNode;
+  /** 머리 뼈에 붙일 것 (모자 등) — 원점 = 정수리 부근, +z 앞 */
+  headgear?: ReactNode;
+  /** 머리 뼈 기준 headgear 높이 (기본 0.12m, 모델 좌표) */
+  headgearY?: number;
   /** 공격 몸짓 — 바뀐 `at`부터 휘두르기·찌르기·반동을 덮어 그린다 */
   strike?: RefObject<Strike>;
   children?: ReactNode;
@@ -257,6 +261,7 @@ export default function HouseFigure(props: HouseFigureProps) {
   }, [cull, vrm, gl, scene, camera]);
   const outlines = useRef<{ of: unknown; list: THREE.Material[] }>({ of: null, list: [] });
   const hand = vrm?.humanoid.getNormalizedBoneNode("rightHand") ?? null;
+  const headBone = vrm?.humanoid.getNormalizedBoneNode("head") ?? null;
   const fit = useMemo(() => {
     if (!vrm) return null;
     const head = vrm.humanoid.getNormalizedBoneNode("head");
@@ -424,6 +429,14 @@ export default function HouseFigure(props: HouseFigureProps) {
           <>
             <primitive object={vrm.scene} scale={fit * size} />
             {props.hand && hand && createPortal(<group rotation-y={vrm.meta.metaVersion === "0" ? Math.PI : 0}>{props.hand}</group>, hand)}
+            {props.headgear &&
+              headBone &&
+              createPortal(
+                <group rotation-y={vrm.meta.metaVersion === "0" ? Math.PI : 0}>
+                  <group position={[0, props.headgearY ?? 0.12, 0.005]}>{props.headgear}</group>
+                </group>,
+                headBone,
+              )}
           </>
         ) : (
           <group scale={size}>

@@ -5,6 +5,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import HouseFigure, { type Drive, type FigurePose, type Strike } from "../../hideAndSeek/three/HouseFigure";
 import HeldWeapon from "./HeldWeapon";
+import PoliceCap from "./PoliceCap";
 import type { WeaponLook } from "./Figures";
 import { CHARACTER_PRESETS, resolveLook, type PersonLook } from "@/lib/character/avatar";
 
@@ -65,12 +66,12 @@ export function seekerLook(seat: number, profile: unknown): PersonLook {
   return resolveLook(seat, ["none"], profile);
 }
 
-export default function VrmFigure({ look, seed, anim, lowDetail, held, strike }: { look: PersonLook; seed: number; anim: string; lowDetail: boolean; held?: WeaponLook; strike?: RefObject<Strike> }) {
+export default function VrmFigure({ look, seed, anim, lowDetail, held, strike, cap }: { look: PersonLook; seed: number; anim: string; lowDetail: boolean; held?: WeaponLook; strike?: RefObject<Strike>; cap?: boolean }) {
   const drive = useRef<Drive>({ active: true, x: 0, y: 0, z: 0, yaw: 0, moving: false });
   const moving = anim === "walk" || anim === "run" || anim === "jump";
   useFrame(() => {
     drive.current.moving = moving;
   });
   const path = useMemo(() => ORIGIN, []);
-  return <HouseFigure look={look} seed={seed} color="#94a3b8" path={path} pathKey="fixed" faceTo={null} pose={heldPose(anim, held)} lowDetail={lowDetail} drive={drive} cull strike={strike} hand={held ? <HeldWeapon kind={held} strike={strike} /> : undefined} speed={anim === "run" ? 4.5 : 2.6} />;
+  return <HouseFigure look={look} seed={seed} color="#94a3b8" path={path} pathKey="fixed" faceTo={null} pose={heldPose(anim, held)} lowDetail={lowDetail} drive={drive} cull strike={strike} hand={held ? <HeldWeapon kind={held} strike={strike} /> : undefined} headgear={cap ? <PoliceCap scale={1.12} /> : undefined} speed={anim === "run" ? 4.5 : 2.6} />;
 }

@@ -3,6 +3,7 @@
 import { useRef, type ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import type * as THREE from "three";
+import PoliceCap from "./PoliceCap";
 
 /**
  * 저폴리 캐릭터 — VRM 없이 상자·구로 만든 사람/점검원(술래)/강아지/고양이/청소기/자동차.
@@ -232,10 +233,10 @@ export function Humanoid({ anim, look = 0, uniform = false, held = null, scale =
             <group ref={head} position={[0, 0.68, 0]}>
               <S p={[0, 0.1, 0]} r={0.15} c={skin} />
               {uniform ? (
-                <>
-                  <B p={[0, 0.22, 0]} s={[0.32, 0.08, 0.32]} c="#14213d" />
-                  <B p={[0, 0.19, 0.17]} s={[0.3, 0.03, 0.12]} c="#14213d" />
-                </>
+                <group position={[0, 0.16, 0]}>
+                  {/* 술래와 같은 경찰 모자 */}
+                  <PoliceCap scale={1.25} />
+                </group>
               ) : (
                 <B p={[0, 0.2, -0.03]} s={[0.31, 0.12, 0.3]} c={hair} />
               )}
