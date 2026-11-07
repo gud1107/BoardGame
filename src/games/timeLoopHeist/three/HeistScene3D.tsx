@@ -25,6 +25,8 @@ export interface HeistScene3DProps {
   lowDetail: boolean;
   /** 재생 중이면 true — 보간을 조금 느리게 */
   replay: boolean;
+  /** 확대 모드에서 따라갈 칸 (없으면 전체 보기) */
+  focus?: { x: number; y: number } | null;
 }
 
 const WALL_H = 0.9;
@@ -310,26 +312,61 @@ function Guard({ x, z, face, emp, k }: { x: number; z: number; face: SelfFrame["
   );
 }
 
-function CameraRig({ w, h }: { w: number; h: number }) {
+export const CAMERA_TILT_DEG = 64;
+/** 확대 모드에서 화면 가로에 들어오는 칸 수 */
+const ZOOM_TILES = 9;
+
+/**
+ * 전체 보기 = 지도 전체가 프레임에 꽉 차게. 확대 = 내 도둑(focus)을 따라가며 가로 ZOOM_TILES칸만
+ * 보여 준다(지도 밖으로 카메라가 나가지 않게 가장자리에서 멈춤). 바뀔 때는 부드럽게 따라간다.
+ */
+function CameraRig({ w, h, focus }: { w: number; h: number; focus: [number, number, number] | null }) {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const size = useThree((s) => s.size);
-  useLayoutEffect(() => {
+  const look = useRef(new THREE.Vector3(0, 0, 0.4));
+  const want = useRef(new THREE.Vector3());
+  const wantLook = useRef(new THREE.Vector3());
+  const first = useRef(true);
+  const fit = useMemo(() => {
     const aspect = size.width / Math.max(1, size.height);
-    const vf = THREE.MathUtils.degToRad(camera.fov / 2);
+    const vf = THREE.MathUtils.degToRad(40 / 2);
     const hf = Math.atan(Math.tan(vf) * aspect);
-    const tilt = THREE.MathUtils.degToRad(58);
-    // 기울어진 시점에선 앞뒤(h)가 cos만큼 짧아 보인다
-    const needW = (w / 2 + 0.6) / Math.tan(hf);
-    const needH = ((h * Math.sin(tilt)) / 2 + 1.0) / Math.tan(vf);
-    const d = Math.max(needW, needH);
-    camera.position.set(0, d * Math.sin(tilt), d * Math.cos(tilt) + 0.4);
-    camera.lookAt(0, 0, 0.4);
-    camera.updateProjectionMatrix();
-  }, [camera, size, w, h]);
+    const tilt = THREE.MathUtils.degToRad(CAMERA_TILT_DEG);
+    // 기울어진 시점에선 앞뒤(h)가 sin만큼 짧아 보인다
+    const needW = (w / 2 + 0.3) / Math.tan(hf);
+    const needH = ((h * Math.sin(tilt)) / 2 + 0.7) / Math.tan(vf);
+    const full = Math.max(needW, needH);
+    const zoom = Math.min(full, ZOOM_TILES / 2 / Math.tan(hf));
+    return { vf, hf, tilt, full, zoom };
+  }, [size, w, h]);
+  const fx = focus?.[0];
+  const fz = focus?.[2];
+  useFrame((_, dt) => {
+    const { vf, hf, tilt, full, zoom } = fit;
+    const zoomed = fx !== undefined && fz !== undefined;
+    const d = zoomed ? zoom : full;
+    let tx = 0;
+    let tz = 0.4;
+    if (zoomed) {
+      const halfW = d * Math.tan(hf);
+      const halfD = (d * Math.tan(vf)) / Math.sin(tilt);
+      const mx = Math.max(0, w / 2 - halfW + 0.4);
+      const mz = Math.max(0, h / 2 - halfD + 0.6);
+      tx = THREE.MathUtils.clamp(fx, -mx, mx);
+      tz = THREE.MathUtils.clamp(fz, -mz, mz) + 0.4;
+    }
+    want.current.set(tx, d * Math.sin(tilt), tz + d * Math.cos(tilt));
+    wantLook.current.set(tx, 0, tz);
+    const k = first.current ? 1 : 1 - Math.exp(-6 * dt);
+    first.current = false;
+    camera.position.lerp(want.current, k);
+    look.current.lerp(wantLook.current, k);
+    camera.lookAt(look.current);
+  });
   return null;
 }
 
-function Scene({ def, frame, meta, lowDetail, replay }: HeistScene3DProps) {
+function Scene({ def, frame, meta, lowDetail, replay, focus }: HeistScene3DProps) {
   const { lv, at } = useGrid(def);
   const k = replay ? 9 : 16;
   return (
@@ -384,7 +421,7 @@ function Scene({ def, frame, meta, lowDetail, replay }: HeistScene3DProps) {
         if (!m) return null;
         return <Thief key={`s${m.seat}-${m.loop}`} s={s} meta={m} at={at(s.x, s.y)} k={k} carryKind={s.carry !== null ? "gem" : null} />;
       })}
-      <CameraRig w={lv.w} h={lv.h} />
+      <CameraRig w={lv.w} h={lv.h} focus={focus ? at(focus.x, focus.y) : null} />
       <AdaptiveResolution max={lowDetail ? 1.5 : 2} />
     </>
   );

@@ -18,6 +18,7 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
  */
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
   "2026-11-08": {
+    "time-loop-heist": "⏳ 새 게임 시간 루프 도둑단 — 루프마다 동시 녹화, 유령·⚠️ 시간 역설, 작전 4개, 🔍 휴대폰 3D 확대",
     "morph-hide": "🃏 증강 고를 때 전체 화면 잠시 해제, 🖥️ PC 큰 화면, 🎭 숨은 모습 진열대, 🗣️ 캐릭터 목소리 감정표현·외침, 👯 분신 제자리",
     common: "🔗 온라인 판 어긋남 자동 복구, ⏳ 장고 게임 무응답 투표 2분, 🧹 준비중 게임 11종 정리",
     "play-dead": "🧬 1·4·7라운드 증강 3택 1 — 23종, 시체에서도 작동하는 부비트랩·명배우, 🪖 BGM·효과음, 🔊 증강 전용 효과음",

@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Frame3D, Loading3D, ViewToggle, preferLowDetail, useBoardView } from "@/games/shared/three/viewPref";
+import { Loading3D, ViewToggle, preferLowDetail, useBoardView } from "@/games/shared/three/viewPref";
 import { REPLAY_TICK_MS, levelOf, mergedTracks, type GameState, type Seat } from "./engine";
 import { parseLevel, type LevelDef } from "./levels";
 import { canAct, simulate, sortTracks, actLabel, type Act, type Frame, type SelfTrack } from "./sim";
@@ -113,13 +113,43 @@ function Grid2D({ def, frame, meta }: { def: LevelDef; frame: Frame; meta: SelfM
 
 // ------------------------------------------------------------------ 공통 무대
 
-function Stage({ def, frame, meta, replay, board }: { def: LevelDef; frame: Frame; meta: SelfMeta[]; replay: boolean; board: ReturnType<typeof useBoardView> }) {
+interface StageProps {
+  def: LevelDef;
+  frame: Frame;
+  meta: SelfMeta[];
+  replay: boolean;
+  board: ReturnType<typeof useBoardView>;
+  zoom: boolean;
+  onZoom: (v: boolean) => void;
+  /** 확대할 때 따라갈 칸 — 녹화 중인 내 도둑, 재생이면 null(전체 보기만) */
+  focus: { x: number; y: number } | null;
+}
+
+/** 3D 프레임 — 전체 보기는 지도 비율(기울기 반영)에 맞춘 높이로 빈 공간 없이, 확대는 정사각형 */
+function Stage({ def, frame, meta, replay, board, zoom, onZoom, focus }: StageProps) {
   const [lowDetail] = useState(preferLowDetail);
   if (board.view === "3d") {
+    const lv = parseLevel(def);
+    const zoomed = zoom && focus !== null;
+    const ratio = zoomed ? 1 : (lv.w + 0.6) / (lv.h * Math.sin((64 * Math.PI) / 180) + 1.4);
     return (
-      <Frame3D tall hint={replay ? "재생 중 — 모든 루프의 자아가 함께 움직여요" : "노란 고리 = 지금의 나 · 반투명 = 지난 루프의 유령 · 빨간 칸 = 경비 시야"}>
-        <HeistScene3D def={def} frame={frame} meta={meta} lowDetail={lowDetail} replay={replay} />
-      </Frame3D>
+      <div className="relative z-10 w-full overflow-hidden rounded-2xl border border-black/50" style={{ aspectRatio: String(ratio), minHeight: 240, maxHeight: "70vh" }}>
+        <HeistScene3D def={def} frame={frame} meta={meta} lowDetail={lowDetail} replay={replay} focus={zoomed ? focus : null} />
+        {focus !== null && (
+          <button
+            type="button"
+            onClick={() => onZoom(!zoom)}
+            className="absolute top-2 right-2 rounded-full bg-black/60 px-3 py-1.5 text-[11px] font-semibold text-white/90 backdrop-blur hover:bg-black/75"
+          >
+            {zoom ? "🗺️ 전체 보기" : "🔍 내 도둑 확대"}
+          </button>
+        )}
+        {!zoomed && (
+          <span className="pointer-events-none absolute bottom-2 left-1/2 max-w-[92%] -translate-x-1/2 truncate rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-white/75">
+            {replay ? "재생 중 — 모든 루프의 자아가 함께 움직여요" : "노란 고리 = 나 · 반투명 = 유령 · 빨간 칸 = 경비 시야"}
+          </span>
+        )}
+      </div>
     );
   }
   return <Grid2D def={def} frame={frame} meta={meta} />;
@@ -209,6 +239,8 @@ export default function TimeLoopHeistBoard(props: TimeLoopHeistBoardProps) {
   const def = levelOf(state);
   const T = def.ticks;
   const board = useBoardView("time-loop-heist-view");
+  // 휴대폰에선 녹화할 때 내 도둑을 따라가며 확대해서 시작한다(전체 지도는 칸이 너무 작다)
+  const [zoom, setZoom] = useState(() => typeof window !== "undefined" && window.innerWidth < 640);
   const [briefOpen, setBriefOpen] = useState(state.loop === 1);
 
   const header = (
@@ -242,17 +274,17 @@ export default function TimeLoopHeistBoard(props: TimeLoopHeistBoardProps) {
     <div className="flex flex-col gap-3">
       {header}
       {brief}
-      {state.phase === "record" && <RecordView key={state.stage} {...props} def={def} T={T} board={board} />}
-      {state.phase === "replay" && <ReplayView key={state.stage} {...props} def={def} T={T} board={board} tracks={mergedTracks(state)} />}
-      {state.phase === "ended" && <ReplayView key={state.stage} {...props} def={def} T={T} board={board} tracks={state.tracks} />}
+      {state.phase === "record" && <RecordView key={state.stage} {...props} def={def} T={T} board={board} zoom={zoom} onZoom={setZoom} />}
+      {state.phase === "replay" && <ReplayView key={state.stage} {...props} def={def} T={T} board={board} zoom={zoom} onZoom={setZoom} tracks={mergedTracks(state)} />}
+      {state.phase === "ended" && <ReplayView key={state.stage} {...props} def={def} T={T} board={board} zoom={zoom} onZoom={setZoom} tracks={state.tracks} />}
       <Legend />
     </div>
   );
 }
 
-type ViewProps = TimeLoopHeistBoardProps & { def: LevelDef; T: number; board: ReturnType<typeof useBoardView> };
+type ViewProps = TimeLoopHeistBoardProps & { def: LevelDef; T: number; board: ReturnType<typeof useBoardView>; zoom: boolean; onZoom: (v: boolean) => void };
 
-function RecordView({ state, viewerSeat, names, deadlineMs, nowMs, onSubmit, def, T, board }: ViewProps) {
+function RecordView({ state, viewerSeat, names, deadlineMs, nowMs, onSubmit, def, T, board, zoom, onZoom }: ViewProps) {
   const submitted = state.pending[viewerSeat];
   const [movesLocal, setMoves] = useState("");
   const moves = submitted ?? movesLocal;
@@ -352,7 +384,7 @@ function RecordView({ state, viewerSeat, names, deadlineMs, nowMs, onSubmit, def
         {preview !== null && <span className="rounded-full bg-yellow-400/20 px-2.5 py-1 text-yellow-100 light:text-yellow-800">👁 {preview}틱 미리보기</span>}
       </div>
 
-      <Stage def={def} frame={frame} meta={meta} replay={false} board={board} />
+      <Stage def={def} frame={frame} meta={meta} replay={false} board={board} zoom={zoom} onZoom={onZoom} focus={frame.selves[me] ? { x: frame.selves[me].x, y: frame.selves[me].y } : null} />
       <Timeline T={T} t={t} marks={ghostMarks} preview={preview} onPreview={setPreview} />
 
       {out && (
@@ -432,7 +464,7 @@ function RecordView({ state, viewerSeat, names, deadlineMs, nowMs, onSubmit, def
   );
 }
 
-function ReplayView({ state, viewerSeat, names, onReady, onGameEnd, def, T, board, tracks }: ViewProps & { tracks: SelfTrack[] }) {
+function ReplayView({ state, viewerSeat, names, onReady, onGameEnd, def, T, board, tracks, zoom, onZoom }: ViewProps & { tracks: SelfTrack[] }) {
   const run = useMemo(() => simulate(def, tracks, state.need), [def, tracks, state.need]);
   const meta = useMemo(() => selfMeta(tracks, names, null), [tracks, names]);
   const [startAt, setStartAt] = useState(() => Date.now());
@@ -465,7 +497,7 @@ function ReplayView({ state, viewerSeat, names, onReady, onGameEnd, def, T, boar
         </span>
         {frame.emp > 0 && <span className="rounded-full bg-sky-500/20 px-2.5 py-1 text-sky-100 light:text-sky-800">⚡ EMP {frame.emp}</span>}
       </div>
-      <Stage def={def} frame={frame} meta={meta} replay board={board} />
+      <Stage def={def} frame={frame} meta={meta} replay board={board} zoom={zoom} onZoom={onZoom} focus={null} />
       <Timeline T={T} t={tick} marks={run.events.filter((e) => e.kind === "bank" || e.kind === "paradox" || e.kind === "caught").map((e) => ({ t: e.t, icon: e.kind === "bank" ? "💎" : e.kind === "caught" ? "🚨" : "⚠️" }))} preview={null} />
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => setStartAt(Date.now())} className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/70 light:border-slate-300 light:text-slate-600">

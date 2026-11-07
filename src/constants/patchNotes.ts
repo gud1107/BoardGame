@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.156.1",
+    releaseDate: "2026-11-08",
+    title: "⏳ 시간 루프 도둑단 — 휴대폰 3D 확대",
+    changes: [
+      { game: "time-loop-heist", type: "IMPROVE", desc: "🔍 휴대폰에선 녹화할 때 카메라가 내 도둑을 따라가며 확대돼요 — 🗺️ 전체 보기로 언제든 전환" },
+      { game: "time-loop-heist", type: "IMPROVE", desc: "🗺️ 3D 화면 높이를 지도 모양에 맞춰 빈 공간 없이 꽉 차게, 더 위에서 내려다보는 각도로" },
+    ],
+  },
+  {
     version: "v1.156.0",
     releaseDate: "2026-11-08",
     title: "🎳 새 게임 볼링 난장판",
