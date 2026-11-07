@@ -38,6 +38,8 @@ import {
   CHAIN_RANGE,
   DEATH_BLAST_RADIUS,
   EXECUTE_HP,
+  INTEREST_CAP,
+  MERC_SEC,
   REVIVE_HP,
   BASE_FRONT,
   CATCH_UP_DISCOUNT,
@@ -102,6 +104,8 @@ export interface Unit {
   moving: boolean;
   /** Already got back up once (불사 군단). */
   revived?: boolean;
+  /** Has attacked at least once (선제 타격). */
+  struck?: boolean;
 }
 
 export interface QueueItem {
@@ -112,6 +116,8 @@ export interface QueueItem {
   free?: boolean;
   /** 쌍둥이 징집 copy (never copies again). */
   twin?: boolean;
+  /** Gold actually paid (refund on cancel). */
+  paid?: number;
 }
 
 export interface TurretSlot {
@@ -348,7 +354,20 @@ export function aug(p: PlayerState, k: NumFx): number {
   return v;
 }
 
-export const popCapOf = (p: PlayerState) => POP_CAP + aug(p, "pop");
+export const popCapOf = (p: PlayerState) => Math.max(5, POP_CAP + aug(p, "pop"));
+
+/** Per-role augment bonus (창술 교범, 명사수 교육, …). */
+export function roleAug(p: PlayerState, role: Role, k: "atk" | "hp" | "speed"): number {
+  let v = 0;
+  for (const id of p.augments ?? []) v += AUGMENTS[id]?.fx.roles?.[role]?.[k] ?? 0;
+  return v;
+}
+
+/** What this side pays for a unit (징병 할인). */
+export const unitCost = (p: PlayerState, kind: UnitKind) => Math.max(1, Math.round(UNITS[kind].cost * (1 - aug(p, "costCut"))));
+
+/** How much of this side's healing survives the enemy's 괴저. */
+export const healMul = (s: EraMarchState, side: Side) => Math.max(0, 1 - aug(s.players[side === 0 ? 1 : 0], "healCut"));
 
 export function baseHpFor(p: PlayerState, era: Era): number {
   const m = (p.plan === "fortress" ? 1.15 : 1) * (1 + aug(p, "baseHp"));
@@ -360,19 +379,26 @@ export const atkMul = (p: PlayerState) => (p.plan === "blitz" ? 1.15 : 1) * (1 +
 
 /** One unit's hit (plan + augments + 광전사 while under half HP). */
 function unitAtk(p: PlayerState, u: Unit): number {
-  const b = u.hp < u.maxHp * 0.5 ? 1 + aug(p, "berserk") : 1;
-  return UNITS[u.kind].atk * atkMul(p) * b;
+  const def = UNITS[u.kind];
+  let m = 1 + roleAug(p, def.role, "atk");
+  if (u.hp < u.maxHp * 0.5) m *= 1 + aug(p, "berserk");
+  if (behind[u.side]) m *= 1 + aug(p, "underdog");
+  if (p.baseHp < p.baseMax * 0.5) m *= 1 + aug(p, "desperate");
+  if (!u.struck) m *= 1 + aug(p, "ambush");
+  return def.atk * atkMul(p) * m;
 }
 
 /** XP multiplier (plan). */
 export const xpMul = (p: PlayerState) => (p.plan === "scholar" ? 1.35 : 1) * (1 + aug(p, "xp"));
 
 /** Spawn HP multiplier for this unit (doctrine + plan + items). */
-export function hpMul(p: PlayerState, kind: UnitKind): number {
+export function hpMul(p: PlayerState, kind: UnitKind, side: Side = 0): number {
   let m = UNITS[kind].role === "charge" && has(p, "iron") ? 1.3 : 1;
   if (hasItem(p, "armor")) m *= 1.08;
   if (p.plan === "merchant") m *= 0.92;
-  return m * (1 + aug(p, "hp"));
+  m *= 1 + roleAug(p, UNITS[kind].role, "hp");
+  if (behind[side]) m *= 1 + aug(p, "underdog");
+  return m * Math.max(0.3, 1 + aug(p, "hp"));
 }
 
 export function unitRange(p: PlayerState, kind: UnitKind): number {
@@ -383,7 +409,7 @@ export function unitRange(p: PlayerState, kind: UnitKind): number {
 
 export function unitSpeed(p: PlayerState, kind: UnitKind): number {
   const def = UNITS[kind];
-  return def.speed * (def.role === "charge" && has(p, "chariot") ? 1.25 : 1) * (p.plan === "blitz" ? 1.15 : 1) * (1 + aug(p, "speed"));
+  return def.speed * (def.role === "charge" && has(p, "chariot") ? 1.25 : 1) * (p.plan === "blitz" ? 1.15 : 1) * (1 + aug(p, "speed") + roleAug(p, def.role, "speed"));
 }
 
 export function trainTicks(p: PlayerState, kind: UnitKind): number {
@@ -420,7 +446,7 @@ export function frontIncome(s: EraMarchState, side: Side): number {
 
 export function incomeOf(s: EraMarchState, side: Side): number {
   const p = s.players[side];
-  const m = 1 + (p.plan === "merchant" ? 0.15 : 0) + (hasItem(p, "bonds") ? 0.15 : 0) + aug(p, "income");
+  const m = Math.max(0.5, 1 + (p.plan === "merchant" ? 0.15 : 0) + (hasItem(p, "bonds") ? 0.15 : 0) + aug(p, "income") - aug(s.players[side === 0 ? 1 : 0], "incomeCut"));
   return Math.round((ERAS[p.era].income + frontIncome(s, side)) * m * 10) / 10;
 }
 
@@ -440,7 +466,7 @@ export function evolveCost(s: EraMarchState, side: Side): number {
   const n = nextEra(p);
   if (n === null) return 0;
   const behind = s.players[side === 0 ? 1 : 0].era > p.era;
-  return Math.round(ERAS[n].goldCost * (behind ? CATCH_UP_DISCOUNT : 1) * (p.plan === "scholar" ? 0.8 : p.plan === "blitz" ? 1.1 : 1) * (1 - aug(p, "evolve")));
+  return Math.round(ERAS[n].goldCost * (behind ? CATCH_UP_DISCOUNT : 1) * (p.plan === "scholar" ? 0.8 : p.plan === "blitz" ? 1.1 : 1) * (1 - aug(p, "evolve") - (behind ? aug(p, "underdogEvolve") : 0)));
 }
 
 /* ── command validation ──────────────────────────────────────────────── */
@@ -452,7 +478,7 @@ export function commandError(s: EraMarchState, side: Side, c: Command): string |
     case "train": {
       if (!rosterOf(p).includes(c.kind)) return "지금 시대에 없는 유닛";
       if (p.queue.length >= QUEUE_CAP) return "생산 대기열이 가득 참";
-      if (p.gold < UNITS[c.kind].cost) return "골드 부족";
+      if (p.gold < unitCost(p, c.kind)) return "골드 부족";
       const lim = UNITS[c.kind].limit;
       if (lim !== undefined) {
         const alive = s.units.filter((u) => u.side === side && u.kind === c.kind).length + p.queue.filter((q) => q.kind === c.kind).length;
@@ -504,9 +530,10 @@ function applyCommand(s: EraMarchState, side: Side, c: Command) {
   }
   switch (c.t) {
     case "train": {
-      p.gold -= UNITS[c.kind].cost;
+      const paid = unitCost(p, c.kind);
+      p.gold -= paid;
       const total = trainTicks(p, c.kind);
-      p.queue.push({ kind: c.kind, left: total, total });
+      p.queue.push({ kind: c.kind, left: total, total, paid });
       p.xp += Math.round(UNITS[c.kind].cost * TRAIN_XP * xpMul(p));
       s.events.push({ t: "train", side, kind: c.kind });
       return;
@@ -514,7 +541,7 @@ function applyCommand(s: EraMarchState, side: Side, c: Command) {
     case "cancel": {
       const [q] = p.queue.splice(c.index, 1);
       if (!q.free) {
-        p.gold += UNITS[q.kind].cost;
+        p.gold += q.paid ?? UNITS[q.kind].cost;
         p.xp = Math.max(0, p.xp - Math.round(UNITS[q.kind].cost * TRAIN_XP * xpMul(p)));
       }
       s.events.push({ t: "cancel", side });
@@ -635,13 +662,14 @@ function castSpecial(s: EraMarchState, side: Side) {
   const era = p.era;
   const foe: Side = side === 0 ? 1 : 0;
   p.specialCd = specialCdMax(p);
+  const sk = 1 + aug(p, "specialDmg");
   p.stats.specials++;
   s.events.push({ t: "special", side, era });
   const enemies = enemiesOf(s, side);
   const d = dirOf(side);
   switch (era) {
     case 0: // mammoth stampede: sweeps from my base toward theirs
-      s.sweeps.push({ side, x: wallX(side), vx: d * 22, end: wallX(foe), dmg: 75, stun: 24, push: 90, hit: [], era });
+      s.sweeps.push({ side, x: wallX(side), vx: d * 22, end: wallX(foe), dmg: Math.round(75 * sk), stun: 24, push: 90, hit: [], era });
       return;
     case 1: {
       // catapult volley on the densest enemy pack
@@ -651,7 +679,7 @@ function castSpecial(s: EraMarchState, side: Side) {
         const n = enemies.filter((o) => Math.abs(o.x - e.x) <= 60).length;
         if (n > bestN) [bestN, bestX] = [n, e.x];
       }
-      for (let i = 0; i < 3; i++) s.strikes.push({ at: s.tick, due: s.tick + 18 + i * 9, side, x: bestX + d * (i - 1) * 25, radius: 62, dmg: 160, stun: 6, push: 12, target: -1, era });
+      for (let i = 0; i < 3; i++) s.strikes.push({ at: s.tick, due: s.tick + 18 + i * 9, side, x: bestX + d * (i - 1) * 25, radius: 62, dmg: Math.round(160 * sk), stun: 6, push: 12, target: -1, era });
       return;
     }
     case 2: {
@@ -660,18 +688,18 @@ function castSpecial(s: EraMarchState, side: Side) {
       for (let i = 0; i < 6 && pool.length; i++) {
         const k = Math.floor(nextRandom(s) * pool.length);
         const [e] = pool.splice(k, 1);
-        s.strikes.push({ at: s.tick, due: s.tick + 16 + i * 5, side, x: e.x, radius: 18, dmg: 560, stun: 8, push: 0, target: e.id, era });
+        s.strikes.push({ at: s.tick, due: s.tick + 16 + i * 5, side, x: e.x, radius: 18, dmg: Math.round(560 * sk), stun: 8, push: 0, target: e.id, era });
       }
       return;
     }
     case 3: {
       // airship bombing run: starts above my front
       const start = fromProgress(side, Math.max(SPAWN_X, frontProgress(s, side) - 40));
-      s.sweeps.push({ side, x: start, vx: d * 9, end: wallX(foe), dmg: 900, stun: 10, push: 20, hit: [], era });
+      s.sweeps.push({ side, x: start, vx: d * 9, end: wallX(foe), dmg: Math.round(900 * sk), stun: 10, push: 20, hit: [], era });
       return;
     }
     case 4:
-      for (const e of enemies) s.strikes.push({ at: s.tick, due: s.tick + 10, side, x: e.x, radius: 0, dmg: 1300, stun: 60, push: 0, target: e.id, era });
+      for (const e of enemies) s.strikes.push({ at: s.tick, due: s.tick + 10, side, x: e.x, radius: 0, dmg: Math.round(1300 * sk), stun: 60, push: 0, target: e.id, era });
       s.players[foe].jammed = 60;
       s.strikes.push({ at: s.tick, due: s.tick + 10, side, x: fromProgress(side, LANE / 2), radius: 0, dmg: 0, stun: 0, push: 0, target: -2, era });
       return;
@@ -684,6 +712,7 @@ function damageTo(s: EraMarchState, u: Unit, dmg: number, role: Role | "turret" 
   const owner = s.players[u.side];
   const att = s.players[u.side === 0 ? 1 : 0];
   let m = role === "turret" || role === "special" ? 1 : matchMul(att, role, def.role);
+  if (m > 1 && role !== "turret" && role !== "special") m = 1 + (m - 1) * Math.max(0, 1 - aug(owner, "counterResist"));
   if (def.role === "melee" && has(owner, "shield")) m *= 0.8;
   if ((def.role === "ranged" || def.role === "support") && has(owner, "network")) m *= 0.75;
   if (u.hp < u.maxHp * EXECUTE_HP) m *= 1 + aug(att, "execute");
@@ -696,6 +725,9 @@ function matchMul(att: PlayerState, a: Role, d: Role): number {
   const c = aug(att, "counter");
   return c && BEATS[a] === d ? c : roleMul(a, d);
 }
+
+/** Whether each side is in an earlier era than the other this tick (역전의 용사). Rebuilt every step. */
+let behind: [boolean, boolean] = [false, false];
 
 /** Frontmost unit id per side this tick (선봉 방패). Rebuilt at the start of every step. */
 let frontIds: [number, number] = [-1, -1];
@@ -725,7 +757,7 @@ function splashAround(s: EraMarchState, out: Dmg[], side: Side, x: number, radiu
 
 function damageBase(s: EraMarchState, side: Side, raw: number, fx: Fx, by: Side) {
   const p = s.players[side];
-  const amt = Math.max(1, Math.round(raw));
+  const amt = Math.max(1, Math.round(raw * (1 + aug(s.players[by], "siegeDmg")) * Math.max(0.2, 1 - aug(p, "baseGuard"))));
   p.baseHp = Math.max(0, p.baseHp - amt);
   s.players[by].stats.damage += amt;
   s.events.push({ t: "hit", side, id: -1, x: wallX(side), dmg: amt, fx, mul: 1, base: true });
@@ -739,6 +771,8 @@ export function stepGame(s: EraMarchState, cmds: readonly SeatCommand[]): void {
   s.tick++;
 
   for (const c of cmds) applyCommand(s, c.side, c.cmd);
+
+  behind = [s.players[0].era < s.players[1].era, s.players[1].era < s.players[0].era];
 
   // 0. augment rounds open on the clock; an untouched offer takes its first card
   const round = s.augRound ?? 0;
@@ -763,7 +797,7 @@ export function stepGame(s: EraMarchState, cmds: readonly SeatCommand[]): void {
     if (s.units.some((u) => u.side === side && progress(side, u.x) < SPAWN_X + ALLY_GAP)) continue;
     p.queue.shift();
     const def = UNITS[q.kind];
-    const hp = Math.round(def.hp * hpMul(p, q.kind));
+    const hp = Math.round(def.hp * hpMul(p, q.kind, side));
     const u: Unit = { id: s.nextId++, side, kind: q.kind, x: spawnX, hp, maxHp: hp, cd: Math.round(def.cdTicks * 0.4), stun: 0, lastAtk: -99, moving: false };
     s.units.push(u);
     p.stats.trained++;
@@ -807,7 +841,7 @@ export function stepGame(s: EraMarchState, cmds: readonly SeatCommand[]): void {
         if (u.cd === 0) {
           u.cd = def.cdTicks;
           u.lastAtk = s.tick;
-          const amt = Math.min(def.atk, ally.maxHp - ally.hp);
+          const amt = Math.min(Math.round(def.atk * (1 + aug(p, "heal")) * healMul(s, u.side)), ally.maxHp - ally.hp);
           ally.hp += amt;
           s.events.push({ t: "shot", side: u.side, from: u.x, to: ally.x, fx: "heal", ticks: 6, turret: -1, id: u.id, base: false });
           s.events.push({ t: "heal", side: u.side, x: ally.x, amt });
@@ -826,18 +860,22 @@ export function stepGame(s: EraMarchState, cmds: readonly SeatCommand[]): void {
     if (u.cd > 0) continue;
     u.cd = def.cdTicks;
     u.lastAtk = s.tick;
+    const firstAtk = unitAtk(p, u);
+    u.struck = true;
     const tx = target === "base" ? wallX(foe) : target.x;
     const ranged = def.range > 30;
     if (ranged) {
       const ticks = Math.max(2, Math.ceil(Math.abs(tx - u.x) / PROJ_SPEED));
-      s.hits.push({ due: s.tick + ticks, side: u.side, target: target === "base" ? -1 : target.id, x: tx, dmg: Math.round(unitAtk(p, u)), role: def.role, fx: def.fx, splash: def.splash ?? 0, siege: def.siege ?? 1, steal: def.steal ?? 0, kind: u.kind, src: u.id, chain: aug(p, "chain") });
+      s.hits.push({ due: s.tick + ticks, side: u.side, target: target === "base" ? -1 : target.id, x: tx, dmg: Math.round(firstAtk), role: def.role, fx: def.fx, splash: def.splash ?? 0, siege: def.siege ?? 1, steal: def.steal ?? 0, kind: u.kind, src: u.id, chain: aug(p, "chain") });
       s.events.push({ t: "shot", side: u.side, from: u.x, to: tx, fx: def.fx, ticks, turret: -1, id: u.id, base: target === "base" });
     } else {
       s.events.push({ t: "swing", side: u.side, id: u.id, kind: u.kind });
-      const atk = unitAtk(p, u);
+      const atk = firstAtk;
       if (target === "base") damageBase(s, foe, atk * (def.siege ?? 1), def.fx, u.side);
       else {
         hitUnit(s, dmgs, target, atk, def.role, u.side, def.fx, u);
+        const shove = aug(p, "shove");
+        if (shove && UNITS[target.kind].size < 1.6) target.x = clampLane(target.x + dirOf(u.side) * shove, target.side);
         if (def.splash) splashAround(s, dmgs, u.side, target.x, def.splash, atk * 0.5, def.role, def.fx, target);
         if (def.steal) stealGold(s, u.side, def.steal, target.x);
       }
@@ -856,10 +894,10 @@ export function stepGame(s: EraMarchState, cmds: readonly SeatCommand[]): void {
       if (p.jammed > 0 || t.cd > 0 || !nearest) return;
       const def = TURRETS[t.kind];
       const dist = Math.abs(nearest.x - wallX(side));
-      if (dist > def.range) return;
+      if (dist > def.range * (1 + aug(p, "turretRange"))) return;
       t.cd = def.cdTicks;
       t.lastShot = s.tick;
-      const stand = dist <= LAST_STAND_RANGE ? LAST_STAND_MUL : 1;
+      const stand = dist <= LAST_STAND_RANGE ? LAST_STAND_MUL + aug(p, "lastStand") : 1;
       const from = fromProgress(side, 12);
       const ticks = Math.max(3, Math.ceil(Math.abs(nearest.x - from) / PROJ_SPEED));
       s.hits.push({ due: s.tick + ticks, side, target: nearest.id, x: nearest.x, dmg: Math.round(def.dmg * stand * (p.plan === "fortress" ? 1.15 : 1) * (1 + aug(p, "turret"))), role: "turret", fx: def.fx, splash: def.splash ?? 0, siege: 1, steal: 0, kind: null });
@@ -882,6 +920,8 @@ export function stepGame(s: EraMarchState, cmds: readonly SeatCommand[]): void {
       const src = h.src !== undefined && h.src >= 0 ? alive.get(h.src) : undefined;
       hitUnit(s, dmgs, tu, h.dmg, h.role, h.side, h.fx, src);
       if (h.steal) stealGold(s, h.side, h.steal, at);
+      const shock = h.kind ? aug(s.players[h.side], "shock") : 0;
+      if (shock) tu.stun = Math.max(tu.stun, shock);
       // 연쇄 사격: bounce to the nearest other enemy
       let from = tu;
       const done = new Set([tu.id]);
@@ -943,7 +983,7 @@ export function stepGame(s: EraMarchState, cmds: readonly SeatCommand[]): void {
     const src = d.src;
     if (src && src.hp > 0) {
       const ls = aug(s.players[d.by], "lifesteal");
-      if (ls) src.hp = Math.min(src.maxHp, src.hp + Math.round(real * ls));
+      if (ls) src.hp = Math.min(src.maxHp, src.hp + Math.round(real * ls * healMul(s, d.by)));
       const th = aug(s.players[d.u.side], "thorns");
       if (th && UNITS[src.kind].range <= 30) {
         const back = Math.max(1, Math.round(d.amt * th));
@@ -991,8 +1031,14 @@ export function stepGame(s: EraMarchState, cmds: readonly SeatCommand[]): void {
       p.gold += inc;
       p.stats.goldEarned += inc;
       p.xp += Math.round(ERAS[p.era].income * PASSIVE_XP * xpMul(p));
-      const regen = aug(p, "regen");
+      const regen = aug(p, "regen") * healMul(s, side);
       if (regen && p.baseHp > 0) p.baseHp = Math.min(p.baseMax, p.baseHp + Math.ceil(p.baseMax * regen));
+      const rate = aug(p, "interest");
+      if (rate) p.gold += Math.round(Math.min(p.gold * rate, ERAS[p.era].income * INTEREST_CAP) * 10) / 10;
+      const merc = aug(p, "merc");
+      if (merc && s.tick % (MERC_SEC * TICKS_PER_SEC) === 0 && p.queue.length < QUEUE_CAP + 2) {
+        for (let i = 0; i < merc; i++) p.queue.push({ kind: ERA_UNITS[p.era][0], left: 10, total: 10, free: true });
+      }
     }
   }
   if (s.tick >= MATCH_TICKS) {
@@ -1048,7 +1094,7 @@ function stealGold(s: EraMarchState, thief: Side, amt: number, x: number) {
 
 /** 불사 군단 gets one roll per unit; otherwise it dies. */
 function dieOrRevive(s: EraMarchState, u: Unit, by: Side) {
-  const rv = aug(s.players[u.side], "revive");
+  const rv = aug(s.players[u.side], "revive") * healMul(s, u.side);
   if (rv && !u.revived && nextRandom(s) < rv) {
     u.revived = true;
     u.hp = Math.round(u.maxHp * REVIVE_HP);
@@ -1066,7 +1112,7 @@ function kill(s: EraMarchState, u: Unit, by: Side) {
   const gm = (bonus ? ERA_GAP_BONUS : 1) * (has(killer, "plunder") ? PLUNDER_GOLD : 1) * (killer.plan === "merchant" ? 1.1 : 1) * (1 + aug(killer, "killGold"));
   const gold = Math.max(1, Math.round(def.cost * KILL_GOLD * gm));
   killer.gold += gold;
-  killer.xp += Math.round(def.cost * KILL_XP * (bonus ? ERA_GAP_BONUS : 1) * xpMul(killer));
+  killer.xp += Math.round(def.cost * KILL_XP * (bonus ? ERA_GAP_BONUS : 1) * xpMul(killer) * (1 + aug(killer, "killXp")));
   killer.stats.kills++;
   killer.stats.goldEarned += gold;
   s.players[u.side].stats.lost++;

@@ -221,7 +221,8 @@ describe("era march strategy shop", async () => {
 
 describe("era march augments", async () => {
   const { AUG_PICK_SECONDS, AUG_ROUNDS, AUGMENTS, TICKS_PER_SEC } = await import("./data");
-  const { aug, popCapOf, startGame: start, stepGame: step } = await import("./engine");
+  const { aug, healMul, incomeOf, popCapOf, startGame: start, stepGame: step, unitCost } = await import("./engine");
+  const data = await import("./data");
   const run = (s: ReturnType<typeof start>, ticks: number) => {
     for (let i = 0; i < ticks; i++) step(s, []);
   };
@@ -262,10 +263,39 @@ describe("era march augments", async () => {
     expect(new Set(s.players[0].augments).size).toBe(AUG_ROUNDS.length);
   });
 
+  it("every augment is well-formed and counters point at real augments", () => {
+    const { AUGMENT_LIST } = data;
+    const ids = new Set(AUGMENT_LIST.map((a) => a.id));
+    expect(ids.size).toBe(AUGMENT_LIST.length);
+    expect(AUGMENT_LIST.length).toBeGreaterThanOrEqual(50);
+    for (const a of AUGMENT_LIST) for (const c of a.counters ?? []) expect(ids.has(c), `${a.id} -> ${c}`).toBe(true);
+  });
+
+  it("answer augments switch off what they counter", () => {
+    const s = start(15);
+    s.players[0].augments = ["discount"];
+    expect(unitCost(s.players[0], "club")).toBe(Math.round(15 * 0.92));
+    s.players[1].augments = ["rot"];
+    expect(healMul(s, 0)).toBe(0);
+    expect(healMul(s, 1)).toBe(1);
+    s.players[1].augments = [];
+    const plain = incomeOf(s, 0);
+    s.players[1].augments = ["blockade"];
+    expect(incomeOf(s, 0)).toBeCloseTo(plain * (1 - 0.24), 1);
+  });
+
+  it("용병 계약 queues a free unit on its timer", () => {
+    const s = start(16);
+    s.players[0].augments = ["merc"];
+    run(s, data.MERC_SEC * TICKS_PER_SEC);
+    expect(s.players[0].queue.some((q) => q.free)).toBe(true);
+    expect(s.players[1].queue.length).toBe(0);
+  });
+
   it("stat augments feed the modifiers", () => {
     const s = start(14);
     s.players[0].augments = ["horde", "tax"];
-    expect(popCapOf(s.players[0])).toBe(23);
+    expect(popCapOf(s.players[0])).toBe(21);
     expect(aug(s.players[0], "income")).toBeCloseTo(0.15);
     expect(aug(s.players[1], "income")).toBe(0);
   });

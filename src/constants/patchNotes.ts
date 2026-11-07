@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.147.0",
+    releaseDate: "2026-11-07",
+    title: "🧬 시대의 진격 증강 51종 · 증강 비교 창",
+    changes: [
+      { game: "era-march", type: "FEAT", desc: "🧬 증강 28 → 51종 — 병과 특화(창술·명사수·박차), 대가 있는 프리즘(유리 대포·정예주의), 용병·복리 이자·역전의 용사 등" },
+      { game: "era-march", type: "FEAT", desc: "🎯 견제 카드 — 괴저(상대 회복·부활 차단)·적응형 갑옷·방벽 결계·해상 봉쇄, 상대 증강을 견제하면 카드에 “🎯 견제” 표시" },
+      { game: "era-march", type: "FEAT", desc: "✨ 증강 비교 창(위 ✨ 버튼·Tab) — 나와 상대 증강·합계 효과·다음 증강 시각과 등급 확률, 카드마다 ⚔️공격·🛡️방어·💰경제 분류" },
+    ],
+  },
+  {
     version: "v1.146.0",
     releaseDate: "2026-11-07",
     title: "🃏 변신 숨바꼭질 술래 증강",

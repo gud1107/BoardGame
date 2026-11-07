@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
-import { AUG_TIER_COLOR, AUG_TIER_NAME, AUGMENTS, AUG_ROUNDS, BEATS, DOCTRINES, ERA_DOCTRINES, ITEMS, PLANS, ERA_TURRETS, ERAS, LANE, QUEUE_CAP, ROLE_ICON, ROLE_NAME, SELL_REFUND, SLOT_COST, SPECIALS, TICK_MS, TURRETS, UNITS, type DoctrineId, type Era, type Role, type TurretKind } from "./data";
-import { commandError, evolveCost, frontProgress, incomeOf, nextEra, popCapOf, popOf, progress, rosterOf, secondsLeft, specialCdMax, type Command, type EraMarchState, type FxEvent, type Side } from "./engine";
+import { AUG_TAG_ICON, AUG_TAG_NAME, AUG_TIER_COLOR, AUG_TIER_NAME, AUGMENTS, AUG_ROUNDS, TICKS_PER_SEC, type AugFx, type AugmentDef, BEATS, DOCTRINES, ERA_DOCTRINES, ITEMS, PLANS, ERA_TURRETS, ERAS, LANE, QUEUE_CAP, ROLE_ICON, ROLE_NAME, SELL_REFUND, SLOT_COST, SPECIALS, TICK_MS, TURRETS, UNITS, type DoctrineId, type Era, type Role, type TurretKind } from "./data";
+import { aug, commandError, evolveCost, frontProgress, incomeOf, nextEra, popCapOf, popOf, roleAug, unitCost, progress, rosterOf, secondsLeft, specialCdMax, type Command, type EraMarchState, type FxEvent, type Side } from "./engine";
 import { EraMarchSound, eraSuite, playCue, unlockAudio } from "./eraMarchAudio";
 import type { MatchDriver } from "./driver";
 import { BattleScene, TEAM_HEX } from "./three/battleScene";
@@ -73,6 +73,7 @@ export default function EraMarchBoard({ driver, reduceShake, subtitle, onEnd, on
   const [speed, setSpeed] = useState(1);
   const [turretOpen, setTurretOpen] = useState(false);
   const [doctrinePick, setDoctrinePick] = useState<Era | null>(null);
+  const [bookOpen, setBookOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [countdown, setCountdown] = useState(4);
   const [banner, setBanner] = useState<{ title: string; sub: string; color: string } | null>(null);
@@ -312,6 +313,11 @@ export default function EraMarchBoard({ driver, reduceShake, subtitle, onEnd, on
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       const st = stateRef.current;
       const list = rosterOf(st.players[ME]);
+      if (e.key === "Tab") {
+        e.preventDefault();
+        setBookOpen((v) => !v);
+        return;
+      }
       if (st.players[ME].offer && doctrinePick === null && !online) {
         if (/^[1-3]$/.test(e.key)) pickAugment(Number(e.key) - 1);
         else if (e.key === "r" || e.key === "R") rerollAugment();
@@ -402,7 +408,7 @@ export default function EraMarchBoard({ driver, reduceShake, subtitle, onEnd, on
       {/* top: bases + timer + minimap */}
       <div className="pointer-events-none absolute inset-x-0 top-0 p-2 sm:p-3">
         <div className="flex items-start gap-2">
-          <BaseCard side={ME} p={me} label={driver.names[ME] || "나"} />
+          <BaseCard side={ME} p={me} label={driver.names[ME] || "나"} onAugments={() => setBookOpen(true)} />
           <div className="pointer-events-auto flex shrink-0 flex-col items-center gap-1">
             <div className={`rounded-lg px-2.5 py-1 font-mono text-sm font-bold tabular-nums shadow ${s.suddenDeath ? "animate-pulse bg-red-700" : "bg-black/60"}`}>{s.suddenDeath ? "서든데스" : `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`}</div>
             <div className="flex gap-1">
@@ -414,10 +420,13 @@ export default function EraMarchBoard({ driver, reduceShake, subtitle, onEnd, on
                   <IconBtn label="배속" onClick={() => { const v = speed === 1 ? 2 : 1; speedRef.current = v; setSpeed(v); playCue("click"); }}>{speed}×</IconBtn>
                 </>
               )}
+              <IconBtn label="증강 보기 [Tab]" onClick={() => { setBookOpen((v) => !v); playCue("click"); }}>
+                <span className="text-xs">✨{(me.augments ?? []).length}:{(foe.augments ?? []).length}</span>
+              </IconBtn>
               <IconBtn label={soundOn ? "소리 끄기" : "소리 켜기"} onClick={() => { unlockAudio(); const st = useAudioSettingsStore.getState(); if (soundOn) st.setMasterMuted(true); else { st.setMasterMuted(false); st.setBgmMuted(false); st.setSfxMuted(false); } }}>{soundOn ? "🔊" : "🔇"}</IconBtn>
             </div>
           </div>
-          <BaseCard side={FOE} p={foe} label={driver.names[FOE]} right />
+          <BaseCard side={FOE} p={foe} label={driver.names[FOE]} right onAugments={() => setBookOpen(true)} />
         </div>
         <canvas
           ref={miniRef}
@@ -536,7 +545,8 @@ export default function EraMarchBoard({ driver, reduceShake, subtitle, onEnd, on
           <div className="mt-1.5 grid grid-cols-4 gap-1.5 sm:grid-cols-7">
             {roster.map((k, i) => {
               const d = UNITS[k];
-              const afford = me.gold >= d.cost;
+              const price = unitCost(me, k);
+              const afford = me.gold >= price;
               const err = commandError(s, ME, { t: "train", kind: k });
               const rec = recommend === d.role;
               return (
@@ -551,7 +561,7 @@ export default function EraMarchBoard({ driver, reduceShake, subtitle, onEnd, on
                   <span className="mt-0.5 w-full truncate text-center text-[10px] font-bold sm:text-xs">{d.name}</span>
                   <span className="flex items-center gap-1 text-[10px]">
                     <span className="rounded bg-black/40 px-1" title={ROLE_NAME[d.role]}>{ROLE_ICON[d.role]}</span>
-                    <span className={`font-black ${afford ? "text-amber-300" : "text-red-400"}`}>{d.cost}</span>
+                    <span className={`font-black ${afford ? "text-amber-300" : "text-red-400"}`}>{price}</span>
                   </span>
                   <span className="absolute left-1 top-0.5 hidden text-[9px] text-white/40 sm:block">{i + 1}</span>
                 </button>
@@ -576,8 +586,10 @@ export default function EraMarchBoard({ driver, reduceShake, subtitle, onEnd, on
       {children}
 
       {me.offer && doctrinePick === null && (
-        <AugmentPanel s={s} side={ME} online={online} onPick={pickAugment} onReroll={rerollAugment} />
+        <AugmentPanel s={s} side={ME} online={online} onPick={pickAugment} onReroll={rerollAugment} onBook={() => setBookOpen(true)} />
       )}
+
+      {bookOpen && <AugmentBook s={s} me={ME} names={driver.names} onClose={() => setBookOpen(false)} />}
 
       {doctrinePick !== null && (
         <DoctrineModal era={doctrinePick} cost={evoCost} online={online} onPick={pickDoctrine} onCancel={() => { setDoctrinePick(null); pausedRef.current = paused; }} />
@@ -607,7 +619,7 @@ function IconBtn({ children, onClick, label }: { children: React.ReactNode; onCl
   );
 }
 
-function BaseCard({ side, p, label, right }: { side: Side; p: EraMarchState["players"][0]; label: string; right?: boolean }) {
+function BaseCard({ side, p, label, right, onAugments }: { side: Side; p: EraMarchState["players"][0]; label: string; right?: boolean; onAugments?: () => void }) {
   const k = p.baseHp / p.baseMax;
   const era = ERAS[p.era];
   return (
@@ -619,17 +631,17 @@ function BaseCard({ side, p, label, right }: { side: Side; p: EraMarchState["pla
         <span className="shrink-0" title={p.plan ? PLANS[p.plan].name : undefined}>{p.plan ? PLANS[p.plan].emoji : ""}{p.doctrines.map((d) => DOCTRINES[d].emoji).join("")}</span>
       </div>
       {(p.augments ?? []).length > 0 && (
-        <div className={`mt-0.5 flex gap-0.5 ${right ? "flex-row-reverse" : ""}`}>
+        <button type="button" onClick={onAugments} aria-label="증강 자세히 보기" className={`pointer-events-auto mt-0.5 flex flex-wrap gap-0.5 ${right ? "flex-row-reverse" : ""}`}>
           {p.augments.map((id) => {
             const a = AUGMENTS[id];
             if (!a) return null;
             return (
-              <span key={id} title={`${a.name} — ${a.desc}`} className="flex h-5 w-5 items-center justify-center rounded-md bg-black/50 text-[11px] sm:h-6 sm:w-6 sm:text-sm" style={{ boxShadow: `inset 0 0 0 1.5px ${AUG_TIER_COLOR[a.tier]}` }}>
+              <span key={id} title={`${AUG_TIER_NAME[a.tier]} · ${a.name} — ${a.desc}`} className="flex h-5 w-5 items-center justify-center rounded-md bg-black/50 text-[11px] sm:h-6 sm:w-6 sm:text-sm" style={{ boxShadow: `inset 0 0 0 1.5px ${AUG_TIER_COLOR[a.tier]}` }}>
                 {a.emoji}
               </span>
             );
           })}
-        </div>
+        </button>
       )}
       <div className="relative mt-1 h-3 overflow-hidden rounded-full bg-white/10">
         <div className={`absolute inset-y-0 rounded-full transition-[width] duration-200 ${right ? "right-0" : "left-0"}`} style={{ width: `${k * 100}%`, background: k > 0.5 ? TEAM_HEX[side] : k > 0.25 ? "#f59e0b" : "#dc2626" }} />
@@ -694,8 +706,9 @@ const TIER_BG: Record<string, string> = {
 };
 
 /** Tier is also spelled out on every card, so colour is never the only cue. */
-function AugmentPanel({ s, side, online, onPick, onReroll }: { s: EraMarchState; side: Side; online: boolean; onPick: (i: number) => void; onReroll: () => void }) {
+function AugmentPanel({ s, side, online, onPick, onReroll, onBook }: { s: EraMarchState; side: Side; online: boolean; onPick: (i: number) => void; onReroll: () => void; onBook: () => void }) {
   const p = s.players[side];
+  const foeAugs = s.players[side === 0 ? 1 : 0].augments ?? [];
   const o = p.offer!;
   const left = Math.max(0, Math.ceil((o.deadline - s.tick) / 20));
   const color = AUG_TIER_COLOR[o.tier];
@@ -716,19 +729,155 @@ function AugmentPanel({ s, side, online, onPick, onReroll }: { s: EraMarchState;
             const c = AUG_TIER_COLOR[a.tier];
             return (
               <button key={`${o.round}-${id}`} onClick={() => onPick(i)} className="em-card flex min-h-[150px] flex-col items-center gap-1 rounded-xl border-2 p-2 text-center transition hover:-translate-y-1 active:scale-95 sm:min-h-[190px] sm:p-3" style={{ borderColor: c, background: TIER_BG[a.tier], animationDelay: `${i * 0.08}s` }}>
-                <span className="text-[10px] font-black tracking-widest" style={{ color: c }}>{AUG_TIER_NAME[a.tier]}</span>
+                <span className="flex items-center gap-1 text-[10px] font-black tracking-widest">
+                  <span style={{ color: c }}>{AUG_TIER_NAME[a.tier]}</span>
+                  <span className="rounded bg-black/40 px-1 font-bold tracking-normal text-white/75">{AUG_TAG_ICON[a.tag]} {AUG_TAG_NAME[a.tag]}</span>
+                </span>
                 <span className="text-3xl sm:text-5xl">{a.emoji}</span>
                 <span className="text-sm font-black leading-tight sm:text-base">{a.name}</span>
                 <span className="text-[11px] leading-snug text-white/80 sm:text-xs">{a.desc}</span>
+                {answersOf(a, foeAugs).map((t) => (
+                  <span key={t.id} className="rounded-full bg-rose-500/25 px-1.5 py-0.5 text-[10px] font-black text-rose-100 ring-1 ring-rose-300/60">🎯 상대 {t.emoji} {t.name} 견제</span>
+                ))}
                 {!online && <span className="mt-auto text-[10px] text-white/40">[{i + 1}]</span>}
               </button>
             );
           })}
         </div>
+        <div className="mt-2 grid grid-cols-2 gap-1.5 text-[11px]">
+          {([["내 증강", p.augments ?? []], ["상대 증강", foeAugs]] as const).map(([label, list], i) => (
+            <button key={label} type="button" onClick={onBook} className={`flex min-w-0 items-center gap-1 rounded-lg px-2 py-1 text-left ${i ? "bg-rose-500/10" : "bg-sky-500/10"}`}>
+              <span className="shrink-0 font-bold text-white/60">{label}</span>
+              <span className="min-w-0 truncate">{list.length ? list.map((id) => AUGMENTS[id]?.emoji).join(" ") : "없음"}</span>
+              <span className="ml-auto shrink-0 text-white/40">자세히</span>
+            </button>
+          ))}
+        </div>
         <div className="mt-2 flex items-center justify-between gap-2 text-xs">
           <span className="min-w-0 truncate text-white/50">{online ? `${left}초 안에 안 고르면 첫 번째 카드가 자동 선택돼요` : "고를 때까지 전투가 멈춰 있어요"}</span>
           <button onClick={onReroll} disabled={p.rerolls <= 0} className="shrink-0 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 font-bold disabled:opacity-35">🎲 다시 뽑기 ({p.rerolls}){online ? "" : " [R]"}</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Enemy augments this card answers. */
+function answersOf(a: AugmentDef, foe: readonly string[]): AugmentDef[] {
+  return (a.counters ?? []).filter((c) => foe.includes(c)).map((c) => AUGMENTS[c]).filter((x): x is AugmentDef => !!x);
+}
+
+type SumKey = Exclude<keyof AugFx, "roles" | "specialNow" | "goldNow">;
+/** How each knob reads in the totals: label, unit and whether a bigger number is a cut. */
+const SUM_LABEL: [SumKey, string, "pct" | "cut" | "num" | "sec" | "mul" | "pps"][] = [
+  ["atk", "공격력", "pct"], ["hp", "HP", "pct"], ["speed", "이동속도", "pct"], ["train", "생산 시간", "cut"], ["costCut", "유닛 가격", "cut"],
+  ["income", "골드 수입", "pct"], ["killGold", "처치 골드", "pct"], ["xp", "XP", "pct"], ["killXp", "처치 XP", "pct"], ["evolve", "진화 골드", "cut"],
+  ["interest", "골드 이자/초", "pct"], ["range", "사거리", "pct"], ["turret", "포탑 피해", "pct"], ["turretRange", "포탑 사거리", "pct"],
+  ["baseHp", "기지 HP", "pct"], ["regen", "기지 수리/초", "pct"], ["baseGuard", "기지 받는 피해", "cut"], ["siegeDmg", "기지 공격", "pct"],
+  ["specialCd", "필살기 쿨", "cut"], ["specialDmg", "필살기 피해", "pct"], ["lifesteal", "흡혈", "pct"], ["heal", "치유량", "pct"],
+  ["thorns", "가시 반사", "pct"], ["execute", "처형 피해", "pct"], ["berserk", "광전사", "pct"], ["frontGuard", "선봉 받는 피해", "cut"],
+  ["deathBlast", "사망 폭발", "pct"], ["twin", "쌍둥이 확률", "pct"], ["revive", "부활 확률", "pct"], ["chain", "튕김", "num"],
+  ["counter", "상성 배율", "mul"], ["counterResist", "상성 피해 무시", "pct"], ["pop", "인구", "num"], ["healCut", "상대 회복 차단", "pct"],
+  ["incomeCut", "상대 수입", "cut"], ["shock", "기절", "sec"], ["shove", "밀치기", "num"], ["ambush", "첫 공격", "pct"], ["merc", "용병", "num"],
+  ["underdog", "역전 시 능력치", "pct"], ["lastStand", "최후 포탑 배율", "num"], ["desperate", "위기 시 공격력", "pct"],
+];
+const ROLE_LABEL: Record<Role, string> = { melee: "근접", ranged: "원거리", charge: "돌격", support: "지원" };
+
+/** The side's augment effects added up, as short chips ("공격력 +23%", "인구 +6"). */
+function augTotals(p: EraMarchState["players"][0]): string[] {
+  const out: string[] = [];
+  for (const [k, label, kind] of SUM_LABEL) {
+    const v = aug(p, k);
+    if (!v) continue;
+    const pct = Math.round(v * 1000) / 10;
+    if (kind === "pct") out.push(`${label} ${v > 0 ? "+" : ""}${pct}%`);
+    else if (kind === "cut") out.push(`${label} ${v > 0 ? "−" : "+"}${Math.abs(pct)}%`);
+    else if (kind === "sec") out.push(`${label} ${v / TICKS_PER_SEC}초`);
+    else if (kind === "mul") out.push(`${label} ×${v}`);
+    else out.push(`${label} ${v > 0 ? "+" : ""}${Math.round(v * 10) / 10}`);
+  }
+  for (const r of ["melee", "ranged", "charge", "support"] as Role[]) {
+    for (const [k, label] of [["atk", "공격력"], ["hp", "HP"], ["speed", "속도"]] as const) {
+      const v = roleAug(p, r, k);
+      if (v) out.push(`${ROLE_LABEL[r]} ${label} +${Math.round(v * 100)}%`);
+    }
+  }
+  return out;
+}
+
+/** Both sides' picks side by side, with totals and what is coming next — readable mid-battle (it never pauses the match). */
+function AugmentBook({ s, me, names, onClose }: { s: EraMarchState; me: Side; names: [string, string]; onClose: () => void }) {
+  const foe: Side = me === 0 ? 1 : 0;
+  const round = s.augRound ?? 0;
+  const next = AUG_ROUNDS[round];
+  const nextIn = next ? Math.max(0, next.sec - Math.floor(s.tick / TICKS_PER_SEC)) : 0;
+  const foeAugs = s.players[foe].augments ?? [];
+  const myAugs = s.players[me].augments ?? [];
+  const col = (side: Side, title: string, tone: string, other: readonly string[]) => {
+    const p = s.players[side];
+    const list = p.augments ?? [];
+    const totals = augTotals(p);
+    return (
+      <div className="min-w-0 rounded-xl border border-white/10 bg-white/[0.04] p-2.5">
+        <div className="mb-1.5 flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: TEAM_HEX[side] }} />
+          <span className="truncate text-sm font-black">{title}</span>
+          <span className={`ml-auto shrink-0 rounded-full px-2 text-[11px] font-bold ${tone}`}>{list.length} / {AUG_ROUNDS.length}</span>
+        </div>
+        {list.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-white/15 p-3 text-center text-xs text-white/45">아직 고른 증강이 없어요</div>
+        ) : (
+          <ul className="flex flex-col gap-1.5">
+            {list.map((id, i) => {
+              const a = AUGMENTS[id];
+              if (!a) return null;
+              const hits = answersOf(a, other);
+              return (
+                <li key={id} className="flex gap-2 rounded-lg bg-black/35 p-1.5" style={{ boxShadow: `inset 3px 0 0 ${AUG_TIER_COLOR[a.tier]}` }}>
+                  <span className="text-2xl leading-none">{a.emoji}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-1.5 text-xs">
+                      <b className="text-sm">{a.name}</b>
+                      <span className="font-bold" style={{ color: AUG_TIER_COLOR[a.tier] }}>{AUG_TIER_NAME[a.tier]}</span>
+                      <span className="text-white/55">{AUG_TAG_ICON[a.tag]} {AUG_TAG_NAME[a.tag]}</span>
+                      <span className="ml-auto text-[10px] text-white/35">{i + 1}번째</span>
+                    </div>
+                    <div className="text-[11px] leading-snug text-white/75">{a.desc}</div>
+                    {hits.length > 0 && <div className="mt-0.5 text-[10px] font-bold text-rose-200">🎯 {hits.map((h) => `${h.emoji} ${h.name}`).join(", ")} 견제 중</div>}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {totals.length > 0 && (
+          <div className="mt-2">
+            <div className="mb-1 text-[10px] font-bold text-white/45">합계 효과</div>
+            <div className="flex flex-wrap gap-1">
+              {totals.map((t) => <span key={t} className="rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-bold">{t}</span>)}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+  return (
+    <div className="absolute inset-0 z-20 flex items-end justify-center bg-black/55 sm:items-center sm:p-4" onClick={onClose}>
+      <div role="dialog" aria-label="증강 비교" className="flex max-h-[82vh] w-full max-w-3xl flex-col rounded-t-2xl border border-white/15 bg-stone-950/95 shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
+          <div className="min-w-0">
+            <div className="text-base font-black">✨ 증강 비교</div>
+            <div className="truncate text-[11px] text-white/55">
+              {next ? `다음 증강 ${Math.floor(nextIn / 60)}:${String(nextIn % 60).padStart(2, "0")} 뒤 · 실버 ${next.odds[0]}% · 골드 ${next.odds[1]}% · 프리즘 ${next.odds[2]}%` : "이번 판 증강은 모두 나왔어요"} · 전투는 계속돼요
+            </div>
+          </div>
+          <button onClick={onClose} className="ml-auto shrink-0 rounded-lg bg-white/10 px-3 py-1.5 text-sm font-bold" aria-label="닫기">닫기 [Tab]</button>
+        </div>
+        <div className="grid min-h-0 grid-cols-1 gap-2 overflow-y-auto p-2.5 sm:grid-cols-2">
+          {col(me, `나 · ${names[me] || "나"}`, "bg-sky-500/20 text-sky-100", foeAugs)}
+          {col(foe, `상대 · ${names[foe]}`, "bg-rose-500/20 text-rose-100", myAugs)}
+        </div>
+        <div className="border-t border-white/10 px-3 py-1.5 text-[10px] text-white/45">🎯 견제 = 상대가 가진 증강을 약하게 만드는 카드예요. 증강을 고를 때 카드에도 같은 표시가 떠요.</div>
       </div>
     </div>
   );

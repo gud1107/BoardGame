@@ -17,6 +17,9 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
  * Keep it short (≤ 80 chars), headline features only.
  */
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
+  "2026-11-07": {
+    "era-march": "✨ 전투 중 증강 3택 1 — 51종(견제 카드 포함), 같은 등급 공정 추첨, 🔍 증강 비교 창, 🤖 봇 증강 선택",
+  },
   "2026-11-06": {
     "morph-hide": "🔨 무기·공격 모션, 🏁 꼼꼬미 규칙, ⚡ 렉 줄이기, ⚖️ 헛손질 연속 가중·잡으면 회복, 🤖 셀프플레이 AI, 🧑‍🎤 VRM 캐릭터, 👁 둘러보기·↩ 뒤돌기",
   },

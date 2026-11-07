@@ -1,7 +1,7 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { AUG_PICK_SECONDS, AUG_ROUNDS, AUG_TIER_NAME, AUGMENT_LIST, DOCTRINES, ERA_DOCTRINES, ERA_TURRETS, ERA_UNITS, ERAS, ITEMS, PLANS, ROLE_ICON, SHOP_BUDGET, SPECIALS, TICKS_PER_SEC, TURRETS, UNITS, type Era } from "./data";
+import { AUG_PICK_SECONDS, AUG_ROUNDS, AUG_TAG_ICON, AUG_TAG_NAME, AUG_TIER_NAME, AUGMENT_LIST, AUGMENTS, DOCTRINES, ERA_DOCTRINES, ERA_TURRETS, ERA_UNITS, ERAS, ITEMS, PLANS, ROLE_ICON, SHOP_BUDGET, SPECIALS, TICKS_PER_SEC, TURRETS, UNITS, type Era } from "./data";
 
 const H3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
 const P = "text-white/70 light:text-slate-600";
@@ -80,13 +80,13 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <p className={P}>
             {AUG_ROUNDS.map((r) => `${Math.floor(r.sec / 60)}:${String(r.sec % 60).padStart(2, "0")}`).join(" · ")}에 증강 카드 3장이 뜹니다. 하나를 고르면 그 판 끝까지 효과가 유지되고, 같은 증강은 두 번 나오지 않아요. 양쪽은 매번 <b>같은 등급</b>(실버/골드/프리즘)을 받고, 뒤로 갈수록 프리즘이 잘 나옵니다.
           </p>
-          <p className={`mt-1 ${P}`}>솔로는 고르는 동안 전투가 멈춥니다. 온라인은 전투가 계속되고 {AUG_PICK_SECONDS}초 안에 고르지 않으면 첫 번째 카드가 자동 선택돼요. 🎲 다시 뽑기는 한 판에 1번. 상대가 고른 증강은 상대 기지 카드 아래에 보입니다.</p>
+          <p className={`mt-1 ${P}`}>솔로는 고르는 동안 전투가 멈춥니다. 온라인은 전투가 계속되고 {AUG_PICK_SECONDS}초 안에 고르지 않으면 첫 번째 카드가 자동 선택돼요. 🎲 다시 뽑기는 한 판에 1번. 상대가 고른 증강은 상대 기지 카드 아래에 보이고, 위쪽 ✨ 버튼(또는 Tab)을 누르면 양쪽 증강과 합계 효과, 다음 증강 시각·등급 확률을 비교할 수 있어요. 카드에 🎯 표시가 붙으면 상대가 가진 증강을 견제하는 카드예요.</p>
           {(["silver", "gold", "prism"] as const).map((t) => (
             <div key={t} className="mt-2">
               <div className="text-xs font-black text-white/80">{AUG_TIER_NAME[t]}</div>
               <ul className={`list-disc space-y-0.5 pl-4 ${P}`}>
                 {AUGMENT_LIST.filter((a) => a.tier === t).map((a) => (
-                  <li key={a.id}>{a.emoji} <b>{a.name}</b>: {a.desc}</li>
+                  <li key={a.id}>{a.emoji} <b>{a.name}</b> <span className="opacity-60">({AUG_TAG_ICON[a.tag]} {AUG_TAG_NAME[a.tag]})</span>: {a.desc}{a.counters?.length ? <span className="opacity-70"> — 🎯 견제: {a.counters.map((c) => AUGMENTS[c]?.name).join(", ")}</span> : null}</li>
                 ))}
               </ul>
             </div>

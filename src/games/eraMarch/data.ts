@@ -344,6 +344,14 @@ export const PLAN_COMBOS: Record<PlanId, ItemId[]> = {
 /* ── in-battle augments: 3 cards, pick 1, four rounds a match ──────────── */
 
 export type AugTier = "silver" | "gold" | "prism";
+/** What a card is for — shown on the card so a pick reads as a plan (attack / defence / economy / answer / tempo). */
+export type AugTag = "atk" | "def" | "eco" | "counter" | "util";
+
+export interface RoleFx {
+  atk?: number;
+  hp?: number;
+  speed?: number;
+}
 
 /** Every knob an augment can turn. Fractions add up across a side's augments. */
 export interface AugFx {
@@ -354,17 +362,27 @@ export interface AugFx {
   train?: number;
   income?: number;
   killGold?: number;
+  /** XP from kills. */
+  killXp?: number;
   xp?: number;
   /** Ranged / support reach. */
   range?: number;
   turret?: number;
+  /** Turret reach. */
+  turretRange?: number;
   baseHp?: number;
   /** Special cooldown cut. */
   specialCd?: number;
+  /** Special damage. */
+  specialDmg?: number;
   /** Evolve gold cut. */
   evolve?: number;
+  /** Unit price cut. */
+  costCut?: number;
   /** Share of dealt damage healed back. */
   lifesteal?: number;
+  /** Support heal amount. */
+  heal?: number;
   /** Share of a melee hit bounced back at the attacker. */
   thorns?: number;
   /** Extra damage to targets under EXECUTE_HP. */
@@ -383,64 +401,127 @@ export interface AugFx {
   chain?: number;
   /** Counter bonus instead of COUNTER_MUL. */
   counter?: number;
+  /** Cuts the bonus enemies get when they counter my units. */
+  counterResist?: number;
   pop?: number;
   /** Base repair per second, share of max HP. */
   regen?: number;
+  /** Damage dealt to the enemy base. */
+  siegeDmg?: number;
+  /** Damage my base takes, cut. */
+  baseGuard?: number;
+  /** ENEMY healing / lifesteal / repair / revive chance, cut. */
+  healCut?: number;
+  /** ENEMY income, cut. */
+  incomeCut?: number;
+  /** Ranged hits stun for this many ticks. */
+  shock?: number;
+  /** Melee hits push the target back this many lane units. */
+  shove?: number;
+  /** A unit's first attack does this much extra. */
+  ambush?: number;
+  /** A free melee unit every MERC_SEC. */
+  merc?: number;
+  /** Banked gold earns this share per second (capped). */
+  interest?: number;
+  /** Attack and HP while in an earlier era than the enemy. */
+  underdog?: number;
+  /** Extra evolve gold cut while behind in era. */
+  underdogEvolve?: number;
+  /** Added to the last-stand turret multiplier. */
+  lastStand?: number;
+  /** Unit attack while my base is under half HP. */
+  desperate?: number;
   /** One-off gold, × the current era's melee unit cost. */
   goldNow?: number;
   /** Special ready right away. */
   specialNow?: boolean;
+  /** Per-role bonuses. */
+  roles?: Partial<Record<Role, RoleFx>>;
 }
 
 export interface AugmentDef {
   id: string;
   tier: AugTier;
+  tag: AugTag;
   name: string;
   emoji: string;
   desc: string;
   fx: AugFx;
   /** Bot preference (higher = picked first). */
   score: number;
+  /** Enemy augments this card answers (shown as a badge when the enemy has one). */
+  counters?: string[];
 }
 
-const aug = (id: string, tier: AugTier, emoji: string, name: string, desc: string, fx: AugFx, score: number): AugmentDef => ({ id, tier, emoji, name, desc, fx, score });
+const aug = (id: string, tier: AugTier, tag: AugTag, emoji: string, name: string, desc: string, fx: AugFx, score: number, counters?: string[]): AugmentDef => ({ id, tier, tag, emoji, name, desc, fx, score, counters });
 
 export const AUGMENT_LIST: readonly AugmentDef[] = [
-  // silver: one plain stat each
-  aug("whet", "silver", "🗡️", "날 선 무기", "모든 유닛 공격력 +8%", { atk: 0.08 }, 6),
-  aug("hide", "silver", "🧥", "두꺼운 가죽", "모든 유닛 HP +10%", { hp: 0.1 }, 6),
-  aug("drums", "silver", "🥁", "행군 북소리", "모든 유닛 이동속도 +18%", { speed: 0.18 }, 4),
-  aug("tax", "silver", "🪙", "세금 징수", "골드 수입 +15%", { income: 0.15 }, 6),
-  aug("loot", "silver", "💰", "전리품 사냥", "처치 골드 +12%", { killGold: 0.12 }, 5),
-  aug("tutor", "silver", "📘", "견습 교관", "XP 획득 +20%", { xp: 0.2 }, 5),
-  aug("watch", "silver", "🏹", "망루 보강", "포탑 피해 +30%", { turret: 0.3 }, 4),
-  aug("wall", "silver", "🧱", "성벽 보수", "기지 최대 HP +20%", { baseHp: 0.2 }, 4),
-  aug("chest", "silver", "🎁", "군자금", "지금 바로 골드 (근접병 6명 값)", { goldNow: 6 }, 3),
-  aug("drill2", "silver", "⏱️", "신속 징병", "생산 시간 −18%", { train: 0.18 }, 5),
-  // gold: changes how fights play out
-  aug("vamp", "gold", "🩸", "흡혈 칼날", "준 피해의 20%만큼 회복", { lifesteal: 0.2 }, 8),
-  aug("thorns", "gold", "🌵", "가시 갑옷", "근접 공격을 받으면 25% 반사", { thorns: 0.25 }, 7),
-  aug("execute", "gold", "🪓", "처형인", "HP 30% 미만 적에게 피해 +60%", { execute: 0.6 }, 7),
-  aug("berserk", "gold", "😤", "광전사", "HP 절반 이하 유닛 공격력 +55%", { berserk: 0.55 }, 7),
-  aug("vanguard", "gold", "🛡️", "선봉 방패", "맨 앞 유닛이 받는 피해 −20%", { frontGuard: 0.2 }, 8),
-  aug("chain", "gold", "⛓️", "연쇄 사격", "원거리 탄이 근처 적 1명에게 튕김 (75%)", { chain: 1 }, 7),
-  aug("martyr", "gold", "💥", "순교자", "유닛이 죽으면 최대 HP 25%로 폭발", { deathBlast: 0.25 }, 6),
-  aug("counter", "gold", "🎯", "상성 달인", "상성 피해 ×1.5 → ×2", { counter: 2 }, 7),
-  aug("wareco", "gold", "📈", "전시 경제", "골드 수입 +20%, 처치 골드 +10%", { income: 0.2, killGold: 0.1 }, 8),
-  aug("sprep", "gold", "☄️", "필살 연구", "필살기 쿨타임 −30%, 지금 바로 충전", { specialCd: 0.3, specialNow: true }, 6),
-  // prism: build-defining
-  aug("twins", "prism", "👯", "쌍둥이 징집", "유닛이 나올 때 30% 확률로 1명 더 (무료)", { twin: 0.3 }, 10),
-  aug("undying", "prism", "👼", "불사 군단", "죽은 유닛이 35% 확률로 HP 40%로 한 번 부활", { revive: 0.35 }, 10),
-  aug("golden", "prism", "👑", "황금 시대", "골드 수입 +30%, 진화 골드 −20%", { income: 0.3, evolve: 0.2 }, 10),
-  aug("giant", "prism", "🗻", "거인화", "HP +25%, 공격력 +15%, 이동속도 −10%", { hp: 0.25, atk: 0.15, speed: -0.1 }, 10),
-  aug("haste", "prism", "⏩", "시간 가속", "생산 시간 −40%, 필살기 쿨타임 −40%", { train: 0.4, specialCd: 0.4 }, 9),
-  aug("horde", "prism", "🐜", "인해전술", "인구 +8, 생산 시간 −20%", { pop: 8, train: 0.2 }, 9),
-  aug("citadel", "prism", "🏰", "요새 심장", "기지 HP +25%, 초당 0.3% 수리, 포탑 피해 +35%", { baseHp: 0.25, regen: 0.003, turret: 0.35 }, 8),
-  aug("storm", "prism", "🌩️", "폭풍 연쇄", "원거리 탄이 2명에게 더 튕김 (70%), 사거리 +10%", { chain: 2, range: 0.1 }, 9),
+  // silver: one plain stat each, or a role specialisation
+  aug("whet", "silver", "atk", "🗡️", "날 선 무기", "모든 유닛 공격력 +8%", { atk: 0.08 }, 6),
+  aug("hide", "silver", "def", "🧥", "두꺼운 가죽", "모든 유닛 HP +10%", { hp: 0.1 }, 6),
+  aug("drums", "silver", "util", "🥁", "행군 북소리", "모든 유닛 이동속도 +18%", { speed: 0.18 }, 4),
+  aug("tax", "silver", "eco", "🪙", "세금 징수", "골드 수입 +15%", { income: 0.15 }, 6),
+  aug("loot", "silver", "eco", "💰", "전리품 사냥", "처치 골드 +8%", { killGold: 0.08 }, 5),
+  aug("tutor", "silver", "eco", "📘", "견습 교관", "XP 획득 +20%", { xp: 0.2 }, 5),
+  aug("watch", "silver", "def", "🗼", "망루 보강", "포탑 피해 +30%", { turret: 0.3 }, 4),
+  aug("wall", "silver", "def", "🧱", "성벽 보수", "기지 최대 HP +20%", { baseHp: 0.2 }, 4),
+  aug("chest", "silver", "eco", "🎁", "군자금", "지금 바로 골드 (근접병 5명 값)", { goldNow: 5 }, 3),
+  aug("drill2", "silver", "util", "⏱️", "신속 징병", "생산 시간 −30%", { train: 0.3 }, 5),
+  aug("pikes", "silver", "atk", "⚔️", "창술 교범", "근접병 공격력 +12%, HP +8%", { roles: { melee: { atk: 0.12, hp: 0.08 } } }, 5),
+  aug("archery", "silver", "atk", "🏹", "명사수 교육", "원거리병 공격력 +18%", { roles: { ranged: { atk: 0.18 } } }, 5),
+  aug("spurs", "silver", "atk", "🐎", "박차", "돌격병 이동속도 +20%, 공격력 +10%", { roles: { charge: { speed: 0.2, atk: 0.1 } } }, 5),
+  aug("medkit", "silver", "def", "🩹", "구급 상자", "지원병 치유량 +40%, HP +20%", { heal: 0.4, roles: { support: { hp: 0.2 } } }, 4),
+  aug("discount", "silver", "eco", "🏷️", "징병 할인", "유닛 가격 −8%", { costCut: 0.08 }, 5),
+  aug("scope", "silver", "def", "🔭", "포탑 조준경", "포탑 사거리 +40%, 피해 +10%", { turretRange: 0.4, turret: 0.1 }, 4),
+  aug("annals", "silver", "eco", "📜", "전투 기록", "처치 XP +60%", { killXp: 0.6 }, 4),
+  aug("sapper", "silver", "atk", "🧨", "공성술", "적 기지에 주는 피해 +40%", { siegeDmg: 0.4 }, 4),
+  // gold: changes how fights play out, or answers what the enemy took
+  aug("vamp", "gold", "atk", "🩸", "흡혈 칼날", "준 피해의 20%만큼 회복", { lifesteal: 0.2 }, 8),
+  aug("thorns", "gold", "def", "🌵", "가시 갑옷", "근접 공격을 받으면 25% 반사", { thorns: 0.25 }, 7, ["pikes", "berserk", "ambush"]),
+  aug("execute", "gold", "atk", "🪓", "처형인", "HP 30% 미만 적에게 피해 +60%", { execute: 0.6 }, 7),
+  aug("berserk", "gold", "atk", "😤", "광전사", "HP 절반 이하 유닛 공격력 +32%", { berserk: 0.32 }, 7),
+  aug("vanguard", "gold", "def", "🛡️", "선봉 방패", "맨 앞 유닛이 받는 피해 −15%", { frontGuard: 0.15 }, 8, ["ambush", "archery"]),
+  aug("chain", "gold", "atk", "⛓️", "연쇄 사격", "원거리 탄이 근처 적 1명에게 튕김 (85%)", { chain: 1 }, 7),
+  aug("martyr", "gold", "atk", "💥", "순교자", "유닛이 죽으면 최대 HP 20%로 폭발", { deathBlast: 0.2 }, 6, ["horde", "twins"]),
+  aug("counter", "gold", "atk", "🎯", "상성 달인", "상성 피해 ×1.5 → ×2", { counter: 2 }, 7),
+  aug("wareco", "gold", "eco", "📈", "전시 경제", "골드 수입 +16%, 처치 골드 +6%", { income: 0.16, killGold: 0.06 }, 8),
+  aug("sprep", "gold", "util", "☄️", "필살 연구", "필살기 쿨타임 −30%, 지금 바로 충전", { specialCd: 0.3, specialNow: true }, 6),
+  aug("rot", "gold", "counter", "🦠", "괴저", "상대의 치유·흡혈·기지 수리·부활을 모두 막음, 공격력 +6%", { healCut: 1, atk: 0.06 }, 6, ["vamp", "undying", "citadel", "medkit"]),
+  aug("adapt", "gold", "counter", "🧬", "적응형 갑옷", "상대가 상성으로 주는 추가 피해를 없앰, 모든 유닛 HP +8%", { counterResist: 1, hp: 0.08 }, 6, ["counter"]),
+  aug("ward", "gold", "counter", "🔰", "방벽 결계", "내 기지가 받는 피해 −45%, 포탑 피해 +20%", { baseGuard: 0.45, turret: 0.2 }, 6, ["sapper", "warlord"]),
+  aug("blockade", "gold", "counter", "⚓", "해상 봉쇄", "상대 골드 수입 −24%", { incomeCut: 0.24 }, 6, ["tax", "wareco", "golden", "interest"]),
+  aug("shock", "gold", "util", "⚡", "충격탄", "원거리 탄에 맞은 적이 0.7초 기절", { shock: 14 }, 7),
+  aug("shove", "gold", "def", "💪", "밀쳐내기", "근접 공격이 적을 뒤로 밀어냄, 근접병 HP +10%", { shove: 11, roles: { melee: { hp: 0.1 } } }, 6, ["spurs"]),
+  aug("ambush", "gold", "atk", "🥷", "선제 타격", "유닛마다 첫 공격 피해 ×2.2", { ambush: 1.2 }, 7),
+  aug("merc", "gold", "util", "🪖", "용병 계약", "24초마다 근접병 1명 무료 출전", { merc: 1 }, 7),
+  aug("interest", "gold", "eco", "🏦", "복리 이자", "가진 골드의 0.5%를 매초 이자로 (상한 있음)", { interest: 0.005 }, 6),
+  // prism: build-defining, often with a cost
+  aug("twins", "prism", "util", "👯", "쌍둥이 징집", "유닛이 나올 때 30% 확률로 1명 더 (무료)", { twin: 0.3 }, 10),
+  aug("undying", "prism", "def", "👼", "불사 군단", "죽은 유닛이 35% 확률로 HP 40%로 한 번 부활", { revive: 0.35 }, 10),
+  aug("golden", "prism", "eco", "👑", "황금 시대", "골드 수입 +30%, 진화 골드 −20%", { income: 0.3, evolve: 0.2 }, 10),
+  aug("giant", "prism", "def", "🗻", "거인화", "HP +20%, 공격력 +15%, 이동속도 −10%", { hp: 0.2, atk: 0.15, speed: -0.1 }, 10),
+  aug("haste", "prism", "util", "⏩", "시간 가속", "생산 시간 −35%, 필살기 쿨타임 −35%", { train: 0.35, specialCd: 0.35 }, 9),
+  aug("horde", "prism", "util", "🐜", "인해전술", "인구 +6, 생산 시간 −35%, 유닛 가격 −15%", { pop: 6, train: 0.35, costCut: 0.15 }, 9),
+  aug("citadel", "prism", "def", "🏰", "요새 심장", "기지 HP +25%, 초당 0.25% 수리, 포탑 피해 +30%", { baseHp: 0.25, regen: 0.0025, turret: 0.3 }, 8, ["sapper", "warlord"]),
+  aug("storm", "prism", "atk", "🌩️", "폭풍 연쇄", "원거리 탄이 2명에게 더 튕김 (70%), 사거리 +10%", { chain: 2, range: 0.1 }, 9),
+  aug("glass", "prism", "atk", "💎", "유리 대포", "공격력 +50%, 대신 HP −20%", { atk: 0.5, hp: -0.2 }, 9, ["giant", "vanguard"]),
+  aug("elite", "prism", "atk", "🎖️", "정예주의", "인구 −6, 대신 모든 유닛 공격력·HP +17%", { pop: -6, atk: 0.17, hp: 0.17 }, 9, ["horde", "twins"]),
+  aug("underdog", "prism", "def", "🏺", "역전의 용사", "상대보다 시대가 뒤처진 동안 공격력·HP +50%, 진화 골드 추가 −15%", { underdog: 0.5, underdogEvolve: 0.15 }, 8, ["golden", "tutor"]),
+  aug("laststand", "prism", "def", "🔥", "배수진", "기지 앞 포탑 피해 ×1.3 → ×2.3, 기지 HP 절반 이하면 공격력 +45%", { lastStand: 1, desperate: 0.45 }, 8),
+  aug("overclock", "prism", "util", "🌋", "필살 증폭", "필살기 피해 +70%, 쿨타임 −20%", { specialDmg: 0.7, specialCd: 0.2 }, 8, ["horde", "twins", "elite"]),
+  aug("warlord", "prism", "atk", "⚜️", "정복자", "처치 골드·XP +30%, 적 기지 피해 +30%", { killGold: 0.3, killXp: 0.3, siegeDmg: 0.3 }, 9),
 ];
 
 export type AugmentId = string;
 export const AUGMENTS: Record<AugmentId, AugmentDef> = Object.fromEntries(AUGMENT_LIST.map((a) => [a.id, a]));
+
+export const AUG_TAG_NAME: Record<AugTag, string> = { atk: "공격", def: "방어", eco: "경제", counter: "견제", util: "운영" };
+export const AUG_TAG_ICON: Record<AugTag, string> = { atk: "⚔️", def: "🛡️", eco: "💰", counter: "🎯", util: "⚙️" };
+/** A free melee unit this often (용병 계약). */
+export const MERC_SEC = 24;
+/** 복리 이자 cap: at most this many × the era's base income per second. */
+export const INTEREST_CAP = 1;
 
 export const AUG_TIER_NAME: Record<AugTier, string> = { silver: "실버", gold: "골드", prism: "프리즘" };
 export const AUG_TIER_COLOR: Record<AugTier, string> = { silver: "#cbd5e1", gold: "#fbbf24", prism: "#c084fc" };
@@ -459,5 +540,5 @@ export const EXECUTE_HP = 0.3;
 export const REVIVE_HP = 0.4;
 export const CHAIN_RANGE = 90;
 /** Bounce damage share: one bounce (연쇄 사격) / two bounces (폭풍 연쇄). */
-export const CHAIN_MUL = [0, 0.75, 0.7] as const;
+export const CHAIN_MUL = [0, 0.85, 0.7] as const;
 export const DEATH_BLAST_RADIUS = 42;

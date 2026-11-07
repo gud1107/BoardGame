@@ -86,7 +86,7 @@ export function botThink(s: EraMarchState, side: Side, level: AiLevel, mem: BotM
   const foe: Side = side === 0 ? 1 : 0;
   const cmds: Command[] = [];
   if (p.offer) {
-    cmds.push(pickAugment(p, level, mem));
+    cmds.push(pickAugment(p, level, mem, s.players[side === 0 ? 1 : 0].augments ?? []));
     return cmds;
   }
   let gold = p.gold;
@@ -197,13 +197,15 @@ function pickUnit(s: EraMarchState, side: Side, roster: UnitKind[], level: numbe
 }
 
 /** Economy cards pay off early and are dead weight late; fighting cards the other way round. */
-const ECO = new Set(["tax", "loot", "tutor", "chest", "wareco", "golden"]);
+const ECO = new Set(["tax", "loot", "tutor", "chest", "wareco", "golden", "interest", "annals", "discount", "oldguard"]);
 
 /** Bot augment pick: Lv.1–2 grab any card, higher levels score them (with less noise as the level rises); Lv.6+ rerolls a weak hand. */
-export function pickAugment(p: EraMarchState["players"][0], level: AiLevel, mem: BotMemory): Command {
+export function pickAugment(p: EraMarchState["players"][0], level: AiLevel, mem: BotMemory, foeAugs: readonly string[] = []): Command {
   const o = p.offer!;
   if (level <= 2) return { t: "augment", pick: Math.floor(rand(mem) * o.cards.length) };
-  const base = o.cards.map((id) => (AUGMENTS[id]?.score ?? 0) + (ECO.has(id) ? (o.round <= 1 ? 2 : o.round >= 3 ? -3 : 0) : 0));
+  // Lv.7+ reads the enemy's picks and values a card that answers one of them
+  const answers = (id: string) => (level >= 7 ? (AUGMENTS[id]?.counters ?? []).filter((c) => foeAugs.includes(c)).length * 3 : 0);
+  const base = o.cards.map((id) => (AUGMENTS[id]?.score ?? 0) + (ECO.has(id) ? (o.round <= 1 ? 2 : o.round >= 3 ? -3 : 0) : 0) + answers(id));
   if (level >= 6 && p.rerolls > 0 && Math.max(...base) < 6) return { t: "reroll" };
   const noise = (11 - level) * 0.6;
   let best = 0;
