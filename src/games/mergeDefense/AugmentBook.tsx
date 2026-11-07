@@ -23,7 +23,8 @@ export default function AugmentBook({ state, mySeat, names, onClose }: { state: 
             <>
               다음 증강 <b>W{nextWave}</b> ({secsTo}초 뒤) ·{" "}
               {AUG_TIERS.map((t) => (
-                <span key={t} className="mr-1.5 whitespace-nowrap" style={{ color: AUG_TIER_INFO[t].color }}>
+                // Silver's pale grey vanishes on the light theme — it takes a slate class instead of the tier hex.
+                <span key={t} className={`mr-1.5 whitespace-nowrap ${t === "silver" ? "text-slate-300 light:text-slate-600" : ""}`} style={t === "silver" ? undefined : { color: AUG_TIER_INFO[t].color }}>
                   {AUG_TIER_INFO[t].mark} {AUG_TIER_INFO[t].name} {AUG_ODDS[nextRound][t]}%
                 </span>
               ))}
