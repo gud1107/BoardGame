@@ -683,9 +683,9 @@ export default function MorphHideGame({ onComplete }: PlayableGameProps) {
                           onClick={() => pickFirstSeeker(seat)}
                           aria-pressed={isFirst}
                           title={isFirst ? "첫 술래 (다시 누르면 무작위)" : "이 자리를 첫 술래로"}
-                          className={`min-h-8 rounded-full border px-2.5 text-[11px] font-semibold ${isFirst ? "border-fuchsia-400 bg-fuchsia-600 text-white" : "border-white/15 text-white/50 hover:border-fuchsia-400/60 light:border-slate-300 light:text-slate-500"}`}
+                          className={`min-h-8 shrink-0 whitespace-nowrap rounded-full border px-2.5 text-[11px] font-semibold ${isFirst ? "border-fuchsia-400 bg-fuchsia-600 text-white" : "border-white/15 text-white/50 hover:border-fuchsia-400/60 light:border-slate-300 light:text-slate-500"}`}
                         >
-                          🎯{isFirst ? " 첫 술래" : ""}
+                          🎯{isFirst && <span className="hidden sm:inline"> 첫 술래</span>}
                         </button>
                       )}
                       {isHost && !occ && (bi >= 0 ? <RemoveBotButton onClick={() => removeBot(seat)} /> : <AddBotButton onAddWithLevel={(lv) => addBotAtSeat(seat, lv)} />)}
