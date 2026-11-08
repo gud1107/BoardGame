@@ -607,7 +607,8 @@ export function startRound(rt: HostRuntime) {
     .map((t) => ({ key: `t${t.id}`, x: t.x, y: t.y, z: t.z, h: THING_SIZE[t.kind][1], form: "prop" as FormKind, thing: t.kind, anim: "idle", tipped: false }));
   rt.nodeDensity = NAV_NODES.map((n) => rt.thingObs.filter((o) => Math.abs(o.y - n.y) < 1 && Math.hypot(o.x - n.x, o.z - n.z) < 7).length / 4);
   const k = seekerCount(s.seatCount);
-  s.seekers = Array.from({ length: k }, (_, i) => ((s.round - 1) * k + i) % s.seatCount);
+  const first = Math.max(0, s.options.firstSeeker ?? 0);
+  s.seekers = Array.from({ length: k }, (_, i) => (first + (s.round - 1) * k + i) % s.seatCount);
   // 꼼꼼이: 잡힌 사람이 다음 술래 (먼저 잡힌 순). 아무도 안 잡혔으면 술래가 한 번 더, 모자라면 순서대로 채운다
   const last = s.history[s.history.length - 1];
   if (s.options.goalMode && last) {

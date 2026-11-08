@@ -192,9 +192,20 @@ export interface GameOptions {
   rounds: number;
   /** 꼼꼼이(찜 장소) 모드 */
   goalMode: boolean;
+  /**
+   * 첫 라운드 술래 자리 (그 뒤로는 자리 순서대로 돌아간다). −1 = 무작위 — 방장이 시작할 때 자리 하나로
+   * 바꿔서 넘기므로 시뮬레이션에는 늘 자리 번호가 들어간다(시뮬은 음수를 0번으로 본다).
+   */
+  firstSeeker: number;
 }
 
-export const DEFAULT_OPTIONS: GameOptions = { huntSec: 300, rounds: 3, goalMode: false };
+export const DEFAULT_OPTIONS: GameOptions = { huntSec: 300, rounds: 3, goalMode: false, firstSeeker: -1 };
+
+/** 시작할 때 첫 술래 자리를 확정 (−1 무작위 → 자리, 없는 자리 → 순환) */
+export function resolveFirstSeeker(choice: number, seatCount: number, rand: () => number = Math.random): number {
+  if (choice < 0) return Math.floor(rand() * seatCount) % seatCount;
+  return choice % seatCount;
+}
 
 /** 변신 + 숨는 쪽 증강을 고르는 시간 (11-07: 증강이 생겨 15 → 20) */
 export const PICK_SEC = 20;

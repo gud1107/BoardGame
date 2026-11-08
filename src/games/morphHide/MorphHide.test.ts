@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DOORS, FILLER_SLOTS, FIXED_THINGS, NAV_EDGES, NAV_NODES, STATIC_SOLIDS, thingSolid } from "./map";
 import { SolidGrid, groundAt, stepBody, type Body, type CollWorld } from "./physics";
-import { DISGUISES, EMOTES, KKOM_CAMP_MS, KKOM_CAMP_R, PICK_SEC, SEEKER_HP, weaponSchedule, weaponTier } from "./data";
+import { DISGUISES, EMOTES, KKOM_CAMP_MS, KKOM_CAMP_R, PICK_SEC, SEEKER_HP, resolveFirstSeeker, weaponSchedule, weaponTier } from "./data";
 import { BASE } from "./map";
 import { evalMany } from "./selfplay";
 import { hiderParamsFor, seekerParamsFor } from "./botParams";
@@ -462,6 +462,26 @@ describe("술래 증강", () => {
       expect(rt.state.decoys).toHaveLength(1);
       expect(seeker.hp).toBeGreaterThanOrEqual(SEEKER_HP);
     }
+  });
+
+  it("방장이 고른 첫 술래부터 자리 순서대로 돈다 (2인 술래도)", () => {
+    for (const [n, first, want] of [
+      [4, 2, [[2], [3], [0]]],
+      [6, 5, [[5, 0], [1, 2], [3, 4]]],
+    ] as const) {
+      const m = createMatch(77, Array.from({ length: n }, () => ({ bot: true, level: 10 })), { huntSec: 180, rounds: 3, firstSeeker: first });
+      const rt = createHost(m);
+      for (let i = 0; i < 20 * 60 * 15 && rt.state.phase !== "gameOver"; i++) hostStep(rt, 50);
+      expect(rt.state.phase).toBe("gameOver");
+      expect(rt.state.history.map((h) => [...h.seekers])).toEqual(want);
+    }
+  }, 120_000);
+
+  it("첫 술래 무작위·없는 자리는 실제 자리로 확정된다", () => {
+    expect(resolveFirstSeeker(-1, 5, () => 0.99)).toBe(4);
+    expect(resolveFirstSeeker(-1, 5, () => 0)).toBe(0);
+    expect(resolveFirstSeeker(6, 4)).toBe(2);
+    expect(resolveFirstSeeker(1, 4)).toBe(1);
   });
 
   it("봇 술래끼리 증강을 들고 한 판을 끝까지 (꼼꼼이 포함)", () => {

@@ -17,7 +17,7 @@ import RulebookGate from "@/components/lobby/RulebookGate";
 import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
 import { selfResult } from "@/games/shared/selfResult";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
-import { DEFAULT_OPTIONS, MAX_PLAYERS, MIN_PLAYERS, type GameOptions } from "./data";
+import { DEFAULT_OPTIONS, MAX_PLAYERS, MIN_PLAYERS, resolveFirstSeeker, seekerCount, type GameOptions } from "./data";
 import { applyAct, applyPos, createHost, createMatch, hostStep, type Act, type HostRuntime, type PosReport } from "./sim";
 import { SnapBuffer, makeSnap, type Snap } from "./net";
 import type { FxItem } from "./three/World3D";
@@ -295,7 +295,9 @@ export default function MorphHideGame({ onComplete }: PlayableGameProps) {
       if (humans.includes(s)) return { bot: false, level: 5 };
       return { bot: true, level: DEFAULT_BOT_LEVEL };
     });
-    const match = createMatch(Math.floor(Math.random() * 1e9), seats, optionsRef.current);
+    const opts = optionsRef.current;
+    // 무작위(−1)는 여기서 자리 하나로 확정 — 다시하기마다 새로 뽑는다
+    const match = createMatch(Math.floor(Math.random() * 1e9), seats, { ...opts, firstSeeker: resolveFirstSeeker(opts.firstSeeker ?? -1, count) });
     hostRef.current = createHost(match);
     bufRef.current = new SnapBuffer();
     setBuf(bufRef.current);
@@ -618,7 +620,21 @@ export default function MorphHideGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "connecting" || phase === "waiting") {
     const filled = occupants.length + botSeats.length;
-    const hostOpts = host?.opts ?? options;
+    const hostOpts = isHost ? options : (host?.opts ?? options);
+    const firstSeeker = hostOpts.firstSeeker ?? -1;
+    const seekersPerRound = seekerCount(knownTarget);
+    const seatLabel = (seat: number) => {
+      const occ = occupants.find((o) => o.seat === seat);
+      const bi = botSeats.indexOf(seat);
+      return `${seat + 1}번${occ ? ` ${occ.name}` : bi >= 0 ? " 봇" : ""}`;
+    };
+    /** 방장: 첫 술래 고르기 (같은 자리를 다시 누르면 무작위로) — 손님 화면에도 바로 보이게 presence로 다시 알린다 */
+    const pickFirstSeeker = (v: number) => {
+      const next = { ...optionsRef.current, firstSeeker: firstSeeker === v ? -1 : v };
+      optionsRef.current = next;
+      setOptions(next);
+      if (mySeat !== null) channelRef.current?.track({ deviceId, seat: mySeat, name: myName, playerId: myPlayerId, isHost: true, targetPlayerCount: playerCountRef.current, opts: next } satisfies Occupant);
+    };
     return withGuard(
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center light:border-slate-200 light:bg-white light:shadow-sm">
         {phase === "connecting" ? (
@@ -636,17 +652,44 @@ export default function MorphHideGame({ onComplete }: PlayableGameProps) {
             <p className="text-xs text-white/50 light:text-slate-500">
               {filled} / {knownTarget}명 참여 중
             </p>
+            <div className="flex flex-col items-center gap-1.5 rounded-xl border border-fuchsia-400/25 bg-fuchsia-500/[0.07] px-4 py-2.5 light:border-fuchsia-300 light:bg-fuchsia-50">
+              <p className="text-sm font-semibold text-fuchsia-200 light:text-fuchsia-700">
+                🎯 첫 술래: {firstSeeker < 0 ? "🎲 무작위 (시작할 때 뽑아요)" : seekersPerRound > 1 ? `${seatLabel(firstSeeker)} + ${seatLabel((firstSeeker + 1) % knownTarget)}` : seatLabel(firstSeeker)}
+              </p>
+              <p className="break-keep text-[11px] text-white/45 light:text-slate-500">
+                {isHost ? "아래 자리의 🎯를 눌러 정하세요 · 다시 누르면 무작위" : "방장이 정해요"} · 다음 라운드부턴 {hostOpts.goalMode ? "잡힌 사람이" : "자리 순서대로"} 술래
+              </p>
+              {isHost && firstSeeker >= 0 && (
+                <button onClick={() => pickFirstSeeker(firstSeeker)} className="rounded-full border border-white/15 px-3 py-1 text-[11px] text-white/70 light:border-slate-300 light:text-slate-600">
+                  🎲 무작위로
+                </button>
+              )}
+            </div>
             {isHost && filled < knownTarget && <FillEmptySeatsButton emptyCount={knownTarget - filled} onFill={fillEmpty} />}
             <div className="flex flex-col gap-1.5">
               {Array.from({ length: knownTarget }, (_, seat) => {
                 const occ = occupants.find((o) => o.seat === seat);
                 const bi = botSeats.indexOf(seat);
+                const isFirst = firstSeeker >= 0 && (seat === firstSeeker || (seekersPerRound > 1 && seat === (firstSeeker + 1) % knownTarget));
                 return (
                   <p key={seat} className="flex items-center justify-between gap-2 text-sm text-white/70 light:text-slate-600">
                     <span>
                       {seat === mySeat ? "나" : `${seat + 1}번`}: {occ ? occ.name : bi >= 0 ? <BotSeatBadge label={botLabel(bi, botLevels[bi])} /> : <span className="text-white/30">대기 중...</span>}
+                      {isFirst && !isHost && <span className="ml-1.5 rounded-full bg-fuchsia-500/20 px-2 py-0.5 text-[11px] font-semibold text-fuchsia-200 light:text-fuchsia-700">🎯 첫 술래</span>}
                     </span>
-                    {isHost && !occ && <span>{bi >= 0 ? <RemoveBotButton onClick={() => removeBot(seat)} /> : <AddBotButton onAddWithLevel={(lv) => addBotAtSeat(seat, lv)} />}</span>}
+                    <span className="flex items-center gap-1.5">
+                      {isHost && (
+                        <button
+                          onClick={() => pickFirstSeeker(seat)}
+                          aria-pressed={isFirst}
+                          title={isFirst ? "첫 술래 (다시 누르면 무작위)" : "이 자리를 첫 술래로"}
+                          className={`min-h-8 rounded-full border px-2.5 text-[11px] font-semibold ${isFirst ? "border-fuchsia-400 bg-fuchsia-600 text-white" : "border-white/15 text-white/50 hover:border-fuchsia-400/60 light:border-slate-300 light:text-slate-500"}`}
+                        >
+                          🎯{isFirst ? " 첫 술래" : ""}
+                        </button>
+                      )}
+                      {isHost && !occ && (bi >= 0 ? <RemoveBotButton onClick={() => removeBot(seat)} /> : <AddBotButton onAddWithLevel={(lv) => addBotAtSeat(seat, lv)} />)}
+                    </span>
                   </p>
                 );
               })}
