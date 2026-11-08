@@ -190,6 +190,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "island-pioneers",
+    name: "섬 개척자",
+    nameEn: "Island Pioneers",
+    description:
+      "바다 한가운데 상륙 캠프에서 시작해 숲·초원·산·바다가 그려진 지형 타일을 한 장씩 이어 붙여 섬을 함께 넓히는 2~5인 타일 놓기 게임! 맞닿는 변의 지형이 같아야 놓을 수 있고, 🛶 항구에 펼쳐진 3장 중 하나를 골라요. 🚩 개척자를 세운 숲·초원·산이나 육지로 둘러싼 🏝️ 석호가 완성되면 점수와 🪵🐑💎🐟 자원을 얻고, 공개된 📜 개척 의뢰 3장을 먼저 이루면 보너스! 자원 4종 세트는 마지막에 +3. 3D로 자라는 섬을 둘러보고, AI 봇 Lv.1~10과도 할 수 있어요.",
+    players: { min: 2, max: 5 },
+    playTime: { minMinutes: 15, maxMinutes: 30 },
+    category: "family",
+    thumbnail: { emoji: "🏝️", gradient: ["#22c55e", "#0369a1"] },
+    tags: ["타일놓기", "지역점령", "섬", "가족", "전략", "3D", "AI봇"],
+    genres: ["strategy", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "mini-golf",
     name: "미니골프 파티",
     nameEn: "Mini Golf Party",

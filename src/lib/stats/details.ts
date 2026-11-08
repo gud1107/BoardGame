@@ -119,6 +119,14 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "💎 귀중품 / ⚙️ 철강 / ⚓ 밸러스트", value: (d) => `${n(d.golds)} / ${n(d.steel)} / ${n(d.ballasts)}` },
     { label: "🧘 무손실 항해 / 항해", value: (d) => `${n(d.cleanVoyages)} / ${n(d.voyages)}` },
   ],
+  "island-pioneers": [
+    { label: "최종 우승 / 최고 점수", value: (d) => `${n(d.gamesWon)} / ${n(d.maxScore)}` },
+    { label: "🚩 완성한 지역 (석호)", value: (d) => `${n(d.regionsCompleted)} (${n(d.lagoons)})` },
+    { label: "한 번 최고 완성 점수 · 최대 칸 수", value: (d) => `${n(d.maxRegionPoints)} · ${n(d.maxRegionTiles)}` },
+    { label: "📜 의뢰 (처음 이룸)", value: (d) => `${n(d.questsDone)} (${n(d.questsFirst)})` },
+    { label: "🎒 자원 / 4종 세트", value: (d) => `${n(d.resourcesTotal)} / ${n(d.sets)}` },
+    { label: "🧱 놓은 타일 / 세운 개척자", value: (d) => `${n(d.tilesPlaced)} / ${n(d.settlersPlaced)}` },
+  ],
   "mini-golf": [
     { label: "⛳ 홀인원 / 이글 / 버디", value: (d) => `${n(d.holeInOnes)} / ${n(d.eagles)} / ${n(d.birdies)}` },
     { label: "파 / 보기 이상", value: (d) => `${n(d.pars)} / ${n(d.bogeys)}` },

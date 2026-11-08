@@ -221,6 +221,15 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["gold-10", "💎", "보물선", "귀중품 10개 싣기", 10, k("golds")],
     ["place-200", "🚢", "만선의 항해사", "컨테이너 누적 200개 싣기", 200, k("placed")],
   ],
+  "island-pioneers": [
+    ["region-1", "🚩", "첫 개척", "지역을 완성해 점수 받기", 1, k("regionsCompleted")],
+    ["big-12", "🏞️", "대개척", "한 번의 완성으로 12점 이상", 12, k("maxRegionPoints")],
+    ["lagoon-1", "🏝️", "비밀의 석호", "석호를 완성해 점수 받기", 1, k("lagoons")],
+    ["quest-first-5", "📜", "의뢰 해결사", "개척 의뢰를 가장 먼저 이루기 누적 5번", 5, k("questsFirst")],
+    ["set-1", "🎒", "만물상", "자원 4종 세트 완성", 1, k("sets")],
+    ["contest-3", "⚔️", "땅따먹기", "남과 겹친 지역에서 다수로 이기기 누적 3번", 3, k("contestsWon")],
+    ["tiles-300", "🧱", "섬 건축가", "타일 누적 300장 놓기", 300, k("tilesPlaced")],
+  ],
   "mini-golf": [
     ["hio-1", "⛳", "홀인원!", "한 번에 컵에 넣기", 1, k("holeInOnes")],
     ["birdie-10", "🐦", "버디 사냥꾼", "버디 누적 10번", 10, k("birdies")],

@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.164.0",
+    releaseDate: "2026-11-09",
+    title: "🏝️ 새 게임 섬 개척자",
+    changes: [
+      { game: "island-pioneers", type: "FEAT", desc: "🏝️ 새 게임 — 숲·초원·산·바다 지형 타일을 이어 붙여 섬을 넓히는 2~5인 타일 놓기 · 🛶 항구 3장 중 골라 놓기 · AI 봇 Lv.1~10" },
+      { game: "island-pioneers", type: "FEAT", desc: "🚩 개척자로 지역 차지 → 완성하면 점수·🪵🐑💎🐟 자원 · 육지로 둘러싼 🏝️ 석호 · 📜 개척 의뢰 3장 · 자원 4종 세트 +3" },
+      { game: "island-pioneers", type: "FEAT", desc: "🧊 나무·산·양이 자라는 3D 섬 + 놓기 전 점수 미리보기 · 🎵 BGM “Trade Winds”와 고르기·돌리기·놓기·깃발·완성·의뢰·떠내려감 효과음" },
+    ],
+  },
+  {
     version: "v1.162.0",
     releaseDate: "2026-11-09",
     title: "🚢 새 게임 화물선 쌓기",

@@ -40,6 +40,16 @@
 - **2026-11-01 두 번째 정리**: 같은 일이 또 일어나 7,311줄/약 1MB가 됐다. 10-25 이전 날짜 섹션 104개(2026-09-14~10-23, 약 7,000줄)를 `docs/history.md` "Phase 30+" 아카이브로 원문 그대로 옮겼다. 3,500줄이 넘던 "🌗 테마 토글" 섹션도 함께 옮겼다. 한 헤더 밑에 여러 날짜의 후속 세션 기록을 `_이전 갱신: ..._` 식으로 계속 이어 붙이지 말 것.
 - **세션을 마칠 때마다** 내 섹션을 맨 위에 추가하고, 1주일 넘은 섹션은 그 자리에서 history.md 맨 끝 아카이브(현재 Phase 30+, "앞으로 이 문서에 추가할 때" 바로 위)로 옮길 것. 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 🏝️ 섬 개척자 (새 게임) — 2026-11-09 (패치 v1.164.0)
+
+요청: "🏝️ 섬 개척 타일 놓기"를 A-Z 상세 설계·개발 + 룰북·BGM·모든 액션 효과음 + handoff. 자체 창작 2~5인 타일 놓기. 규칙·설계 원전: [boardGameRule/섬개척자/섬개척자.md](./boardGameRule/섬개척자/섬개척자.md) (§1~§8, 튜닝 기록 포함).
+- **게임**: 삼각형 4개(숲·초원·산·바다)로 나뉜 타일을 🛶 항구 3장 중 골라 섬 옆에 변이 맞게 놓기 → 자원 아이콘(🪵🐑💎🐟) 즉시 획득 → 🚩 개척자(1인 5명)를 빈 지역에 세우기. 지역이 닫히면 다수가 칸당 🌲🌾2·⛰️🏝️석호3점 + 지역 자원, 개척자 귀환. 📜 의뢰 8종 중 3장(처음 +5/이후 +2). 못 놓는 타일은 🌊 떠내려감. 끝: 미완성 칸당 1·자원 1·4종 세트 +3. 11×11 판, 덱 2인 40~5인 60장, 차례 60초(초과 시 자동 배치).
+- **구조** `src/games/islandPioneers/`: `tiles.ts`(61장) · `engine.ts`(유니온파인드 `analyze`, `fits`, 완성/의뢰/최종 점수, `previewPlacement`) · `bot.ts`(전 수 시뮬 + 남은 타일로 빈칸 채울 수 있는지 세는 완성 가능성 평가, Lv.1~10) · `selfPlay.ts` · `IslandPioneersBoard.tsx`(SVG 지도·놓기 전 점수 미리보기·지역 호버·키보드 1·2·3/R/E/Enter/Esc) · `TileArt.tsx` · `three/IslandScene3D.tsx`(drei 없이 자체 드래그 회전) · `islandPioneersSound.ts`(BGM "Trade Winds" + SFX 16종) · `IslandPioneersGame.tsx`(별빛 러미 방 흐름 복제) · `RulebookModal.tsx` · `stats.ts`.
+- **튜닝**: 자원이 완성 때만 들어오면 세트 보너스가 거의 안 나와서(판당 0~0.3) "놓을 때 즉시 획득" 규칙을 추가 → Lv.7 거울전 평균 2인 ~60점/5인 ~43점, 2인 ~39턴, Lv.10 vs Lv.1 29/30승.
+- **등록**: registry(2~5인, 🏝️)/playableGames/gameDifficulty(2)/posterTaglines/roomRulebookSummaries/achievements(7)/details/presentation/patchNotes v1.164.0, `[gameId]/page.tsx` max-w-3xl, proceduralSuites 개수 47(작업트리 기준 — 화물선·안개 저택 suite 포함).
+- **확인**: `IslandPioneers.test.ts` 14개 + `balance.sim.test.ts` 2개, 공용 constants/stats/audio/registry 통과, tsc 0, eslint 0. rolldown+swiftshader 헤드리스로 390px 2D·1280px 3D 캡처 — 가로 넘침·콘솔 에러 0, 3D에서 바다 삼각형이 모래 블록에 가려지던 것 고침. 하네스 삭제.
+- **남은 것**: 포스터·호버 영상 없음(🏝️ 이모지), 실제 다기기 온라인·폰 실기기·소리 귀로 미확인, 봇끼리는 남의 지역 합류(다수 빼앗기)가 거의 안 나옴.
+
 ## 🚢 화물선 쌓기 (새 게임) — 2026-11-09 (패치 v1.162.0)
 
 요청: "🚢 화물선 쌓기 게임 A-Z 상세 설계·개발 + 룰북·BGM·모든 액션 효과음 + handoff". 자체 창작 턴제 균형 쌓기. 규칙·설계 원전: [boardGameRule/화물선쌓기/화물선쌓기.md](./boardGameRule/화물선쌓기/화물선쌓기.md) (§1~§14, 구현 지도 포함).

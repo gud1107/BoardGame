@@ -53,6 +53,7 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   curling: dynamic(() => import("./curling/CurlingGame"), { ssr: false }),
   alkkagi: dynamic(() => import("./alkkagi/AlkkagiGame"), { ssr: false }),
   "bowling-mayhem": dynamic(() => import("./bowlingMayhem/BowlingMayhemGame"), { ssr: false }),
+  "island-pioneers": dynamic(() => import("./islandPioneers/IslandPioneersGame"), { ssr: false }),
   "mini-golf": dynamic(() => import("./miniGolf/MiniGolfGame"), { ssr: false }),
   "cargo-stack": dynamic(() => import("./cargoStack/CargoStackGame"), { ssr: false }),
   "wobble-tower": dynamic(() => import("./wobbleTower/WobbleTowerGame"), { ssr: false }),
