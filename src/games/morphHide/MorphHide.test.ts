@@ -491,6 +491,9 @@ describe("술래 증강", () => {
       for (let i = 0; i < 20 * 60 * 6 && rt.state.phase !== "gameOver"; i++) hostStep(rt, 50);
       expect(rt.state.phase).toBe("gameOver");
       for (const sk of rt.state.history[0].seekers) expect(rt.state.players[sk].augs).toHaveLength(2);
+      // 결과표용: 라운드 기록에 자리별 증강이 남는다 (술래 2개 · 숨는 사람 1개)
+      for (const sk of rt.state.history[0].seekers) expect(rt.state.history[0].augs?.[sk]).toHaveLength(2);
+      for (const h of rt.state.history[0].hiders) expect(rt.state.history[0].augs?.[h.seat]).toHaveLength(1);
     }
   }, 60_000);
 });

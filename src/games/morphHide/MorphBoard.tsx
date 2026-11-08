@@ -33,6 +33,12 @@ export interface MorphBoardProps {
   fx: FxItem[];
   onPos: (p: PosReport) => void;
   onAct: (a: Act) => void;
+  /** 게임이 끝나 결과 기록까지 마쳤나 (그 전엔 버튼 대신 "정리 중") */
+  ended?: boolean;
+  /** 게임 종료(방 나가기) */
+  onLeave?: () => void;
+  /** 다시하기 — 방장만 */
+  onRestart?: () => void;
 }
 
 const TOUCH_QUERY = "(hover: none), (pointer: coarse)";
@@ -63,7 +69,7 @@ function Key({ k, dark }: { k: string; dark?: boolean }) {
 
 const fmt = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.max(0, Math.floor(sec % 60))).padStart(2, "0")}`;
 
-export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct }: MorphBoardProps) {
+export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct, ended, onLeave, onRestart }: MorphBoardProps) {
   const me = snap.players[mySeat];
   const touch = useIsTouch();
   const lowDetail = useLowDetail();
@@ -817,7 +823,7 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct 
         )}
 
         {snap.phase === "roundEnd" && <RoundResult snap={snap} names={names} mySeat={mySeat} />}
-        {(showBoard || snap.phase === "gameOver") && <ScoreBoard snap={snap} names={names} mySeat={mySeat} simNow={simNow} onClose={() => setShowBoard(false)} />}
+        {(showBoard || snap.phase === "gameOver") && <ScoreBoard snap={snap} names={names} mySeat={mySeat} simNow={simNow} onClose={() => setShowBoard(false)} ended={ended} onLeave={onLeave} onRestart={onRestart} />}
         {showMap && <BigMap snap={snap} buf={buf} mySeat={mySeat} selfRef={selfRef} onClose={() => setShowMap(false)} />}
         {!touch && !locked && playing && settings.mode === "pubg" && (
           <div className={`pointer-events-none absolute left-1/2 top-1/2 mt-10 -translate-x-1/2 rounded-full px-3.5 py-1.5 text-[11px] text-white/85 ${GLASS}`}>🖱️ 화면을 클릭하면 마우스로 둘러봐요 · ESC 해제</div>
@@ -837,6 +843,97 @@ function HpBar({ hp, max = SEEKER_HP, w }: { hp: number; max?: number; w: string
   return (
     <div className={`mt-1 h-1.5 ${w} overflow-hidden rounded-full bg-white/12`}>
       <div className={`h-full rounded-full transition-[width] duration-300 ${hp > max * 0.5 ? "bg-white/90" : hp > max * 0.25 ? "bg-amber-300" : "bg-rose-500"}`} style={{ width: `${Math.min(100, (hp / max) * 100)}%` }} />
+    </div>
+  );
+}
+
+/**
+ * 증강 아이콘 줄 — 마우스를 올리거나 누르면(터치) 바로 아래에 이름·등급·설명이 펼쳐진다.
+ * 말풍선 대신 아래로 펼치는 건 결과판·Tab 판이 스크롤 상자라 띄운 말풍선이 잘리기 때문.
+ * 누름은 바깥으로 안 번지게 막는다(Tab 판은 아무 데나 누르면 닫힌다).
+ */
+function AugIcons({ ids, size = "md" }: { ids: string[]; size?: "sm" | "md" }) {
+  const [hover, setHover] = useState<string | null>(null);
+  const [pinned, setPinned] = useState<string | null>(null);
+  const shown = hover ?? pinned;
+  const a = shown ? aug(shown) : undefined;
+  if (ids.length === 0) return <span className="text-[10px] text-white/35">증강 없음</span>;
+  const box = size === "sm" ? "h-6 w-6 text-sm" : "h-7 w-7 text-base";
+  return (
+    <div className="min-w-0" onClick={(e) => e.stopPropagation()}>
+      <div className="flex flex-wrap items-center gap-1">
+        {ids.map((id, i) => {
+          const d = aug(id);
+          if (!d) return null;
+          const c = AUG_TIER_STYLE[d.tier].color;
+          const on = shown === id;
+          return (
+            <button
+              key={`${id}${i}`}
+              type="button"
+              aria-label={`${d.name} 설명`}
+              aria-pressed={pinned === id}
+              onMouseEnter={() => setHover(id)}
+              onMouseLeave={() => setHover(null)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setPinned((p) => (p === id ? null : id));
+              }}
+              className={`grid ${box} shrink-0 cursor-help place-items-center rounded-lg border bg-white/5 transition ${on ? "scale-110 bg-white/15" : "hover:bg-white/10"}`}
+              style={{ borderColor: `${c}${on ? "" : "88"}`, boxShadow: `0 0 10px -4px ${c}` }}
+            >
+              {d.icon}
+            </button>
+          );
+        })}
+      </div>
+      {a && (
+        <div className="mt-1 rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-left">
+          <div className="flex items-center gap-1.5 text-[12px]">
+            <b className="text-white">
+              {a.icon} {a.name}
+            </b>
+            <span className="rounded-full px-1.5 py-px text-[9px] font-bold" style={{ color: AUG_TIER_STYLE[a.tier].color, background: `${AUG_TIER_STYLE[a.tier].color}22` }}>
+              {AUG_TIER_STYLE[a.tier].name}
+            </span>
+            <span className="text-[9px] text-white/45">{a.side === "hider" ? "숨는 쪽" : "술래"}</span>
+          </div>
+          <div className="mt-0.5 break-keep text-[11px] leading-snug text-white/80">{a.desc}</div>
+          <div className="mt-0.5 break-keep text-[10px] leading-snug text-fuchsia-200/75">⏱ {a.when}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 라운드별 증강 기록 — 누가 어느 쪽에서 무엇을 골랐나 (라운드가 끝나면 전부 공개) */
+function AugHistory({ rounds, names, mySeat }: { rounds: Snap["history"]; names: Record<number, string>; mySeat: number }) {
+  const nm = (s: number) => (s === mySeat ? "나" : (names[s] ?? `${s + 1}번`));
+  const withAugs = rounds.filter((h) => h.augs && Object.keys(h.augs).length > 0);
+  if (withAugs.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      {withAugs.map((h) => {
+        const seats = [...h.seekers, ...h.hiders.map((x) => x.seat)];
+        return (
+          <div key={h.round}>
+            {rounds.length > 1 && <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/45">Round {h.round}</div>}
+            <div className="flex flex-col gap-1">
+              {seats.map((s) => (
+                <div key={s} className={`flex items-start gap-2 rounded-xl px-2.5 py-1.5 ${s === mySeat ? "bg-white/12" : "bg-white/[0.04]"}`}>
+                  <span className="w-20 shrink-0 truncate pt-1 text-xs">
+                    {h.seekers.includes(s) ? "👁️" : "🫣"} {nm(s)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <AugIcons ids={h.augs?.[s] ?? []} size="sm" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+      <p className="text-[10px] text-white/40">아이콘에 마우스를 올리거나 누르면 설명이 나와요</p>
     </div>
   );
 }
@@ -1684,7 +1781,7 @@ function RoundResult({ snap, names, mySeat }: { snap: Snap; names: Record<number
   const h = snap.history[snap.history.length - 1];
   if (!h) return null;
   return (
-    <div className="absolute inset-0 z-10 grid place-items-center bg-black/55 p-3 backdrop-blur-sm">
+    <div className="absolute inset-0 z-10 grid place-items-center overflow-y-auto bg-black/55 p-3 backdrop-blur-sm">
       <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-slate-950/70 p-5 text-white shadow-2xl shadow-black/50 backdrop-blur-xl">
         <div className="text-center text-[10px] font-semibold uppercase tracking-[0.3em] text-white/45">Round {snap.round}</div>
         <div className="mt-1 text-center text-xl font-bold">{h.winner === "seekers" ? "👁️ 술래 승리! 모두 찾았다" : "🫣 숨는 사람 승리!"}</div>
@@ -1703,6 +1800,12 @@ function RoundResult({ snap, names, mySeat }: { snap: Snap; names: Record<number
             );
           })}
         </ul>
+        {h.augs && Object.keys(h.augs).length > 0 && (
+          <div className="mt-3">
+            <div className="mb-1 text-xs font-bold text-fuchsia-200/90">🃏 이번 라운드 증강</div>
+            <AugHistory rounds={[h]} names={names} mySeat={mySeat} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1740,7 +1843,26 @@ function HiderLineup({ snap, names, mySeat }: { snap: Snap; names: Record<number
  * 이번 라운드: 숨는 사람(또는 탈락자)은 살아 있는 사람·변신·술래별 잡은 수까지,
  * 술래는 "내가 잡은 사람"만 (살아 있는 숨는 사람의 변신은 술래에게 숨긴다).
  */
-function ScoreBoard({ snap, names, mySeat, simNow, onClose }: { snap: Snap; names: Record<number, string>; mySeat: number; simNow: number; onClose: () => void }) {
+function ScoreBoard({
+  snap,
+  names,
+  mySeat,
+  simNow,
+  onClose,
+  ended,
+  onLeave,
+  onRestart,
+}: {
+  snap: Snap;
+  names: Record<number, string>;
+  mySeat: number;
+  simNow: number;
+  onClose: () => void;
+  ended?: boolean;
+  onLeave?: () => void;
+  onRestart?: () => void;
+}) {
+  const over = snap.phase === "gameOver";
   const rows = [...snap.players].sort((a, b) => b.score - a.score);
   const me = snap.players[mySeat];
   const isSeeker = me?.role === "seeker";
@@ -1750,6 +1872,12 @@ function ScoreBoard({ snap, names, mySeat, simNow, onClose }: { snap: Snap; name
   const hidersLeft = hiders.filter((p) => p.alive && !p.escaped).length;
   const inRound = snap.phase === "hide" || snap.phase === "hunt";
   const myCaught = hiders.filter((p) => p.cb === mySeat);
+  // 술래의 증강은 모두에게 공개, 숨는 사람의 증강은 라운드 중엔 술래에게 숨긴다 (라운드가 끝나면 공개)
+  const showAugsOf = (p: Snap["players"][number]) => p.role === "seeker" || !isSeeker || p.s === mySeat || !inRound;
+  const leave = () => {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    onLeave?.();
+  };
   const status = (p: Snap["players"][number]) => (p.escaped ? "🏁 찜" : p.alive ? "🫣 숨는 중" : p.cb === -1 ? "📢 찾는다! 아웃" : p.cb !== undefined ? `💥 ${nm(p.cb)}에게 잡힘` : "💥 잡힘");
   return (
     <div data-hud className="absolute inset-0 z-20 flex items-center justify-center overflow-y-auto bg-black/60 p-3" onClick={onClose}>
@@ -1758,11 +1886,19 @@ function ScoreBoard({ snap, names, mySeat, simNow, onClose }: { snap: Snap; name
         <div className="rounded-3xl border border-white/10 bg-slate-950/75 p-4 text-white shadow-2xl shadow-black/50 backdrop-blur-xl sm:w-60 sm:shrink-0">
           <div className="mb-2 text-center font-bold">{snap.phase === "gameOver" ? "🏁 최종 점수" : "🏆 점수"}</div>
           {rows.map((p, i) => (
-            <div key={p.s} className={`flex items-center justify-between rounded-xl px-3 py-1.5 text-sm ${p.s === mySeat ? "bg-white/15" : ""}`}>
-              <span className="truncate">
-                {i + 1}. {p.role === "seeker" ? "👁️" : "🫣"} {names[p.s]}
-              </span>
-              <b className="tabular-nums">{p.score}</b>
+            <div key={p.s} className={`rounded-xl px-3 py-1.5 text-sm ${p.s === mySeat ? "bg-white/15" : ""}`}>
+              <div className="flex items-center justify-between">
+                <span className="truncate">
+                  {i + 1}. {over ? "" : p.role === "seeker" ? "👁️ " : "🫣 "}
+                  {names[p.s]}
+                </span>
+                <b className="tabular-nums">{p.score}</b>
+              </div>
+              {!over && (p.aug?.length ?? 0) > 0 && showAugsOf(p) && (
+                <div className="mt-1 pl-4">
+                  <AugIcons ids={p.aug ?? []} size="sm" />
+                </div>
+              )}
             </div>
           ))}
           <p className="mt-2 text-center text-[10px] text-white/50">끝까지 숨기 +3 · 찜 +4 · 버틴 1분마다 +1 · 술래 잡기 +2 · 술래 전원 검거 +2</p>
@@ -1770,10 +1906,37 @@ function ScoreBoard({ snap, names, mySeat, simNow, onClose }: { snap: Snap; name
 
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           {/* 게임 끝: 마지막 라운드에 숨는 사람이 어떤 모습이었나 */}
-          {snap.phase === "gameOver" && snap.history.length > 0 && (
+          {over && (
+            <div className="rounded-3xl border border-fuchsia-400/30 bg-slate-950/80 p-4 text-white shadow-2xl shadow-black/50 backdrop-blur-xl" onClick={(e) => e.stopPropagation()}>
+              <div className="text-center text-base font-bold">🏁 게임 끝!</div>
+              {ended ? (
+                <div className="mt-3 flex gap-2">
+                  <button type="button" onClick={leave} className="flex-1 rounded-xl border border-white/20 py-2.5 text-sm font-semibold text-white/85 hover:bg-white/10">
+                    🚪 게임 종료
+                  </button>
+                  {onRestart ? (
+                    <button type="button" onClick={onRestart} className="flex-1 rounded-xl bg-fuchsia-600 py-2.5 text-sm font-semibold text-white hover:bg-fuchsia-500">
+                      🔄 다시하기
+                    </button>
+                  ) : (
+                    <span className="grid flex-1 place-items-center rounded-xl bg-white/5 px-2 text-center text-[11px] text-white/55">방장이 다시하기를 누르면 바로 시작해요</span>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-2 text-center text-xs text-white/55">결과 정리 중…</div>
+              )}
+            </div>
+          )}
+          {over && snap.history.length > 0 && (
             <div className="rounded-3xl border border-white/10 bg-slate-950/75 p-4 text-white shadow-2xl shadow-black/50 backdrop-blur-xl">
               <div className="text-center text-sm font-bold">🎭 마지막 라운드 — 이렇게 숨어 있었어요</div>
               <HiderLineup snap={snap} names={names} mySeat={mySeat} />
+            </div>
+          )}
+          {over && snap.history.some((h) => h.augs && Object.keys(h.augs).length > 0) && (
+            <div className="rounded-3xl border border-white/10 bg-slate-950/75 p-4 text-white shadow-2xl shadow-black/50 backdrop-blur-xl">
+              <div className="mb-2 text-center text-sm font-bold">🃏 라운드별 증강</div>
+              <AugHistory rounds={snap.history} names={names} mySeat={mySeat} />
             </div>
           )}
           {/* 이번 라운드 */}
@@ -1828,7 +1991,7 @@ function ScoreBoard({ snap, names, mySeat, simNow, onClose }: { snap: Snap; name
           )}
 
           {/* 내 증강 설명 */}
-          {me && (me.aug?.length ?? 0) > 0 && (
+          {!over && me && (me.aug?.length ?? 0) > 0 && (
             <div className="rounded-3xl border border-white/10 bg-slate-950/75 p-4 text-white shadow-2xl shadow-black/50 backdrop-blur-xl">
               <div className="mb-1 font-bold">🃏 내 증강</div>
               {(me.aug ?? []).map((id) => {
@@ -1853,7 +2016,7 @@ function ScoreBoard({ snap, names, mySeat, simNow, onClose }: { snap: Snap; name
               })}
             </div>
           )}
-          <p className="text-center text-[10px] text-white/45">아무 데나 누르면 닫혀요 · PC는 Tab을 떼면 닫혀요</p>
+          {!over && <p className="text-center text-[10px] text-white/45">증강 아이콘은 올리거나 누르면 설명 · 빈 곳을 누르면 닫혀요 · PC는 Tab을 떼면 닫혀요</p>}
         </div>
       </div>
     </div>

@@ -718,7 +718,7 @@ export default function MorphHideGame({ onComplete }: PlayableGameProps) {
       );
     return withGuard(
       <div className="flex flex-col gap-2">
-        <MorphBoard snap={snap} buf={buf} mySeat={mySeat} names={names} fx={fx} onPos={onPos} onAct={onAct} />
+        <MorphBoard snap={snap} buf={buf} mySeat={mySeat} names={names} fx={fx} onPos={onPos} onAct={onAct} ended={phase === "post-game"} onLeave={handleLeave} onRestart={isHost ? startGame : undefined} />
         {phase === "post-game" && (
           <div className="flex justify-center gap-2">
             <button onClick={handleLeave} className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 light:border-slate-300 light:text-slate-600">

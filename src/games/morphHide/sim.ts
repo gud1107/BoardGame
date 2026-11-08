@@ -221,6 +221,8 @@ export interface RoundSummary {
   seekers: number[];
   winner: "seekers" | "hiders";
   hiders: { seat: number; disguise: string | null; result: "survived" | "escaped" | "caught"; by?: number }[];
+  /** 그 라운드에 자리마다 고른 증강 (고른 순서) — 라운드가 끝나면 모두에게 공개 */
+  augs?: Record<number, string[]>;
 }
 
 export interface MatchState {
@@ -1511,7 +1513,8 @@ export function hostStep(rt: HostRuntime, dtMs: number) {
 
 function endRound(rt: HostRuntime, winner: "seekers" | "hiders") {
   const s = rt.state;
-  const summary: RoundSummary = { round: s.round, seekers: [...s.seekers], winner, hiders: [] };
+  const summary: RoundSummary = { round: s.round, seekers: [...s.seekers], winner, hiders: [], augs: {} };
+  for (const p of s.players) if (p.augs.length > 0) summary.augs![p.seat] = [...p.augs];
   for (const p of s.players) {
     if (p.role === "hider") {
       let result: "survived" | "escaped" | "caught" = "caught";
