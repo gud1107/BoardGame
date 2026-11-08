@@ -1,6 +1,6 @@
 import type { Persona } from "@/games/shared/three/persona";
 import { seatVoice } from "@/lib/audio/seatVoice";
-import { speakLineAs } from "@/lib/audio/characterVoice";
+import { excitedVoice, speakLineAs } from "@/lib/audio/characterVoice";
 import { EMOTES } from "./data";
 
 /**
@@ -66,15 +66,18 @@ const LINES: Record<string, Record<Persona | "base", string[]>> = {
     dreamer: ["아~ 들켜 버렸네~", "어라~ 들켰다~"],
     fidget: ["으악, 들켰다!", "안 돼, 안 돼! 들켰어!"],
   },
-  /** 몰래 전봇대를 찍은 숨는 사람 */
+  /**
+   * 몰래 전봇대를 찍은 숨는 사람 — 성격과 상관없이 들뜬 외침. TTS가 또렷하게 읽도록 더듬기(꼬, 꼼…)·
+   * 늘이기(~)·흐리기(…)·늘어진 받침(꼼꼬미이) 없이 "꼼꼬미!"를 맨 앞 한 마디로 끊는다.
+   */
   kkom: {
-    base: ["꼼꼬미!", "꼼꼬미! 찜!"],
-    starer: ["꼼꼬미. 쉽네.", "찜. 꼼꼬미."],
-    shy: ["꼬, 꼼꼬미…!", "헤헤, 꼼꼬미요!"],
-    scanner: ["꼼꼬미! 봤지 봤지?", "찜! 꼼꼬미!"],
-    focused: ["꼼꼬미. 계획대로.", "꼼꼬미. 끝."],
-    dreamer: ["꼼꼬미~", "찜~ 꼼꼬미~"],
-    fidget: ["꼼꼬미이! 앗싸!", "꼼꼬미! 예스!"],
+    base: ["꼼꼬미! 찍었다!", "꼼꼬미! 신난다!"],
+    starer: ["꼼꼬미! 내가 먼저 찍었다!", "꼼꼬미! 봤지?"],
+    shy: ["꼼꼬미! 제가 찍었어요!", "꼼꼬미! 성공했어요!"],
+    scanner: ["꼼꼬미! 봤지, 봤지?", "꼼꼬미! 찍었다!"],
+    focused: ["꼼꼬미! 계획대로야!", "꼼꼬미! 성공!"],
+    dreamer: ["꼼꼬미! 와, 찍었다!", "꼼꼬미! 야호!"],
+    fidget: ["꼼꼬미! 앗싸!", "꼼꼬미! 예스!"],
   },
 };
 
@@ -99,7 +102,9 @@ export function speakEmote(emoteId: string, seat: number, at: number, name: stri
   speakLineAs(seatVoice(seat, name), emoteLine(emoteId, seat, at, name), vol);
 }
 
-/** 꼼꼼이 외침("찾는다!"·"들켰다!"·"꼼꼬미!")을 그 사람 캐릭터 목소리·말투로 */
+/** 꼼꼼이 외침("찾는다!"·"들켰다!"·"꼼꼬미!")을 그 사람 캐릭터 목소리·말투로 — "꼼꼬미!"는 들뜬 목소리로 또박또박 */
 export function speakShout(kind: ShoutKind, seat: number, at: number, name: string | null | undefined, vol: number) {
-  speakLineAs(seatVoice(seat, name), emoteLine(kind, seat, at, name), vol);
+  const voice = seatVoice(seat, name);
+  if (kind === "kkom") speakLineAs(excitedVoice(voice), emoteLine(kind, seat, at, name), vol, true);
+  else speakLineAs(voice, emoteLine(kind, seat, at, name), vol);
 }

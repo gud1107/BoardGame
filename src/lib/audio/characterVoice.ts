@@ -421,7 +421,7 @@ export function speakEmotion(o: { seat: number; mood: PersonMood; voice: Charact
   say(o.voice, o.text);
 }
 
-const lineQueue = new PassQueue<{ voice: CharacterVoice; text: string; vol: number }>();
+const lineQueue = new PassQueue<{ voice: CharacterVoice; text: string; vol: number; steady: boolean }>();
 const passes = new Map<number, number>();
 let queueTimer: number | null = null;
 
@@ -432,14 +432,14 @@ const voiceBusy = () => window.speechSynthesis.speaking || window.speechSynthesi
  * playing — it waits its turn (see PassQueue) and, having waited, is said a bit quicker to
  * catch up with the table.
  */
-function speakQueued(voice: CharacterVoice, text: string, vol = 1) {
+function speakQueued(voice: CharacterVoice, text: string, vol = 1, steady = false) {
   if (!canSpeak()) return;
-  const ready = lineQueue.offer({ voice, text, vol }, performance.now() / 1000, voiceBusy());
+  const ready = lineQueue.offer({ voice, text, vol, steady }, performance.now() / 1000, voiceBusy());
   if (ready) return say(ready.voice, ready.text, 1, ready.vol);
   if (queueTimer !== null) return;
   queueTimer = window.setInterval(() => {
     const next = lineQueue.take(performance.now() / 1000, voiceBusy());
-    if (next && canSpeak()) say(next.voice, next.text, 1.15, next.vol);
+    if (next && canSpeak()) say(next.voice, next.text, next.steady ? 1 : 1.15, next.vol);
     if (!lineQueue.pending && queueTimer !== null) {
       window.clearInterval(queueTimer);
       queueTimer = null;
@@ -462,10 +462,19 @@ export function speakCall(voice: CharacterVoice, word: string) {
 /**
  * Any ready-written line (an emote, a taunt) in this character's voice, with the same phrase
  * intonation as emotion lines — `vol` scales it (distance falloff). Waits its turn, never cuts.
+ * `steady` = never hurried to catch up after waiting (a call-out that must be heard clearly).
  */
-export function speakLineAs(voice: CharacterVoice, text: string, vol = 1) {
+export function speakLineAs(voice: CharacterVoice, text: string, vol = 1, steady = false) {
   if (vol <= 0.05) return;
-  speakQueued(voice, text, vol);
+  speakQueued(voice, text, vol, steady);
+}
+
+/**
+ * The same character, excited: higher and brighter, full volume, at an even, clear pace —
+ * the persona's drawl (0.8) or rush (1.3) blurs a short word, so speed is pinned near normal.
+ */
+export function excitedVoice(voice: CharacterVoice): CharacterVoice {
+  return { ...voice, pitch: Math.min(2, voice.pitch * 1.15), rate: 0.98, volume: 1 };
 }
 
 /**
