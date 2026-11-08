@@ -131,6 +131,20 @@ VRoid Hub 라이선스(`corporate_commercial_use=allow`, `modification=allow`, `
 
 이 9개와 `three-vrm-girl`은 같은 뼈대(`J_Bip_*`)를 써서, 게임 안에서 헤어·옷·신발을 서로 바꿔 입힐 수 있습니다(`VRM_WARDROBE`).
 
+### VRoid 1.x 캐스트 (2026-11-08 추가)
+
+| 파일 | 원본 | 저작자 | 이용 조건 (2026-11-08 확인) | 받은 곳 |
+|---|---|---|---|---|
+| `ps-female.vrm` | VRoid_V110_Female (PerfectSync 52 blendshapes) | hinzka (VRoid 기본 모델 기반) | README: 개인·상업 이용 자유, 수정 데이터 재배포·판매 가능, 연락·출처 표기 불필요 | https://github.com/hinzka/52blendshapes-for-VRoid-face |
+| `ps-male.vrm` | VRoid_V110_Male (PerfectSync 52 blendshapes) | hinzka (VRoid 기본 모델 기반) | 위와 같음 | 위와 같음 |
+| `tanis-male.vrm` | TanisJr男性アバター | TanisJr (VRoid Studio 제작) | VRM 1.0 메타: 누구나 · 법인 상업 이용 허용 · 출처 표기 불필요 · 수정·재배포 허용 | https://github.com/kdt26aie40008-ux/TanisJR (assets/avatars, PR #5) |
+
+- hinzka 두 파일의 VRM 메타 `licenseName`에는 원본 VRoid 내보내기 기본값(`Redistribution_Prohibited`)이 남아 있지만, 저작자 README가 재배포·판매를 명시적으로 허용해서 README를 따랐습니다.
+- 다른 모델처럼 텍스처 해상도만 줄이고(1024, 노멀 512) 표정 데이터를 손실 없는 희소(sparse) 형식으로 바꿔 23MB → 5.5MB로 줄였습니다. 형태·표정·뼈대는 그대로입니다.
+- ps-female/ps-male은 클래식 캐스트와 같은 `J_Bip_*` 뼈대·비율이라 헤어·옷·신발 바꿔 입기에 들어갑니다. tanis-male은 VRM 1.0 축이라 자기 것만 입습니다.
+- **넣지 않은 것:** VRoid 공식 AvatarSample_A·B·C(와 이를 바탕으로 한 TanisJr 여성 모델)는 이용 조건에 "샘플 데이터로 캐릭터 작성 서비스(파츠 조합 등)를 만들지 말 것"이 있어, 머리·옷을 바꿔 입히는 이 사이트의 꾸미기 기능과 맞지 않아 제외했습니다.
+  Polygonal Mind 100Avatars(CC0)는 로우폴리 화풍이라 제외했습니다.
+
 - **Seed-san은 출처 표기가 필요합니다.** 2026-10-27 패치노트(v1.100.0)와 이 문서에 "Seed-san © VirtualCast, Inc."로 표기했습니다.
 - 로봇 팔(`robo_arm` 메시)은 보드게임 테이블에 맞지 않아 화면에서만 숨깁니다(파일은 그대로).
 

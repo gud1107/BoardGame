@@ -6,11 +6,12 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils, type VRM, type VRMHumanBoneName } from "@pixiv/three-vrm";
 import { DYED_BY_DEFAULT, VRM_WARDROBE, type VrmModel, type WardrobeSlot } from "@/lib/character/avatar";
-import { blinking, FACES, Hat, holdPose, holdsInMood, STRONG_MOODS, TABLE_POSES, type PersonLook, type PersonMood, type SeatedPersonProps } from "./SeatedPerson";
+import { FACES, Hat, holdPose, holdsInMood, STRONG_MOODS, TABLE_POSES, type PersonLook, type PersonMood, type SeatedPersonProps } from "./SeatedPerson";
 import { createMotion, HANDS, stepMotion, type MotionState } from "./motion";
 import { PERSONA_STYLE, personaGaze } from "./persona";
 import { armJointQuat, toVrm0, upperArmQuat } from "./vrmPose";
 import { fingerAngles, GRIP_CURL, handRigs, reach, thumbAngles, type Grip } from "./vrmHands";
+import { blinkAmount, breath, GazeSpring, mouthShape, saccade } from "./vrmLife";
 import { acquirePaintedFace, acquireSeedEyes, faceMorphs, greyIris, holdMorphs, isBrow, isFaceSkin, isIris, liftMorphs, PAINTABLE, releasePaintedFace, shapeFace, type FaceMorph } from "./vrmMakeup";
 
 /**
@@ -51,12 +52,16 @@ const MODELS: Record<ModelKey, ModelSpec> = {
   "vroid-shino": CLASSIC,
   "vroid-hair-m": CLASSIC,
   "vroid-fumiriya": CLASSIC,
+  // VRoid 1.x exports keep the classic material naming ("N00_000_00_Body_00_SKIN", "…_Tops_01_CLOTH")
+  "ps-female": CLASSIC,
+  "ps-male": CLASSIC,
+  "tanis-male": CLASSIC,
 };
 
 /** Seats nobody styled: a varied cast per gender, stable per seat. */
 const DEFAULT_CAST: Record<"f" | "m", ModelKey[]> = {
-  f: ["pixiv-sample", "vroid-d", "three-vrm-girl", "vroid-g", "vroid-shino", "vroid-hair-f", "vroid-e", "vroid-f"],
-  m: ["seed-san", "vroid-hair-m", "vroid-fumiriya"],
+  f: ["pixiv-sample", "vroid-d", "three-vrm-girl", "vroid-g", "vroid-shino", "vroid-hair-f", "vroid-e", "vroid-f", "ps-female"],
+  m: ["seed-san", "vroid-hair-m", "vroid-fumiriya", "ps-male", "tanis-male"],
 };
 
 function modelFor(look: PersonLook, seed: number): ModelKey {
@@ -344,6 +349,8 @@ function tint(vrm: VRM, key: ModelKey, look: PersonLook, out: boolean) {
   }
 }
 
+const VISEMES = ["aa", "ih", "ou", "ee", "oh"] as const;
+
 /** Per-frame scratch (useFrame runs for every seat, every frame — allocating here means GC hitches). */
 const fQ = new THREE.Quaternion();
 const fE = new THREE.Euler();
@@ -605,7 +612,8 @@ export function useVrmAvatar(look: PersonLook, seed: number, opts: { out?: boole
  * devices) — they cost more than the rest of the rig, and the eye can't tell. Call
  * after posing the normalized bones and setting expressions.
  */
-export function tickVrm(vrm: VRM, dt: number, morphs: FaceMorph[], springAcc: { current: number }, lowDetail: boolean) {
+export function tickVrm(vrm: VRM, dt: number, morphs: FaceMorph[], springAcc: { current: number }, lowDetail: boolean, life?: VrmLife) {
+  if (life) lifeEyes(vrm, life);
   vrm.humanoid.update();
   vrm.lookAt?.update(dt);
   liftMorphs(morphs);
@@ -621,6 +629,23 @@ export function tickVrm(vrm: VRM, dt: number, morphs: FaceMorph[], springAcc: { 
     }
   }
   vrm.materials?.forEach((m) => (m as { update?: (d: number) => void }).update?.(dt));
+}
+
+/**
+ * The eyes' share of looking somewhere: they jump ahead of the head (`lead`, radians the
+ * head hasn't turned yet) and hop between nearby fixation points ({@link saccade}).
+ * Standing rigs pass `{ t, seed }` to {@link tickVrm} for the fixation hops alone.
+ */
+export type VrmLife = { t: number; seed: number; lead?: [number, number]; spread?: number };
+function lifeEyes(vrm: VRM, life: VrmLife) {
+  const la = vrm.lookAt;
+  if (!la) return;
+  const [sy, sp] = saccade(life.t, life.seed, life.spread ?? 1);
+  const lead = life.lead ?? [0, 0];
+  const deg = 180 / Math.PI;
+  // VRM look-at maps: about ±25° of yaw, a little less of pitch, before the eyes run out of white
+  la.yaw = Math.max(-24, Math.min(24, lead[0] * deg + sy));
+  la.pitch = Math.max(-14, Math.min(14, -lead[1] * deg + sp));
 }
 
 export default function VrmPerson(props: VrmPersonProps) {
@@ -649,11 +674,11 @@ export default function VrmPerson(props: VrmPersonProps) {
   /** IK blend per arm (0 = gesture channels, 1 = grip). */
   const ikW = useRef<[number, number]>([0, 0]);
   const springDt = useRef(0);
-  const cur = useRef<{ m: MotionState; look: [number, number] } | null>(null);
+  const cur = useRef<{ m: MotionState; gaze: GazeSpring; target: [number, number]; blinkAt: number } | null>(null);
   useFrame(({ clock }, dt) => {
     if (!vrm || !fit) return;
     const now = clock.elapsedTime;
-    cur.current ??= { m: createMotion(TABLE_POSES.rest, HANDS.rest), look: [0, 0] };
+    cur.current ??= { m: createMotion(TABLE_POSES.rest, HANDS.rest), gaze: new GazeSpring(), target: [0, 0], blinkAt: -9 };
     const c = cur.current;
     const ps = PERSONA_STYLE[props.persona ?? "focused"];
     let mood: PersonMood = props.out ? "slump" : props.mood;
@@ -682,8 +707,11 @@ export default function VrmPerson(props: VrmPersonProps) {
       eul(upperLeg, -Math.PI / 2, 0, splay);
       eul(lowerLeg, Math.PI / 2, 0, 0);
     }
-    eul("spine", p[0] * 0.6, p[1] * 0.6, p[2] * 0.6);
-    eul("chest", p[0] * 0.4, p[1] * 0.4, p[2] * 0.4);
+    // breathing: the upper chest lifts and the shoulders rise a touch on each inhale
+    const excited = mood === "laugh" || mood === "cheer" || mood === "shock" || mood === "nervous" || mood === "slam";
+    const br = breath(now, seed, excited);
+    eul("chest", p[0] * 0.4 - br * 0.012, p[1] * 0.4, p[2] * 0.4);
+    eul("upperChest", -br * 0.018, 0, 0);
 
     // gaze: the game's cue, or wherever this temperament drifts (as SeatedPerson)
     let yaw = 0;
@@ -707,12 +735,19 @@ export default function VrmPerson(props: VrmPersonProps) {
       pitch = gaze.pitch;
     }
     pitch += ps.pitch;
-    c.look[0] += (yaw - c.look[0]) * (1 - Math.exp(-dt * ps.turn));
-    c.look[1] += (pitch - c.look[1]) * (1 - Math.exp(-dt * ps.turn));
+    // a big change of where to look comes with a blink (people blink on large gaze shifts)
+    if (Math.abs(yaw - c.target[0]) + Math.abs(pitch - c.target[1]) > 0.45) c.blinkAt = now;
+    c.target[0] = yaw;
+    c.target[1] = pitch;
+    // the head follows on a spring (a small overshoot and settle); the eyes get there first
+    const look = c.gaze.step(c.target, dt, ps.turn * 1.5);
     const drift = (la ? 0.35 : 1) * ps.drift;
-    const hx = p[3] + c.look[1], hy = p[4] * drift + c.look[0], hz = p[5];
+    const hx = p[3] + look[1], hy = p[4] * drift + look[0], hz = p[5];
+    // the torso joins a wide turn a little, so the neck doesn't do it all
+    eul("spine", p[0] * 0.6, p[1] * 0.6 + look[0] * 0.12, p[2] * 0.6);
     eul("neck", hx * 0.3, hy * 0.3, hz * 0.3);
     eul("head", hx * 0.7, hy * 0.7, hz * 0.7);
+    const eyesOn = !props.out && !props.firstPerson;
 
     // arms: resting tables tuck the long arms in; gestures and held cards keep the shared angles
     const tuck = !holding && (mood === "rest" || mood === "think" || mood === "write" || mood === "nervous" || mood === "smug" || mood === "sad") ? 1 : 0;
@@ -730,7 +765,10 @@ export default function VrmPerson(props: VrmPersonProps) {
       for (const [name, y, z] of handShape(s, handCurl)) eul(name, 0, y, z);
     };
     arm("l", 0, 6, p[9], p[14], p[15], p[18], 0);
-    arm("r", 1, 10, p[13], p[16], p[17], p[19], mood === "point" ? c.look[0] * 0.9 : 0);
+    arm("r", 1, 10, p[13], p[16], p[17], p[19], mood === "point" ? look[0] * 0.9 : 0);
+    // shoulders ride the breath
+    eul("leftShoulder", 0, 0, br * 0.012);
+    eul("rightShoulder", 0, 0, -br * 0.012);
 
     const chains = chainsOf(vrm);
     if (chains && seatRef.current && (ikW.current[0] > 0.001 || ikW.current[1] > 0.001)) {
@@ -750,10 +788,18 @@ export default function VrmPerson(props: VrmPersonProps) {
       em.setValue("sad", f.mouth === "frown" ? 0.75 : 0);
       em.setValue("surprised", f.eye > 1.3 ? 1 : 0);
       em.setValue("angry", f.brow < -0.5 ? 0.6 : 0);
-      em.setValue("aa", mood === "talk" ? 0.25 + Math.abs(Math.sin(now * 11)) * 0.45 : f.mouth === "o" && f.eye <= 1.3 ? 0.35 : 0);
-      em.setValue("blink", grin > 0.9 ? 0 : f.eye < 0.3 ? 1 : blinking(now, seed) ? 1 : 0);
+      // talking: a vowel per syllable with pauses for breath, not one jaw on a sine
+      const talk = mood === "talk" ? mouthShape(now, seed) : null;
+      const rest = f.mouth === "o" && f.eye <= 1.3 ? 0.35 : 0;
+      for (const v of VISEMES) em.setValue(v, talk ? (talk.v === v ? talk.open * 0.75 : 0) : v === "aa" ? rest : 0);
+      // a gaze-shift blink on top of the irregular natural ones
+      const shiftBlink = now - c.blinkAt < 0.25 ? Math.sin(((now - c.blinkAt) / 0.25) * Math.PI) : 0;
+      em.setValue("blink", grin > 0.9 ? 0 : f.eye < 0.3 ? 1 : Math.max(blinkAmount(now, seed), shiftBlink));
+      // calm faces aren't blank: a faint, slowly changing softness around the mouth
+      if (grin === 0 && f.mouth !== "frown" && (mood === "rest" || mood === "think" || mood === "write")) em.setValue("relaxed", Math.max(0, Math.sin(now * 0.21 + seed * 2.1)) * 0.22);
+      else em.setValue("relaxed", 0);
     }
-    tickVrm(vrm, dt, morphs.current, springDt, !!props.lowDetail);
+    tickVrm(vrm, dt, morphs.current, springDt, !!props.lowDetail, eyesOn ? { t: now, seed, lead: [c.target[0] - look[0], c.target[1] - look[1]], spread: gaze.kind === "away" || !la ? 1.3 : 0.7 } : undefined);
   });
 
   // still downloading (or failed): an empty chair with the seat's cards and name tag — never a stand-in body

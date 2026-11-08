@@ -102,7 +102,10 @@ describe("VRoid wardrobe", () => {
     const { wardrobeFor } = await import("./avatar");
     expect(wardrobeFor("vroid-d").hair).toContain("vroid-hair-m");
     expect(wardrobeFor("vroid-d").outfit).not.toContain("vroid-fumiriya");
-    expect(wardrobeFor("vroid-hair-m").shoes).toEqual(["vroid-hair-m", "vroid-fumiriya"]);
+    expect(wardrobeFor("vroid-hair-m").shoes).toEqual(["vroid-hair-m", "vroid-fumiriya", "ps-male"]);
+    // the VRoid 1.x bases share the classic skeleton; the TanisJr export (VRM 1.0 axes) wears only its own
+    expect(wardrobeFor("ps-female").outfit).toContain("vroid-d");
+    expect(wardrobeFor("tanis-male")).toEqual({ hair: [], outfit: [], shoes: [] });
     expect(wardrobeFor("pixiv-sample")).toEqual({ hair: [], outfit: [], shoes: [] });
     expect(wardrobeFor("seed-san").hair).toEqual([]);
   });
@@ -119,6 +122,16 @@ describe("VRoid wardrobe", () => {
 describe("make-up", () => {
   it("sanitize keeps hex lens / blusher / eyeshadow colours only", () => {
     expect(sanitizeAvatar({ iris: "#4F86D0", blush: "pink", shadow: "#9474c4" })).toEqual({ iris: "#4f86d0", shadow: "#9474c4" });
+  });
+
+  it("sanitize keeps known make-up styles and stickers only", () => {
+    expect(sanitizeAvatar({ shadowStyle: "smoky", liner: "wing", blushStyle: "hangover", lipStyle: "gloss", glow: true, mark: "heart" })).toEqual({ shadowStyle: "smoky", liner: "wing", blushStyle: "hangover", lipStyle: "gloss", glow: true, mark: "heart" });
+    expect(sanitizeAvatar({ shadowStyle: "neon", liner: 3, blushStyle: "", lipStyle: "matte", glow: "yes", mark: "tattoo" })).toEqual({});
+  });
+
+  it("every choosable body has its model file", async () => {
+    const { existsSync } = await import("node:fs");
+    for (const o of AVATAR_OPTIONS.model) expect(existsSync(`public/models/vrm/${o.id}.vrm`)).toBe(true);
   });
 
   it("presets on one model never share 눈매 + make-up, so they don't read as one face", async () => {

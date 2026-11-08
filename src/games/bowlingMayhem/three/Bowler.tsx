@@ -4,7 +4,8 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { VRMHumanBoneName } from "@pixiv/three-vrm";
-import { blinking, type PersonLook } from "@/games/shared/three/SeatedPerson";
+import type { PersonLook } from "@/games/shared/three/SeatedPerson";
+import { blinkAmount } from "@/games/shared/three/vrmLife";
 import { tickVrm, useVrmAvatar } from "@/games/shared/three/VrmPerson";
 import { toVrm0 } from "@/games/shared/three/vrmPose";
 
@@ -253,9 +254,9 @@ export default function Bowler({ look, seed, pose, poseKey, lowDetail }: BowlerP
       em.setValue("surprised", f.surprised);
       em.setValue("angry", f.angry);
       em.setValue("aa", f.aa);
-      em.setValue("blink", f.happy > 0.9 ? 0 : blinking(t, seed) ? 1 : 0);
+      em.setValue("blink", f.happy > 0.9 ? 0 : blinkAmount(t, seed));
     }
-    tickVrm(vrm, dt, morphs.current, s.springs, lowDetail);
+    tickVrm(vrm, dt, morphs.current, s.springs, lowDetail, { t, seed });
   });
 
   return (

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { VRM } from "@pixiv/three-vrm";
-import type { EyeShape, FaceShape, PersonLook, VrmModel } from "@/lib/character/avatar";
+import type { BlushStyle, EyeShape, FaceMark, FaceShape, LinerStyle, LipStyle, PersonLook, ShadowStyle, VrmModel } from "@/lib/character/avatar";
 
 /**
  * Make-up and face styling for the VRoid table characters, so two players on one model
@@ -17,10 +17,17 @@ const UV = {
   eyes: [0.345, 0.665],
   // just above the eye opening (the opening itself is a hole in the mesh)
   shadowY: 0.502,
+  // the lower lash line / 애교살 band just under the opening
+  underY: 0.588,
+  // outer eye corners (left/right of the texture) and where a liner tail starts
+  outer: [0.287, 0.713],
+  outerY: 0.546,
   cheekY: 0.672,
   cheeks: [0.315, 0.685],
+  nose: [0.5, 0.645],
   mouth: [0.5, 0.764],
   mole: [0.4, 0.628],
+  lipMole: [0.56, 0.786],
 } as const;
 
 /** Models whose face texture uses the VRoid layout. */
@@ -37,10 +44,10 @@ export function isBrow(materialName: string): boolean {
   return materialName.toLowerCase().includes("facebrow");
 }
 
-type Paint = Pick<PersonLook, "gender" | "lip" | "mark" | "blush" | "shadow">;
+type Paint = Pick<PersonLook, "gender" | "lip" | "mark" | "blush" | "shadow" | "shadowStyle" | "liner" | "blushStyle" | "lipStyle" | "glow">;
 
 export function paintKey(p: Paint): string {
-  return [p.gender, p.lip, p.mark, p.blush ?? "", p.shadow ?? ""].join("|");
+  return [p.gender, p.lip, p.mark, p.blush ?? "", p.shadow ?? "", p.shadowStyle ?? "", p.liner ?? "", p.blushStyle ?? "", p.lipStyle ?? "", p.glow ? 1 : 0].join("|");
 }
 
 function rgba(hex: string, a: number): string {
@@ -48,15 +55,16 @@ function rgba(hex: string, a: number): string {
   return `rgba(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},${a})`;
 }
 
-/** A soft elliptical dab, strongest in the middle. */
-function dab(ctx: CanvasRenderingContext2D, W: number, H: number, u: number, v: number, ru: number, rv: number, color: string, a: number) {
+/** A soft elliptical dab, strongest in the middle (`edge`: where it has faded to 60%; `rot` tilts it). */
+function dab(ctx: CanvasRenderingContext2D, W: number, H: number, u: number, v: number, ru: number, rv: number, color: string, a: number, edge = 0.55, rot = 0) {
   ctx.save();
   ctx.translate(u * W, v * H);
+  if (rot) ctx.rotate(rot);
   ctx.scale(1, (rv * H) / (ru * W));
   const r = ru * W;
   const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
   g.addColorStop(0, rgba(color, a));
-  g.addColorStop(0.55, rgba(color, a * 0.6));
+  g.addColorStop(edge, rgba(color, a * 0.6));
   g.addColorStop(1, rgba(color, 0));
   ctx.fillStyle = g;
   ctx.beginPath();
@@ -84,24 +92,163 @@ function paint(img: CanvasImageSource & { width: number; height: number }, p: Pa
   ctx.drawImage(img, 0, 0);
   // multiply keeps the painted skin's own shading under the colour
   ctx.globalCompositeOperation = "multiply";
-  if (p.shadow) for (const u of UV.eyes) dab(ctx, W, H, u, UV.shadowY, 0.09, 0.034, p.shadow, 0.9);
-  if (p.blush) for (const u of UV.cheeks) dab(ctx, W, H, u, UV.cheekY, 0.08, 0.05, p.blush, 0.36);
-  dab(ctx, W, H, UV.mouth[0], UV.mouth[1], 0.052, 0.017, p.lip, p.gender === "f" ? 0.8 : 0.25);
+  if (p.shadow) paintShadow(ctx, W, H, p.shadow, p.shadowStyle ?? "soft");
+  if (p.blush) paintBlush(ctx, W, H, p.blush, p.blushStyle ?? "apple");
+  paintLip(ctx, W, H, p.lip, p.lipStyle ?? "blur", p.gender === "f" ? 1 : 0.32);
   ctx.globalCompositeOperation = "source-over";
-  if (p.mark === "mole") {
-    ctx.fillStyle = "rgba(70,42,34,0.9)";
-    ctx.beginPath();
-    ctx.arc(UV.mole[0] * W, UV.mole[1] * H, 0.0042 * W, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (p.mark === "freckles") {
-    ctx.fillStyle = "rgba(150,90,62,0.55)";
-    for (const [u, v] of FRECKLES) {
-      ctx.beginPath();
-      ctx.arc(u * W, v * H, 0.003 * W, 0, Math.PI * 2);
-      ctx.fill();
+  if (p.liner && p.liner !== "none") paintLiner(ctx, W, H, p.liner);
+  if (p.shadow && p.shadowStyle === "glitter") sparkle(ctx, W, H);
+  if (p.glow) paintGlow(ctx, W, H);
+  if (p.lipStyle === "gloss") dab(ctx, W, H, UV.mouth[0] - 0.008, UV.mouth[1] + 0.006, 0.016, 0.0045, "#ffffff", 0.6);
+  paintMark(ctx, W, H, p.mark);
+  return canvas;
+}
+
+/** 아이섀도: 은은하게 (one wash over the lid), 그라데이션 (light wash + deep lash line), 스모키 (wide, dark, smudged under), 애교살 글리터 (wash + a lit band under the eye). */
+function paintShadow(ctx: CanvasRenderingContext2D, W: number, H: number, c: string, style: ShadowStyle) {
+  for (const u of UV.eyes) {
+    const out = u < 0.5 ? -1 : 1;
+    if (style === "soft") dab(ctx, W, H, u, UV.shadowY, 0.09, 0.034, c, 0.9);
+    else if (style === "gradient") {
+      dab(ctx, W, H, u, UV.shadowY - 0.012, 0.1, 0.045, c, 0.45, 0.4);
+      dab(ctx, W, H, u + out * 0.012, UV.shadowY + 0.012, 0.075, 0.02, c, 1, 0.7);
+    } else if (style === "smoky") {
+      dab(ctx, W, H, u + out * 0.01, UV.shadowY + 0.004, 0.115, 0.05, c, 1, 0.65);
+      dab(ctx, W, H, u, UV.underY, 0.075, 0.012, c, 0.7, 0.5);
+    } else {
+      dab(ctx, W, H, u, UV.shadowY, 0.085, 0.03, c, 0.7);
+      dab(ctx, W, H, u, UV.underY, 0.07, 0.011, c, 0.45, 0.5);
     }
   }
-  return canvas;
+}
+
+/** Fixed glitter flecks along the 애교살 (a stable look, not a reroll per seat). */
+const GLITTER: [number, number][] = (() => {
+  const out: [number, number][] = [];
+  let s = 11;
+  const rnd = () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
+  for (const u of UV.eyes) for (let i = 0; i < 9; i++) out.push([u + (rnd() - 0.5) * 0.12, UV.underY + (rnd() - 0.5) * 0.018]);
+  return out;
+})();
+
+function sparkle(ctx: CanvasRenderingContext2D, W: number, H: number) {
+  for (const u of UV.eyes) dab(ctx, W, H, u, UV.underY, 0.07, 0.013, "#fff6e8", 0.45, 0.5);
+  ctx.fillStyle = "rgba(255,255,245,0.95)";
+  for (const [u, v] of GLITTER) {
+    ctx.beginPath();
+    ctx.arc(u * W, v * H, 0.0028 * W, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/** 아이라인 꼬리 from the outer corner: up and out (고양이) or down and out (강아지). */
+function paintLiner(ctx: CanvasRenderingContext2D, W: number, H: number, style: LinerStyle) {
+  ctx.save();
+  ctx.fillStyle = "rgba(34,22,20,0.95)";
+  for (const u of UV.outer) {
+    const out = u < 0.5 ? -1 : 1;
+    const x0 = u * W - out * 0.016 * W, y0 = (UV.outerY + (style === "wing" ? 0.004 : 0.022)) * H;
+    const x1 = u * W + out * (style === "wing" ? 0.04 : 0.036) * W, y1 = y0 + (style === "wing" ? -0.046 : 0.03) * H;
+    const t = 0.015 * W;
+    // a tapered tail: thick at the eye, a point at the end
+    ctx.beginPath();
+    ctx.moveTo(x0, y0 - t);
+    ctx.quadraticCurveTo((x0 + x1) / 2, (y0 + y1) / 2 - t * 0.5, x1, y1);
+    ctx.quadraticCurveTo((x0 + x1) / 2, (y0 + y1) / 2 + t * 0.7, x0, y0 + t * 0.6);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** 블러셔: 볼 중앙, 숙취 (high under the eyes and over the nose), 광대 사선 (tilted up toward the temples). */
+function paintBlush(ctx: CanvasRenderingContext2D, W: number, H: number, c: string, style: BlushStyle) {
+  if (style === "apple") for (const u of UV.cheeks) dab(ctx, W, H, u, UV.cheekY, 0.08, 0.05, c, 0.36);
+  else if (style === "hangover") {
+    for (const u of UV.eyes) dab(ctx, W, H, u + (u < 0.5 ? 0.02 : -0.02), UV.underY + 0.03, 0.085, 0.035, c, 0.42);
+    dab(ctx, W, H, UV.nose[0], UV.nose[1] - 0.015, 0.035, 0.022, c, 0.32);
+  } else for (const u of UV.cheeks) dab(ctx, W, H, u + (u < 0.5 ? -0.03 : 0.03), UV.cheekY - 0.02, 0.1, 0.03, c, 0.42, 0.55, u < 0.5 ? 0.45 : -0.45);
+}
+
+/** 립: 블러 (soft gradient, the default), 풀 (a crisp full lip); 글로시 is 풀 + a highlight drawn on top. */
+function paintLip(ctx: CanvasRenderingContext2D, W: number, H: number, c: string, style: LipStyle, k: number) {
+  const [u, v] = UV.mouth;
+  if (style === "blur") dab(ctx, W, H, u, v, 0.052, 0.017, c, 0.8 * k);
+  else {
+    dab(ctx, W, H, u, v, 0.058, 0.02, c, 0.85 * k, 0.85);
+    dab(ctx, W, H, u, v, 0.03, 0.012, c, 0.5 * k, 0.6);
+  }
+}
+
+/** 하이라이터: a lit stroke down the nose and on the cheekbones. */
+function paintGlow(ctx: CanvasRenderingContext2D, W: number, H: number) {
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  dab(ctx, W, H, UV.nose[0], UV.nose[1] - 0.03, 0.009, 0.035, "#fff2e2", 0.55);
+  for (const u of UV.cheeks) dab(ctx, W, H, u + (u < 0.5 ? -0.01 : 0.01), UV.underY + 0.025, 0.045, 0.014, "#fff2e2", 0.5, 0.55, u < 0.5 ? 0.35 : -0.35);
+  ctx.restore();
+}
+
+function starPath(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const rr = i % 2 ? r * 0.45 : r;
+    ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  ctx.closePath();
+}
+
+function heartPath(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x, y + r * 0.9);
+  ctx.bezierCurveTo(x - r * 1.4, y - r * 0.1, x - r * 0.6, y - r * 1.1, x, y - r * 0.35);
+  ctx.bezierCurveTo(x + r * 0.6, y - r * 1.1, x + r * 1.4, y - r * 0.1, x, y + r * 0.9);
+  ctx.closePath();
+}
+
+/** 포인트: moles and freckles are painted skin; the stickers and the plaster sit on top. */
+function paintMark(ctx: CanvasRenderingContext2D, W: number, H: number, mark: FaceMark) {
+  const dot = (u: number, v: number, r: number) => {
+    ctx.beginPath();
+    ctx.arc(u * W, v * H, r * W, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  if (mark === "mole" || mark === "lipMole") {
+    ctx.fillStyle = "rgba(70,42,34,0.9)";
+    const [u, v] = mark === "mole" ? UV.mole : UV.lipMole;
+    dot(u, v, 0.0042);
+  } else if (mark === "freckles") {
+    ctx.fillStyle = "rgba(150,90,62,0.55)";
+    for (const [u, v] of FRECKLES) dot(u, v, 0.003);
+  } else if (mark === "heart" || mark === "star") {
+    const heart = mark === "heart";
+    const x = (heart ? 0.7 : 0.285) * W, y = (heart ? 0.655 : 0.63) * H, r = 0.016 * W;
+    ctx.save();
+    ctx.fillStyle = heart ? "#ff4f86" : "#ffcc33";
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.lineWidth = 0.0025 * W;
+    if (heart) heartPath(ctx, x, y, r);
+    else starPath(ctx, x, y, r * 1.1);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  } else if (mark === "bandage") {
+    ctx.save();
+    ctx.translate(UV.nose[0] * W, (UV.nose[1] - 0.035) * H);
+    ctx.rotate(-0.12);
+    const w = 0.075 * W, h = 0.02 * W;
+    ctx.fillStyle = "#f1d2b0";
+    ctx.strokeStyle = "rgba(150,110,80,0.6)";
+    ctx.lineWidth = 0.0015 * W;
+    ctx.beginPath();
+    ctx.roundRect(-w / 2, -h / 2, w, h, h / 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#e6bf98";
+    ctx.fillRect(-w * 0.16, -h * 0.38, w * 0.32, h * 0.76);
+    ctx.restore();
+  }
 }
 
 function canvasTexture(canvas: HTMLCanvasElement, like: THREE.Texture): THREE.Texture {

@@ -4,7 +4,8 @@ import { useMemo, useRef, type ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { VRMHumanBoneName } from "@pixiv/three-vrm";
-import { blinking, type PersonLook } from "@/games/shared/three/SeatedPerson";
+import type { PersonLook } from "@/games/shared/three/SeatedPerson";
+import { blinkAmount } from "@/games/shared/three/vrmLife";
 import { tickVrm, useVrmAvatar } from "@/games/shared/three/VrmPerson";
 import { fingerAngles, thumbAngles, type Side } from "@/games/shared/three/vrmHands";
 import { toVrm0 } from "@/games/shared/three/vrmPose";
@@ -501,9 +502,9 @@ export default function VrmFighter(props: VrmFighterProps) {
       em.setValue("surprised", f.surprised);
       em.setValue("happy", f.happy);
       em.setValue("aa", f.aa);
-      em.setValue("blink", f.shut ? 1 : f.happy > 0.9 || f.surprised > 0 ? 0 : blinking(t, seed) ? 1 : 0);
+      em.setValue("blink", f.shut ? 1 : f.happy > 0.9 || f.surprised > 0 ? 0 : blinkAmount(t, seed));
     }
-    tickVrm(vrm, dt, morphs.current, st.springs, lowDetail);
+    tickVrm(vrm, dt, morphs.current, st.springs, lowDetail, { t, seed });
     if (rifleRef.current?.visible) seatRifle(rifleRef.current, body, vrm);
   });
 

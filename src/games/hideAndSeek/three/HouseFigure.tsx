@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, type ReactNode, type RefObject } from "reac
 import { createPortal, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import type { VRMHumanBoneName } from "@pixiv/three-vrm";
-import { blinking, type PersonLook } from "@/games/shared/three/SeatedPerson";
+import type { PersonLook } from "@/games/shared/three/SeatedPerson";
+import { blinkAmount } from "@/games/shared/three/vrmLife";
 import { tickVrm, useVrmAvatar } from "@/games/shared/three/VrmPerson";
 import { toVrm0 } from "@/games/shared/three/vrmPose";
 
@@ -413,9 +414,9 @@ export default function HouseFigure(props: HouseFigureProps) {
       em.setValue("surprised", f.surprised);
       em.setValue("happy", f.happy);
       em.setValue("angry", f.angry);
-      em.setValue("blink", f.shut ? 1 : f.happy > 0.9 || f.surprised > 0.5 ? 0 : blinking(t, seed) ? 1 : 0);
+      em.setValue("blink", f.shut ? 1 : f.happy > 0.9 || f.surprised > 0.5 ? 0 : blinkAmount(t, seed));
     }
-    tickVrm(vrm, tickDt, morphs.current, s.springs, lowDetail || (cull && tickDt > dt));
+    tickVrm(vrm, tickDt, morphs.current, s.springs, lowDetail || (cull && tickDt > dt), { t, seed });
   });
 
   return (

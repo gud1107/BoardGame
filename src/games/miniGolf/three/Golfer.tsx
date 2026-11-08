@@ -4,7 +4,8 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { VRMHumanBoneName } from "@pixiv/three-vrm";
-import { blinking, type PersonLook } from "@/games/shared/three/SeatedPerson";
+import type { PersonLook } from "@/games/shared/three/SeatedPerson";
+import { blinkAmount } from "@/games/shared/three/vrmLife";
 import { tickVrm, useVrmAvatar } from "@/games/shared/three/VrmPerson";
 import { toVrm0 } from "@/games/shared/three/vrmPose";
 
@@ -192,9 +193,9 @@ export default function Golfer({ look, seed, pose, poseKey, lowDetail, color }: 
       em.setValue("sad", pose === "slump" ? 0.9 : 0);
       em.setValue("angry", pose === "swing" ? 0.3 : 0);
       em.setValue("aa", pose === "cheer" ? 0.45 : 0);
-      em.setValue("blink", happy > 0.9 ? 0 : blinking(t, seed) ? 1 : 0);
+      em.setValue("blink", happy > 0.9 ? 0 : blinkAmount(t, seed));
     }
-    tickVrm(vrm, dt, morphs.current, s.springs, lowDetail);
+    tickVrm(vrm, dt, morphs.current, s.springs, lowDetail, { t, seed });
   });
 
   return (

@@ -26,7 +26,15 @@ export type FaceShape = "oval" | "vline" | "round" | "square";
 /** 눈매: painted eye shape + the brow line that goes with it. */
 export type EyeShape = "round" | "fox" | "puppy" | "sharp";
 /** 포인트: a small personal mark on the face. */
-export type FaceMark = "none" | "mole" | "freckles";
+export type FaceMark = "none" | "mole" | "freckles" | "lipMole" | "heart" | "star" | "bandage";
+/** 아이섀도 바르는 법 (색은 `shadow`). */
+export type ShadowStyle = "soft" | "gradient" | "smoky" | "glitter";
+/** 아이라인 모양. */
+export type LinerStyle = "none" | "wing" | "puppy";
+/** 블러셔 위치 (색은 `blush`). */
+export type BlushStyle = "apple" | "hangover" | "side";
+/** 립 질감 (색은 `lip`). */
+export type LipStyle = "blur" | "full" | "gloss";
 /**
  * Which VRoid (VRM) body the 3D tables use — files in public/models/vrm. The model
  * fixes the face; hair, outfit and shoes can come from another model of the
@@ -44,7 +52,10 @@ export type VrmModel =
   | "vroid-hair-f"
   | "vroid-shino"
   | "vroid-hair-m"
-  | "vroid-fumiriya";
+  | "vroid-fumiriya"
+  | "ps-female"
+  | "ps-male"
+  | "tanis-male";
 /** The gender each model reads as (voice pitch, hair-colour list). */
 export const VRM_MODEL_GENDER: Record<VrmModel, PersonGender> = {
   "pixiv-sample": "f",
@@ -59,6 +70,9 @@ export const VRM_MODEL_GENDER: Record<VrmModel, PersonGender> = {
   "vroid-shino": "f",
   "vroid-hair-m": "m",
   "vroid-fumiriya": "m",
+  "ps-female": "f",
+  "ps-male": "m",
+  "tanis-male": "m",
 };
 /**
  * The classic VRoid family (VRM 0.x exports sharing one `J_Bip_*` skeleton): their
@@ -77,10 +91,13 @@ export const VRM_WARDROBE: Partial<Record<VrmModel, { hair: string; outfit: stri
   "vroid-shino": { hair: "남색 생머리", outfit: "교복 (파란 리본)", shoes: "로퍼" },
   "vroid-hair-m": { hair: "흑발 숏컷", outfit: "화이트 후드", shoes: "스니커즈" },
   "vroid-fumiriya": { hair: "주황 투블럭", outfit: "교복 (넥타이)", shoes: "로퍼" },
+  // VRoid 1.x base bodies (PerfectSync exports): same J_Bip skeleton and proportions as the classic cast
+  "ps-female": { hair: "단발 보브", outfit: "흰 티·반바지", shoes: "흰 운동화" },
+  "ps-male": { hair: "기본 숏컷", outfit: "흰 티·반바지", shoes: "흰 운동화" },
 };
 export type WardrobeSlot = "hair" | "outfit" | "shoes";
-/** Models whose hair / top take the look's colours unless told otherwise (`hairDye`/`outfitDye`): the original three, which presets colour-tint. */
-export const DYED_BY_DEFAULT: ReadonlySet<VrmModel> = new Set<VrmModel>(["pixiv-sample", "three-vrm-girl", "seed-san"]);
+/** Models whose hair / top take the look's colours unless told otherwise (`hairDye`/`outfitDye`): the original three, which presets colour-tint, and the plain grey-haired / white-tee VRoid 1.x bases. */
+export const DYED_BY_DEFAULT: ReadonlySet<VrmModel> = new Set<VrmModel>(["pixiv-sample", "three-vrm-girl", "seed-san", "ps-female", "ps-male"]);
 /**
  * What `model` may wear in each slot: any classic model's hair, and outfits/shoes
  * cut for the same body (men's and women's VRoid bodies differ). Empty for models
@@ -131,10 +148,16 @@ export interface PersonLook {
   iris?: string;
   blush?: string;
   shadow?: string;
+  /** How the make-up goes on (unset = the first of each list: soft shadow, no liner, apple blush, blurred lip, no highlighter). */
+  shadowStyle?: ShadowStyle;
+  liner?: LinerStyle;
+  blushStyle?: BlushStyle;
+  lipStyle?: LipStyle;
+  glow?: boolean;
 }
 
 /** The part of a look a player can choose in their profile (+ which preset it started from, for the list's highlight). */
-export type AvatarProfile = Partial<Pick<PersonLook, "gender" | "skin" | "hair" | "hairStyle" | "coat" | "shirt" | "glasses" | "lip" | "build" | "face" | "eyes" | "mark" | "model" | "hairFrom" | "outfitFrom" | "shoesFrom" | "hairDye" | "outfitDye" | "iris" | "blush" | "shadow">> & { presetId?: string };
+export type AvatarProfile = Partial<Pick<PersonLook, "gender" | "skin" | "hair" | "hairStyle" | "coat" | "shirt" | "glasses" | "lip" | "build" | "face" | "eyes" | "mark" | "model" | "hairFrom" | "outfitFrom" | "shoesFrom" | "hairDye" | "outfitDye" | "iris" | "blush" | "shadow" | "shadowStyle" | "liner" | "blushStyle" | "lipStyle" | "glow">> & { presetId?: string };
 
 /** Bump when the stored shape changes incompatibly; sanitizeAvatar can then migrate by version. */
 export const AVATAR_VERSION = 1;
@@ -164,6 +187,9 @@ export const AVATAR_OPTIONS = {
     opt<VrmModel>("seed-san", "짧은 흑발 탐험가"),
     opt<VrmModel>("vroid-hair-m", "흑발 후드 소년"),
     opt<VrmModel>("vroid-fumiriya", "주황 머리 교복"),
+    opt<VrmModel>("ps-female", "단발 보브 (염색 자유)"),
+    opt<VrmModel>("ps-male", "기본 숏컷 (염색 자유)"),
+    opt<VrmModel>("tanis-male", "갈색 머리 빨간 후드"),
   ],
   // K-pop idol cast: fair-to-warm East Asian skin
   skin: [opt("#fbe4d5", "밝은 톤"), opt("#f6d9c4", "핑크 톤"), opt("#f2cfb5", "웜 톤"), opt("#f9ddca", "아이보리"), opt("#ecc6a8", "건강한 톤"), opt("#f4d6c0", "내추럴")],
@@ -183,15 +209,19 @@ export const AVATAR_OPTIONS = {
   build: [opt<BodyBuild>("petite", "아담한"), opt<BodyBuild>("slim", "슬림"), opt<BodyBuild>("standard", "보통"), opt<BodyBuild>("broad", "어깨 넓은")],
   face: [opt<FaceShape>("oval", "계란형"), opt<FaceShape>("vline", "V라인"), opt<FaceShape>("round", "동글동글"), opt<FaceShape>("square", "각진 턱선")],
   eyes: [opt<EyeShape>("round", "동그란 사슴눈"), opt<EyeShape>("fox", "올라간 여우눈"), opt<EyeShape>("puppy", "처진 강아지눈"), opt<EyeShape>("sharp", "날카로운 무쌍")],
-  mark: [opt<FaceMark>("none", "없음"), opt<FaceMark>("mole", "눈밑 점"), opt<FaceMark>("freckles", "주근깨")],
+  mark: [opt<FaceMark>("none", "없음"), opt<FaceMark>("mole", "눈밑 점"), opt<FaceMark>("lipMole", "입가 점"), opt<FaceMark>("freckles", "주근깨"), opt<FaceMark>("heart", "하트 스티커"), opt<FaceMark>("star", "별 스티커"), opt<FaceMark>("bandage", "콧등 밴드")],
+  shadowStyle: [opt<ShadowStyle>("soft", "은은하게"), opt<ShadowStyle>("gradient", "그라데이션"), opt<ShadowStyle>("smoky", "스모키"), opt<ShadowStyle>("glitter", "애교살 글리터")],
+  liner: [opt<LinerStyle>("none", "없음"), opt<LinerStyle>("wing", "고양이 라인"), opt<LinerStyle>("puppy", "강아지 라인")],
+  blushStyle: [opt<BlushStyle>("apple", "볼 중앙"), opt<BlushStyle>("hangover", "숙취 (눈밑·콧등)"), opt<BlushStyle>("side", "광대 사선")],
+  lipStyle: [opt<LipStyle>("blur", "블러 립"), opt<LipStyle>("full", "풀 립"), opt<LipStyle>("gloss", "글로시")],
   // make-up VrmPerson paints on the face; each list is the profile's choices after "없음 / 원래 눈"
   iris: [opt("#4a3226", "다크 브라운"), opt("#8a6038", "헤이즐"), opt("#8a929e", "그레이"), opt("#4f86d0", "블루"), opt("#5aa070", "그린"), opt("#9070d0", "바이올렛"), opt("#c84858", "레드"), opt("#d0a040", "골드")],
-  blush: [opt("#f59a86", "피치"), opt("#f283a4", "핑크"), opt("#ee7a68", "코랄"), opt("#d26c8c", "로즈")],
-  shadow: [opt("#a06a4c", "브라운"), opt("#e0849e", "핑크"), opt("#e8945a", "오렌지"), opt("#9474c4", "퍼플"), opt("#4a3e48", "스모키")],
-  lip: [opt("#e05a6e", "로즈"), opt("#d8485e", "체리"), opt("#e8766e", "코랄"), opt("#c94a62", "말린 장미"), opt("#ef8a84", "피치"), opt("#d4607a", "핑크"), opt("#c27a6e", "내추럴")],
+  blush: [opt("#f59a86", "피치"), opt("#f283a4", "핑크"), opt("#ee7a68", "코랄"), opt("#d26c8c", "로즈"), opt("#c69ad8", "라벤더"), opt("#f2a46e", "오렌지")],
+  shadow: [opt("#a06a4c", "브라운"), opt("#e0849e", "핑크"), opt("#e8945a", "오렌지"), opt("#9474c4", "퍼플"), opt("#4a3e48", "스모키"), opt("#c9a24a", "골드"), opt("#a0463c", "레드 브라운"), opt("#5a7ec8", "블루")],
+  lip: [opt("#e05a6e", "로즈"), opt("#d8485e", "체리"), opt("#e8766e", "코랄"), opt("#c94a62", "말린 장미"), opt("#ef8a84", "피치"), opt("#d4607a", "핑크"), opt("#c27a6e", "내추럴"), opt("#c98a7a", "누드 베이지"), opt("#8e3a5a", "플럼"), opt("#e2553a", "오렌지 레드")],
 } as const;
 
-type WardrobeKey = "hairFrom" | "outfitFrom" | "shoesFrom" | "hairDye" | "outfitDye" | "iris" | "blush" | "shadow";
+type WardrobeKey = "hairFrom" | "outfitFrom" | "shoesFrom" | "hairDye" | "outfitDye" | "iris" | "blush" | "shadow" | "shadowStyle" | "liner" | "blushStyle" | "lipStyle" | "glow";
 
 export interface CharacterPreset {
   id: string;
@@ -235,6 +265,12 @@ export const CHARACTER_PRESETS: readonly CharacterPreset[] = [
   preset("ria", "리아", "은발 다크 엘프 · 레드 렌즈 · 스모키", { gender: "f", skin: "#fbe4d5", hair: "#d9d6de", hairStyle: "straight", coat: "#1c1c22", shirt: "#1f1f24", glasses: false, lip: "#c94a62", build: "slim", face: "square", eyes: "fox", mark: "mole", model: "vroid-d-darkness", iris: "#c84858", shadow: "#4a3e48" }),
   preset("geonu", "건우", "흑발 후드 · 무쌍 · 블루 렌즈", { gender: "m", skin: "#f6d9c4", hair: "#121010", hairStyle: "comma", coat: "#ece4d6", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "slim", face: "oval", eyes: "sharp", mark: "none", model: "vroid-hair-m", iris: "#4f86d0" }),
   preset("haechan", "해찬", "주황 투블럭 교복 · 골드 렌즈 · 눈밑 점", { gender: "m", skin: "#f9ddca", hair: "#6b4a3a", hairStyle: "dandy", coat: "#2b3a5c", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "standard", face: "square", eyes: "fox", mark: "mole", model: "vroid-fumiriya", iris: "#d0a040" }),
+  // 2026-11-08: the VRoid 1.x bases (dyed freely) + TanisJr, and the make-up styles (섀도 바르는 법 · 아이라인 · 블러셔 위치 · 립 질감 · 하이라이터 · 스티커)
+  preset("dahye", "다혜", "밀크티 보브 · 고양이 라인 · 글로시 오렌지 립", { gender: "f", skin: "#f6d9c4", hair: "#7a5640", hairStyle: "hush", coat: "#ece4d6", shirt: "#ffffff", glasses: false, lip: "#e2553a", build: "slim", face: "vline", eyes: "fox", mark: "none", model: "ps-female", hairDye: true, outfitDye: true, iris: "#8a6038", shadow: "#a06a4c", shadowStyle: "gradient", liner: "wing", lipStyle: "gloss", glow: true }),
+  preset("yeseul", "예슬", "로즈 핑크 보브 · 애교살 글리터 · 숙취 블러셔 · 하트", { gender: "f", skin: "#fbe4d5", hair: "#b8707e", hairStyle: "straight", coat: "#e7b7c4", shirt: "#fdf1f4", glasses: false, lip: "#e05a6e", build: "petite", face: "square", eyes: "puppy", mark: "heart", model: "ps-female", hairDye: true, outfitDye: true, iris: "#9070d0", shadow: "#e0849e", shadowStyle: "glitter", blush: "#f283a4", blushStyle: "hangover" }),
+  preset("rin", "린", "남색 생머리 교복 · 퍼플 스모키 · 강아지 라인 · 플럼 립", { gender: "f", skin: "#fbe4d5", hair: "#16110f", hairStyle: "straight", coat: "#2b3a5c", shirt: "#ffffff", glasses: false, lip: "#8e3a5a", build: "slim", face: "oval", eyes: "sharp", mark: "lipMole", model: "vroid-shino", iris: "#8a929e", shadow: "#9474c4", shadowStyle: "smoky", liner: "puppy", blush: "#c69ad8", blushStyle: "side", lipStyle: "full" }),
+  preset("siwoo", "시우", "플래티넘 숏컷 · 무쌍 · 콧등 밴드", { gender: "m", skin: "#f6d9c4", hair: "#d9d6de", hairStyle: "comma", coat: "#1c1c22", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "slim", face: "vline", eyes: "sharp", mark: "bandage", model: "ps-male", hairDye: true, outfitDye: true, iris: "#4f86d0" }),
+  preset("kangmin", "강민", "갈색 머리 빨간 후드 · 골드 렌즈 · 하이라이터", { gender: "m", skin: "#f2cfb5", hair: "#3a2a22", hairStyle: "dandy", coat: "#7a2238", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "standard", face: "oval", eyes: "round", mark: "none", model: "tanis-male", iris: "#d0a040", glow: true }),
 ];
 
 const STYLES_F: HairStyle[] = ["straight", "hush", "pony"];
@@ -294,14 +330,14 @@ export function sanitizeAvatar(raw: unknown): AvatarProfile {
   }
   if (typeof r.hairStyle === "string" && (ALL_STYLES as readonly string[]).includes(r.hairStyle)) out.hairStyle = r.hairStyle as HairStyle;
   if (typeof r.glasses === "boolean") out.glasses = r.glasses;
-  for (const k of ["build", "face", "eyes", "mark"] as const) {
+  for (const k of ["build", "face", "eyes", "mark", "shadowStyle", "liner", "blushStyle", "lipStyle"] as const) {
     const v = r[k];
     if (typeof v === "string" && (ids(AVATAR_OPTIONS[k]) as readonly string[]).includes(v)) (out as Record<string, string>)[k] = v;
   }
   const isModel = (v: unknown): v is VrmModel => typeof v === "string" && (ids(AVATAR_OPTIONS.model) as readonly string[]).includes(v);
   if (isModel(r.model)) out.model = r.model;
   for (const k of ["hairFrom", "outfitFrom", "shoesFrom"] as const) if (isModel(r[k]) && VRM_WARDROBE[r[k] as VrmModel]) out[k] = r[k] as VrmModel;
-  for (const k of ["hairDye", "outfitDye"] as const) if (typeof r[k] === "boolean") out[k] = r[k] as boolean;
+  for (const k of ["hairDye", "outfitDye", "glow"] as const) if (typeof r[k] === "boolean") out[k] = r[k] as boolean;
   for (const k of ["iris", "blush", "shadow"] as const) {
     const v = r[k];
     if (typeof v === "string" && HEX.test(v)) out[k] = v.toLowerCase();

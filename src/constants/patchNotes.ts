@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.161.0",
+    releaseDate: "2026-11-08",
+    title: "👥 3D 캐릭터 3명 추가 · 메이크업 다양화 · 더 사람 같은 움직임",
+    changes: [
+      { game: "common", type: "FEAT", desc: "👥 3D 캐릭터 3명 추가 (남자 2·여자 1) — 단발 보브·기본 숏컷(머리·옷 색 자유), 갈색 머리 빨간 후드 · 새 프리셋 5명" },
+      { game: "common", type: "FEAT", desc: "💄 메이크업 — 섀도 바르는 법 4종, 고양이·강아지 아이라인, 블러셔 위치 3종, 립 질감 3종, 하이라이터, 하트·별 스티커·콧등 밴드, 색 추가" },
+      { game: "common", type: "IMPROVE", desc: "👀 더 사람 같은 움직임 — 눈이 먼저 움직이고 고개가 따라와요, 불규칙한 깜빡임, 숨쉬기, 말할 때 음절마다 입 모양이 바뀌어요" },
+    ],
+  },
+  {
     version: "v1.159.0",
     releaseDate: "2026-11-08",
     title: "💀 죽은척 대작전 — 사망 연출 + 소생",

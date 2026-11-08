@@ -40,6 +40,11 @@ function toProfile(l: PersonLook): AvatarProfile {
     iris: l.iris,
     blush: l.blush,
     shadow: l.shadow,
+    shadowStyle: l.shadowStyle,
+    liner: l.liner,
+    blushStyle: l.blushStyle,
+    lipStyle: l.lipStyle,
+    glow: l.glow,
   };
 }
 
@@ -359,7 +364,7 @@ export function CharacterCustomizer({ onDone, doneLabel }: { onDone: () => void;
         ))}
       </Row>
       {model === "seed-san" ? (
-        <p className="text-[11px] text-white/45 light:text-slate-500">이 캐릭터는 얼굴 그림 방식이 달라서 아이섀도·블러셔·립·점은 안 보여요 (눈매·얼굴형·렌즈는 적용돼요).</p>
+        <p className="text-[11px] text-white/45 light:text-slate-500">이 캐릭터는 얼굴 그림 방식이 달라서 아이섀도·아이라인·블러셔·립·하이라이터·점·스티커는 안 보여요 (눈매·얼굴형·렌즈는 적용돼요).</p>
       ) : (
         <>
           <Row label="아이섀도">
@@ -370,11 +375,16 @@ export function CharacterCustomizer({ onDone, doneLabel }: { onDone: () => void;
               <Swatch key={o.id} color={o.id} label={o.label} selected={look.shadow === o.id} onClick={() => update({ shadow: o.id })} />
             ))}
           </Row>
+          {look.shadow && (
+            <StyleRow label="섀도 바르는 법" options={AVATAR_OPTIONS.shadowStyle} value={look.shadowStyle ?? "soft"} onPick={(v) => update({ shadowStyle: v })} />
+          )}
+          <StyleRow label="아이라인" options={AVATAR_OPTIONS.liner} value={look.liner ?? "none"} onPick={(v) => update({ liner: v })} />
           <Row label="립 컬러">
             {AVATAR_OPTIONS.lip.map((o) => (
               <Swatch key={o.id} color={o.id} label={o.label} selected={look.lip === o.id} onClick={() => update({ lip: o.id })} />
             ))}
           </Row>
+          <StyleRow label="립 질감" options={AVATAR_OPTIONS.lipStyle} value={look.lipStyle ?? "blur"} onPick={(v) => update({ lipStyle: v })} />
           <Row label="블러셔">
             <Chip selected={!look.blush} onClick={() => update({ blush: undefined })}>
               없음
@@ -382,6 +392,17 @@ export function CharacterCustomizer({ onDone, doneLabel }: { onDone: () => void;
             {AVATAR_OPTIONS.blush.map((o) => (
               <Swatch key={o.id} color={o.id} label={o.label} selected={look.blush === o.id} onClick={() => update({ blush: o.id })} />
             ))}
+          </Row>
+          {look.blush && (
+            <StyleRow label="블러셔 위치" options={AVATAR_OPTIONS.blushStyle} value={look.blushStyle ?? "apple"} onPick={(v) => update({ blushStyle: v })} />
+          )}
+          <Row label="하이라이터 (콧대·광대)">
+            <Chip selected={!look.glow} onClick={() => update({ glow: undefined })}>
+              없음
+            </Chip>
+            <Chip selected={!!look.glow} onClick={() => update({ glow: true })}>
+              ✨ 바르기
+            </Chip>
           </Row>
           <Row label="포인트">
             {AVATAR_OPTIONS.mark.map((o) => (
@@ -393,6 +414,19 @@ export function CharacterCustomizer({ onDone, doneLabel }: { onDone: () => void;
         </>
       )}
     </div>
+  );
+}
+
+/** One choice from a short list of named styles (make-up techniques). */
+function StyleRow<T extends string>({ label, options, value, onPick }: { label: string; options: readonly { id: T; label: string }[]; value: T; onPick: (v: T) => void }) {
+  return (
+    <Row label={label}>
+      {options.map((o) => (
+        <Chip key={o.id} selected={value === o.id} onClick={() => onPick(o.id)}>
+          {o.label}
+        </Chip>
+      ))}
+    </Row>
   );
 }
 
