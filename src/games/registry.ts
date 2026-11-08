@@ -882,6 +882,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "fog-manor",
+    name: "안개 저택 살인사건",
+    nameEn: "Fog Manor Murder",
+    description:
+      "폭풍우 치는 밤, 외딴 섬의 안개 저택에서 회장이 살해됐다. 새벽 6시 배가 오기 전에 범인·흉기·장소를 가장 먼저 밝혀내는 2~6인 경쟁 추리 게임! 3층×3관 저택을 옮겨 다니며 🗣️ 대질 심문(상대가 몇 장 가졌는지는 모두가 듣고, 한 장은 나에게만 몰래 보여 줘요)과 🔍 현장 수색(특징·알리바이 단서)으로 좁혀 가요. 🔔 괘종이 울리면 새 단서가 놓이고, 🕳️ 비밀 통로로 지름길. ⚖️ 고발이 틀리면 누명! 끝까지 못 풀면 🌅 새벽에 비밀 추리. 정답·손패는 서버가 숨겨요. 📒 수사 노트 · 3D/2D 저택 · AI 봇 Lv.1~10.",
+    players: { min: 2, max: 6 },
+    playTime: { minMinutes: 15, maxMinutes: 40 },
+    category: "party",
+    thumbnail: { emoji: "🕯️", gradient: ["#7f1d1d", "#0b0a12"] },
+    tags: ["추리", "숨겨진정보", "심문", "카드", "경쟁", "미스터리", "3D", "AI봇"],
+    genres: ["strategy", "party"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "time-loop-heist",
     name: "시간 루프 도둑단",
     nameEn: "Time Loop Heist",

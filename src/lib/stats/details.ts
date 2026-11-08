@@ -249,6 +249,14 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "엉뚱한 걸 친 횟수", value: (d) => n(d.wrongHits) },
     { label: "만든 분신", value: (d) => n(d.decoys) },
   ],
+  "fog-manor": [
+    { label: "해결 (고발 / 새벽)", value: (d) => `${n(d.solves)} (${n(d.accuseSolves)} / ${n(d.dawnSolves)})` },
+    { label: "빠른 해결 (자정의 추리)", value: (d) => n(d.fastSolves) },
+    { label: "누명 쓴 횟수", value: (d) => n(d.wrongAccusations) },
+    { label: "심문 / 수색", value: (d) => `${n(d.asks)} / ${n(d.searches)}` },
+    { label: "찾은 단서 (괘종 단서)", value: (d) => `${n(d.clues)} (${n(d.bellClues)})` },
+    { label: "비밀 통로 이용", value: (d) => n(d.passages) },
+  ],
   "lantern-keepers": [
     { label: "탈출 (별 3개)", value: (d) => `${n(d.escapes)} (${n(d.threeStars)})` },
     { label: "받은 별 합계", value: (d) => n(d.stars) },

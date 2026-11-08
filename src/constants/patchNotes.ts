@@ -74,6 +74,16 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     ],
   },
   {
+    version: "v1.163.0",
+    releaseDate: "2026-11-09",
+    title: "🕯️ 새 게임 안개 저택 살인사건",
+    changes: [
+      { game: "fog-manor", type: "FEAT", desc: "🕯️ 새 게임 — 새벽 6시 배가 오기 전에 범인·흉기·장소를 먼저 밝히는 2~6인 경쟁 추리 · 3D/2D 저택 · AI 봇 Lv.1~10" },
+      { game: "fog-manor", type: "FEAT", desc: "🗣️ 대질 심문(몇 장인지는 모두가 듣고 한 장은 몰래) · 🔍 특징·알리바이 단서 수색 · 🔔 괘종 새 단서 · 🕳️ 비밀 통로" },
+      { game: "fog-manor", type: "FEAT", desc: "⚖️ 고발이 틀리면 누명 · 🌅 새벽 비밀 추리 · 📒 자동 수사 노트 · 정답·손패는 서버가 숨김 · 느와르 BGM과 모든 행동 효과음" },
+    ],
+  },
+  {
     version: "v1.162.0",
     releaseDate: "2026-11-09",
     title: "🚢 새 게임 화물선 쌓기",

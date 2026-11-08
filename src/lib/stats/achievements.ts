@@ -343,6 +343,16 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["escape-5", "🏁", "꼼꼼이 탈출", "찜 장소 탈출 누적 5번", 5, k("escapes")],
     ["decoy-10", "👯", "분신술", "분신 누적 10개 만들기", 10, k("decoys")],
   ],
+  "fog-manor": [
+    ["solve-1", "🕯️", "첫 사건 해결", "사건을 풀어 1위 하기", 1, k("solves")],
+    ["accuse-10", "⚖️", "명탐정", "고발로 사건 누적 10번 해결", 10, k("accuseSolves")],
+    ["fast-1", "⚡", "자정의 추리", "시계 절반이 지나기 전에 고발로 해결", 1, k("fastSolves")],
+    ["dawn-1", "🌅", "새벽의 한 수", "새벽 비밀 추리로 맞히기", 1, k("dawnSolves")],
+    ["silent-1", "🤫", "말없는 탐정", "심문 한 번 없이 사건 해결", 1, k("silentSolves")],
+    ["full-house", "🏰", "만원 저택", "6인전에서 사건 해결", 1, k("fullHouse")],
+    ["search-50", "🔍", "현장 감식반", "현장 수색 누적 50번", 50, k("searches")],
+    ["ask-100", "🗣️", "심문의 달인", "대질 심문 누적 100번", 100, k("asks")],
+  ],
   "lantern-keepers": [
     ["escape-1", "🌅", "첫 새벽", "숲을 빠져나와 탈출하기", 1, k("escapes")],
     ["three-star", "🌟", "완벽한 탐험", "별 3개로 탈출", 1, k("threeStars")],
