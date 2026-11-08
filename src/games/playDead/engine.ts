@@ -15,6 +15,9 @@ import { AUG_BY_ID, AUG_N, AUG_REROLLS, AUG_ROUNDS, rollAugOffer, rollAugTier, t
  * - 쓰러져 있으면: 숨죽이기 / 일어나기 / 벌떡 기습. 진짜 죽은 사람도 똑같은 메뉴를 받고
  *   (아무 효과 없음) 똑같이 제출해야 해서 타이밍으로도 정체가 새지 않는다.
  * - 3라운드를 연달아 누워 있으면 숨이 차서 강제로 일어난다(살아 있다는 게 드러남).
+ * - 소생: 쓰러진 채 🩹 붕대(탄약 2발)를 감거나 🎁 구급상자가 떨어지면 — 진짜 시체는 50%로 목숨 1로
+ *   살아나고, 살아 있던 사람은 목숨 +1. 겉으로는 똑같이 누워 있고 "치료 시도"만 공개된다 — 공개 확률
+ *   (`survivalChance`)이 치료 시점까지 그대로 반영해서 정확히 맞는다.
  * - 실제 생존자가 1명 이하가 되면(또는 최대 라운드) 끝, 모든 정체 공개.
  *
  * 신뢰 모델: 락스텝이라 각 기기가 전체 상태(목숨 포함)를 들고 있다 — 다른 락스텝 게임과 같은
@@ -37,7 +40,7 @@ export function surgeAt(round: number): number {
   return round < SURGE_ROUND ? 0 : 1 + Math.floor((round - SURGE_ROUND) / SURGE_STEP);
 }
 
-export type MoveKind = "reload" | "cover" | "shot" | "burst" | "grenade" | "loot" | "finish" | "hold" | "rise" | "ambush";
+export type MoveKind = "reload" | "cover" | "shot" | "burst" | "grenade" | "loot" | "finish" | "hold" | "rise" | "ambush" | "bandage";
 export interface Move {
   kind: MoveKind;
   target?: Seat;
@@ -47,6 +50,18 @@ export const START_HP = 3;
 /** 공격: 탄약 비용 = 화력 등급 (서로 쏘면 화력이 센 쪽이 제압, 같으면 맞사격으로 둘 다 빗나감) */
 export const BLAST_TIER: Partial<Record<MoveKind, number>> = { shot: 1, burst: 2, grenade: 3 };
 export const FINISH_COST = 1;
+/** 🩹 붕대: 쓰러진 채 탄약을 써서 지혈 — 진짜 시체면 REVIVE_CHANCE로 소생, 살아 있으면 목숨 +1 */
+export const BANDAGE_COST = 2;
+export const REVIVE_CHANCE = 0.5;
+/** 🎁 구급상자 낙하: 이 라운드부터 MEDKIT_STEP마다, 쓰러진 몸 하나(무작위)에 떨어진다 */
+export const MEDKIT_ROUND = 5;
+export const MEDKIT_STEP = 6;
+export function isMedkitRound(round: number): boolean {
+  return round >= MEDKIT_ROUND && (round - MEDKIT_ROUND) % MEDKIT_STEP === 0;
+}
+export function nextMedkitRound(round: number): number {
+  return round <= MEDKIT_ROUND ? MEDKIT_ROUND : MEDKIT_ROUND + Math.ceil((round - MEDKIT_ROUND) / MEDKIT_STEP) * MEDKIT_STEP;
+}
 export const LOOT_TAKE = 2;
 /** 피해 범위 [최소, 최대] — 범위는 공개, 실제 값은 맞은 사람만 안다 */
 export type DmgRange = readonly [number, number];
@@ -70,9 +85,9 @@ export interface GameOptions {
 }
 export const DEFAULT_OPTIONS: GameOptions = { chooseSeconds: 15, maxRounds: 0, augments: false };
 
-/** 인원이 많을수록 다 쓰러뜨리는 데 오래 걸린다 — 셀프플레이로 맞춘 최대 라운드 */
+/** 인원이 많을수록 다 쓰러뜨리는 데 오래 걸린다 — 셀프플레이로 맞춘 최대 라운드 (5·6인은 소생 규칙 뒤 21·22: 레벨 7 봇 6인전 최대 라운드 도달 29%→33%) */
 export function maxRoundsFor(seatCount: number): number {
-  return seatCount <= 3 ? 15 : seatCount === 4 ? 18 : 20;
+  return seatCount <= 3 ? 15 : seatCount === 4 ? 18 : seatCount === 5 ? 21 : 22;
 }
 
 export interface SeatState {
@@ -88,6 +103,8 @@ export interface SeatState {
   coverStreak: number;
   /** 공개 정보: 지금까지 맞은 타격들의 피해 범위 */
   hits: DmgRange[];
+  /** 공개: 치료 시도(붕대·구급상자) 시점 — 그때까지 맞은 타격 수. 빠진 값 = 없음(구버전 상태) */
+  heals?: number[];
   diedRound: number | null;
   /** 개인 기록용 집계 */
   tally: Tally;
@@ -124,7 +141,12 @@ export type RoundEvent =
   | { t: "rise"; seat: Seat; reason: "choice" | "breath" }
   | { t: "fall"; seats: Seat[] }
   /** 증강 효과로 들어간 타격: 부비트랩(seat=누운 몸 → target=턴 사람), 카운터 저격, 파편 */
-  | { t: "aug"; id: AugId; seat: Seat; target: Seat; hit: Hit };
+  | { t: "aug"; id: AugId; seat: Seat; target: Seat; hit: Hit }
+  /**
+   * 치료 시도(공개). `result`는 숨은 정보 — 그 자리 화면에만 쓴다:
+   * revived = 시체였는데 살아남, failed = 시체 그대로, healed = 살아 있었고 목숨 +1(최대면 그대로)
+   */
+  | { t: "heal"; seat: Seat; source: "bandage" | "medkit"; result: "revived" | "failed" | "healed" };
 
 /** 한 번의 타격: 공개 범위 lo~hi, 실제 값 dmg(맞은 사람 화면에만 보여 준다) */
 export interface Hit {
@@ -211,6 +233,7 @@ export function startGame(seatCount: number, seed: number, options: GameOptions 
       lie: 0,
       coverStreak: 0,
       hits: [],
+      heals: [],
       diedRound: null,
       tally: { ...EMPTY_TALLY },
       augs: [],
@@ -347,7 +370,11 @@ export function legalMoves(state: GameState, seat: Seat): Move[] {
   const others = state.seats.map((_, i) => i).filter((i) => i !== seat);
   const standing = others.filter((i) => !state.seats[i].down);
   const bodies = others.filter((i) => state.seats[i].down && !state.seats[i].confirmed);
-  if (me.down) return [{ kind: "hold" }, { kind: "rise" }, ...standing.map((target) => ({ kind: "ambush" as const, target }))];
+  if (me.down) {
+    const down: Move[] = [{ kind: "hold" }, { kind: "rise" }, ...standing.map((target) => ({ kind: "ambush" as const, target }))];
+    if (canBandage(me)) down.push({ kind: "bandage" });
+    return down;
+  }
   const out: Move[] = [{ kind: "reload" }];
   if (me.coverStreak < coverLimitOf(me)) out.push({ kind: "cover" });
   for (const kind of ["shot", "burst", "grenade"] as const) {
@@ -358,6 +385,14 @@ export function legalMoves(state: GameState, seat: Seat): Move[] {
     if (me.ammo >= costOf(me, "finish")) out.push({ kind: "finish", target });
   }
   return out;
+}
+
+/**
+ * 붕대는 숨 참기 한도 전에만(이번 라운드를 누워 보내고도 한도가 남을 때) — 그래야 "한도보다 오래
+ * 누워 있으면 시체" 규칙이 소생 뒤에도 그대로 맞는다. 조건이 전부 공개 정보라 시체도 똑같이 받는다.
+ */
+export function canBandage(s: SeatState): boolean {
+  return s.down && !s.confirmed && s.ammo >= BANDAGE_COST && s.lie + 1 < lieLimitOf(s);
 }
 
 export function isLegal(state: GameState, seat: Seat, move: Move): boolean {
@@ -424,9 +459,15 @@ function resolveRound(state: GameState): GameState {
 
   // 비용 지불 (공개 정보)
   moves.forEach((m, i) => {
-    if (startDown[i]) return;
+    if (startDown[i]) {
+      // 🩹 붕대 값은 시체도 똑같이 낸다(공개 탄약이 정체를 흘리지 않게)
+      if (m.kind === "bandage" && !seats[i].confirmed) seats[i].ammo -= BANDAGE_COST;
+      return;
+    }
     if (BLAST_TIER[m.kind] || m.kind === "finish") seats[i].ammo -= costOf(seats[i], m.kind);
   });
+  /** 이번 라운드 끝에 붕대를 감는 몸(확인사살·기습 간파로 끊기지 않은) */
+  const bandaging = Array(n).fill(false);
 
   // 1) 쓰러진 사람을 둘러싼 일
   for (let k = 0; k < n; k++) {
@@ -442,6 +483,7 @@ function resolveRound(state: GameState): GameState {
       }
       lootBody(seats, k, looters, events);
       if (looters.length && hasAug(seats[k], "tripwire")) for (const l of looters) augStrike("tripwire", k, l, AUG_N.tripwireDmg);
+      if (!finishers.length && moves[k].kind === "bandage") bandaging[k] = true;
       continue;
     }
     if (fm.kind === "ambush" && finishers.includes(fm.target!)) {
@@ -467,9 +509,10 @@ function resolveRound(state: GameState): GameState {
       for (const l of looters) events.push({ t: "loot", seat: l, target: k, took: 0, foiled: true });
       continue;
     }
-    if (fm.kind === "hold") {
+    if (fm.kind === "hold" || fm.kind === "bandage") {
       lootBody(seats, k, looters, events);
       if (looters.length && hasAug(seats[k], "tripwire")) for (const l of looters) augStrike("tripwire", k, l, AUG_N.tripwireDmg);
+      if (fm.kind === "bandage") bandaging[k] = true;
     } else for (const l of looters) events.push({ t: "loot", seat: l, target: k, took: 0, foiled: true });
     if (fm.kind === "rise") {
       rose[k] = true;
@@ -587,13 +630,38 @@ function resolveRound(state: GameState): GameState {
   }
   if (fallen.length) events.push({ t: "fall", seats: fallen });
 
+  // 5½) 💓 치료 시도 — 🩹 붕대, 그다음 🎁 구급상자. 몸은 그대로 누워 있다(소생해도 겉보기 같음)
+  const heal = (i: Seat, source: "bandage" | "medkit") => {
+    const s = seats[i];
+    s.heals = [...(s.heals ?? []), s.hits.length];
+    const r = roll();
+    let result: "revived" | "failed" | "healed";
+    if (s.dead) {
+      if (r < REVIVE_CHANCE) {
+        s.dead = false;
+        s.hp = 1;
+        s.diedRound = null;
+        result = "revived";
+      } else result = "failed";
+    } else {
+      s.hp = Math.min(START_HP, s.hp + 1);
+      result = "healed";
+    }
+    events.push({ t: "heal", seat: i, source, result });
+  };
+  for (let i = 0; i < n; i++) if (bandaging[i] && seats[i].down && !seats[i].confirmed) heal(i, "bandage");
+  if (isMedkitRound(state.round)) {
+    const bodies = seats.map((_, k) => k).filter((k) => seats[k].down && !seats[k].confirmed && seats[k].lie < lieLimitOf(seats[k]));
+    if (bodies.length) heal(bodies[Math.floor(roll() * bodies.length)], "medkit");
+  }
+
   // 6) 🩺 청진기 — 쓰러진 상대 중 아직 모르는 1명의 생사를 몰래
   for (let i = 0; i < n; i++) {
     if (!hasAug(seats[i], "stethoscope") || seats[i].confirmed) continue;
     const unknown = seats.map((_, k) => k).filter((k) => k !== i && seats[k].down && !seats[k].confirmed && !intelValid(seats[i], k, seats[k]));
     if (!unknown.length) continue;
     const k = unknown[Math.floor(roll() * unknown.length)];
-    seats[i].intel[k] = { dead: seats[k].dead, hits: seats[k].hits.length };
+    seats[i].intel[k] = { dead: seats[k].dead, hits: opsOf(seats[k]) };
   }
 
   const lastMoves = moves.map((m, i) => (startDown[i] || state.seats[i].confirmed ? null : m));
@@ -611,11 +679,16 @@ function resolveRound(state: GameState): GameState {
   };
 }
 
-/** 청진기로 안 정보가 아직 맞는가 — 시체는 영원히, 산 사람은 그 뒤로 안 맞았을 때만 */
+/** 공개된 타격·치료 횟수 — 이게 바뀌면 그 몸의 생사가 바뀌었을 수 있다 */
+function opsOf(s: SeatState): number {
+  return s.hits.length + (s.heals?.length ?? 0);
+}
+
+/** 청진기로 안 정보가 아직 맞는가 — 그 뒤로 맞거나 치료받지 않았을 때만(시체도 소생할 수 있다) */
 export function intelValid(viewer: SeatState, seat: Seat, target: SeatState): boolean {
   const it = viewer.intel?.[seat];
   if (!it) return false;
-  return it.dead || it.hits === target.hits.length;
+  return it.hits === opsOf(target);
 }
 
 function lootBody(seats: SeatState[], k: Seat, looters: Seat[], events: RoundEvent[]) {
@@ -739,18 +812,42 @@ export function pendingSeats(state: GameState): Seat[] {
 // ---------------------------------------------------------------------------
 // 공개 정보 / 결과
 
-/** 맞은 타격들의 피해 범위로 본 "합계 < 목숨" 확률 (각 타격은 범위 안에서 균등) */
-export function survivalChance(hits: readonly DmgRange[], hp = START_HP): number {
+/**
+ * 맞은 타격들의 피해 범위로 본 "합계 < 목숨" 확률 (각 타격은 범위 안에서 균등).
+ * `heals` = 치료 시도 시점(그때까지의 타격 수): 시체면 REVIVE_CHANCE로 목숨 1, 살아 있으면 피해 −1.
+ */
+export function survivalChance(hits: readonly DmgRange[], hp = START_HP, heals: readonly number[] = []): number {
   let dist = new Map<number, number>([[0, 1]]);
-  for (const [lo, hi] of hits) {
+  const add = (m: Map<number, number>, k: number, p: number) => m.set(k, (m.get(k) ?? 0) + p);
+  const healAt = (i: number) => {
+    for (const h of heals) {
+      if (h !== i) continue;
+      const nextDist = new Map<number, number>();
+      for (const [sum, p] of dist) {
+        if (sum >= hp) {
+          add(nextDist, hp - 1, p * REVIVE_CHANCE);
+          add(nextDist, hp, p * (1 - REVIVE_CHANCE));
+        } else add(nextDist, Math.max(0, sum - 1), p);
+      }
+      dist = nextDist;
+    }
+  };
+  hits.forEach(([lo, hi], i) => {
+    healAt(i);
     const nextDist = new Map<number, number>();
     const w = 1 / (hi - lo + 1);
-    for (const [sum, p] of dist) for (let d = lo; d <= hi; d++) nextDist.set(Math.min(hp, sum + d), (nextDist.get(Math.min(hp, sum + d)) ?? 0) + p * w);
+    for (const [sum, p] of dist) for (let d = lo; d <= hi; d++) add(nextDist, Math.min(hp, sum + d), p * w);
     dist = nextDist;
-  }
+  });
+  healAt(hits.length);
   let alive = 0;
   for (const [sum, p] of dist) if (sum < hp) alive += p;
   return alive;
+}
+
+/** 한 자리의 공개 생존 확률(타격·치료 기록) — `extra`는 가정한 추가 타격 */
+export function survivalOf(s: SeatState, extra?: DmgRange): number {
+  return survivalChance(extra ? [...s.hits, extra] : s.hits, START_HP, s.heals ?? []);
 }
 
 /** 공개 정보만으로 본 "이 자리가 아직 살아 있을 확률" (viewer 자신은 자기 상태를 안다) */
@@ -763,7 +860,7 @@ export function aliveChance(state: GameState, seat: Seat, viewer?: Seat): number
   if (s.lie >= lieLimitOf(s)) return 0;
   // 🩺 청진기로 몰래 안 생사
   if (viewer !== undefined && state.seats[viewer] && intelValid(state.seats[viewer], seat, s)) return state.seats[viewer].intel[seat].dead ? 0 : 1;
-  return survivalChance(s.hits);
+  return survivalOf(s);
 }
 
 /** 공개된 최소/최대 누적 피해 */

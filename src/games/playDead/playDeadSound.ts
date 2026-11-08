@@ -55,6 +55,23 @@ const SFX = {
   augCounter: [fx.whoosh(5000, 2500, 0.15, 0.1, SHOW.impact + 0.05), ...fx.crack(SHOW.impact + 0.15, 0.5)],
   /** 파편 수류탄: 수류탄 폭발 뒤 사방으로 튀는 파편 */
   augFrag: [0, 0.05, 0.11, 0.18].map((d) => fx.pop(3200, 1400, 0.09, SHOW.impact + 0.2 + d)),
+  // 💓 치료 시도(공개) — 결과와 상관없이 같은 소리
+  /** 붕대: 천 찢는 소리 두 번 */
+  bandage: [fx.whoosh(5200, 2600, 0.16, 0.1, SHOW.fall + 0.4), fx.whoosh(4800, 2200, 0.2, 0.09, SHOW.fall + 0.6)],
+  /** 구급상자: 낙하산 바람 → 털썩 → 맑은 차임 */
+  medkit: [fx.whoosh(900, 300, 1.1, 0.08, SHOW.fall + 0.1), fx.thud(130, 0.3, 0.5, SHOW.fall + 1.25), ...fx.arp("bell", ["E5", "B5"], 0.08, 0.6, 0.5).map((q) => ({ ...q, at: (q.at ?? 0) + SHOW.fall + 1.3 }))],
+  // ☠ 내 화면 전용(보드가 직접 낸다): 심장 두 번 → 길게 삐— (심정지)
+  myDeath: [
+    fx.thud(70, 0.5, 0.9),
+    ...fx.crack(0, 0.35),
+    fx.thud(55, 0.22, 0.7, 0.35),
+    fx.thud(50, 0.22, 0.55, 0.62),
+    { wave: "sine", freq: 988, dur: 0.12, peak: 0.16, at: 1.0 },
+    { wave: "sine", freq: 988, dur: 2.2, peak: 0.16, at: 1.45 },
+    ...fx.chord("strings", ["E2", "B2", "G3"], 2.4, 0.6, 1.4),
+  ],
+  /** 💓 소생: 멈췄던 심장이 다시 쿵쿵 → 밝은 나팔 */
+  myRevive: [fx.thud(60, 0.2, 0.75), fx.thud(55, 0.2, 0.6, 0.25), fx.thud(60, 0.2, 0.8, 0.8), fx.thud(55, 0.2, 0.65, 1.05), ...at(fx.arp("brass", ["E4", "G#4", "B4", "E5"], 0.1, 0.6, 0.7), 1.3)],
   victory: at([...fx.arp("brass", ["E3", "G3", "B3", "E4"], 0.12, 0.6), ...fx.chord("brass", ["E3", "G#3", "B3", "E4"], 1.8, 0.8, 0.5)], SHOW.end),
 } satisfies Record<string, SfxRecipe>;
 
@@ -127,6 +144,9 @@ export function playDeadSoundCues(prev: GameState, next: GameState): Cue[] {
         break;
       case "aug":
         kinds.add(ev.id === "tripwire" ? "augTrap" : ev.id === "counterSniper" ? "augCounter" : "augFrag");
+        break;
+      case "heal":
+        kinds.add(ev.source);
         break;
     }
   }

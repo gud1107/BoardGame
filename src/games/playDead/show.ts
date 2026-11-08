@@ -29,7 +29,22 @@ export const MOVE_LABEL: Record<MoveKind, { icon: string; label: string }> = {
   hold: { icon: "🤫", label: "숨죽이기" },
   rise: { icon: "🧍", label: "일어나기" },
   ambush: { icon: "⚡", label: "벌떡 기습" },
+  bandage: { icon: "🩹", label: "붕대 감기" },
 };
+
+/**
+ * 쓰러진 몸의 자세 — 앉은 채 축 처짐 / 옆으로 뻗음 / 배를 움켜쥐고 웅크림. 공개 정보(자리·맞은 횟수)로만
+ * 고르므로 진짜 시체와 죽은 척이 똑같은 확률로 같은 자세가 된다. 다시 맞으면 자세가 바뀐다.
+ */
+export const WOUND_POSES = ["slump", "sprawl", "curl"] as const satisfies readonly FighterPose[];
+export function woundPose(s: SeatState, seat: Seat): FighterPose {
+  return WOUND_POSES[(seat * 7 + s.hits.length * 5 + (s.heals?.length ?? 0)) % WOUND_POSES.length];
+}
+/** 바닥 핏자국 크기 단계 — 공개된 맞은 횟수(쓰러져 있거나 사망 확인일 때만) */
+export function bloodOf(s: SeatState): number {
+  return s.down || s.confirmed ? Math.max(1, s.hits.length) : 0;
+}
+const restPose = (s: SeatState, seat: Seat): FighterPose => (s.down || s.confirmed ? woundPose(s, seat) : "down");
 
 /** 피해 표시: 맞은 본인에게는 실제 값, 다른 사람에게는 공개 범위 */
 export function dmgText(hit: Hit, target: Seat, viewer: Seat): string {
@@ -65,7 +80,7 @@ export function fightersAt(state: GameState, prev: SeatState[] | null, viewer: S
     if (!showing) {
       const waiting = state.phase === "choosing" && !s.confirmed;
       // 평소엔 모두 엎드려 엄폐 — 끝난 판의 생존자만 일어나 환호
-      const pose: FighterPose = state.phase === "ended" && !s.dead ? "win" : "down";
+      const pose: FighterPose = state.phase === "ended" && !s.dead ? "win" : restPose(s, seat);
       return {
         ...base,
         pose,
@@ -75,11 +90,12 @@ export function fightersAt(state: GameState, prev: SeatState[] | null, viewer: S
         out: s.confirmed,
         ammo: s.ammo,
         status: statusOf(s) ?? (waiting ? (committed[seat] ? "✅ 결정 완료" : "🤔 고민 중…") : null),
+        blood: bloodOf(s),
       };
     }
     const p = prev![seat];
     // 공개 전·후엔 모두 엎드려 있고, 행동하는 순간에만 몸을 일으킨다
-    let pose: FighterPose = "down";
+    let pose: FighterPose = restPose(p, seat);
     let moveToSeat: number | null = null;
     let aimSeat: number | null = null;
     const m = state.lastMoves[seat];
@@ -103,9 +119,11 @@ export function fightersAt(state: GameState, prev: SeatState[] | null, viewer: S
     }
     if (e >= SHOW.fall) {
       const breath = state.events.some((ev) => ev.t === "rise" && ev.seat === seat && ev.reason === "breath");
-      if (hits.has(seat) && e < SHOW.end) pose = "hit";
+      // 맞은 몸은 털썩 쓰러지며 바로 부상 자세로(앉은 채 축 처짐·뻗음·웅크림)
+      if (hits.has(seat)) pose = woundPose(s, seat);
       else if (breath && e < SHOW.end) pose = "rise";
-      else if (e >= SHOW.end) pose = state.phase === "ended" && !s.dead ? "win" : "down";
+      else if (e >= SHOW.end) pose = state.phase === "ended" && !s.dead ? "win" : restPose(s, seat);
+      else if (pose === restPose(p, seat) && (s.down || s.confirmed)) pose = restPose(s, seat);
     }
     const after = e >= SHOW.impact;
     return {
@@ -117,6 +135,7 @@ export function fightersAt(state: GameState, prev: SeatState[] | null, viewer: S
       out: after ? s.confirmed : p.confirmed,
       ammo: after ? s.ammo : p.ammo,
       status: e >= SHOW.fall ? statusOf(s) : statusOf(p),
+      blood: e >= SHOW.fall ? bloodOf(s) : bloodOf(p),
     };
   });
 }
@@ -149,6 +168,7 @@ export function buildFx(state: GameState, viewer: Seat): ArenaFx[] {
           if (ev.result === "blocked") fx.push({ key: `${key}t`, kind: "text", seat: ev.target, text: "🪖 엄폐로 피함!", color: "#93c5fd", at: SHOW.impact });
           else {
             fx.push({ key: `${key}b`, kind: "burst", seat: ev.target, color: ev.tier >= 3 ? "#ff8c2a" : "#ffd27a", at: SHOW.impact, big: ev.tier >= 3 });
+            fx.push({ key: `${key}r`, kind: "blood", seat: ev.target, at: SHOW.impact, big: ev.tier >= 2 });
             fx.push({ key: `${key}t`, kind: "text", seat: ev.target, text: `${ev.result === "pierce" ? "관통! " : ""}${dmgText(ev.hit!, ev.target, viewer)}`, color: RED, at: SHOW.impact });
           }
         }
@@ -160,6 +180,7 @@ export function buildFx(state: GameState, viewer: Seat): ArenaFx[] {
         if (ev.result === "blocked") fx.push({ key: `${key}t`, kind: "text", seat: ev.target, text: "🪖 기습을 엄폐로 피함!", color: "#93c5fd", at: SHOW.impact });
         else {
           fx.push({ key: `${key}b`, kind: "burst", seat: ev.target, color: "#fb923c", at: SHOW.impact, big: true });
+          fx.push({ key: `${key}r`, kind: "blood", seat: ev.target, at: SHOW.impact, big: true });
           fx.push({ key: `${key}t`, kind: "text", seat: ev.target, text: `⚡기습! ${dmgText(ev.hit!, ev.target, viewer)}`, color: RED, at: SHOW.impact });
         }
         break;
@@ -168,6 +189,7 @@ export function buildFx(state: GameState, viewer: Seat): ArenaFx[] {
         if (ev.result === "dead") fx.push({ key, kind: "text", seat: ev.target, text: "☠ 진짜 시체였다", color: "#fca5a5", at: SHOW.impact });
         else if (ev.hit) {
           fx.push({ key: `${key}b`, kind: "burst", seat: ev.target, color: "#f87171", at: SHOW.impact });
+          fx.push({ key: `${key}r`, kind: "blood", seat: ev.target, at: SHOW.impact });
           fx.push({ key, kind: "text", seat: ev.target, text: `${ev.result === "countered" ? "기습 간파!" : "들켰다!"} ${dmgText(ev.hit, ev.target, viewer)}`, color: RED, at: SHOW.impact });
         }
         break;
@@ -183,11 +205,23 @@ export function buildFx(state: GameState, viewer: Seat): ArenaFx[] {
       case "aug": {
         const a = AUG_BY_ID[ev.id];
         fx.push({ key: `${key}b`, kind: "burst", seat: ev.target, color: "#c084fc", at: SHOW.impact + 0.15 });
+        fx.push({ key: `${key}r`, kind: "blood", seat: ev.target, at: SHOW.impact + 0.15 });
         fx.push({ key, kind: "text", seat: ev.target, text: `${a.icon}${a.name}! ${dmgText(ev.hit, ev.target, viewer)}`, color: "#e9d5ff", at: SHOW.impact + 0.15 });
         break;
       }
       case "fall":
         ev.seats.forEach((seat) => fx.push({ key: `${key}:${seat}`, kind: "text", seat, text: "털썩!", color: "#e2e8f0", at: SHOW.fall + 0.2 }));
+        break;
+      // 치료 시도는 결과와 상관없이 모두에게 똑같이 보인다(소생했는지는 본인만 안다)
+      case "heal":
+        if (ev.source === "medkit") {
+          fx.push({ key: `${key}m`, kind: "medkit", seat: ev.seat, at: SHOW.fall + 0.1 });
+          fx.push({ key: `${key}g`, kind: "burst", seat: ev.seat, color: "#4ade80", at: SHOW.fall + 1.25 });
+          fx.push({ key, kind: "text", seat: ev.seat, text: "🎁 구급상자 낙하!", color: "#86efac", at: SHOW.fall + 1.25 });
+        } else {
+          fx.push({ key: `${key}g`, kind: "burst", seat: ev.seat, color: "#4ade80", at: SHOW.fall + 0.45 });
+          fx.push({ key, kind: "text", seat: ev.seat, text: "🩹 붕대를 감았다…", color: "#86efac", at: SHOW.fall + 0.45 });
+        }
         break;
       default:
         break;
@@ -242,6 +276,16 @@ export function describeEvents(state: GameState, names: Record<Seat, string>, vi
       case "fall":
         out.push({ text: `💀 ${ev.seats.map(nm).join(", ")} 털썩 쓰러졌다! 진짜 죽었을까?` });
         break;
+      case "heal": {
+        const how = ev.source === "medkit" ? `🎁 구급상자가 ${nm(ev.seat)}의 몸 위로 떨어졌다` : `🩹 쓰러진 ${nm(ev.seat)}이(가) 붕대를 감았다`;
+        if (ev.seat !== viewer) out.push({ text: `${how} — 숨이 돌아왔을까?` });
+        else
+          out.push({
+            text: `${how} — ${ev.result === "revived" ? "💓 기적처럼 숨이 돌아왔다! 목숨 1 (남들은 몰라요)" : ev.result === "failed" ? "…심장은 다시 뛰지 않았다. 아직 기회가 있어요" : "목숨 +1 회복"}`,
+            mine: true,
+          });
+        break;
+      }
       default:
         break;
     }

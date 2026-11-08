@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { DMG, FINISH_COST, LOOT_TAKE, MAX_AMMO, MAX_LIE, START_HP, SURGE_ROUND } from "./engine";
+import { BANDAGE_COST, DMG, FINISH_COST, LOOT_TAKE, MAX_AMMO, MAX_LIE, MEDKIT_ROUND, MEDKIT_STEP, REVIVE_CHANCE, START_HP, SURGE_ROUND } from "./engine";
 import { AUG_ROUNDS } from "./augments";
 
 /**
@@ -63,7 +63,12 @@ export default function HowToPlay({ startOpen, augments }: { startOpen: boolean;
               <Row icon="🤫" name="숨죽이기" text="계속 누워 있어요. 누운 사람은 총의 표적이 안 돼요" />
               <Row icon="🧍" name="일어나기" text="털고 일어나요 (살아 있다는 게 드러나요)" />
               <Row icon="⚡" name="벌떡 기습" text={`일어나며 피해 ${range(DMG.ambush)}, 나를 털러 온 상대면 ${range(DMG.ambushLooter)}`} />
+              <Row icon="🩹" name="붕대 감기" cost={`${BANDAGE_COST}발`} text={`누운 채 목숨 +1 — 진짜 죽었으면 ${Math.round(REVIVE_CHANCE * 100)}%로 소생(목숨 1)`} />
             </ul>
+            <p className="mt-1.5 break-keep rounded-lg bg-emerald-500/10 px-2 py-1.5 text-xs text-emerald-100 light:bg-emerald-50 light:text-emerald-800">
+              💓 <b>소생</b> — 죽어도 확인사살 전까진 기회가 있어요. 🩹 붕대, 또는 {MEDKIT_ROUND}라운드부터 {MEDKIT_STEP}라운드마다 쓰러진 몸 하나에 떨어지는 🎁 구급상자.
+              치료한 건 모두 보지만 살아났는지는 나만 알아요.
+            </p>
             <h4 className="mb-1 mt-2 text-xs font-semibold text-white/60 light:text-slate-500">🕵️ 누가 진짜 죽었을까?</h4>
             <ul className="flex list-disc flex-col gap-0.5 pl-4 text-xs">
               <li className="break-keep">참가자 표의 ‘맞은 피해’ 범위와 ‘살아 있을 확률’을 보세요.</li>

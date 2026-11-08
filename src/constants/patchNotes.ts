@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.159.0",
+    releaseDate: "2026-11-08",
+    title: "💀 죽은척 대작전 — 사망 연출 + 소생",
+    changes: [
+      { game: "play-dead", type: "FEAT", desc: "☠ 진짜로 죽으면 내 화면에만 붉은 섬광·흔들림·심전도 '삐—' + 살아날 방법 안내, 죽은 동안 전장이 흑백으로" },
+      { game: "play-dead", type: "FEAT", desc: "💓 소생 — 쓰러진 채 🩹 붕대(탄약 2발) 또는 🎁 구급상자 낙하(5·11·17R): 시체면 50% 부활, 산 사람은 목숨 +1. 결과는 나만 알아요" },
+      { game: "play-dead", type: "FEAT", desc: "🩸 쓰러진 몸은 앉은 채 축 처짐·옆으로 뻗음·웅크림 + 핏자국, 명중하면 피가 튀어요 (진짜 시체와 똑같이 보임)" },
+    ],
+  },
+  {
     version: "v1.157.0",
     releaseDate: "2026-11-08",
     title: "🏮 새 게임 등불 지기",

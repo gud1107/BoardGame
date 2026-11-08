@@ -19,7 +19,10 @@ import { toVrm0 } from "@/games/shared/three/vrmPose";
  * same pose, same closed eyes, no breathing — the hidden state never reaches this file.
  */
 
-export type FighterPose = "idle" | "reload" | "cover" | "shot" | "burst" | "grenade" | "loot" | "finish" | "hit" | "down" | "rise" | "ambush" | "win";
+export type FighterPose = "idle" | "reload" | "cover" | "shot" | "burst" | "grenade" | "loot" | "finish" | "hit" | "down" | "rise" | "ambush" | "win" | "slump" | "sprawl" | "curl";
+
+/** 쓰러진(맞은) 몸의 자세 — 바닥에 누운 셋 중 앉은 자세(slump)만 몸을 세운다 */
+export const LYING_POSES: ReadonlySet<FighterPose> = new Set(["down", "sprawl", "curl"]);
 
 export interface VrmFighterProps {
   look: PersonLook;
@@ -67,6 +70,8 @@ const HOP = FALL + 2;
 const CHANNELS = HOP + 1;
 
 const HEAD_HEIGHT = 1.52;
+/** 앉은 자세에서 엉덩이를 바닥까지 내리는 높이(m) — 머리 1.52 m 기준 골반 높이쯤 */
+const SIT_DROP = 0.7;
 /** Finger curl: relaxed, and wrapped round the rifle (right fist on the grip, left hand cupping the handguard). */
 const CURL_REST = 0.15;
 const CURL_GRIP = { r: 0.9, l: 0.65 } as const;
@@ -161,6 +166,53 @@ function lying(o: Float32Array) {
   o[FALL] = 1;
 }
 
+/** 앉은 채 고개를 떨군 몸: 엉덩이는 바닥, 다리는 앞으로 뻗고, 팔은 축 늘어뜨린다 */
+function slumped(o: Float32Array) {
+  o.fill(0);
+  set3(o, B.rightUpperLeg, -1.45, 0, 0.18);
+  set3(o, B.leftUpperLeg, -1.4, 0, -0.22);
+  set3(o, B.rightLowerLeg, 0.35, 0, 0);
+  set3(o, B.leftLowerLeg, 0.15, 0, 0);
+  set3(o, B.spine, 0.35, 0, 0.08);
+  set3(o, B.chest, 0.3, 0, 0);
+  set3(o, B.neck, 0.35, 0, 0);
+  set3(o, B.head, 0.45, 0.25, 0.35);
+  set3(o, B.rightUpperArm, 0.25, 0, 1.3);
+  set3(o, B.leftUpperArm, 0.35, 0, -1.25);
+  set3(o, B.rightLowerArm, 0, 0.35, 0);
+  set3(o, B.leftLowerArm, 0, -0.2, 0);
+  o[CROUCH] = SIT_DROP;
+}
+
+/** 옆으로 뻗은 몸: 한 팔은 앞으로 내던지고 한 다리는 굽힌 채 고개가 꺾였다 */
+function sprawled(o: Float32Array) {
+  lying(o);
+  set3(o, B.rightUpperArm, -1.35, 0.2, 0.9);
+  set3(o, B.rightLowerArm, 0, 0.5, 0);
+  set3(o, B.leftUpperArm, -0.3, 0, -1.25);
+  set3(o, B.rightUpperLeg, -0.95, 0, 0.1);
+  set3(o, B.rightLowerLeg, 1.35, 0, 0);
+  set3(o, B.leftUpperLeg, 0.15, 0, -0.05);
+  set3(o, B.spine, -0.15, 0.2, 0);
+  set3(o, B.head, -0.35, 0.55, 0);
+}
+
+/** 배를 움켜쥐고 웅크린 몸 */
+function curled(o: Float32Array) {
+  lying(o);
+  set3(o, B.spine, 0.5, 0, 0);
+  set3(o, B.chest, 0.25, 0, 0);
+  set3(o, B.head, 0.45, 0.2, 0);
+  set3(o, B.rightUpperLeg, -1.3, 0, 0.12);
+  set3(o, B.leftUpperLeg, -1.15, 0, -0.12);
+  set3(o, B.rightLowerLeg, 1.8, 0, 0);
+  set3(o, B.leftLowerLeg, 1.65, 0, 0);
+  set3(o, B.rightUpperArm, -0.45, 0, 1.05);
+  set3(o, B.leftUpperArm, -0.45, 0, -1.05);
+  set3(o, B.rightLowerArm, 0, 1.85, 0);
+  set3(o, B.leftLowerArm, 0, -1.85, 0);
+}
+
 /** Target channels for a pose `u` seconds after it started. */
 function poseTarget(o: Float32Array, pose: FighterPose, u: number, t: number, seed: number) {
   idle(o, t, seed);
@@ -203,6 +255,12 @@ function poseTarget(o: Float32Array, pose: FighterPose, u: number, t: number, se
       return;
     case "down":
       return lying(o);
+    case "slump":
+      return slumped(o);
+    case "sprawl":
+      return sprawled(o);
+    case "curl":
+      return curled(o);
     case "rise":
     case "ambush": {
       // spring up from the floor, then (ambush) strike
@@ -269,7 +327,11 @@ function face(pose: FighterPose, u: number): { angry: number; sad: number; surpr
     case "hit":
       return { angry: 0, sad: 0.8, surprised: u < 0.3 ? 1 : 0, happy: 0, aa: 0.4, shut: u > 0.5 };
     case "down":
+    case "slump":
+    case "sprawl":
       return { angry: 0, sad: 0, surprised: 0, happy: 0, aa: 0, shut: true };
+    case "curl":
+      return { angry: 0, sad: 0.45, surprised: 0, happy: 0, aa: 0.15, shut: true };
     case "loot":
       return { angry: 0, sad: 0, surprised: 0, happy: 0.55, aa: 0, shut: false };
     case "win":
@@ -385,7 +447,7 @@ export default function VrmFighter(props: VrmFighterProps) {
     st.yaw += dy * (1 - Math.exp(-dt * 10));
     root.rotation.y = st.yaw;
 
-    poseTarget(want, walking && pose !== "down" ? "idle" : pose, u, t, seed);
+    poseTarget(want, walking && !LYING_POSES.has(pose) && pose !== "slump" ? "idle" : pose, u, t, seed);
     if (walking) {
       const s = Math.sin(st.walk) * 0.55;
       want[B.rightUpperLeg] = s;

@@ -1,6 +1,6 @@
 import { pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
 import { AUG_BY_ID, type AugId } from "./augments";
-import { aliveChance, attackRange, BLAST_TIER, costOf, defendedRange, hasAug, legalMoves, lieLimitOf, MAX_LIE, survivalChance, type DmgRange, type GameState, type Move, type Seat, type SeatState } from "./engine";
+import { aliveChance, attackRange, BANDAGE_COST, BLAST_TIER, costOf, defendedRange, hasAug, legalMoves, lieLimitOf, MAX_LIE, START_HP, survivalOf, type DmgRange, type GameState, type Move, type Seat, type SeatState } from "./engine";
 
 /**
  * 죽은척 대작전 봇 — 공개 정보(탄약, 맞은 피해 범위, 누운 라운드)와
@@ -22,7 +22,7 @@ function threat(state: GameState, seat: Seat): { shooters: number; maxKi: number
 /** 이 타격이 상대를 쓰러뜨려 끝낼 확률(공개 범위 기준, 상대 방탄 반영) */
 function killChance(t: SeatState, range: DmgRange): number {
   // 방탄모·조끼(shield)는 빼고 본다 — 넣으면 봇이 방탄 가진 사람을 끝까지 안 쏴서 방탄이 영영 안 닳는다
-  return survivalChance(t.hits) - survivalChance([...t.hits, defendedRange({ ...t, shield: 0 }, range)]);
+  return survivalOf(t) - survivalOf(t, defendedRange({ ...t, shield: 0 }, range));
 }
 
 export function scoreMove(state: GameState, seat: Seat, m: Move): number {
@@ -59,6 +59,11 @@ export function scoreMove(state: GameState, seat: Seat, m: Move): number {
       return 1 + (me.lie < (hasAug(me, "understudy") ? lieLimitOf(me) : MAX_LIE) - 1 ? 0.45 : -0.7) + (me.hp <= 1 ? 0.5 : 0);
     case "rise":
       return 0.35 + (me.ammo >= 3 ? 0.55 : 0) - (me.hp <= 1 ? 0.4 : 0);
+    case "bandage":
+      // 내 생사는 나만 안다: 진짜 시체면 붕대가 유일한 살길, 살아 있으면 다친 만큼만
+      // 점수를 숨죽이기와 비슷하게 둬서 "붕대 = 시체" 티가 나지 않게 섞는다
+      if (me.dead) return 2.1;
+      return me.hp >= START_HP ? -1 : 1.2 + (START_HP - me.hp) * 0.35 - (BANDAGE_COST - 2) * 0.3;
     case "ambush": {
       const lethal = killChance(t!, attackRange(me, "ambush")) * 0.9;
       return 0.55 + me.lie * 0.3 + (t!.ammo >= 2 ? 0.3 : 0) + lethal;
