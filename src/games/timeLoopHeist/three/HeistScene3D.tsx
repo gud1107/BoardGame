@@ -9,6 +9,9 @@ import { labelTexture } from "@/games/shared/three/tableKit";
 import { parseLevel, type LevelDef } from "../levels";
 import type { Frame, SelfFrame } from "../sim";
 import type { SelfMeta } from "../show";
+import { Thief3D } from "./Thief3D";
+
+const FACE_ROT: Record<SelfFrame["face"], number> = { E: Math.PI / 2, W: -Math.PI / 2, N: Math.PI, S: 0 };
 
 /**
  * 시간 루프 도둑단 3D — 위에서 비스듬히 내려다보는 박물관 단면. 한 칸 = 1 유닛.
@@ -228,62 +231,6 @@ function Gem({ coin }: { coin?: boolean }) {
   );
 }
 
-const FACE_ROT: Record<SelfFrame["face"], number> = { E: Math.PI / 2, W: -Math.PI / 2, N: Math.PI, S: 0 };
-
-function Thief({ s, meta, at, k, carryKind }: { s: SelfFrame; meta: SelfMeta; at: [number, number, number]; k: number; carryKind: "gem" | null }) {
-  const ref = useRef<THREE.Group>(null);
-  const body = useRef<THREE.MeshStandardMaterial>(null);
-  const ghost = !meta.live;
-  useFrame((_, dt) => {
-    const g = ref.current;
-    if (!g) return;
-    g.position.x = damp(g.position.x, at[0], k, dt);
-    g.position.z = damp(g.position.z, at[2], k, dt);
-    g.rotation.y = damp(g.rotation.y, FACE_ROT[s.face], 12, dt);
-    const scale = s.status === "paradox" ? 0.001 : 1;
-    const sc = damp(g.scale.x, scale, s.status === "paradox" ? 4 : 10, dt);
-    g.scale.setScalar(sc);
-    g.rotation.x = damp(g.rotation.x, s.status === "caught" ? -1.2 : 0, 6, dt);
-    if (s.status === "paradox") g.rotation.y += dt * 14;
-  });
-  const color = s.status === "caught" ? "#ef4444" : meta.color;
-  const opacity = ghost ? 0.55 : 1;
-  return (
-    <group ref={ref} position={[at[0], 0, at[2]]}>
-      {meta.live && (
-        <mesh position={[0, 0.02, 0]} rotation-x={-Math.PI / 2}>
-          <ringGeometry args={[0.3, 0.42, 28]} />
-          <meshBasicMaterial color="#fde047" />
-        </mesh>
-      )}
-      <mesh position={[0, 0.32, 0]}>
-        <capsuleGeometry args={[0.17, 0.3, 4, 10]} />
-        <meshStandardMaterial ref={body} color={color} transparent={ghost} opacity={opacity} emissive={ghost ? color : "#000000"} emissiveIntensity={ghost ? 0.35 : 0} />
-      </mesh>
-      <mesh position={[0, 0.72, 0]}>
-        <sphereGeometry args={[0.15, 14, 12]} />
-        <meshStandardMaterial color="#fcd9b6" transparent={ghost} opacity={opacity} />
-      </mesh>
-      {/* 도둑 복면 띠 */}
-      <mesh position={[0, 0.75, 0.02]}>
-        <cylinderGeometry args={[0.155, 0.155, 0.06, 14]} />
-        <meshStandardMaterial color="#111827" transparent={ghost} opacity={opacity} />
-      </mesh>
-      {/* 코(앞 방향 표시) */}
-      <mesh position={[0, 0.72, 0.15]}>
-        <sphereGeometry args={[0.035, 8, 6]} />
-        <meshStandardMaterial color="#f59e0b" />
-      </mesh>
-      {carryKind && (
-        <group position={[0, 0.65, 0]}>
-          <Gem />
-        </group>
-      )}
-      <ScreenSprite position={[0, 1.2, 0]} scale={meta.live ? [0.9, 0.225] : [0.6, 0.15]} map={labelTexture(meta.live ? "▼ 나" : meta.short, meta.color)} />
-    </group>
-  );
-}
-
 function Guard({ x, z, face, emp, k }: { x: number; z: number; face: SelfFrame["face"]; emp: boolean; k: number }) {
   const ref = useRef<THREE.Group>(null);
   useFrame((_, dt) => {
@@ -419,7 +366,7 @@ function Scene({ def, frame, meta, lowDetail, replay, focus }: HeistScene3DProps
       {frame.selves.map((s, i) => {
         const m = meta[i];
         if (!m) return null;
-        return <Thief key={`s${m.seat}-${m.loop}`} s={s} meta={m} at={at(s.x, s.y)} k={k} carryKind={s.carry !== null ? "gem" : null} />;
+        return <Thief3D key={`s${m.seat}-${m.loop}`} s={s} meta={m} at={at(s.x, s.y)} k={k} carrying={s.carry !== null} />;
       })}
       <CameraRig w={lv.w} h={lv.h} focus={focus ? at(focus.x, focus.y) : null} />
       <AdaptiveResolution max={lowDetail ? 1.5 : 2} />

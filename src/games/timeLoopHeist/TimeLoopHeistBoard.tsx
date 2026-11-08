@@ -7,6 +7,10 @@ import { REPLAY_TICK_MS, levelOf, mergedTracks, type GameState, type Seat } from
 import { parseLevel, type LevelDef } from "./levels";
 import { canAct, simulate, sortTracks, actLabel, type Act, type Frame, type SelfTrack } from "./sim";
 import { KEY_HELP, SEAT_COLORS, SEAT_MARKS, eventText, lootKindAt, selfMeta, type SelfMeta } from "./show";
+import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
+import { useSoundCues, useSuiteBgm, type SoundCue } from "@/lib/audio/useProceduralSuite";
+import { getTimeLoopHeistSound, heistPlay, tickSfx } from "./timeLoopHeistSound";
+import { ThiefToken } from "./ThiefToken";
 
 const HeistScene3D = dynamic(() => import("./three/HeistScene3D"), { ssr: false, loading: () => <Loading3D /> });
 
@@ -88,12 +92,9 @@ function Grid2D({ def, frame, meta }: { def: LevelDef; frame: Frame; meta: SelfM
           {selves.length > 0 && (
             <span className="absolute inset-[6%] flex flex-wrap items-center justify-center gap-[1px]">
               {selves.slice(0, 4).map(({ s, m }, k) => (
-                <span
-                  key={k}
-                  className={`flex items-center justify-center rounded-full text-[0.55em] text-slate-950 ${m.live ? "h-[78%] w-[78%] ring-2 ring-yellow-300" : selves.length > 1 ? "h-[46%] w-[46%] opacity-80" : "h-[64%] w-[64%] opacity-75"}`}
-                  style={{ background: s.status === "caught" ? "#ef4444" : m.color }}
-                >
-                  {s.carry !== null ? "💎" : m.live ? "나" : m.short}
+                <span key={k} title={m.label} className={`relative flex items-center justify-center ${m.live ? "h-[88%] w-[88%]" : selves.length > 1 ? "h-[48%] w-[48%]" : "h-[70%] w-[70%]"}`}>
+                  <ThiefToken color={m.color} caught={s.status === "caught"} ghost={!m.live} live={m.live} carrying={s.carry !== null} />
+                  {!m.live && selves.length === 1 && <span className="absolute -right-[14%] -bottom-[10%] rounded bg-black/70 px-[2px] text-[0.42em] leading-tight text-white">{m.short}</span>}
                 </span>
               ))}
             </span>
@@ -138,7 +139,10 @@ function Stage({ def, frame, meta, replay, board, zoom, onZoom, focus }: StagePr
         {focus !== null && (
           <button
             type="button"
-            onClick={() => onZoom(!zoom)}
+            onClick={() => {
+              heistPlay("ui");
+              onZoom(!zoom);
+            }}
             className="absolute top-2 right-2 rounded-full bg-black/60 px-3 py-1.5 text-[11px] font-semibold text-white/90 backdrop-blur hover:bg-black/75"
           >
             {zoom ? "🗺️ 전체 보기" : "🔍 내 도둑 확대"}
@@ -254,7 +258,14 @@ export default function TimeLoopHeistBoard(props: TimeLoopHeistBoardProps) {
         </span>
       </div>
       <div className="flex items-center gap-2">
-        <button type="button" onClick={() => setBriefOpen((v) => !v)} className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 light:border-slate-300 light:text-slate-600">
+        <SuiteSoundHud suite={getTimeLoopHeistSound} icon="🕵️" label="Midnight Caper" preview="pick" />
+        <button
+          type="button"
+          onClick={() => {
+            heistPlay("ui");
+            setBriefOpen((v) => !v);
+          }}
+          className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 light:border-slate-300 light:text-slate-600">
           📋 브리핑
         </button>
         <ViewToggle board={board} />
@@ -270,8 +281,27 @@ export default function TimeLoopHeistBoard(props: TimeLoopHeistBoardProps) {
     </div>
   );
 
+  // 배경음악: 녹화 중엔 잔잔한 느와르 재즈, 재생 중엔 첩보 선율·현악이 더해진다
+  useSuiteBgm(getTimeLoopHeistSound, true, state.phase === "record" ? 0 : 1);
+  // 단계 전환·동료 진행 소리 (내 행동 소리는 각 화면이 바로 낸다)
+  const viewer = props.viewerSeat;
+  const phaseCues = useCallback(
+    (prev: GameState, next: GameState): SoundCue[] => {
+      const cues: SoundCue[] = [];
+      if (prev.phase === "record" && next.phase !== "record") cues.push("rewind");
+      else if (prev.phase === "replay" && next.phase === "record") cues.push("loopStart");
+      if (prev.phase === next.phase && prev.stage === next.stage) {
+        const mate = next.pending.some((m, s) => s !== viewer && m !== null && prev.pending[s] === null) || next.ready.some((r, s) => s !== viewer && r && !prev.ready[s]);
+        if (mate) cues.push("mateDone");
+      }
+      return cues;
+    },
+    [viewer],
+  );
+  useSoundCues(state, getTimeLoopHeistSound, phaseCues);
+
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3" onPointerDownCapture={() => getTimeLoopHeistSound().unlock()}>
       {header}
       {brief}
       {state.phase === "record" && <RecordView key={state.stage} {...props} def={def} T={T} board={board} zoom={zoom} onZoom={setZoom} />}
@@ -305,27 +335,42 @@ function RecordView({ state, viewerSeat, names, deadlineMs, nowMs, onSubmit, def
   const myNow = nowFrame.selves[me];
   const locked = submitted !== null;
 
+  const plates = useMemo(() => Object.keys(parseLevel(def).plates), [def]);
+  const coinOf = useCallback((loot: number) => lootKindAt(def, loot) === "coin", [def]);
   const act = useCallback(
-    (a: Act) => {
+    (a: Act, quiet = false) => {
       const cur = movesRef.current;
       if (locked || cur.length >= T) return;
       const r = simulate(def, [...state.tracks, { seat: viewerSeat, loop: state.loop, moves: cur }], state.need);
-      if (!canAct(def, r.frames[cur.length], me, a)) return;
+      if (!canAct(def, r.frames[cur.length], me, a)) {
+        if (!quiet && a !== "." && a !== "U") heistPlay("blocked");
+        return;
+      }
       const next = cur + a;
       movesRef.current = next;
       setMoves(next);
+      if (quiet) return;
+      // 움직일 때마다 발걸음 · 대기는 째깍 · 그 틱에 일어난 일(줍기·레버·문·역설…)도 함께
+      if (a === ".") heistPlay("wait");
+      else if (a !== "U") heistPlay("step", cur.length);
+      const r2 = simulate(def, [...state.tracks, { seat: viewerSeat, loop: state.loop, moves: next }], state.need);
+      const cues = tickSfx(r2.events, cur.length, r2.frames[cur.length], r2.frames[cur.length + 1], plates, coinOf);
+      for (const c of cues) heistPlay(c);
+      if (a === "U" && cues.length === 0) heistPlay("ui");
     },
-    [locked, T, def, state.tracks, viewerSeat, state.loop, state.need, me],
+    [locked, T, def, state.tracks, viewerSeat, state.loop, state.need, me, plates, coinOf],
   );
   const undo = useCallback(() => {
-    if (locked) return;
+    if (locked || movesRef.current.length === 0) return;
     const next = movesRef.current.slice(0, -1);
     movesRef.current = next;
     setMoves(next);
+    heistPlay("undo");
   }, [locked]);
   const submit = useCallback(
     (auto: boolean) => {
       if (locked) return;
+      heistPlay("submit");
       onSubmit(movesRef.current, auto);
     },
     [locked, onSubmit],
@@ -370,6 +415,13 @@ function RecordView({ state, viewerSeat, names, deadlineMs, nowMs, onSubmit, def
     .filter((e) => e.kind === "lever" || e.kind === "emp" || e.kind === "paradox" || e.kind === "caught" || e.kind === "bank")
     .map((e) => ({ t: e.t, icon: e.kind === "lever" ? "🔧" : e.kind === "emp" ? "⚡" : e.kind === "bank" ? "💎" : e.kind === "caught" ? "🚨" : "⚠️" }));
   const remaining = deadlineMs !== null ? Math.max(0, Math.ceil((deadlineMs - nowMs) / 1000)) : null;
+  // 제한 10초 전부터 매 초 삑
+  const warnedRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (locked || remaining === null || remaining > 10 || remaining <= 0 || warnedRef.current === remaining) return;
+    warnedRef.current = remaining;
+    heistPlay("timeWarn");
+  }, [locked, remaining]);
   const brokenGhosts = run.events.filter((e) => (e.kind === "paradox" || e.kind === "caught") && e.self !== me && e.t < t);
   const myGems = run.final.gems;
 
@@ -422,7 +474,8 @@ function RecordView({ state, viewerSeat, names, deadlineMs, nowMs, onSubmit, def
             <button
               type="button"
               onClick={() => {
-                for (let i = 0; i < 5; i++) act(".");
+                heistPlay("waitMany");
+                for (let i = 0; i < 5; i++) act(".", true);
               }}
               disabled={out || t >= T}
               className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/70 disabled:opacity-30 light:border-slate-300 light:text-slate-600"
@@ -434,6 +487,7 @@ function RecordView({ state, viewerSeat, names, deadlineMs, nowMs, onSubmit, def
               onClick={() => {
                 const cur = movesRef.current;
                 if (cur.length < T) {
+                  heistPlay("waitMany");
                   movesRef.current = cur + ".".repeat(T - cur.length);
                   setMoves(movesRef.current);
                 }
@@ -486,6 +540,30 @@ function ReplayView({ state, viewerSeat, names, onReady, onGameEnd, def, T, boar
   const outcome = state.outcome;
   const iReady = state.ready[viewerSeat];
 
+  // 재생 소리: 틱마다 그 틱의 사건 + 누군가 움직였으면 발걸음 한 번. ⏭ 건너뛰기면 생략.
+  const plates = useMemo(() => Object.keys(parseLevel(def).plates), [def]);
+  const lastTickRef = useRef(0);
+  useEffect(() => {
+    const from = lastTickRef.current;
+    lastTickRef.current = tick;
+    if (tick <= from || tick - from > 2) return;
+    for (let t = from; t < tick; t++) {
+      const a = run.frames[t];
+      const b = run.frames[t + 1];
+      const moved = b.selves.some((s, i) => s.status === "ok" && (s.x !== a.selves[i].x || s.y !== a.selves[i].y));
+      if (moved) heistPlay("ghostStep", t);
+      for (const c of tickSfx(run.events, t, a, b, plates, (l) => lootKindAt(def, l) === "coin")) heistPlay(c);
+    }
+  }, [tick, run, plates, def]);
+  // 재생이 끝나면 결과 소리 한 번 (다시 보기마다 다시)
+  const finaleRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!done || finaleRef.current === startAt) return;
+    finaleRef.current = startAt;
+    if (ended && outcome) heistPlay(outcome.cleared ? "victory" : "fail");
+    else if (!cleared) heistPlay("loopEnd");
+  }, [done, startAt, ended, outcome, cleared]);
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -500,11 +578,24 @@ function ReplayView({ state, viewerSeat, names, onReady, onGameEnd, def, T, boar
       <Stage def={def} frame={frame} meta={meta} replay board={board} zoom={zoom} onZoom={onZoom} focus={null} />
       <Timeline T={T} t={tick} marks={run.events.filter((e) => e.kind === "bank" || e.kind === "paradox" || e.kind === "caught").map((e) => ({ t: e.t, icon: e.kind === "bank" ? "💎" : e.kind === "caught" ? "🚨" : "⚠️" }))} preview={null} />
       <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={() => setStartAt(Date.now())} className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/70 light:border-slate-300 light:text-slate-600">
+        <button
+          type="button"
+          onClick={() => {
+            heistPlay("rewind");
+            lastTickRef.current = 0;
+            setStartAt(Date.now());
+          }}
+          className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/70 light:border-slate-300 light:text-slate-600">
           🔁 처음부터 다시 보기
         </button>
         {!done && (
-          <button type="button" onClick={() => setStartAt(Date.now() - T * REPLAY_TICK_MS)} className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/70 light:border-slate-300 light:text-slate-600">
+          <button
+            type="button"
+            onClick={() => {
+              heistPlay("waitMany");
+              setStartAt(Date.now() - T * REPLAY_TICK_MS);
+            }}
+            className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/70 light:border-slate-300 light:text-slate-600">
             ⏭ 끝으로
           </button>
         )}
@@ -527,7 +618,13 @@ function ReplayView({ state, viewerSeat, names, onReady, onGameEnd, def, T, boar
             <p className="break-keep text-xs text-white/60 light:text-slate-500">이번 루프의 자아들은 유령이 되어 다음 루프에도 똑같이 움직여요. 남은 루프 {state.maxLoops - state.loop}번.</p>
           )}
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={onReady} disabled={iReady} className="rounded-full bg-violet-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-violet-500 disabled:opacity-50">
+            <button
+              type="button"
+              onClick={() => {
+                heistPlay("mateDone");
+                onReady();
+              }}
+              disabled={iReady} className="rounded-full bg-violet-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-violet-500 disabled:opacity-50">
               {iReady ? "기다리는 중…" : cleared || state.loop >= state.maxLoops ? "🏁 결과 보기" : "▶ 다음 루프"}
             </button>
             {state.ready.map((r, s) => (

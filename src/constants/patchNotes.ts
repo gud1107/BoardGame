@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.156.2",
+    releaseDate: "2026-11-08",
+    title: "⏳ 시간 루프 도둑단 — 사운드 + 새 도둑",
+    changes: [
+      { game: "time-loop-heist", type: "FEAT", desc: "🎷 배경음악 Midnight Caper — 녹화 땐 잔잔한 느와르 재즈, 재생 땐 첩보 선율이 더해져요 · 시계 째깍 소리" },
+      { game: "time-loop-heist", type: "FEAT", desc: "👣 움직일 때마다 발걸음 · 💎 줍기·🔧 레버·⚡ EMP·🚪 문·⚠️ 역설·🚨 체포·🚐 입금·되감기까지 모든 행동에 효과음" },
+      { game: "time-loop-heist", type: "IMPROVE", desc: "🕵️ 도둑이 비니·가면·줄무늬 옷의 날렵한 캣버글러로 — 걷는 동작, 보석은 머리 위로, 유령은 홀로그램처럼" },
+    ],
+  },
+  {
     version: "v1.156.1",
     releaseDate: "2026-11-08",
     title: "⏳ 시간 루프 도둑단 — 휴대폰 3D 확대",

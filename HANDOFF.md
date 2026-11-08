@@ -40,6 +40,25 @@
 - **2026-11-01 두 번째 정리**: 같은 일이 또 일어나 7,311줄/약 1MB가 됐다. 10-25 이전 날짜 섹션 104개(2026-09-14~10-23, 약 7,000줄)를 `docs/history.md` "Phase 30+" 아카이브로 원문 그대로 옮겼다. 3,500줄이 넘던 "🌗 테마 토글" 섹션도 함께 옮겼다. 한 헤더 밑에 여러 날짜의 후속 세션 기록을 `_이전 갱신: ..._` 식으로 계속 이어 붙이지 말 것.
 - **세션을 마칠 때마다** 내 섹션을 맨 위에 추가하고, 1주일 넘은 섹션은 그 자리에서 history.md 맨 끝 아카이브(현재 Phase 30+, "앞으로 이 문서에 추가할 때" 바로 위)로 옮길 것. 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 🏮 등불 지기 (새 게임) — 2026-11-08
+
+요청: 추천 아이디어 "🏮 등불 지기 (턴제·2~5인)"를 A-Z 개발 + 룰북. 자체 창작 협력 게임. 규칙 원전: [boardGameRule/등불지기/등불지기.md](./boardGameRule/등불지기/등불지기.md) (구현 현황 표·셀프플레이 수치·구현 지도 포함).
+- **구조** `src/games/lanternKeepers/`: `forest.ts`(시드 숲 생성 3종 + 도달 검증 + 빛 BFS), `engine.ts`(PLAN/READY/TURN/SIGNAL/TIMEOUT, `resolveRound`, `lanternView`), `secure.ts`(서버 판정 — `src/lib/secureMatch/games.ts`에 등록, 라이어 다음 두 번째), `bot.ts`, `LanternKeepersBoard.tsx`, `three/ForestScene3D.tsx`, `LanternKeepersGame.tsx`(시간 루프 어댑터 + 라이어의 서버 판정 경로), `lanternSound.ts`.
+- **숨김 정보**: 다리·함정·괴물은 같은 색 빛 아래서만. 서버 판정이면 남의 색 정보·못 본 지형·시드가 기기에 안 옴. 락스텝 대체 때도 화면·봇은 `lanternView`만 사용. 계획은 공개(경고용), 칸별 "비춘 색"(`checked`)도 공개 정보.
+- **설계 중 바꾼 것(셀프플레이로)**: 빛 반경 3→4, 숲 크기 한 단계 축소, 함정 배율 0.6+0.12n, 등유/♥는 Lv.10 무제한 측정 분포로 결정. 봇: 계획 공개와 출발을 분리(마지막 봇 계획에 경고 못 하던 문제), 목표는 순수 거리·길은 조심 가중치(왕복 진동 해결), 안 비춘 골짜기 확인하러 가기, 주인은 괴물 다음 칸 무시(퇴치가 먼저), 막히면 일부러 물려서 길 열기. 결과 Lv.10 탈출률 오솔길 88~95% / 깊은 숲 58~78% / 그림자 숲 45~75%.
+- **서버 모드 주의**: 계획 수정이 HTTP 요청마다 따로 가서 순서가 뒤바뀔 수 있음 → 액션에 `rev`(Date.now 기반 단조 증가), 옛 초안은 엔진이 무시.
+- **등록**: registry(2~5인, 🏮)/playableGames/gameDifficulty(2)/posterTaglines/roomRulebookSummaries/achievements(8)/details/patchNotes v1.157.0, proceduralSuites 테스트 수 41(HEAD 기준 — 다른 세션의 미커밋 miniGolf·시간루프 사운드가 작업 트리에 있으면 42+로 보임).
+- **확인**: tsc/eslint 0, `LanternKeepers.test.ts` 15개(숲 75조합×25시드 검증, 보기 누출 3, 규칙 8, 봇 완주·탈출률) + secureMatch/stats/constants 통과. rolldown 하네스로 390px 3D·2D 캡처 — 가로 넘침·콘솔 에러 0, 폰 조작부 줄바꿈 깨짐 고침.
+- **남은 것**: 포스터 이미지·호버 영상 없음(🏮 이모지), 실제 2기기·운영 서버 판정 플레이 미확인, Lv.5와 Lv.10 차이 작음.
+
+## ⏳ 시간 루프 도둑단 — BGM·효과음 + 새 도둑 모델 — 2026-11-08 (패치 v1.156.2)
+
+요청: "움직일 때마다 소리, 어울리는 배경음악, 모든 액션에 효과음, 좀 더 섬세하고 세련된 도둑 이미지".
+- **사운드** `timeLoopHeistSound.ts`(공용 procedural suite): BGM "Midnight Caper" D단조 104BPM 느와르 재즈(워킹 베이스·브러시·비브라폰·시계 째깍), intensity 1(재생·결과 단계)에 피치카토 선율·현악·킥 추가. SFX 26종 — step/ghostStep(좌우 발 번갈아)·wait/waitMany·blocked·undo·pick·coin·drop·lever·emp·plateOn/Off·doorOpen/Close·bank/bankCoin·paradox·caught·submit·mateDone·rewind·loopStart·loopEnd·timeWarn·ui·victory·fail.
+- **어디서 나나**: 녹화 중 내 조작은 `act()`에서 즉시(내 기기만) — 이동 = 발걸음, 막힌 칸 = blocked, 그리고 새 행동으로 다시 시뮬해 그 틱의 사건(유령 것 포함)+문/발판 변화를 `tickSfx`로. 재생은 틱마다 사건 + 누가 움직였으면 발걸음 한 번(⏭ 건너뛰기는 무음), 끝나면 victory/fail/loopEnd. 단계 전환(rewind/loopStart)·동료 제출/준비는 보드 `useSoundCues`. 녹화 제한 10초 전부터 매 초 삑. 헤더에 `SuiteSoundHud`.
+- **도둑** `three/Thief3D.tsx`: 비니(방울)·도미노 가면+흰 눈빛·터틀넥 좌석색 줄무늬·장갑·벨트 버클·등 자루, 골반/어깨 피벗 걷기 동작, 보석 들면 두 팔로 머리 위, 유령 = 좌석색 발광 반투명 + 일렁임, 들키면 강조색 빨강. 기하는 모듈 공유. 2D 격자는 `ThiefToken.tsx` SVG 얼굴(나 = 노란 고리, 유령 = 점선·반투명, 💎·! 배지).
+- 확인: tsc/eslint 0, 도둑단·audio 테스트 통과(`proceduralSuites` 개수는 커밋 기준 41; 작업트리엔 다른 세션의 등불 지기·미니골프 suite가 있어 로컬 숫자가 다름). rolldown+swiftshader 헤드리스 1장으로 3D 4종 상태·2D 토큰 확인, 콘솔 에러 0. **실제 소리는 귀로 확인 못 함**, prod 게임 화면 캡처는 안 함.
+
 ## 🫣 변신 숨바꼭질 — "꼼꼬미!" 외침 또렷·들뜬 목소리 — 2026-11-08
 
 요청: "꼼꼬미 소리 딕션·발음 정확하게, 들뜨고 신난 목소리로". 목소리는 브라우저 TTS(speechSynthesis)라 녹음 파일 없음.
