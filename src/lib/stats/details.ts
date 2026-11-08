@@ -111,6 +111,14 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "거터 / 던진 공", value: (d) => `${n(d.gutters)} / ${n(d.rolls)}` },
     { label: "방해 / 방해받고 X·/", value: (d) => `${n(d.sabotages)} / ${n(d.hazardBeaten)}` },
   ],
+  "mini-golf": [
+    { label: "⛳ 홀인원 / 이글 / 버디", value: (d) => `${n(d.holeInOnes)} / ${n(d.eagles)} / ${n(d.birdies)}` },
+    { label: "파 / 보기 이상", value: (d) => `${n(d.pars)} / ${n(d.bogeys)}` },
+    { label: "최고 언더파 · 9홀 최소 타수", value: (d) => `${n(d.maxUnderPar)} · ${d.min9 ? `${n(d.min9)}타` : "—"}` },
+    { label: "☁️ 추락 / 공 줍기", value: (d) => `${n(d.falls)} / ${n(d.pickups)}` },
+    { label: "💥 남의 공 떨어뜨림 / 🎁 넣어 줌", value: (d) => `${n(d.knockOffs)} / ${n(d.gifts)}` },
+    { label: "🛹 점프 / 🌀 풍차 통과", value: (d) => `${n(d.jumps)} / ${n(d.windmillPasses)}` },
+  ],
   "wobble-tower": [
     { label: "빼기 성공 / 무너뜨림", value: (d) => `${n(d.pulls)} / ${n(d.collapses)}` },
     { label: "🏅 마지막 건축가", value: (d) => n(d.lastBuilder) },

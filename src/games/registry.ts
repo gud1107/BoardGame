@@ -190,6 +190,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "mini-golf",
+    name: "미니골프 파티",
+    nameEn: "Mini Golf Party",
+    description:
+      "하늘에 뜬 섬 9홀을 1~6명이 한 타씩 번갈아 도는 3D 미니골프! 코스를 새총처럼 끌었다 놓거나 방향·세기를 정밀하게 맞춰 치면 내 캐릭터가 퍼터를 휘둘러요 — 난간 뱅크 샷, 비탈·모래·얼음·범퍼, 난간 없는 낭떠러지까지. 홀이 끝날 때마다 꼴찌가 다음 홀에 🌀풍차·🛹점프대·🧲자석 중 하나를 놓아 역전을 노리고, 남의 공을 맞혀 섬 밖으로 떨어뜨릴 수도! 3/6/9홀, AI 봇 Lv.1~10.",
+    players: { min: 1, max: 6 },
+    playTime: { minMinutes: 5, maxMinutes: 25 },
+    category: "party",
+    thumbnail: { emoji: "⛳", gradient: ["#10b981", "#0b2a4a"] },
+    tags: ["미니골프", "골프", "퍼팅", "스포츠", "물리", "역전", "3D", "AI봇"],
+    genres: ["party", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "wobble-tower",
     name: "와르르 타워",
     nameEn: "Wobble Tower",

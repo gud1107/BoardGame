@@ -74,6 +74,16 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     ],
   },
   {
+    version: "v1.158.0",
+    releaseDate: "2026-11-08",
+    title: "⛳ 새 게임 미니골프 파티",
+    changes: [
+      { game: "mini-golf", type: "FEAT", desc: "⛳ 새 게임 — 하늘에 뜬 섬 9홀 3D 미니골프 1~6인, 한 타씩 번갈아 · 3/6/9홀 · AI 봇 Lv.1~10" },
+      { game: "mini-golf", type: "FEAT", desc: "🏹 새총처럼 끌었다 놓거나 ◀▶·세기 막대로 정밀 조준, 내 캐릭터가 퍼터를 휘둘러요 — 난간·비탈·모래·얼음·범퍼·낭떠러지" },
+      { game: "mini-golf", type: "FEAT", desc: "🎲 홀마다 꼴찌가 다음 홀에 🌀풍차·🛹점프대·🧲자석을 골라 역전 · 💥 남의 공을 섬 밖으로 밀어낼 수도" },
+    ],
+  },
+  {
     version: "v1.157.0",
     releaseDate: "2026-11-08",
     title: "🏮 새 게임 등불 지기",

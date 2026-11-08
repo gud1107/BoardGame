@@ -130,6 +130,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "스페어", key: "spares", unit: "개" },
     { label: "최장 연속 스트라이크", key: "maxStreak", unit: "연속" },
   ],
+  "mini-golf": [
+    { label: "홀인원", key: "holeInOnes", unit: "번" },
+    { label: "버디", key: "birdies", unit: "번" },
+    { label: "파", key: "pars", unit: "번" },
+    { label: "언더파", key: "maxUnderPar", unit: "타" },
+  ],
   "wobble-tower": [
     { label: "빼기 성공", key: "pulls", unit: "번" },
     { label: "🏅 마지막 건축가", key: "lastBuilder", unit: "번" },
@@ -304,6 +310,11 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "bwl-score", label: "최고 점수", num: "maxScore", format: "count", unit: "점" },
     { id: "bwl-strikes", label: "스트라이크", num: "strikes", format: "count", unit: "개" },
     { id: "bwl-turkeys", label: "🦃 터키", num: "turkeys", format: "count", unit: "번" },
+  ],
+  "mini-golf": [
+    { id: "mg-hio", label: "⛳ 홀인원", num: "holeInOnes", format: "count", unit: "번" },
+    { id: "mg-birdie", label: "🐦 버디", num: "birdies", format: "count", unit: "번" },
+    { id: "mg-knock", label: "💥 섬 밖으로", num: "knockOffs", format: "count", unit: "번" },
   ],
   "wobble-tower": [
     { id: "wbt-pulls", label: "빼기 성공", num: "pulls", format: "count", unit: "번" },

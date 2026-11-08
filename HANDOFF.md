@@ -40,6 +40,15 @@
 - **2026-11-01 두 번째 정리**: 같은 일이 또 일어나 7,311줄/약 1MB가 됐다. 10-25 이전 날짜 섹션 104개(2026-09-14~10-23, 약 7,000줄)를 `docs/history.md` "Phase 30+" 아카이브로 원문 그대로 옮겼다. 3,500줄이 넘던 "🌗 테마 토글" 섹션도 함께 옮겼다. 한 헤더 밑에 여러 날짜의 후속 세션 기록을 `_이전 갱신: ..._` 식으로 계속 이어 붙이지 말 것.
 - **세션을 마칠 때마다** 내 섹션을 맨 위에 추가하고, 1주일 넘은 섹션은 그 자리에서 history.md 맨 끝 아카이브(현재 Phase 30+, "앞으로 이 문서에 추가할 때" 바로 위)로 옮길 것. 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## ⛳ 미니골프 파티 (새 게임) — 2026-11-08 (패치 v1.158.0)
+
+요청: 추천 아이디어 "⛳ 미니골프 파티(2~6인, 턴제)"를 A-Z 개발 + 룰북 + handoff. 자체 창작. 규칙 원전: [boardGameRule/미니골프파티/미니골프파티.md](./boardGameRule/미니골프파티/미니골프파티.md).
+- **구조** `src/games/miniGolf/`: `physics.ts`(컬링·알까기 계열 sqrt 결정론 물리 — 난간·비탈·모래·얼음·범퍼·낭떠러지·풍차·점프대·자석), `course.ts`(하늘섬 9홀 파 28 + 장애물 3종), `engine.ts`(턴 순서·벌타·파×2 상한·꼴찌의 장애물 선택, 샷 40초/선택 20초), `bot.ts`(Lv.1~10 손떨림·세기 오차), `aim.ts`(새총 끌기/정밀 조준), `replay.ts`, `MiniGolfBoard.tsx`, `MiniGolfGame.tsx`, `three/GolfScene.tsx`+`Golfer.tsx`(VRM 캐릭터가 퍼터 스윙), `miniGolfSound.ts`, `RulebookModal.tsx`, `stats.ts`.
+- **등록**: registry(1~6인, ⛳)/playableGames/gameDifficulty(2)/posterTaglines/roomRulebookSummaries/achievements(7)/details/presentation/patchNotes v1.158.0, `[gameId]/page.tsx` max-w-3xl, proceduralSuites 테스트 수 43.
+- **봇 튜닝(셀프플레이, 9홀 파 28 대비)**: Lv.1 +17.5 · Lv.3 +8 · Lv.5 +3.5 · Lv.7 −1 · Lv.10 −7 (Lv.10 손떨림 ≈1.4°, 세기 6.5%).
+- **확인**: `MiniGolf.test.ts`+`balance.sim.test.ts` 34개, eslint 0, tsc 0, constants/stats/audio 공용 테스트 통과.
+- **남은 것**: 화면 캡처 검증은 원래 세션에서 하네스 작성 도중 사용자가 중단 → 이어받은 세션도 생략(하네스 `scripts/zz-minigolf-check/` 삭제). 포스터·호버 영상 없음(⛳ 이모지), 실제 다기기 온라인 플레이 미확인.
+
 ## 💀 죽은척 대작전 — 사망 연출 + 소생 — 2026-11-08 (패치 v1.159.0)
 
 요청: "내가 죽었으면 강한 이펙트로 알려주기 · 죽었을 때 살아날 경우의 수 추가 · 쓰러져 있을 때 피/앉아 쓰러짐/부상 연출". 룰북 md(boardGameRule/죽은척대작전)에 소생 규칙 반영.
