@@ -316,6 +316,16 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["escape-5", "🏁", "꼼꼼이 탈출", "찜 장소 탈출 누적 5번", 5, k("escapes")],
     ["decoy-10", "👯", "분신술", "분신 누적 10개 만들기", 10, k("decoys")],
   ],
+  "lantern-keepers": [
+    ["escape-1", "🌅", "첫 새벽", "숲을 빠져나와 탈출하기", 1, k("escapes")],
+    ["three-star", "🌟", "완벽한 탐험", "별 3개로 탈출", 1, k("threeStars")],
+    ["shadow-1", "🌑", "그림자 숲 정복", "그림자 숲에서 탈출", 1, k("escapes_shadow")],
+    ["flawless", "🕊️", "상처 하나 없이", "생명을 하나도 잃지 않고 탈출", 1, k("flawless")],
+    ["disarm-10", "🛠️", "함정 해체반", "내 색 함정 누적 10개 해제", 10, k("disarms")],
+    ["banish-5", "✨", "괴물 사냥꾼", "내 색 괴물 누적 5마리 퇴치", 5, k("banishes")],
+    ["shard-20", "💠", "빛 수집가", "빛 조각 누적 20개 줍기", 20, k("shards")],
+    ["full-party", "🏮", "다섯 등불", "5인 탐험대로 탈출", 1, k("fullParty")],
+  ],
   "time-loop-heist": [
     ["clear-1", "💎", "첫 작전 성공", "작전 하나를 성공하기", 1, k("clears")],
     ["three-star", "🌟", "완벽한 루프", "별 3개로 작전 성공", 1, k("threeStars")],

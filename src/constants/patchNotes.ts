@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.157.0",
+    releaseDate: "2026-11-08",
+    title: "🏮 새 게임 등불 지기",
+    changes: [
+      { game: "lantern-keepers", type: "FEAT", desc: "🏮 새 게임 — 2~5인 협력 3D 숲 탐험. 다리·함정·괴물은 같은 색 등불 빛 아래서만 보여요 (남의 시야는 서버가 숨김)" },
+      { game: "lantern-keepers", type: "FEAT", desc: "📍 핑 2개·💬 한마디 1개로만 신호, 계획한 길은 동료에게 공개 · 내 색 함정은 해제, 내 색 괴물은 옆에서 퇴치 · 🔆 밝히기" },
+      { game: "lantern-keepers", type: "FEAT", desc: "🌲🌳🌑 숲 3종 자동 생성 · 색마다 문양 ▲●◆★✚ · 3D/2D 지도 · 🔍 확인 표시 · AI 봇 Lv.1~10 · Night Forest BGM" },
+    ],
+  },
+  {
     version: "v1.156.2",
     releaseDate: "2026-11-08",
     title: "⏳ 시간 루프 도둑단 — 사운드 + 새 도둑",

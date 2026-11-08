@@ -225,6 +225,25 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "엉뚱한 걸 친 횟수", value: (d) => n(d.wrongHits) },
     { label: "만든 분신", value: (d) => n(d.decoys) },
   ],
+  "lantern-keepers": [
+    { label: "탈출 (별 3개)", value: (d) => `${n(d.escapes)} (${n(d.threeStars)})` },
+    { label: "받은 별 합계", value: (d) => n(d.stars) },
+    {
+      label: "숲별 최고 별",
+      value: (d) => {
+        const ids: [string, string][] = [
+          ["trail", "🌲"],
+          ["deep", "🌳"],
+          ["shadow", "🌑"],
+        ];
+        const parts = ids.filter(([id]) => d[`maxStars_${id}`]).map(([id, l]) => `${l} ${"⭐".repeat(d[`maxStars_${id}`] ?? 0)}`);
+        return parts.length > 0 ? parts.join(" · ") : null;
+      },
+    },
+    { label: "주운 빛 조각 / 반딧불 병", value: (d) => `${n(d.shards)} / ${n(d.jars)}` },
+    { label: "해제한 함정 / 퇴치한 괴물", value: (d) => `${n(d.disarms)} / ${n(d.banishes)}` },
+    { label: "보낸 핑 / 다친 횟수", value: (d) => `${n(d.pings)} / ${n(d.hurt)}` },
+  ],
   "time-loop-heist": [
     { label: "작전 성공 (별 3개)", value: (d) => `${n(d.clears)} (${n(d.threeStars)})` },
     { label: "받은 별 합계", value: (d) => n(d.stars) },

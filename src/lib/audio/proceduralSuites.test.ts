@@ -57,9 +57,9 @@ describe("game sound suites", () => {
     // 27 from the 2026-10-11 sound-suite pass + telepathy's BGM + tavern brawl.
     // + word tower (단어 마천루) + wobble tower (와르르 타워) + alkkagi (알까기 대전)
     // + curling (컬링 파티) + chess (체스) + god-life planner (갓생 플래너) + qplay (큐플레이)
-    // + hide-and-seek (한밤의 숨바꼭질) + bowling mayhem (볼링 난장판)
+    // + hide-and-seek (한밤의 숨바꼭질) + bowling mayhem (볼링 난장판) + lantern keepers (등불 지기)
     // + time loop heist (시간 루프 도둑단).
-    expect(suites.length).toBe(41);
+    expect(suites.length).toBe(42);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

@@ -27,6 +27,7 @@ export const GAME_DIFFICULTY: Record<string, 1 | 2 | 3 | 4 | 5> = {
   "star-rummy": 2,
   "hide-and-seek": 2,
   "time-loop-heist": 3,
+  "lantern-keepers": 2,
   "morph-hide": 2,
   "liar-game": 1,
   qplay: 1,

@@ -816,6 +816,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "lantern-keepers",
+    name: "등불 지기",
+    nameEn: "Lantern Keepers",
+    description:
+      "캄캄한 3D 숲속 미로를 2~5명의 탐험대가 서로 다른 색 등불을 들고 지나가는 협력 게임. 빨강 함정은 빨강 빛 아래서만, 파랑 다리는 파랑 빛 아래서만, 초록 괴물은 초록 빛 아래서만 보여요 — 내 화면엔 내 등불이 비춘 것만 나오고, 남의 시야는 서버가 지켜 줘요. 매 라운드 모두 동시에 3걸음을 정하고(동료에게 그대로 보여요) 📍 핑 2개와 💬 짧은 한마디로만 위험을 알려 주세요. 내 색 함정은 밟으면 해제, 내 색 괴물은 옆에 서면 퇴치! 빛 조각을 모두 모아 새벽 제단에 함께 서면 탈출. 숲 3종 · 색마다 문양(▲●◆★✚) · 🔆 밝히기 · AI 봇 Lv.1~10.",
+    players: { min: 2, max: 5 },
+    playTime: { minMinutes: 10, maxMinutes: 30 },
+    category: "party",
+    thumbnail: { emoji: "🏮", gradient: ["#f59e0b", "#050814"] },
+    tags: ["협력", "숨겨진정보", "탐험", "미로", "신호", "동시행동", "3D", "AI봇", "색각배려"],
+    genres: ["strategy", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "time-loop-heist",
     name: "시간 루프 도둑단",
     nameEn: "Time Loop Heist",

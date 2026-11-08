@@ -57,6 +57,7 @@ export const POSTER_TAGLINES: Partial<Record<GameId, string>> = {
   "star-rummy": "쪼개고, 합치고, 다시 빛나게 — 마지막 별은 누구 손에?",
   "hide-and-seek": "쉿… 삐걱. 술래가 바로 옆방에 있다.",
   "time-loop-heist": "어제의 내가 문을 연다. 오늘의 내가 턴다.",
+  "lantern-keepers": "네 빛엔 안 보여. 내 빛엔 보여 — 거기 밟지 마!",
   "morph-hide": "저 쓰레기통, 방금 움직이지 않았어?",
   "era-march": "돌도끼에서 플라즈마까지, 먼저 진화하는 쪽이 이긴다",
   "lost-cities": "잃어버린 도시로, 모험엔 대가가 있다",
