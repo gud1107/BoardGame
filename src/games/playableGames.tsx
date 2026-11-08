@@ -54,6 +54,7 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   alkkagi: dynamic(() => import("./alkkagi/AlkkagiGame"), { ssr: false }),
   "bowling-mayhem": dynamic(() => import("./bowlingMayhem/BowlingMayhemGame"), { ssr: false }),
   "mini-golf": dynamic(() => import("./miniGolf/MiniGolfGame"), { ssr: false }),
+  "cargo-stack": dynamic(() => import("./cargoStack/CargoStackGame"), { ssr: false }),
   "wobble-tower": dynamic(() => import("./wobbleTower/WobbleTowerGame"), { ssr: false }),
   "liar-game": dynamic(() => import("./liarGame/LiarGameGame"), { ssr: false }),
   "god-life-planner": dynamic(() => import("./godLifePlanner/GodLifePlannerGame"), { ssr: false }),

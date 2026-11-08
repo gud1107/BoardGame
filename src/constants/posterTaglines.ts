@@ -20,6 +20,7 @@ export const POSTER_TAGLINES: Partial<Record<GameId, string>> = {
   alkkagi: "튕겨라, 떨어뜨려라, 딱!",
   "bowling-mayhem": "스트라이크냐, 거터냐, 고깔이냐!",
   "mini-golf": "한 타에 쏙? 풍차에 퉁? 구름 아래로 풍덩?",
+  "cargo-stack": "한 층만 더… 기우뚱, 풍덩!",
   "wobble-tower": "한 칸만 더… 와르르!",
   qplay: "8가지 퀴즈, 먼저 맞히는 자가 쏜다",
   "word-tower": "단어를 쏟아내 하늘까지 쌓아라",

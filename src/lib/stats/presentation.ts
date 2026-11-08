@@ -130,6 +130,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "스페어", key: "spares", unit: "개" },
     { label: "최장 연속 스트라이크", key: "maxStreak", unit: "연속" },
   ],
+  "cargo-stack": [
+    { label: "실은 컨테이너", key: "placed", unit: "개" },
+    { label: "최고 층", key: "maxTier", unit: "층" },
+    { label: "바다에 잃음", key: "lost", unit: "개" },
+    { label: "최고 점수", key: "maxScore", unit: "점" },
+  ],
   "mini-golf": [
     { label: "홀인원", key: "holeInOnes", unit: "번" },
     { label: "버디", key: "birdies", unit: "번" },
@@ -310,6 +316,10 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "bwl-score", label: "최고 점수", num: "maxScore", format: "count", unit: "점" },
     { id: "bwl-strikes", label: "스트라이크", num: "strikes", format: "count", unit: "개" },
     { id: "bwl-turkeys", label: "🦃 터키", num: "turkeys", format: "count", unit: "번" },
+  ],
+  "cargo-stack": [
+    { id: "cs-placed", label: "🏗️ 실은 컨테이너", num: "placed", format: "count", unit: "개" },
+    { id: "cs-best", label: "🚢 최고 점수", num: "maxScore", format: "count", unit: "점" },
   ],
   "mini-golf": [
     { id: "mg-hio", label: "⛳ 홀인원", num: "holeInOnes", format: "count", unit: "번" },

@@ -207,6 +207,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "cargo-stack",
+    name: "화물선 쌓기",
+    nameEn: "Cargo Stack",
+    description:
+      "한 척의 화물선에 1~6명이 번갈아 컨테이너를 싣는 턴제 균형 쌓기! 크레인 대기열 3개 중 하나를 골라 9칸×6층 갑판에 내리면 무게×층만큼 점수 — 높이 쌓을수록 크지만 배가 기울 한계는 줄어들어요. 한계를 넘으면 기운 쪽 컨테이너가 바다로 미끄러지고(주인 점수 손실, 쏟은 사람 벌금), 끝내 배가 뒤집혀요. ⚙️ 철강·🥚 유리·💎 귀중품, ⚓ 밸러스트, ☀️🌊⛈️ 날씨 예보와 출항 판정까지. 1~3항해, 혼자 최고 점수 도전·AI 봇 Lv.1~10.",
+    players: { min: 1, max: 6 },
+    playTime: { minMinutes: 5, maxMinutes: 20 },
+    category: "strategy",
+    thumbnail: { emoji: "🚢", gradient: ["#0ea5e9", "#7f1d1d"] },
+    tags: ["쌓기", "균형", "턴제", "전략", "가족", "3D", "AI봇"],
+    genres: ["strategy", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "wobble-tower",
     name: "와르르 타워",
     nameEn: "Wobble Tower",

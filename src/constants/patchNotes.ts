@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.162.0",
+    releaseDate: "2026-11-09",
+    title: "🚢 새 게임 화물선 쌓기",
+    changes: [
+      { game: "cargo-stack", type: "FEAT", desc: "🚢 새 게임 — 한 척의 화물선에 번갈아 컨테이너를 싣는 1~6인 턴제 균형 쌓기 · 무게×층 점수 · 3D/2D 보기 · AI 봇 Lv.1~10" },
+      { game: "cargo-stack", type: "FEAT", desc: "⚖️ 높이 쌓을수록 줄어드는 기울기 한계 — 넘으면 바다로 와르르, 끝내 전복 · ⚓ 밸러스트 · 🔰 결과 미리보기" },
+      { game: "cargo-stack", type: "FEAT", desc: "⚙️ 철강·🥚 유리·💎 귀중품 화물과 ☀️🌊⛈️ 날씨 예보 출항 판정 · 뱃노래 BGM과 모든 행동 효과음" },
+    ],
+  },
+  {
     version: "v1.161.0",
     releaseDate: "2026-11-08",
     title: "👥 3D 캐릭터 3명 추가 · 메이크업 다양화 · 더 사람 같은 움직임",

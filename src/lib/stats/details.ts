@@ -111,6 +111,14 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "거터 / 던진 공", value: (d) => `${n(d.gutters)} / ${n(d.rolls)}` },
     { label: "방해 / 방해받고 X·/", value: (d) => `${n(d.sabotages)} / ${n(d.hazardBeaten)}` },
   ],
+  "cargo-stack": [
+    { label: "🏗️ 실은 컨테이너 / 얻은 점수", value: (d) => `${n(d.placed)} / ${n(d.points)}` },
+    { label: "🗼 최고 층 · 💰 한 번에 최고", value: (d) => `${n(d.maxTier)}층 · ${n(d.maxPlace)}점` },
+    { label: "🌊 내가 쏟음 / 잃음 (출항 때)", value: (d) => `${n(d.spills)} / ${n(d.lost)} (${n(d.stormLost)})` },
+    { label: "🚨 전복 · 🥚 깨뜨림 / 배달", value: (d) => `${n(d.capsizes)} · ${n(d.crushes)} / ${n(d.fragileSaved)}` },
+    { label: "💎 귀중품 / ⚙️ 철강 / ⚓ 밸러스트", value: (d) => `${n(d.golds)} / ${n(d.steel)} / ${n(d.ballasts)}` },
+    { label: "🧘 무손실 항해 / 항해", value: (d) => `${n(d.cleanVoyages)} / ${n(d.voyages)}` },
+  ],
   "mini-golf": [
     { label: "⛳ 홀인원 / 이글 / 버디", value: (d) => `${n(d.holeInOnes)} / ${n(d.eagles)} / ${n(d.birdies)}` },
     { label: "파 / 보기 이상", value: (d) => `${n(d.pars)} / ${n(d.bogeys)}` },
