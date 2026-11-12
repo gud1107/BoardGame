@@ -142,6 +142,7 @@ function liftToGrey(tex: THREE.Texture): THREE.Texture {
   out.wrapT = tex.wrapT;
   out.magFilter = tex.magFilter;
   out.minFilter = tex.minFilter;
+  out.anisotropy = tex.anisotropy;
   out.channel = tex.channel;
   out.offset.copy(tex.offset);
   out.repeat.copy(tex.repeat);
@@ -150,10 +151,18 @@ function liftToGrey(tex: THREE.Texture): THREE.Texture {
   return out;
 }
 
+/**
+ * Anisotropic filtering for every model texture. The table camera looks down at the seats,
+ * so faces, eyes and outfit prints are sampled at a slant — plain trilinear mips smear them
+ * into a soft blur there. three clamps this to the GPU's limit at upload.
+ */
+export const VRM_ANISOTROPY = 8;
+
 function shareTextures(key: ModelKey, vrm: VRM) {
   const mats = materialsOf(vrm.scene) as unknown as Record<string, THREE.Texture | undefined>[];
   const base = shared[key];
   if (!base) {
+    for (const m of mats) for (const k of TEXTURE_KEYS) if (m[k]?.isTexture) m[k]!.anisotropy = VRM_ANISOTROPY;
     shared[key] = mats.map((m) => Object.fromEntries(TEXTURE_KEYS.filter((k) => m[k]?.isTexture).map((k) => [k, m[k]!])));
     return;
   }

@@ -21,7 +21,7 @@ export default function CharacterPreview3D({ look }: { look: PersonLook }) {
     {readyFor !== look && (
       <span className="pointer-events-none absolute inset-0 grid place-items-center text-xs text-white/50 light:text-slate-500">캐릭터 불러오는 중…</span>
     )}
-    <Canvas dpr={[1, 1.75]} camera={{ fov: 17, position: [0.5, 1.55, 3] }} onCreated={({ camera }) => camera.lookAt(0, 1.4, 0)}>
+    <Canvas dpr={[1, 2]} camera={{ fov: 17, position: [0.5, 1.55, 3] }} onCreated={({ camera }) => camera.lookAt(0, 1.4, 0)}>
       <ambientLight intensity={0.75} />
       <hemisphereLight args={["#fff4e6", "#2a2a3a", 0.5]} />
       <directionalLight position={[1.5, 3, 4]} intensity={1.5} />

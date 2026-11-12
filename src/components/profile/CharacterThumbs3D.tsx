@@ -78,7 +78,7 @@ export default function CharacterThumbs3D({
   return (
     <div aria-hidden style={{ position: "fixed", left: -9999, top: 0, width: 160, height: 160, pointerEvents: "none" }}>
       {/* a fresh shooter whenever the queue changes, so a new item (e.g. a re-styled own character) gets shot too */}
-      <Canvas dpr={1} gl={{ preserveDrawingBuffer: true, alpha: true }} camera={{ fov: f.fov, position: [0, 1.62, 3] }} onCreated={({ camera }) => camera.lookAt(0, f.y, 0)}>
+      <Canvas dpr={2} gl={{ preserveDrawingBuffer: true, alpha: true, antialias: true }} camera={{ fov: f.fov, position: [0, 1.62, 3] }} onCreated={({ camera }) => camera.lookAt(0, f.y, 0)}>
         <ambientLight intensity={0.8} />
         <hemisphereLight args={["#fff4e6", "#2a2a3a", 0.5]} />
         <directionalLight position={[1.5, 3, 4]} intensity={1.5} />

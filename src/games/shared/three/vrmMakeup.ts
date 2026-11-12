@@ -259,6 +259,7 @@ function canvasTexture(canvas: HTMLCanvasElement, like: THREE.Texture): THREE.Te
   out.wrapT = like.wrapT;
   out.magFilter = like.magFilter;
   out.minFilter = like.minFilter;
+  out.anisotropy = like.anisotropy;
   out.channel = like.channel;
   return out;
 }
