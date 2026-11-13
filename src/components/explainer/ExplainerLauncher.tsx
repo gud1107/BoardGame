@@ -81,8 +81,10 @@ function ExplainerModal({ gameId, onClose }: { gameId: string; onClose: () => vo
     };
   }, [onClose]);
   if (!script || typeof document === "undefined") return null;
+  // No backdrop-filter on this overlay: it would become the containing block
+  // for the player's `position: fixed` iPhone fullscreen fallback.
   return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-black/85 p-2 backdrop-blur-sm sm:items-center sm:p-6" onClick={onClose} role="dialog" aria-modal="true" aria-label={script.title}>
+    <div className="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-black/90 p-2 sm:items-center sm:p-6" onClick={onClose} role="dialog" aria-modal="true" aria-label={script.title}>
       <div className="relative w-full max-w-6xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-2 flex items-center justify-between gap-2 px-1">
           <div className="text-sm font-bold text-white sm:text-base">🎬 {script.title}</div>

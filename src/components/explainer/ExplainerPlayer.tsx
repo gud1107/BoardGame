@@ -311,13 +311,16 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
   });
   const caption = started && loc.cueIndex >= 0 ? tl.cues[loc.cueIndex].text.trim() || null : null;
   const noVoice = !speechSupported();
+  // On phone-width players an overlaid 2-line subtitle hides a quarter of the
+  // picture — put it in a bar under the video instead (overlay again in fullscreen).
+  const narrow = scale * STAGE_W < 560 && !isFull;
 
   return (
     <div className="flex w-full flex-col gap-3 lg:flex-row lg:items-start">
       <div
         ref={shellRef}
         className={`group relative overflow-hidden bg-black select-none ${
-          cssFull ? "fixed inset-0 z-[300] flex items-center justify-center" : `w-full lg:flex-1 ${isFull ? "flex items-center" : "rounded-xl"}`
+          cssFull ? "fixed inset-0 z-[300] flex items-center justify-center" : `w-full lg:flex-1 ${isFull ? "flex items-center" : narrow && captions ? "rounded-t-xl" : "rounded-xl"}`
         }`}
         onPointerMove={poke}
         style={{ cursor: chrome ? undefined : "none" }}
@@ -331,7 +334,7 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
           </div>
 
           {/* Subtitles */}
-          {captions && caption && (
+          {captions && caption && !narrow && (
             <div
               className="pointer-events-none absolute inset-x-0 flex justify-center px-[4%] transition-[bottom]"
               style={{ bottom: chrome ? "16%" : "6%" }}
@@ -484,6 +487,12 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
         </div>
       </div>
 
+      {narrow && captions && started && (
+        <div className="-mt-3 flex min-h-[3.4em] w-full items-center justify-center rounded-b-xl bg-black px-3 py-1.5 text-center text-[13px] leading-snug font-semibold break-keep text-white">
+          {caption ?? ""}
+        </div>
+      )}
+
       {/* Chapter list */}
       <ol className="flex w-full flex-col gap-1 rounded-xl border border-white/10 bg-white/[0.03] p-2 text-left lg:max-h-[min(70vh,560px)] lg:w-72 lg:overflow-y-auto light:border-slate-200 light:bg-white">
         <li className="px-2 pt-1 pb-2 text-xs font-bold text-white/60 light:text-slate-500">📑 챕터</li>
@@ -504,7 +513,7 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
             </button>
           </li>
         ))}
-        <li className="px-2 pt-2 text-[11px] leading-relaxed break-keep text-white/40 light:text-slate-400">
+        <li className="hidden px-2 pt-2 text-[11px] leading-relaxed break-keep text-white/40 md:list-item light:text-slate-400">
           단축키: Space 재생 · ←/→ 5초 · J/L 10초 · F 전체화면 · C 자막 · M 내레이션
         </li>
       </ol>
