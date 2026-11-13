@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.170.0",
+    releaseDate: "2026-11-14",
+    title: "🦎 변신 숨바꼭질 — 끊김 없이 부드러운 움직임",
+    changes: [
+      { game: "morph-hide", type: "FIX", desc: "🏃 다른 사람·행인·분신이 멈칫하거나 순간이동하듯 튀던 현상 수정 — 스냅샷 여러 장을 방장 시계에 맞춰 이어 그려요 (모의 측정: 달리는 사람의 멈칫 16%→0.1%, 튐 9%→0.1% 프레임)" },
+      { game: "morph-hide", type: "FIX", desc: "📡 방장이 보내는 화면 정보 간격이 100·150ms로 들쭉날쭉하던 것을 일정하게 · 위치 보고와 스냅샷 주기가 어긋나 생기던 끊김을 속도로 보정" },
+      { game: "morph-hide", type: "IMPROVE", desc: "🦶 멈춘 뒤에도 발이 미끄러지던 것 수정 — 걷기·멈춤 몸짓을 보이는 위치와 같은 시점으로 맞추고, 멈추는 순간 바로 알려요" },
+    ],
+  },
+  {
     version: "v1.169.2",
     releaseDate: "2026-11-14",
     title: "🔊 살얼음 파티 — 모든 동작 효과음 · 3단계 BGM",

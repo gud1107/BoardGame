@@ -547,6 +547,18 @@ export interface HostRuntime {
   dossier: Map<number, string[]>;
   /** 밸런스 측정용: 봇이 이 증강만 (순서대로) 고른다 — 빈 배열이면 증강 없음 */
   forceAugs?: { seeker?: string[]; hider?: string[] };
+  /** 사람 기기 위치 보고의 속도 (스냅샷 그릴 때만 씀 — 보고·스냅샷 주기가 어긋나 생기는 멈칫/두 칸 뛰기 방지) */
+  posTrack?: Map<number, PosTrack>;
+}
+
+export interface PosTrack {
+  x: number;
+  z: number;
+  vx: number;
+  vz: number;
+  /** 받은 시뮬 시각 · 보낸 기기 시각(ms) */
+  at: number;
+  ct: number;
 }
 
 export function createHost(state: MatchState): HostRuntime {
@@ -749,6 +761,8 @@ export interface PosReport {
   anim: string;
   pose: number;
   tp: number;
+  /** 보낸 기기의 performance.now() (ms) — 속도 계산용, 옛 기기는 없음 */
+  ct?: number;
 }
 
 /** 사람 기기가 보낸 위치 */
@@ -762,12 +776,41 @@ export function applyPos(rt: HostRuntime, seat: number, pos: PosReport) {
   if (![pos.x, pos.y, pos.z, pos.yaw].every(Number.isFinite)) return;
   const moved = Math.hypot(pos.x - p.x, pos.z - p.z) > 0.03 || Math.abs(pos.y - p.y) > 0.05;
   if (moved) rt.movedAt.set(seat, s.t);
+  trackPos(rt, seat, p, pos);
   p.x = pos.x;
   p.y = pos.y;
   p.z = pos.z;
   p.yaw = pos.yaw;
   p.anim = String(pos.anim).slice(0, 16);
   p.pose = Math.max(0, Math.min(9, Math.floor(pos.pose) || 0));
+}
+
+/** 보고 사이 속도 — 기기 시각 차이로 계산 (도착 간격의 흔들림과 무관) */
+export function trackPos(rt: HostRuntime, seat: number, p: { x: number; z: number }, pos: PosReport) {
+  const tracks = (rt.posTrack ??= new Map());
+  const prev = tracks.get(seat);
+  const ct = Number.isFinite(pos.ct) ? (pos.ct as number) : NaN;
+  let vx = 0;
+  let vz = 0;
+  const moving = pos.anim === "walk" || pos.anim === "run" || pos.anim === "jump";
+  if (moving && prev && Number.isFinite(ct) && prev.x === p.x && prev.z === p.z) {
+    const dt = (ct - prev.ct) / 1000;
+    if (dt > 0.03 && dt < 0.4) {
+      vx = (pos.x - prev.x) / dt;
+      vz = (pos.z - prev.z) / dt;
+      // 사다리·순간이동 같은 큰 점프는 속도로 치지 않는다
+      if (Math.hypot(vx, vz) > 12) vx = vz = 0;
+    }
+  }
+  tracks.set(seat, { x: pos.x, z: pos.z, vx, vz, at: rt.state.t, ct: Number.isFinite(ct) ? ct : 0 });
+}
+
+/** 스냅샷에 실을 위치: 마지막 보고 + 속도 × 지난 시간(최대 100ms) — 방장 쪽 상태는 안 바꾼다 */
+export function projectedPos(rt: HostRuntime, p: { seat: number; x: number; z: number; bot: boolean }): { x: number; z: number } {
+  const tr = rt.posTrack?.get(p.seat);
+  if (p.bot || !tr || (tr.vx === 0 && tr.vz === 0) || tr.x !== p.x || tr.z !== p.z) return { x: p.x, z: p.z };
+  const age = Math.max(0, Math.min(100, rt.state.t - tr.at)) / 1000;
+  return { x: p.x + tr.vx * age, z: p.z + tr.vz * age };
 }
 
 const INTERACT = 1.7;

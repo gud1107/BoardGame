@@ -421,7 +421,16 @@ function Bubble({ text, y }: { text: string; y: number }) {
   return <ScreenSprite position={[0, y, 0]} scale={[1.0, 0.25]} map={map} renderOrder={14} />;
 }
 
-function RemotePlayer({ buf, p, snap, name, showName, strikeAt }: { buf: SnapBuffer; p: SnapPlayer; snap: Snap; name: string; showName: boolean; strikeAt?: number }) {
+type RemoteProps = { buf: SnapBuffer; p: SnapPlayer; snap: Snap; name: string; showName: boolean; strikeAt?: number };
+
+/** 스냅샷(10번/초)마다 모든 사람을 다시 그리지 않도록 — 그림에 쓰는 값이 바뀔 때만 */
+const RemotePlayer = memo(RemotePlayerView, (a: RemoteProps, b: RemoteProps) =>
+  a.buf === b.buf && a.name === b.name && a.showName === b.showName && a.strikeAt === b.strikeAt &&
+  a.snap.phase === b.snap.phase && a.snap.tier === b.snap.tier && a.snap.options.huntSec === b.snap.options.huntSec &&
+  a.p.s === b.p.s && a.p.role === b.p.role && a.p.dg === b.p.dg && a.p.anim === b.p.anim && a.p.pose === b.p.pose && a.p.em?.id === b.p.em?.id && a.p.em?.at === b.p.em?.at,
+);
+
+function RemotePlayerView({ buf, p, snap, name, showName, strikeAt }: RemoteProps) {
   const ref = useRef<THREE.Group>(null);
   const strike = useRef<Strike>({ at: -1e9, kind: "none" });
   const wid = snap.phase === "hunt" ? weaponSchedule(snap.options.huntSec)[snap.tier] : null;
@@ -452,7 +461,7 @@ function RemotePlayer({ buf, p, snap, name, showName, strikeAt }: { buf: SnapBuf
   );
 }
 
-function NpcView({ buf, id, kind, anim, look }: { buf: SnapBuffer; id: number; kind: string; anim: string; look: number }) {
+const NpcView = memo(function NpcView({ buf, id, kind, anim, look }: { buf: SnapBuffer; id: number; kind: string; anim: string; look: number }) {
   const ref = useRef<THREE.Group>(null);
   useFrame(() => {
     const pose = buf.npc(id, performance.now());
@@ -471,9 +480,9 @@ function NpcView({ buf, id, kind, anim, look }: { buf: SnapBuffer; id: number; k
       {kind === "car" && <Car anim={anim} look={look} />}
     </group>
   );
-}
+});
 
-function DecoyView({ buf, id, dg, anim, pose, look, owner }: { buf: SnapBuffer; id: number; dg: string; anim: string; pose: number; look: number; owner: number }) {
+const DecoyView = memo(function DecoyView({ buf, id, dg, anim, pose, look, owner }: { buf: SnapBuffer; id: number; dg: string; anim: string; pose: number; look: number; owner: number }) {
   const fig = useContext(FigCtx);
   const ref = useRef<THREE.Group>(null);
   useFrame(() => {
@@ -487,7 +496,7 @@ function DecoyView({ buf, id, dg, anim, pose, look, owner }: { buf: SnapBuffer; 
       <FormModel dg={dg} anim={anim} pose={pose} look={look} castKey={castKeyFor(fig.seed, fig.round, owner)} />
     </group>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // 효과
@@ -709,6 +718,7 @@ function LocalPlayer(props: World3DProps & { gridRef: RefObject<ReturnType<typeo
   // pivot은 몸을 부드럽게 따라가고(계단·점프에서 덜컹이지 않게), 거리는 벽에 막히면 즉시 당겨졌다가 천천히 풀린다.
   const cam = useRef({ yaw: Math.PI, pitch: 0.28, tYaw: Math.PI, tPitch: 0.28, dist: 3.2, fov: 60, pivot: new THREE.Vector3(), pivotInit: false, init: false, free: false, baseYaw: Math.PI, basePitch: 0.28, slowUntil: 0 });
   const lastSent = useRef(0);
+  const lastSentAnim = useRef("");
   const anim = useRef("idle");
   const yawRef = useRef(0);
   const nearTag = useRef("");
@@ -906,9 +916,12 @@ function LocalPlayer(props: World3DProps & { gridRef: RefObject<ReturnType<typeo
 
     // 위치 보고 (100ms)
     const now = performance.now();
-    if (visible && now - lastSent.current > 100) {
+    // 100ms마다 (프레임 경계에 걸려 116ms로 밀리지 않게 한 프레임 여유) + 멈추거나 출발하는 순간엔 바로
+    // (방장이 마지막 속도로 위치를 앞당겨 실으니, 멈춤을 늦게 알리면 그만큼 미끄러졌다 돌아온다)
+    if (visible && (now - lastSent.current >= 92 || (showAnim !== lastSentAnim.current && now - lastSent.current >= 30))) {
       lastSent.current = now;
-      onPos({ x: r2(b.x), y: r2(b.y), z: r2(b.z), yaw: r2(yawRef.current), anim: showAnim, pose, tp: meNow.tp });
+      lastSentAnim.current = showAnim;
+      onPos({ x: r2(b.x), y: r2(b.y), z: r2(b.z), yaw: r2(yawRef.current), anim: showAnim, pose, tp: meNow.tp, ct: Math.round(now) });
     }
     if (group.current) {
       group.current.visible = visible;
@@ -1087,6 +1100,7 @@ function Scene(props: World3DProps) {
   const chests = chestThings(snap);
   // 남의 공격 순간 (휘두르기·발사 이벤트를 받은 시각)
   const strikeAts = new Map<number, number>();
+  const animSnap = buf.animSnap();
   for (const f of props.fx) if (f.ev.type === "swing" || f.ev.type === "shot") strikeAts.set(f.ev.by, Math.max(strikeAts.get(f.ev.by) ?? 0, f.at));
   return (
     <>
@@ -1119,10 +1133,10 @@ function Scene(props: World3DProps) {
       {snap.goal?.open && <GoalBeacon slot={snap.goal.slot} />}
       {snap.goal && <BaseZone />}
       {snap.npcs.map((n) => (
-        <NpcView key={n.id} buf={buf} id={n.id} kind={n.kind} anim={n.anim} look={n.look} />
+        <NpcView key={n.id} buf={buf} id={n.id} kind={n.kind} anim={animSnap?.npcs.find((q) => q.id === n.id)?.anim ?? n.anim} look={n.look} />
       ))}
       {snap.decoys.map((d) => (
-        <DecoyView key={d.id} buf={buf} id={d.id} dg={d.disguise} anim={d.anim} pose={d.pose} look={(d.owner * 3 + 1) % 8} owner={d.owner} />
+        <DecoyView key={d.id} buf={buf} id={d.id} dg={d.disguise} anim={animSnap?.decoys.find((q) => q.id === d.id)?.anim ?? d.anim} pose={d.pose} look={(d.owner * 3 + 1) % 8} owner={d.owner} />
       ))}
       {snap.players.map((p) => {
         if (p.s === mySeat) return null;
@@ -1130,7 +1144,10 @@ function Scene(props: World3DProps) {
         if (!vis || snap.phase === "gameOver") return null;
         // 이름표: 술래는 모두에게, 숨는 사람 이름은 같은 편(또는 탈락자)에게만
         const showName = p.s !== props.spectate && (p.role === "seeker" || meDead || me?.role === "hider");
-        return <RemotePlayer key={`${p.s}:${p.dg}:${p.role}`} buf={buf} p={p} snap={snap} name={names[p.s] ?? `${p.s + 1}번`} showName={showName} strikeAt={strikeAts.get(p.s)} />;
+        // 몸짓은 위치를 그리는 시점(160ms 전)에 맞춘다 — 최신 걸 쓰면 멈춘 뒤에도 발이 미끄러졌다
+        const ap = animSnap?.players[p.s];
+        const pv = ap && ap.dg === p.dg && ap.role === p.role ? { ...p, anim: ap.anim, pose: ap.pose } : p;
+        return <RemotePlayer key={`${p.s}:${p.dg}:${p.role}`} buf={buf} p={pv} snap={snap} name={names[p.s] ?? `${p.s + 1}번`} showName={showName} strikeAt={strikeAts.get(p.s)} />;
       })}
       {me && <LocalPlayer key={`${me.role}:${me.dg}`} {...props} gridRef={gridRef} />}
       <Effects fx={props.fx} snap={snap} buf={buf} />

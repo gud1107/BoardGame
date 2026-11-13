@@ -18,7 +18,7 @@ import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficul
 import { selfResult } from "@/games/shared/selfResult";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 import { DEFAULT_OPTIONS, MAX_PLAYERS, MIN_PLAYERS, resolveFirstSeeker, seekerCount, type GameOptions } from "./data";
-import { applyAct, applyPos, createHost, createMatch, hostStep, type Act, type HostRuntime, type PosReport } from "./sim";
+import { applyAct, applyPos, createHost, createMatch, hostStep, projectedPos, type Act, type HostRuntime, type PosReport } from "./sim";
 import { SnapBuffer, makeSnap, type Snap } from "./net";
 import type { FxItem } from "./three/World3D";
 import MorphBoard from "./MorphBoard";
@@ -329,9 +329,10 @@ export default function MorphHideGame({ onComplete }: PlayableGameProps) {
       for (const [seat, at] of leftAtRef.current) {
         if (Date.now() - at > LEAVE_GRACE_MS && rt.state.players[seat]) rt.state.players[seat].bot = true;
       }
-      if (now - lastSnap >= SNAP_MS) {
+      // 50ms 타이머가 조금만 빨리 와도 "100ms 안 됨"으로 한 번 건너뛰어 150ms 간격이 섞였다 — 여유를 둔다
+      if (now - lastSnap >= SNAP_MS - TICK_MS / 2) {
         lastSnap = now;
-        const s = makeSnap(rt.state, ++seqRef.current);
+        const s = makeSnap(rt.state, ++seqRef.current, (p) => projectedPos(rt, p));
         ingest(s);
         channelRef.current?.send({ type: "broadcast", event: "snap", payload: s });
       }
