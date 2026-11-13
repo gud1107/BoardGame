@@ -199,6 +199,7 @@ export type GameEvent = { id: number; at: number } & (
   | { k: "splash"; s: number; x: number; z: number }
   | { k: "spawn"; kind: ItemKind; x: number; z: number }
   | { k: "pick"; s: number; kind: ItemKind; x: number; z: number }
+  | { k: "expire"; kind: ItemKind; x: number; z: number }
   | { k: "warn"; sector: number; by: number[] }
   | { k: "thaw"; sector: number; broke: number }
   | { k: "vote"; s: number; sector: number }
@@ -984,6 +985,7 @@ function sink(s: MatchState, p: PlayerState, dt: number) {
 /* ── 아이템 ─────────────────────────────────────────────────────────── */
 
 function items(s: MatchState) {
+  for (const it of s.items) if (it.until <= s.t && tileSolid(s, it.tile)) emit(s, { k: "expire", kind: it.kind, x: it.x, z: it.z });
   s.items = s.items.filter((it) => it.until > s.t && tileSolid(s, it.tile));
   for (const p of s.players) {
     if (!p.alive || airborne(p) || s.items.length === 0) continue;

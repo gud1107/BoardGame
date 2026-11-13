@@ -397,7 +397,10 @@ export default function ThinIceBoard({ snap, buf, fresh, mySeat, names, onInput,
   const me = snap.players[mySeat];
   const fighting = snap.phase === "fight";
   const sound = getThinIceSound;
-  useSuiteBgm(sound, !ended && snap.phase !== "gameOver", snap.sudden ? 1 : 0);
+  const aliveNow = snap.players.filter((p) => p.alive).length;
+  // BGM 3단계: 서든데스 2 · 해빙 경보 중이거나 최후의 2인 1 · 평소 0
+  const bgmLevel = snap.phase !== "fight" ? 0 : snap.sudden ? 2 : snap.thaw || (snap.seatCount >= 3 && aliveNow === 2) ? 1 : 0;
+  useSuiteBgm(sound, !ended && snap.phase !== "gameOver", bgmLevel);
 
   const showBanner = useCallback((text: string, tone: Banner["tone"], sub?: string, ms = 1400) => {
     const id = ++bannerSeq.current;
@@ -416,8 +419,14 @@ export default function ThinIceBoard({ snap, buf, fresh, mySeat, names, onInput,
     (what: "jump" | "stomp") => {
       const p = snap.players[mySeat];
       if (!p || snap.phase !== "fight" || !p.alive) return;
-      if (what === "jump" && p.air === "none" && snap.t >= p.jumpCdAt - 150) sound().play("jump");
-      if (what === "stomp" && snap.t >= p.stompCdAt - 150) sound().play("stomp");
+      if (what === "jump") {
+        if (p.air === "none" && snap.t >= p.jumpCdAt - 150) sound().play("jump", 1);
+        else sound().play("denied");
+      }
+      if (what === "stomp") {
+        if (snap.t >= p.stompCdAt - 150 && p.air !== "stagger") sound().play("stomp");
+        else sound().play("denied");
+      }
     },
     [snap, mySeat, sound],
   );
@@ -444,6 +453,7 @@ export default function ThinIceBoard({ snap, buf, fresh, mySeat, names, onInput,
         case "slam":
           add.push({ ev, at: now });
           s.play("slam", ev.n);
+          if (ev.s !== mySeat && ev.n > 0 && mine?.alive && near(ev.x, ev.z, 2.7)) s.play("knocked");
           if (ev.s === mySeat || near(ev.x, ev.z, 3.5)) shared.current.shake = Math.max(shared.current.shake, ev.s === mySeat ? 0.45 : 0.3);
           if (ev.n > 0) pushFeed(
             <>
@@ -452,7 +462,15 @@ export default function ThinIceBoard({ snap, buf, fresh, mySeat, names, onInput,
           );
           break;
         case "land":
-          if (ev.s === mySeat) s.play("land");
+          if (ev.s === mySeat) s.play("land", 1);
+          else if (near(ev.x, ev.z, 6)) s.play("land", 0.45);
+          break;
+        case "jump":
+          // 내 점프는 누른 순간 이미 울렸다 — 가까운 남의 점프만
+          if (ev.s !== mySeat) {
+            const o = snap.players[ev.s];
+            if (o && near(o.x, o.z, 6)) s.play("jump", 0.4);
+          }
           break;
         case "stomp":
           if (ev.s !== mySeat && mine && near(snap.players[ev.s]?.x ?? 99, snap.players[ev.s]?.z ?? 99, 5)) s.play("stomp");
@@ -476,6 +494,7 @@ export default function ThinIceBoard({ snap, buf, fresh, mySeat, names, onInput,
             s.play("myOut");
             setMyOut({ by: ev.by });
             shared.current.shake = 1;
+            if (snap.options.ghosts) window.setTimeout(() => sound().play("ghost"), 1300);
           }
           pushFeed(
             ev.by >= 0 ? (
@@ -493,6 +512,10 @@ export default function ThinIceBoard({ snap, buf, fresh, mySeat, names, onInput,
         case "splash":
           add.push({ ev, at: now });
           s.play("splash");
+          if (ev.s === mySeat) window.setTimeout(() => sound().play("bubbles"), 450);
+          break;
+        case "expire":
+          s.play("expire");
           break;
         case "spawn":
           s.play("spawn");
@@ -549,6 +572,7 @@ export default function ThinIceBoard({ snap, buf, fresh, mySeat, names, onInput,
         case "round":
           setMyOut(null);
           setVote(-1);
+          s.play("roundStart");
           break;
         default:
           break;
@@ -585,6 +609,73 @@ export default function ThinIceBoard({ snap, buf, fresh, mySeat, names, onInput,
     if (d && !lastDanger.current) sound().play("danger");
     lastDanger.current = d;
   }, [underWarned, underDoomed, fighting, sound]);
+
+  // 발소리: 내 몸이 얼음 위를 0.9m 갈 때마다 (스케이트 날 긁는 소리)
+  const stepAcc = useRef<{ x: number; z: number; d: number; n: number } | null>(null);
+  useEffect(() => {
+    if (!me || !me.alive || !fighting || me.air !== "none") {
+      stepAcc.current = null;
+      return;
+    }
+    const a = stepAcc.current;
+    if (!a) {
+      stepAcc.current = { x: me.x, z: me.z, d: 0, n: 0 };
+      return;
+    }
+    const d = Math.hypot(me.x - a.x, me.z - a.z);
+    a.x = me.x;
+    a.z = me.z;
+    if (d > 3) return; // 순간이동(라운드 시작)
+    a.d += d;
+    if (a.d >= 0.9) {
+      a.d = 0;
+      a.n += 1;
+      sound().play("step", a.n);
+    }
+  }, [me, fighting, sound]);
+
+  // 금 2단계 얼음 위에 서 있으면 삐걱삐걱 (경고 글자와 함께)
+  useEffect(() => {
+    if (!fighting || crackLvl !== 2 || !me?.alive) return;
+    sound().play("creak");
+    const id = window.setInterval(() => sound().play("creak"), 650);
+    return () => window.clearInterval(id);
+  }, [crackLvl, fighting, me?.alive, sound]);
+
+  // 해빙 3·2·1 똑딱
+  const thawSec = snap.thaw && fighting ? Math.ceil(Math.max(0, snap.thaw.at - snap.t) / 1000) : 0;
+  const lastThawSec = useRef(0);
+  useEffect(() => {
+    if (thawSec > 0 && thawSec <= 3 && thawSec !== lastThawSec.current) sound().play("thawTick", thawSec);
+    lastThawSec.current = thawSec;
+  }, [thawSec, sound]);
+
+  // 내려찍기 다시 쓸 수 있게 되면 띵
+  const stompReady = !!me?.alive && fighting && snap.t >= (me?.stompCdAt ?? 0);
+  const lastReady = useRef(true);
+  useEffect(() => {
+    if (stompReady && !lastReady.current) sound().play("ready");
+    lastReady.current = stompReady;
+  }, [stompReady, sound]);
+
+  // 내가 고른 유령 표
+  const lastVote = useRef(-1);
+  useEffect(() => {
+    if (controls.myVote >= 0 && controls.myVote !== lastVote.current) sound().play("vote");
+    lastVote.current = controls.myVote;
+  }, [controls.myVote, sound]);
+
+  // 최후의 2인 (3명 이상 판)
+  const lastAlive = useRef(snap.seatCount);
+  useEffect(() => {
+    if (fighting && snap.seatCount >= 3 && aliveNow === 2 && lastAlive.current > 2) {
+      sound().play("finalTwo");
+      showBanner("⚔️ 최후의 2인!", "warn", "마지막까지 버티는 사람이 1등", 1500);
+    }
+    lastAlive.current = fighting ? aliveNow : snap.seatCount;
+  }, [aliveNow, fighting, snap.seatCount, sound, showBanner]);
+
+  const uiClick = useCallback(() => sound().play("ui"), [sound]);
 
   // 전체화면
   const [full, setFull] = useState(false);
@@ -633,10 +724,10 @@ export default function ThinIceBoard({ snap, buf, fresh, mySeat, names, onInput,
           생존 <b className="text-white light:text-slate-900">{alive}</b>/{snap.seatCount}
         </span>
         <span className="flex items-center gap-1.5">
-          <button type="button" onClick={() => setRulebook(true)} className="rounded-full border border-white/15 px-2.5 py-1 light:border-slate-300">
+          <button type="button" onClick={() => { uiClick(); setRulebook(true); }} className="rounded-full border border-white/15 px-2.5 py-1 light:border-slate-300">
             📖 룰북
           </button>
-          <button type="button" onClick={() => setSettings((v) => !v)} className="rounded-full border border-white/15 px-2.5 py-1 light:border-slate-300" aria-expanded={settings} aria-label="보기 설정">
+          <button type="button" onClick={() => { uiClick(); setSettings((v) => !v); }} className="rounded-full border border-white/15 px-2.5 py-1 light:border-slate-300" aria-expanded={settings} aria-label="보기 설정">
             ⚙️
           </button>
         </span>
@@ -650,6 +741,7 @@ export default function ThinIceBoard({ snap, buf, fresh, mySeat, names, onInput,
               type="button"
               disabled={m === "3d" && !canGl}
               onClick={() => {
+                uiClick();
                 const v = { ...view, mode: m };
                 setView(v);
                 saveView(v);
@@ -665,6 +757,7 @@ export default function ThinIceBoard({ snap, buf, fresh, mySeat, names, onInput,
               key={q}
               type="button"
               onClick={() => {
+                uiClick();
                 const v = { ...view, quality: q };
                 setView(v);
                 saveView(v);
@@ -824,7 +917,7 @@ export default function ThinIceBoard({ snap, buf, fresh, mySeat, names, onInput,
         {notice && <div className="absolute inset-x-0 top-12 z-30 mx-auto w-fit rounded-full bg-amber-500/90 px-3 py-1 text-xs font-bold text-slate-900">{notice}</div>}
 
         {/* 전체화면 */}
-        <button type="button" onClick={toggleFull} className="absolute top-2 left-2 z-30 rounded-full bg-black/45 px-2.5 py-1 text-xs text-white" aria-label={full ? "전체화면 끄기" : "전체화면"}>
+        <button type="button" onClick={() => { uiClick(); toggleFull(); }} className="absolute top-2 left-2 z-30 rounded-full bg-black/45 px-2.5 py-1 text-xs text-white" aria-label={full ? "전체화면 끄기" : "전체화면"}>
           {full ? "↙ 작게" : "⛶ 크게"}
         </button>
 

@@ -64,7 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
-    version: "v1.169.0",
+    version: "v1.169.2",
+    releaseDate: "2026-11-14",
+    title: "🔊 살얼음 파티 — 모든 동작 효과음 · 3단계 BGM",
+    changes: [
+      { game: "thin-ice-party", type: "IMPROVE", desc: "🔊 얼음 위 발소리·삐걱임, 밀쳐짐·해빙 3·2·1·내려찍기 준비·아이템 사라짐·투표·최후의 2인까지 효과음 · 🎵 BGM이 경보·서든데스에 따라 3단계로" },
+    ],
+  },
+  {
+    version: "v1.169.1",
     releaseDate: "2026-11-14",
     title: "🦎 변신 숨바꼭질 — 더 선명하고 자연스러운 화면",
     changes: [
