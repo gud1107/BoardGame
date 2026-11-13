@@ -64,6 +64,18 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.166.0",
+    releaseDate: "2026-11-13",
+    title: "🎬 유튜브처럼 보는 룰 설명 영상",
+    changes: [
+      { game: "common", type: "FEAT", desc: "🎬 방 만들기 화면에 '영상' 탭 — 자막·내레이션·챕터·배속·전체화면이 있는 룰 설명 영상, 30초 룰북이 있는 모든 게임" },
+      { game: "dalmuti", type: "FEAT", desc: "🎬 애니메이션 룰 영상 — 실제 카드로 보는 계급·세금·혁명·카드 내기 예시" },
+      { game: "coyote", type: "FEAT", desc: "🎬 애니메이션 룰 영상 — 이마 카드·선언·코요테 판정·특수 카드 계산 순서 예시" },
+      { game: "perudo", type: "FEAT", desc: "🎬 애니메이션 룰 영상 — 컵·와일드 1·선언·페루도!/맞아! 차등 페널티 예시" },
+      { game: "no-thanks", type: "FEAT", desc: "🎬 애니메이션 룰 영상 — 거절·인수·연속 숫자 보너스·점수 계산 예시" },
+    ],
+  },
+  {
     version: "v1.165.0",
     releaseDate: "2026-11-13",
     title: "🧍 더 많은 게임에 내 3D 캐릭터",

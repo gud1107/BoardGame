@@ -5,6 +5,7 @@ import RulebookSummaryCard from "./RulebookSummaryCard";
 import PublicRoomBrowser from "./PublicRoomBrowser";
 import { useActiveRooms } from "@/games/shared/room/useActiveRooms";
 import RoomListingSettings from "./RoomListingSettings";
+import ExplainerLauncher from "@/components/explainer/ExplainerLauncher";
 
 /**
  * Wraps a game's room-creation "choose" screen (방만들기/참여하기 선택
@@ -46,7 +47,7 @@ export default function RulebookGate({
    */
   containerClassName?: string;
 }) {
-  const [tab, setTab] = useState<"settings" | "rulebook">("settings");
+  const [tab, setTab] = useState<"settings" | "rulebook" | "video">("settings");
   const [mobileRulebookOpen, setMobileRulebookOpen] = useState(false);
   const rooms = useActiveRooms();
 
@@ -78,12 +79,25 @@ export default function RulebookGate({
           >
             📖 룰북 / 게임 규칙
           </button>
+          <button
+            type="button"
+            onClick={() => setTab("video")}
+            aria-pressed={tab === "video"}
+            className={`flex-1 rounded-full px-3 py-1.5 text-xs font-semibold break-keep transition ${
+              tab === "video" ? "bg-red-600 text-white" : "text-white/50 hover:text-white/80 light:text-slate-500 light:hover:text-slate-800"
+            }`}
+          >
+            🎬 영상
+          </button>
         </div>
-        <div className="w-full">{tab === "settings" ? description : <RulebookSummaryCard gameId={gameId} />}</div>
+        <div className="w-full">
+          {tab === "settings" ? description : tab === "rulebook" ? <RulebookSummaryCard gameId={gameId} /> : <ExplainerLauncher gameId={gameId} />}
+        </div>
       </div>
 
       {/* Mobile: settings form always visible, rulebook collapses above it */}
       <div className="flex w-full flex-col items-center gap-3 md:hidden">
+        <ExplainerLauncher gameId={gameId} compact />
         <button
           type="button"
           onClick={() => setMobileRulebookOpen((o) => !o)}
