@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.169.0",
+    releaseDate: "2026-11-14",
+    title: "🧊 새 게임 살얼음 파티",
+    changes: [
+      { game: "thin-ice-party", type: "FEAT", desc: "🧊 새 게임 — 오래 서 있으면 금이 가는 호수 얼음판에서 끝까지 버티는 2~6인 실시간 3D 서바이벌 · 혼자 연습·AI 봇 Lv.1~10" },
+      { game: "thin-ice-party", type: "FEAT", desc: "⤴ 점프로 구멍 건너기 · 💥 내려찍기로 얼음 깨며 밀쳐내기 · ☀️ 3초 예고 해빙 경보 · ⚠️ 60초 서든데스" },
+      { game: "thin-ice-party", type: "FEAT", desc: "👻 빠지면 유령이 되어 다음에 녹일 구역 투표 · ❄️🥾🐟 아이템 · 꼴찌 아이젠 · 방장이 나가도 판이 이어져요" },
+    ],
+  },
+  {
     version: "v1.168.0",
     releaseDate: "2026-11-14",
     title: "👮 변신 숨바꼭질 — 진짜 순경 같은 점검원",

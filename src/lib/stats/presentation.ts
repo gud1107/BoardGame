@@ -112,6 +112,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "체크", key: "checks", unit: "번" },
     { label: "승진", key: "promotions", unit: "번" },
   ],
+  "thin-ice-party": [
+    { label: "KO", key: "kos", unit: "번" },
+    { label: "라운드 1등", key: "roundWins", unit: "번" },
+    { label: "최장 버티기", key: "maxSurviveSec", unit: "초" },
+    { label: "최고 점수", key: "maxScore", unit: "점" },
+  ],
   curling: [
     { label: "🎯 버튼", key: "buttons", unit: "번" },
     { label: "테이크아웃", key: "takeouts", unit: "개" },
@@ -313,6 +319,10 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "chs-mates", label: "체크메이트 승", num: "mateWins", format: "count", unit: "번" },
     { id: "chs-captures", label: "잡은 기물", num: "captures", format: "count", unit: "개" },
     { id: "chs-quick", label: "번개 메이트", num: "quickMates", format: "count", unit: "번" },
+  ],
+  "thin-ice-party": [
+    { id: "ti-kos", label: "💥 KO", num: "kos", format: "count", unit: "번" },
+    { id: "ti-wins", label: "🏆 라운드 1등", num: "roundWins", format: "count", unit: "번" },
   ],
   curling: [
     { id: "crl-buttons", label: "🎯 버튼", num: "buttons", format: "count", unit: "번" },

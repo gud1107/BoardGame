@@ -156,6 +156,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "thin-ice-party",
+    name: "살얼음 파티",
+    nameEn: "Thin Ice Party",
+    description:
+      "얼어붙은 호수 위, 오래 서 있으면 금이 가는 육각 얼음판에서 마지막까지 물에 빠지지 않고 버티는 2~6인 실시간 3D 서바이벌! 계속 움직이며 ⤴ 점프로 구멍을 건너고, 💥 내려찍기로 주변 얼음을 깨며 상대를 밀쳐내요. ☀️ 해빙 경보가 뜬 구역은 3초 뒤 녹고, 60초부터는 바깥 고리부터 무너져요. ❄️ 냉기·🥾 아이젠·🐟 물고기 아이템, 먼저 빠진 사람은 👻 유령이 되어 다음에 녹일 구역을 투표해요. 1/3/5라운드, 혼자 연습·AI 봇 Lv.1~10.",
+    players: { min: 2, max: 6 },
+    playTime: { minMinutes: 2, maxMinutes: 10 },
+    category: "party",
+    thumbnail: { emoji: "🧊", gradient: ["#7dd3fc", "#0b2540"] },
+    tags: ["얼음", "서바이벌", "발판", "실시간", "액션", "파티", "3D", "AI봇"],
+    genres: ["party", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "alkkagi",
     name: "알까기 대전",
     nameEn: "Alkkagi Battle",

@@ -17,6 +17,7 @@ export const POSTER_TAGLINES: Partial<Record<GameId, string>> = {
   "god-life-planner": "일주일 갓생, 누가 먼저 완성할까",
   chess: "64칸 위의 영원한 전쟁",
   curling: "던지고! 쓸고! 소리 질러!",
+  "thin-ice-party": "오래 서 있으면 쩍— 첨벙!",
   alkkagi: "튕겨라, 떨어뜨려라, 딱!",
   "bowling-mayhem": "스트라이크냐, 거터냐, 고깔이냐!",
   "island-pioneers": "한 장씩 이어 붙여라, 섬은 함께 자라고 땅은 내 것!",

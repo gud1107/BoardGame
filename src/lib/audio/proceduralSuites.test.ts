@@ -59,8 +59,9 @@ describe("game sound suites", () => {
     // + curling (컬링 파티) + chess (체스) + god-life planner (갓생 플래너) + qplay (큐플레이)
     // + hide-and-seek (한밤의 숨바꼭질) + bowling mayhem (볼링 난장판) + lantern keepers (등불 지기)
     // + time loop heist (시간 루프 도둑단) + mini golf (미니골프 파티)
-    // + cargo stack (화물선 쌓기) + island pioneers (섬 개척자) + fog manor (안개 저택 살인사건).
-    expect(suites.length).toBe(46);
+    // + cargo stack (화물선 쌓기) + island pioneers (섬 개척자) + fog manor (안개 저택 살인사건)
+    // + thin ice party (살얼음 파티).
+    expect(suites.length).toBe(47);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

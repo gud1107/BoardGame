@@ -89,6 +89,14 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "캐슬링 / 앙파상", value: (d) => `${n(d.castles)} / ${n(d.enPassants)}` },
     { label: "승진 (언더프로모션)", value: (d) => `${n(d.promotions)} (${n(d.underPromotions)})` },
   ],
+  "thin-ice-party": [
+    { label: "💥 KO / 🌊 빠짐 (혼자)", value: (d) => `${n(d.kos)} / ${n(d.falls)} (${n(d.selfFalls)})` },
+    { label: "🏆 라운드 1등 / 3등 안", value: (d) => `${n(d.roundWins)} / ${n(d.podiums)}` },
+    { label: "⏱ 버틴 시간 합 · 한 라운드 최장", value: (d) => `${n(d.surviveSec)}초 · ${n(d.maxSurviveSec)}초` },
+    { label: "💥 내려찍기 / 밀친 사람 / 깬 얼음", value: (d) => `${n(d.stomps)} / ${n(d.stompHits)} / ${n(d.tilesBroken)}` },
+    { label: "🎁 아이템 (🐟 물고기 · ❄️ 냉기)", value: (d) => `${n(d.items)} (${n(d.fish)} · ${n(d.frosts)})` },
+    { label: "👻 내 표로 정한 해빙 / 그때 빠진 사람", value: (d) => `${n(d.votes)} / ${n(d.voteHits)}` },
+  ],
   curling: [
     { label: "투구 / 🎯 버튼", value: (d) => `${n(d.throws)} / ${n(d.buttons)}` },
     { label: "테이크아웃 (더블 이상)", value: (d) => `${n(d.takeouts)}개 (${n(d.doubles)})` },
