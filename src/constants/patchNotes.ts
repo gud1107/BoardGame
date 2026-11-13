@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.168.0",
+    releaseDate: "2026-11-14",
+    title: "👮 변신 숨바꼭질 — 진짜 순경 같은 점검원",
+    changes: [
+      { game: "morph-hide", type: "IMPROVE", desc: "👮 점검원(과 '술래인 척' 변신)이 실제 지구대 순경 차림으로 — 형광 반사 조끼(등판 POLICE·가슴 경찰), 흉장·명찰·견장, 어깨 무전기, 권총집·경찰봉 근무벨트, 광 나는 구두" },
+      { game: "morph-hide", type: "IMPROVE", desc: "🔦 팔꿈치가 굽는 자연스러운 몸짓 — 무전할 땐 어깨 무전기를 잡고, 손전등엔 희미한 빛줄기" },
+    ],
+  },
+  {
     version: "v1.167.0",
     releaseDate: "2026-11-14",
     title: "🎬 룰 영상, 유튜브처럼 배속·고화질",
