@@ -664,9 +664,60 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
                   )}
                   {menu === "speed" && (
                     <>
-                      <SubHeader title="재생 속도" onBack={() => setMenu("main")} />
+                      <SubHeader title={narrow ? `재생 속도 · ${speed.toFixed(2)}×` : "재생 속도"} onBack={() => setMenu("main")} />
+                      {narrow ? (
+                        <>
+                      <div className={`border-t border-white/10 ${narrow ? "grid grid-cols-4 gap-1 p-2" : "pt-1"}`}>
+                        {SPEED_PRESETS.map((s) => {
+                          const on = Math.abs(s - speed) < 1e-6;
+                          return narrow ? (
+                            <button
+                              key={s}
+                              type="button"
+                              onClick={() => setRate(s)}
+                              className={`rounded-md py-1.5 text-xs font-bold ${on ? "bg-red-600 text-white" : "bg-white/10"}`}
+                            >
+                              {s === 1 ? "1×" : `${s}×`}
+                            </button>
+                          ) : (
+                            <button
+                              key={s}
+                              type="button"
+                              onClick={() => setRate(s)}
+                              className={`flex w-full items-center gap-2 px-4 py-1.5 text-left hover:bg-white/10 ${on ? "font-bold text-red-400" : ""}`}
+                            >
+                              <span className="w-4">{on ? "✓" : ""}</span>
+                              {speedLabel(s)}
+                            </button>
+                          );
+                        })}
+                      </div>
                       <div className="px-4 pt-1 pb-2">
-                        <div className="mb-1 text-center text-base font-black tabular-nums">{speed.toFixed(2)}×</div>
+                        {!narrow && <div className="mb-1 text-center text-base font-black tabular-nums">{speed.toFixed(2)}×</div>}
+                        <div className="flex items-center gap-2">
+                          <button type="button" aria-label="느리게" className="h-7 w-7 rounded-full bg-white/10 font-bold" onClick={() => setRate(speed - 0.05, false)}>
+                            −
+                          </button>
+                          <input
+                            type="range"
+                            aria-label="재생 속도 직접 조절"
+                            min={MIN_SPEED}
+                            max={MAX_SPEED}
+                            step={0.05}
+                            value={speed}
+                            onChange={(e) => setRate(Number(e.target.value), false)}
+                            className="flex-1 accent-red-600"
+                          />
+                          <button type="button" aria-label="빠르게" className="h-7 w-7 rounded-full bg-white/10 font-bold" onClick={() => setRate(speed + 0.05, false)}>
+                            +
+                          </button>
+                        </div>
+                      </div>
+                        </>
+                      ) : (
+                        <>
+                      <div className="px-4 pt-1 pb-2">
+                        {!narrow && <div className="mb-1 text-center text-base font-black tabular-nums">{speed.toFixed(2)}×</div>}
                         <div className="flex items-center gap-2">
                           <button type="button" aria-label="느리게" className="h-7 w-7 rounded-full bg-white/10 font-bold" onClick={() => setRate(speed - 0.05, false)}>
                             −
@@ -711,6 +762,8 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
                           );
                         })}
                       </div>
+                        </>
+                      )}
                     </>
                   )}
                   {menu === "quality" && (
