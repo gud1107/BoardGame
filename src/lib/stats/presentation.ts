@@ -148,6 +148,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "자원", key: "resourcesTotal", unit: "개" },
     { label: "최종 점수", key: "maxScore", unit: "점" },
   ],
+  "hundred-tales": [
+    { label: "들려준 괴담", key: "told", unit: "개" },
+    { label: "한 번에 최고", key: "maxStory", unit: "점" },
+    { label: "씌임", key: "busts", unit: "번" },
+    { label: "최종 점수", key: "maxScore", unit: "점" },
+  ],
   "mini-golf": [
     { label: "홀인원", key: "holeInOnes", unit: "번" },
     { label: "버디", key: "birdies", unit: "번" },
@@ -346,6 +352,10 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
   "island-pioneers": [
     { id: "ip-regions", label: "🚩 완성 지역", num: "regionsCompleted", format: "count", unit: "개" },
     { id: "ip-quests", label: "📜 먼저 이룬 의뢰", num: "questsFirst", format: "count", unit: "개" },
+  ],
+  "hundred-tales": [
+    { id: "ht-told", label: "🕯️ 들려준 괴담", num: "told", format: "count", unit: "개" },
+    { id: "ht-best", label: "😨 최고 점수", num: "maxScore", format: "count", unit: "점" },
   ],
   "mini-golf": [
     { id: "mg-hio", label: "⛳ 홀인원", num: "holeInOnes", format: "count", unit: "번" },

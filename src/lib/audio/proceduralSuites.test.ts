@@ -61,7 +61,8 @@ describe("game sound suites", () => {
     // + time loop heist (시간 루프 도둑단) + mini golf (미니골프 파티)
     // + cargo stack (화물선 쌓기) + island pioneers (섬 개척자) + fog manor (안개 저택 살인사건)
     // + thin ice party (살얼음 파티).
-    expect(suites.length).toBe(47);
+    // + hundred tales (백 개의 괴담).
+    expect(suites.length).toBe(48);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

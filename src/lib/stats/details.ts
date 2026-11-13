@@ -135,6 +135,14 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "🎒 자원 / 4종 세트", value: (d) => `${n(d.resourcesTotal)} / ${n(d.sets)}` },
     { label: "🧱 놓은 타일 / 세운 개척자", value: (d) => `${n(d.tilesPlaced)} / ${n(d.settlersPlaced)}` },
   ],
+  "hundred-tales": [
+    { label: "🕯️ 들려준 괴담 / 끈 촛불", value: (d) => `${n(d.told)} / ${n(d.snuffed)}` },
+    { label: "📜 모은 이야기 / 모은 점수", value: (d) => `${n(d.stories)} / ${n(d.banked)}` },
+    { label: "😨 한 번에 최고 · 최대 장수", value: (d) => `${n(d.maxStory)}점 · ${n(d.maxChain)}장` },
+    { label: "😱 씌임 / 날린 점수", value: (d) => `${n(d.busts)} / ${n(d.lostToBust)}` },
+    { label: "👻 다섯 귀신 · 💀 저주", value: (d) => `${n(d.perfects)} · ${n(d.curses)}` },
+    { label: "🧂 부적으로 버팀 / 🕯️ 새 초 / 🪞 거울", value: (d) => `${n(d.saltSaves)} / ${n(d.relit)} / ${n(d.mirrors)}` },
+  ],
   "mini-golf": [
     { label: "⛳ 홀인원 / 이글 / 버디", value: (d) => `${n(d.holeInOnes)} / ${n(d.eagles)} / ${n(d.birdies)}` },
     { label: "파 / 보기 이상", value: (d) => `${n(d.pars)} / ${n(d.bogeys)}` },

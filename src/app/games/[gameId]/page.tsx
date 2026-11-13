@@ -336,7 +336,7 @@ export default function GamePlayPage() {
   const pageMaxWidth =
     game.id === "hungry-shark" || game.id === "prism-five" || game.id === "thin-ice-party"
       ? "max-w-6xl"
-      : game.id === "doodle-phone" || game.id === "liar-game" || game.id === "word-tower" || game.id === "qplay" || game.id === "wobble-tower" || game.id === "alkkagi" || game.id === "curling" || game.id === "bowling-mayhem" || game.id === "mini-golf" || game.id === "cargo-stack" || game.id === "island-pioneers"
+      : game.id === "doodle-phone" || game.id === "liar-game" || game.id === "word-tower" || game.id === "qplay" || game.id === "wobble-tower" || game.id === "alkkagi" || game.id === "curling" || game.id === "bowling-mayhem" || game.id === "mini-golf" || game.id === "cargo-stack" || game.id === "hundred-tales" || game.id === "island-pioneers"
       ? "max-w-3xl"
       : game.id === "lotr-duel"
       ? "max-w-[96rem]"

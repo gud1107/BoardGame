@@ -257,6 +257,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "hundred-tales",
+    name: "백 개의 괴담",
+    nameEn: "Hundred Tales",
+    description:
+      "촛불 100개를 켜 놓고 둘러앉아 돌아가며 괴담을 들려주는 2~6인 3D 눈치 게임! 이야기 하나마다 공포만큼 촛불이 꺼지고 그만큼 점수가 쌓여요 — 촛불은 모두가 나눠 먹는 파이. 더 할까, 멈출까? 같은 귀신(👻👹🦊💀🥚)을 한 차례에 두 번 부르면 씌어서 모은 이야기가 날아가요. 🧂 소금 부적·🕯️ 새 초·🪞 거울 카드, 다섯 귀신 보너스, 그리고 마지막 촛불을 끈 사람에겐 백 번째 이야기의 저주(점수 절반). 촛불이 꺼질수록 방이 어두워져요. AI 봇 Lv.1~10.",
+    players: { min: 2, max: 6 },
+    playTime: { minMinutes: 6, maxMinutes: 15 },
+    category: "card",
+    thumbnail: { emoji: "🕯️", gradient: ["#7f1d1d", "#0c0a09"] },
+    tags: ["공포", "괴담", "푸시유어럭", "눈치", "카드", "파티", "3D", "AI봇"],
+    genres: ["luck", "party"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "wobble-tower",
     name: "와르르 타워",
     nameEn: "Wobble Tower",

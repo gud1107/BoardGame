@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.171.0",
+    releaseDate: "2026-11-14",
+    title: "🕯️ 새 게임 백 개의 괴담",
+    changes: [
+      { game: "hundred-tales", type: "FEAT", desc: "🕯️ 새 게임 — 촛불 100개를 켜 놓고 돌아가며 괴담을 들려주는 2~6인 3D 눈치 게임 · 촛불이 꺼질수록 방이 어두워져요 · AI 봇 Lv.1~10" },
+      { game: "hundred-tales", type: "FEAT", desc: "😱 같은 귀신을 두 번 부르면 씌어서 이야기가 날아가요 · 🧂 소금 부적 · 🕯️ 새 초 · 🪞 거울 · 👻 다섯 귀신 보너스" },
+      { game: "hundred-tales", type: "FEAT", desc: "💀 마지막 촛불을 끈 사람은 백 번째 이야기의 저주 · 자장가 BGM과 모든 행동 효과음 · 🔰 씌일 확률 도우미" },
+    ],
+  },
+  {
     version: "v1.170.0",
     releaseDate: "2026-11-14",
     title: "🦎 변신 숨바꼭질 — 끊김 없이 부드러운 움직임",
