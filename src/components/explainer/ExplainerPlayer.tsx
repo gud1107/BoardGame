@@ -319,8 +319,9 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
     <div className="flex w-full flex-col gap-3 lg:flex-row lg:items-start">
       <div
         ref={shellRef}
-        className={`group relative overflow-hidden bg-black select-none ${
-          cssFull ? "fixed inset-0 z-[300] flex items-center justify-center" : `w-full lg:flex-1 ${isFull ? "flex items-center" : narrow && captions ? "rounded-t-xl" : "rounded-xl"}`
+        className={`group overflow-hidden bg-black select-none ${
+          // never combine with `relative` — Tailwind's `relative` comes later in the CSS and wins over `fixed`
+          cssFull ? "fixed inset-0 z-[300] flex items-center justify-center" : `relative w-full lg:flex-1 ${isFull ? "flex items-center" : narrow && captions ? "rounded-t-xl" : "rounded-xl"}`
         }`}
         onPointerMove={poke}
         style={{ cursor: chrome ? undefined : "none" }}
