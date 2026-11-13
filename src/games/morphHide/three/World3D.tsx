@@ -5,7 +5,7 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber"
 import * as THREE from "three";
 import ScreenSprite from "@/games/shared/three/ScreenSprite";
 import { AdaptiveResolution, BlobShadow, PostFx, StudioEnvironment } from "@/games/shared/three/sceneFx";
-import { DUSK, ShadowSetup, Sky, SunLight, surfaceTexture, type SurfaceKind } from "./Atmosphere";
+import { DUSK, ShadowSetup, Sky, SunLight, SURFACE_BUMP, surfaceTexture, type SurfaceKind } from "./Atmosphere";
 import { labelTexture } from "@/games/shared/three/tableKit";
 import { BASE, CHEST_SLOTS, DOORS, FIXED_THINGS, FLOOR, GOAL_SLOTS, LADDER, ROAD, ROOMS, STATIC_SOLIDS, WINDOWS, slotY, type PlacedThing } from "../map";
 import { EMOTES, KKOM_CAMP_R, RUN_MULT, disguise, poseOf, weaponSchedule } from "../data";
@@ -186,7 +186,7 @@ function Plane({ x0, x1, z0, z1, y = 0.005, color, surface, tile = 3 }: { x0: nu
   return (
     <mesh rotation-x={-Math.PI / 2} position={[(x0 + x1) / 2, y, (z0 + z1) / 2]}>
       <planeGeometry args={[x1 - x0, z1 - z0]} />
-      <meshStandardMaterial color={map ? "#ffffff" : color} map={map} roughness={surface === "tile" ? 0.45 : surface === "wood" ? 0.6 : 0.95} />
+      <meshStandardMaterial color={map ? "#ffffff" : color} map={map} bumpMap={map} bumpScale={surface ? SURFACE_BUMP[surface] : 0} roughness={surface === "tile" ? 0.45 : surface === "wood" ? 0.6 : 0.95} />
     </mesh>
   );
 }
@@ -1135,8 +1135,10 @@ function Scene(props: World3DProps) {
       {me && <LocalPlayer key={`${me.role}:${me.dg}`} {...props} gridRef={gridRef} />}
       <Effects fx={props.fx} snap={snap} buf={buf} />
       {me?.role === "seeker" && <AugMarks snap={snap} buf={buf} />}
-      <AdaptiveResolution max={props.lowDetail ? 1.25 : 1.75} />
-      {!props.lowDetail && <PostFx bloom={0.42} ao={false} />}
+      {/* 선명도: 기기 화소 그대로(PC 2배·폰 1.5배)까지 — 프레임이 떨어지면 AdaptiveResolution이 낮춘다 */}
+      <AdaptiveResolution max={props.lowDetail ? 1.5 : 2} />
+      {/* 접촉 그늘(AO)로 물건이 바닥에 붙어 보이게 — 40fps 아래면 PostFx가 스스로 끈다 */}
+      {!props.lowDetail && <PostFx bloom={0.42} ao />}
       </FigCtx.Provider>
     </>
   );
@@ -1144,7 +1146,7 @@ function Scene(props: World3DProps) {
 
 export default function World3D(props: World3DProps) {
   return (
-    <Canvas shadows={props.lowDetail ? false : "soft"} dpr={props.lowDetail ? [1, 1.25] : [1, 1.75]} gl={{ antialias: !props.lowDetail, powerPreference: "high-performance" }} camera={{ fov: 62, position: [9, 4, 14], near: 0.08, far: 160 }} style={{ touchAction: "none" }}>
+    <Canvas shadows={props.lowDetail ? false : "soft"} dpr={props.lowDetail ? [1, 1.5] : [1, 2]} gl={{ antialias: true, powerPreference: "high-performance" }} camera={{ fov: 62, position: [9, 4, 14], near: 0.08, far: 160 }} style={{ touchAction: "none" }}>
       <Scene {...props} />
     </Canvas>
   );

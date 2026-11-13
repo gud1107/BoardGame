@@ -66,6 +66,16 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.169.0",
     releaseDate: "2026-11-14",
+    title: "🦎 변신 숨바꼭질 — 더 선명하고 자연스러운 화면",
+    changes: [
+      { game: "morph-hide", type: "IMPROVE", desc: "🔍 더 선명하게 — PC는 기기 화소 그대로(최대 2배), 폰도 1.5배 + 계단 현상 없애기(안티에일리어싱) · 프레임이 떨어지면 자동으로 낮춰요" },
+      { game: "morph-hide", type: "IMPROVE", desc: "🌿 바닥 질감 2배 해상도 — 풀잎·자갈·아스팔트 잔금·나뭇결·보도블록 줄눈, 비스듬히 봐도 흐려지지 않고 노을빛에 결이 살아나요" },
+      { game: "morph-hide", type: "IMPROVE", desc: "🌅 노을 하늘 색 띠 없이 부드럽게 · PC는 물건과 바닥이 맞닿는 곳에 은은한 그늘(AO)" },
+    ],
+  },
+  {
+    version: "v1.169.0",
+    releaseDate: "2026-11-14",
     title: "🧊 새 게임 살얼음 파티",
     changes: [
       { game: "thin-ice-party", type: "FEAT", desc: "🧊 새 게임 — 오래 서 있으면 금이 가는 호수 얼음판에서 끝까지 버티는 2~6인 실시간 3D 서바이벌 · 혼자 연습·AI 봇 Lv.1~10" },
