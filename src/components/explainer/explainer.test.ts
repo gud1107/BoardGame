@@ -117,3 +117,33 @@ describe("cue boundaries", () => {
     }
   });
 });
+
+describe("cinema", () => {
+  it("steps through YouTube's speed presets and clamps custom speeds", async () => {
+    const { stepSpeed, clampSpeed, speedLabel } = await import("./cinema");
+    expect(stepSpeed(1, 1)).toBe(1.25);
+    expect(stepSpeed(1, -1)).toBe(0.75);
+    expect(stepSpeed(2, 1)).toBe(2);
+    expect(stepSpeed(0.25, -1)).toBe(0.25);
+    expect(stepSpeed(1.1, 1)).toBe(1.25);
+    expect(clampSpeed(5)).toBe(2);
+    expect(clampSpeed(0.1)).toBe(0.25);
+    expect(clampSpeed(1.2345)).toBe(1.23);
+    expect(speedLabel(1)).toBe("보통");
+    expect(speedLabel(1.5)).toBe("1.5×");
+  });
+
+  it("crossfades inside a chapter, iris-wipes between chapters, and ends cleanly", async () => {
+    const { transitionAt, cameraAt } = await import("./cinema");
+    const tl = buildTimeline(getExplainerScript("coyote")!);
+    expect(transitionAt(tl, 0, 0)).toBeNull();
+    for (let i = 1; i < tl.scenes.length; i++) {
+      const kind = tl.scenes[i].chapterIndex !== tl.scenes[i - 1].chapterIndex ? "iris" : "fade";
+      expect(transitionAt(tl, i, 0)).toMatchObject({ from: i - 1, p: 0, kind });
+      expect(transitionAt(tl, i, 1)).toBeNull();
+    }
+    const cam = cameraAt(3, 100, 100);
+    expect(cam.scale).toBeLessThanOrEqual(1.025 + 1e-9);
+    expect(Math.abs(cam.x)).toBeLessThanOrEqual(14);
+  });
+});

@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.167.0",
+    releaseDate: "2026-11-14",
+    title: "🎬 룰 영상, 유튜브처럼 배속·고화질",
+    changes: [
+      { game: "common", type: "IMPROVE", desc: "⏩ 룰 영상 배속 — ⚙ 설정에서 0.25~2배 + 슬라이더로 0.05 단위 조절, 화면 길게 누르면 그동안만 2배속, Shift+>/< 단축키 · 고른 배속 기억" },
+      { game: "common", type: "IMPROVE", desc: "🎞️ 룰 영상 고화질 연출 — 장면 사이 부드러운 전환, 챕터가 바뀔 땐 원형 와이프, 느린 카메라 무빙, 은은한 빛 입자 · 잔잔한 배경음악(내레이션 땐 작아져요) · 저사양 폰은 '가볍게' 화질로" },
+    ],
+  },
+  {
     version: "v1.166.0",
     releaseDate: "2026-11-13",
     title: "🎬 유튜브처럼 보는 룰 설명 영상",

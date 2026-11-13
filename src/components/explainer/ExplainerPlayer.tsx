@@ -5,10 +5,43 @@ import type { ExplainerScript } from "./types";
 import { buildTimeline, chapterAt, formatTime, locate } from "./timeline";
 import { isSpeaking, speak, speechSupported, stopSpeech, unlockSpeech } from "./narration";
 import { STAGE_H, STAGE_W } from "./stage";
+import { cameraAt, clampSpeed, MAX_SPEED, MIN_SPEED, moteAt, SPEED_PRESETS, speedLabel, stepSpeed, transitionAt } from "./cinema";
+import { stopMusic, unlockMusic, updateMusic, whoosh } from "./explainerAudio";
 
-const SPEEDS = [0.75, 1, 1.25, 1.5, 2] as const;
 /** Longest the clock waits at a cue boundary for slow TTS to finish (real seconds). */
 const MAX_HOLD = 3.5;
+/** Press-and-hold on the picture plays at 2× until released (YouTube mobile). */
+const HOLD_MS = 450;
+const MOTES = 16;
+
+type Quality = "hd" | "lite";
+type Menu = null | "main" | "speed" | "quality";
+
+function readSpeed(): number {
+  try {
+    const v = Number(localStorage.getItem("explainer:speed"));
+    return v > 0 ? clampSpeed(v) : 1;
+  } catch {
+    return 1;
+  }
+}
+function readQuality(): Quality {
+  try {
+    const v = localStorage.getItem("explainer:quality");
+    if (v === "hd" || v === "lite") return v;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return "lite";
+  } catch {
+    // fall through
+  }
+  return "hd";
+}
+function writeStr(key: string, v: string) {
+  try {
+    localStorage.setItem(key, v);
+  } catch {
+    // per-session only
+  }
+}
 
 function readPref(key: string, fallback: boolean): boolean {
   try {
@@ -37,10 +70,15 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [started, setStarted] = useState(false);
-  const [speed, setSpeed] = useState<number>(1);
+  const [speed, setSpeed] = useState<number>(readSpeed);
   const [captions, setCaptions] = useState(() => readPref("explainer:captions", true));
   const [voiceOn, setVoiceOn] = useState(() => readPref("explainer:voice", true));
-  const [speedMenu, setSpeedMenu] = useState(false);
+  const [musicOn, setMusicOn] = useState(() => readPref("explainer:music", true));
+  const [quality, setQuality] = useState<Quality>(readQuality);
+  const [menu, setMenu] = useState<Menu>(null);
+  /** Centre-screen "1.5×" / "▶▶ 2×" badge, like YouTube's. */
+  const [toast, setToast] = useState<{ text: string; n: number } | null>(null);
+  const [boosting, setBoosting] = useState(false);
   const [controlsShown, setControlsShown] = useState(true);
   const [hover, setHover] = useState<{ x: number; t: number; w: number } | null>(null);
   const [scale, setScale] = useState(0.5);
@@ -53,8 +91,15 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
 
   const timeRef = useRef(0);
   const playingRef = useRef(false);
-  const speedRef = useRef(1);
+  const speedRef = useRef(speed);
   const voiceRef = useRef(voiceOn);
+  const musicRef = useRef(musicOn);
+  const lastSceneRef = useRef(-1);
+  const toastTimer = useRef<number | undefined>(undefined);
+  const holdTimer = useRef<number | undefined>(undefined);
+  /** Speed to restore when a press-and-hold 2× ends (null = not boosting). */
+  const boostFrom = useRef<number | null>(null);
+  const suppressClick = useRef(false);
   const lastCueRef = useRef(-2);
   const holdRef = useRef(0);
   const cancelSpeechRef = useRef<() => void>(() => {});
@@ -116,13 +161,14 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
     hideTimer.current = window.setTimeout(() => {
       if (playingRef.current) {
         setControlsShown(false);
-        setSpeedMenu(false);
+        setMenu(null);
       }
     }, 2600);
   }, []);
 
   const play = useCallback(() => {
     unlockSpeech();
+    unlockMusic();
     if (timeRef.current >= tl.duration - 0.05) seek(0);
     setStarted(true);
     setEnded(false);
@@ -171,6 +217,12 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
           // still inside the line
         } else holdRef.current = 0;
         t = next;
+        // Scene change → whoosh (skipped while scrubbing/seeking far).
+        const nowScene = locate(tl, t).sceneIndex;
+        if (nowScene !== lastSceneRef.current) {
+          if (nowScene === lastSceneRef.current + 1 && musicRef.current) whoosh(tl.scenes[nowScene].chapterIndex !== tl.scenes[nowScene - 1]?.chapterIndex);
+          lastSceneRef.current = nowScene;
+        }
         if (t >= tl.duration) {
           t = tl.duration;
           playingRef.current = false;
@@ -181,6 +233,7 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
         timeRef.current = t;
         setTime(t);
       }
+      updateMusic(timeRef.current, playingRef.current && musicRef.current, isSpeaking());
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -197,15 +250,55 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
       document.removeEventListener("visibilitychange", onVis);
       cancelSpeechRef.current();
       stopSpeech();
+      stopMusic();
     };
   }, [pause]);
 
   const chrome = controlsShown || !playing;
 
-  const setRate = (s: number) => {
+  const setRate = useCallback((raw: number, closeMenu = true) => {
+    const s = clampSpeed(raw);
+    boostFrom.current = null;
+    setBoosting(false);
     speedRef.current = s;
     setSpeed(s);
-    setSpeedMenu(false);
+    writeStr("explainer:speed", String(s));
+    if (closeMenu) setMenu(null);
+    window.clearTimeout(toastTimer.current);
+    setToast((prev) => ({ text: s === 1 ? "1×" : `${s}×`, n: (prev?.n ?? 0) + 1 }));
+    toastTimer.current = window.setTimeout(() => setToast(null), 700);
+  }, []);
+  const toggleMusic = () => {
+    const v = !musicRef.current;
+    musicRef.current = v;
+    setMusicOn(v);
+    writePref("explainer:music", v);
+    if (v) unlockMusic();
+  };
+  const pickQuality = (q: Quality) => {
+    setQuality(q);
+    writeStr("explainer:quality", q);
+    setMenu(null);
+  };
+  // Press-and-hold the picture → 2× while held.
+  const onFrameDown = (e: React.PointerEvent) => {
+    if (e.button !== 0 || !playingRef.current) return;
+    window.clearTimeout(holdTimer.current);
+    holdTimer.current = window.setTimeout(() => {
+      if (!playingRef.current || speedRef.current >= MAX_SPEED) return;
+      boostFrom.current = speedRef.current;
+      speedRef.current = MAX_SPEED;
+      suppressClick.current = true;
+      setBoosting(true);
+    }, HOLD_MS);
+  };
+  const endBoost = () => {
+    window.clearTimeout(holdTimer.current);
+    if (boostFrom.current !== null) {
+      speedRef.current = boostFrom.current;
+      boostFrom.current = null;
+      setBoosting(false);
+    }
   };
   const toggleVoice = () => {
     const v = !voiceRef.current;
@@ -265,7 +358,10 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
       if (k === " " || k === "k") {
         e.preventDefault();
         toggle();
-      } else if (k === "arrowleft") seek(timeRef.current - 5);
+      } else if (e.key === ">" || (e.shiftKey && e.code === "Period")) setRate(stepSpeed(speedRef.current, 1));
+      else if (e.key === "<" || (e.shiftKey && e.code === "Comma")) setRate(stepSpeed(speedRef.current, -1));
+      else if (/^[0-9]$/.test(e.key)) seek((tl.duration * Number(e.key)) / 10);
+      else if (k === "arrowleft") seek(timeRef.current - 5);
       else if (k === "arrowright") seek(timeRef.current + 5);
       else if (k === "j") seek(timeRef.current - 10);
       else if (k === "l") seek(timeRef.current + 10);
@@ -277,7 +373,7 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggle, seek, poke, toggleFull]);
+  }, [toggle, seek, poke, toggleFull, setRate, tl.duration]);
 
   // Seek bar pointer handling.
   const timeFromX = (clientX: number) => {
@@ -301,14 +397,49 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
   // Current frame (before first play: a nicer poster frame a moment in).
   const shownTime = started ? time : Math.min(2.4, tl.duration * 0.5);
   const loc = locate(tl, shownTime);
-  const sceneMeta = tl.scenes[loc.sceneIndex];
-  const scene = flatScenes[loc.sceneIndex];
-  const frame = scene.render({
-    t: loc.local,
-    dur: sceneMeta.dur,
-    at: (i) => sceneMeta.cueStarts[Math.min(Math.max(i, 0), sceneMeta.cueStarts.length - 1)],
-    cue: loc.sceneCue,
-  });
+  const hd = quality === "hd";
+  const renderScene = (i: number, local: number, cue: number) => {
+    const meta = tl.scenes[i];
+    const node = flatScenes[i].render({
+      t: local,
+      dur: meta.dur,
+      at: (k) => meta.cueStarts[Math.min(Math.max(k, 0), meta.cueStarts.length - 1)],
+      cue,
+    });
+    if (!hd) return node;
+    const cam = cameraAt(i, local, meta.dur);
+    return (
+      <div className="absolute inset-0" style={{ transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.scale})`, transformOrigin: "50% 50%" }}>
+        {node}
+      </div>
+    );
+  };
+  const current = renderScene(loc.sceneIndex, loc.local, loc.sceneCue);
+  const trans = hd ? transitionAt(tl, loc.sceneIndex, loc.local) : null;
+  let frame = current;
+  if (trans) {
+    const prevMeta = tl.scenes[trans.from];
+    const outgoing = renderScene(trans.from, prevMeta.dur - 1e-3, prevMeta.cueStarts.length - 2);
+    const p = trans.p;
+    frame = (
+      <>
+        <div className="absolute inset-0" style={trans.kind === "fade" ? undefined : { transform: `scale(${1 + 0.06 * p})`, filter: `brightness(${1 - 0.5 * p})` }}>
+          {outgoing}
+        </div>
+        <div
+          className="absolute inset-0"
+          style={
+            trans.kind === "fade"
+              ? { opacity: p }
+              : { clipPath: `circle(${p * 105}% at 50% 50%)`, transform: `scale(${1.04 - 0.04 * p})` }
+          }
+        >
+          {current}
+        </div>
+      </>
+    );
+  }
+  const motes = hd ? Array.from({ length: MOTES }, (_, i) => moteAt(i, shownTime)) : [];
   const caption = started && loc.cueIndex >= 0 ? tl.cues[loc.cueIndex].text.trim() || null : null;
   const noVoice = !speechSupported();
   // On phone-width players an overlaid 2-line subtitle hides a quarter of the
@@ -329,10 +460,56 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
         <div
           ref={frameRef}
           style={cssFull ? { width: "min(100vw, calc(100dvh * 16 / 9))" } : undefined}
-          className="relative aspect-video w-full overflow-hidden" onClick={() => (speedMenu ? setSpeedMenu(false) : toggle())}>
-          <div className="absolute top-0 left-0 origin-top-left" style={{ width: STAGE_W, height: STAGE_H, transform: `scale(${scale})` }}>
+          className="relative aspect-video w-full overflow-hidden"
+          onPointerDown={onFrameDown}
+          onPointerUp={endBoost}
+          onPointerLeave={endBoost}
+          onPointerCancel={endBoost}
+          onContextMenu={(e) => e.preventDefault()}
+          onClick={() => {
+            if (suppressClick.current) {
+              suppressClick.current = false;
+              return;
+            }
+            if (menu) setMenu(null);
+            else toggle();
+          }}
+        >
+          <div className="absolute top-0 left-0 origin-top-left overflow-hidden" style={{ width: STAGE_W, height: STAGE_H, transform: `scale(${scale})` }}>
             {frame}
+            {hd && (
+              <div className="pointer-events-none absolute inset-0 mix-blend-screen">
+                {motes.map((m, i) => (
+                  <div
+                    key={i}
+                    className="absolute rounded-full"
+                    style={{
+                      left: m.x - m.r,
+                      top: m.y - m.r,
+                      width: m.r * 2,
+                      height: m.r * 2,
+                      opacity: m.o,
+                      background: "radial-gradient(circle, rgba(255,244,214,.9) 0%, rgba(255,244,214,0) 70%)",
+                    }}
+                  />
+                ))}
+                {/* lens vignette + faint top light, like a filmed table */}
+                <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(255,240,200,.08), transparent 55%)" }} />
+              </div>
+            )}
           </div>
+
+          {/* Speed badge (key presses / menu) and press-and-hold 2× */}
+          {boosting && (
+            <div className="pointer-events-none absolute top-[8%] left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1 text-xs font-bold text-white sm:text-sm">
+              2배속 ▶▶
+            </div>
+          )}
+          {toast && !boosting && (
+            <div key={toast.n} className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-xl bg-black/65 px-5 py-2 text-lg font-black text-white sm:text-2xl">
+              {toast.text}
+            </div>
+          )}
 
           {/* Subtitles */}
           {captions && caption && !narrow && (
@@ -462,22 +639,94 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
               <span className="rounded border border-current px-1 text-[10px] leading-tight font-black">CC</span>
             </CtlButton>
             <div className="relative">
-              <CtlButton label="재생 속도" onClick={() => setSpeedMenu((m) => !m)}>
-                <span className="text-xs font-bold">{speed === 1 ? "1×" : `${speed}×`}</span>
+              <CtlButton label="설정 (재생 속도·화질)" onClick={() => setMenu((m) => (m ? null : "main"))} active={menu !== null ? true : undefined}>
+                <span className="relative">
+                  ⚙
+                  {speed !== 1 && (
+                    <span className="absolute -top-2 -right-3 rounded bg-red-600 px-0.5 text-[9px] leading-tight font-black text-white">{speed}×</span>
+                  )}
+                </span>
               </CtlButton>
-              {speedMenu && (
-                <div className="absolute right-0 bottom-9 z-10 flex flex-col overflow-hidden rounded-lg bg-black/90 py-1 text-sm shadow-xl">
-                  <div className="px-4 py-1 text-[11px] text-white/50">재생 속도</div>
-                  {SPEEDS.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setRate(s)}
-                      className={`px-4 py-1.5 text-left hover:bg-white/10 ${s === speed ? "font-bold text-red-400" : "text-white"}`}
-                    >
-                      {s === 1 ? "보통" : `${s}×`}
-                    </button>
-                  ))}
+              {menu && (
+                <div
+                  className="absolute right-0 bottom-10 z-10 w-60 overflow-hidden rounded-xl bg-black/90 py-1.5 text-sm text-white shadow-2xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {menu === "main" && (
+                    <>
+                      <MenuRow icon="⏱" label="재생 속도" value={speedLabel(speed)} onClick={() => setMenu("speed")} />
+                      <MenuRow icon="🎞" label="화질" value={quality === "hd" ? "고화질 (연출 효과)" : "가볍게"} onClick={() => setMenu("quality")} />
+                      <MenuRow icon="🎵" label="배경음악" value={musicOn ? "켜짐" : "꺼짐"} onClick={toggleMusic} />
+                      <MenuRow icon="💬" label="자막" value={captions ? "켜짐" : "꺼짐"} onClick={toggleCaptions} />
+                    </>
+                  )}
+                  {menu === "speed" && (
+                    <>
+                      <SubHeader title="재생 속도" onBack={() => setMenu("main")} />
+                      <div className="px-4 pt-1 pb-2">
+                        <div className="mb-1 text-center text-base font-black tabular-nums">{speed.toFixed(2)}×</div>
+                        <div className="flex items-center gap-2">
+                          <button type="button" aria-label="느리게" className="h-7 w-7 rounded-full bg-white/10 font-bold" onClick={() => setRate(speed - 0.05, false)}>
+                            −
+                          </button>
+                          <input
+                            type="range"
+                            aria-label="재생 속도 직접 조절"
+                            min={MIN_SPEED}
+                            max={MAX_SPEED}
+                            step={0.05}
+                            value={speed}
+                            onChange={(e) => setRate(Number(e.target.value), false)}
+                            className="flex-1 accent-red-600"
+                          />
+                          <button type="button" aria-label="빠르게" className="h-7 w-7 rounded-full bg-white/10 font-bold" onClick={() => setRate(speed + 0.05, false)}>
+                            +
+                          </button>
+                        </div>
+                      </div>
+                      <div className="max-h-56 overflow-y-auto border-t border-white/10 pt-1">
+                        {SPEED_PRESETS.map((s) => (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => setRate(s)}
+                            className={`flex w-full items-center gap-2 px-4 py-1.5 text-left hover:bg-white/10 ${Math.abs(s - speed) < 1e-6 ? "font-bold text-red-400" : ""}`}
+                          >
+                            <span className="w-4">{Math.abs(s - speed) < 1e-6 ? "✓" : ""}</span>
+                            {speedLabel(s)}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {menu === "quality" && (
+                    <>
+                      <SubHeader title="화질" onBack={() => setMenu("main")} />
+                      {(
+                        [
+                          ["hd", "고화질", "장면 전환·카메라 무빙·빛 효과"],
+                          ["lite", "가볍게", "효과 끄기 — 저사양 휴대폰용"],
+                        ] as const
+                      ).map(([q, name, desc]) => (
+                        <button
+                          key={q}
+                          type="button"
+                          onClick={() => pickQuality(q)}
+                          className={`flex w-full items-start gap-2 px-4 py-2 text-left hover:bg-white/10 ${quality === q ? "text-red-400" : ""}`}
+                        >
+                          <span className="w-4">{quality === q ? "✓" : ""}</span>
+                          <span>
+                            <span className="font-bold">{name}</span>
+                            {q === "hd" && <span className="ml-1 rounded bg-red-600 px-1 text-[9px] font-black text-white">HD</span>}
+                            <span className="block text-[11px] text-white/50">{desc}</span>
+                          </span>
+                        </button>
+                      ))}
+                      <div className="px-4 pt-1 pb-1 text-[10px] leading-snug text-white/40">
+                        영상 파일이 아니라 화면에서 직접 그려서, 어떤 크기에서도 글자가 선명해요.
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -515,10 +764,28 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
           </li>
         ))}
         <li className="hidden px-2 pt-2 text-[11px] leading-relaxed break-keep text-white/40 md:list-item light:text-slate-400">
-          단축키: Space 재생 · ←/→ 5초 · J/L 10초 · F 전체화면 · C 자막 · M 내레이션
+          단축키: Space 재생 · ←/→ 5초 · J/L 10초 · Shift+&gt;/&lt; 배속 · 0~9 구간 이동 · F 전체화면 · C 자막 · M 내레이션 · 화면 길게 누르기 2배속
         </li>
       </ol>
     </div>
+  );
+}
+
+function MenuRow({ icon, label, value, onClick }: { icon: string; label: string; value: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-white/10">
+      <span className="w-5 text-center">{icon}</span>
+      <span className="flex-1">{label}</span>
+      <span className="text-xs text-white/60">{value} ›</span>
+    </button>
+  );
+}
+
+function SubHeader({ title, onBack }: { title: string; onBack: () => void }) {
+  return (
+    <button type="button" onClick={onBack} className="mb-1 flex w-full items-center gap-2 border-b border-white/10 px-4 pt-1 pb-2 text-left font-bold hover:bg-white/5">
+      ‹ {title}
+    </button>
   );
 }
 
