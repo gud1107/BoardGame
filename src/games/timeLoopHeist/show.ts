@@ -15,6 +15,8 @@ export interface SelfMeta {
   /** "민수 · 2루프" */
   label: string;
   short: string;
+  /** 좌석의 플레이어 이름 (3D VRM 캐릭터를 찾을 때) */
+  name?: string;
 }
 
 /** 시뮬레이션의 자아 순서(루프·좌석 오름차순)에 맞춘 표시 정보 */
@@ -30,6 +32,7 @@ export function selfMeta(tracks: readonly SelfTrack[], names: Record<number, str
       mark: SEAT_MARKS[t.seat % SEAT_MARKS.length],
       label: isLive ? `나 · 지금` : `${name} · ${t.loop}루프`,
       short: `${SEAT_MARKS[t.seat % SEAT_MARKS.length]}${t.loop}`,
+      name: names[t.seat],
     };
   });
 }

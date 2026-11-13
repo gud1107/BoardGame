@@ -230,6 +230,7 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
               heat={heat}
               latestSearch={latestSearch}
               lowDetail={lowDetail}
+              names={names}
               alarm={blocked && state.path.includes(blocked.cell) ? blocked : null}
             />
           ) : (

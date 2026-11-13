@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { resolveLook } from "@/games/shared/three/SeatedPerson";
+import { Hat, resolveLook } from "@/games/shared/three/SeatedPerson";
+import type { AvatarProfile, HatKind } from "@/lib/character/avatar";
 import ScreenSprite from "@/games/shared/three/ScreenSprite";
 import { AdaptiveResolution } from "@/games/shared/three/sceneFx";
 import { labelTexture } from "@/games/shared/three/tableKit";
@@ -15,7 +16,7 @@ import { ROOMS, SEAT_COLORS, SEAT_GLYPHS, SUSPECTS } from "../data";
 
 /**
  * 안개 저택 — 앞벽을 걷어낸 3층 × 3관 인형의 집 단면 (규칙서 §2-2). 위에서부터 2층·1층·지하.
- * 탐정은 VRM 캐릭터(내 캐릭터 설정 그대로)로 방 사이를 걷고, 용의자는 색 실루엣 + 이름표.
+ * 탐정은 VRM 캐릭터(내 캐릭터 설정 그대로)로 방 사이를 걷고, 용의자도 VRM(직업별 모자·옷 색) + 발밑 색 고리 + 이름표.
  * 이동할 수 있는 방은 바닥이 금빛으로 빛나고, 누르면 이동한다. 숨김 정보는 이 파일로 오지 않는다.
  */
 
@@ -177,27 +178,53 @@ function Passages() {
   );
 }
 
-function SuspectFigure({ i, room, slot }: { i: number; room: number; slot: number }) {
+/**
+ * 용의자 NPC — 탐정과 같은 VRM 인물(HouseFigure). 직업이 실루엣으로 읽히게 모자·옷 색을 고정하고,
+ * 발밑에 용의자 색 고리 + 이름표(아이콘)로 플레이어(좌석 기호 이름표)와 구분한다.
+ */
+const SUSPECT_LOOKS: { profile: AvatarProfile; hat: HatKind; hatColor: string }[] = [
+  // 집사: 검은 연미복 + 중절모
+  { profile: { gender: "m", model: "ps-male", hair: "#9a9aa2", coat: "#1c1c22", shirt: "#ffffff", hairDye: true, outfitDye: true, eyes: "sharp" }, hat: "bowler", hatColor: "#1a1a1e" },
+  // 상속녀: 진분홍 드레스 + 왕관 머리띠
+  { profile: { gender: "f", model: "three-vrm-girl", hair: "#16110f", coat: "#db2777", shirt: "#fdf1f4", eyes: "fox", lip: "#d8485e" }, hat: "circlet", hatColor: "#f5c542" },
+  // 주치의: 흰 가운 + 안경
+  { profile: { gender: "m", model: "seed-san", hair: "#3a2a22", coat: "#e8eef8", shirt: "#0891b2", glasses: true, eyes: "round" }, hat: "none", hatColor: "#000000" },
+  // 화가: 보라 베레모
+  { profile: { gender: "f", model: "pixiv-sample", hair: "#b8707e", coat: "#7c3aed", shirt: "#ffffff", eyes: "puppy", mark: "freckles" }, hat: "beret", hatColor: "#5b21b6" },
+  // 동업자: 갈색 정장 + 페도라
+  { profile: { gender: "m", model: "tanis-male", hair: "#121010", coat: "#b45309", shirt: "#ffffff", eyes: "fox" }, hat: "fedora", hatColor: "#3f2a14" },
+  // 정원사: 초록 작업복 + 캡
+  { profile: { gender: "f", model: "ps-female", hair: "#5e3c2c", coat: "#15803d", shirt: "#ece4d6", hairDye: true, outfitDye: true, eyes: "round" }, hat: "cap", hatColor: "#166534" },
+];
+
+function SuspectFigure({ i, room, slot, lowDetail }: { i: number; room: number; slot: number; lowDetail: boolean }) {
   const s = SUSPECTS[i];
+  const spec = SUSPECT_LOOKS[i % SUSPECT_LOOKS.length];
+  // 플레이어 좌석(0~5)과 겹치지 않는 번호로 기본값을 뽑는다
+  const look = useMemo(() => ({ ...resolveLook(10 + i, ["none"], spec.profile), hat: spec.hat, hatColor: spec.hatColor }), [i, spec]);
   const p = roomBase(room).add(new THREE.Vector3(-2.2 + slot * 0.75, 0, 1.4));
-  const ref = useRef<THREE.Group>(null);
-  useFrame(() => {
-    const g = ref.current;
-    if (!g) return;
-    g.position.lerp(p, 0.06);
-  });
+  const faceTo = new THREE.Vector3(p.x, p.y, 8);
   return (
-    <group ref={ref} position={p}>
-      <mesh position={[0, 0.45, 0]}>
-        <cylinderGeometry args={[0.14, 0.22, 0.9, 10]} />
-        <meshStandardMaterial color={s.color} roughness={0.6} transparent opacity={0.85} />
+    <HouseFigure
+      look={look}
+      seed={40 + i * 7}
+      color={s.color}
+      path={[p]}
+      pathKey={`${room}:${slot}`}
+      faceTo={faceTo}
+      pose="stand"
+      lowDetail={lowDetail}
+      size={0.74}
+      speed={2}
+      headgear={spec.hat === "none" ? undefined : <group scale={0.47}><Hat kind={spec.hat} color={spec.hatColor} seg={lowDetail ? 10 : 20} /></group>}
+      headgearY={0.1}
+    >
+      <mesh rotation-x={-Math.PI / 2} position-y={0.03}>
+        <ringGeometry args={[0.3, 0.38, 24]} />
+        <meshBasicMaterial color={s.color} transparent opacity={0.75} depthWrite={false} />
       </mesh>
-      <mesh position={[0, 1.02, 0]}>
-        <sphereGeometry args={[0.15, 12, 10]} />
-        <meshStandardMaterial color="#e8d5c0" roughness={0.6} />
-      </mesh>
-      <ScreenSprite position={[0, 1.42, 0]} anchorY={1.25} scale={[0.95, 0.24]} map={labelTexture(`${s.icon} ${s.name}`, s.color)} />
-    </group>
+      <ScreenSprite position={[0, 1.6, 0]} anchorY={1.25} scale={[0.95, 0.24]} map={labelTexture(`${s.icon} ${s.name}`, s.color)} />
+    </HouseFigure>
   );
 }
 
@@ -277,7 +304,7 @@ function SceneContents(props: ManorScene3DProps) {
       {suspectPos.map((room, i) => {
         const slot = bySlot.get(room) ?? 0;
         bySlot.set(room, slot + 1);
-        return <SuspectFigure key={i} i={i} room={room} slot={slot} />;
+        return <SuspectFigure key={i} i={i} room={room} slot={slot} lowDetail={lowDetail} />;
       })}
       {pos.map((room, seat) => {
         const color = SEAT_COLORS[seat % SEAT_COLORS.length];

@@ -64,6 +64,18 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.165.0",
+    releaseDate: "2026-11-13",
+    title: "🧍 더 많은 게임에 내 3D 캐릭터",
+    changes: [
+      { game: "fog-manor", type: "IMPROVE", desc: "🕯️ 용의자 6명도 VRM 인물로 — 집사 중절모·주치의 흰 가운·화가 베레모처럼 직업이 보이는 옷차림 + 발밑 색 고리로 탐정과 구분" },
+      { game: "time-loop-heist", type: "IMPROVE", desc: "🦹 도둑이 내 캐릭터로 — 좌석 색 비니와 자루, 보석은 두 손으로 번쩍 · 지난 루프의 유령도 같은 캐릭터가 반투명하게 빛나요" },
+      { game: "city-chase", type: "IMPROVE", desc: "🚓 도둑은 도둑 플레이어의, 도보 경찰은 조종하는 플레이어의 캐릭터로 — 비니·눈가리개, 경찰모·형광 조끼 · 체포 땐 수갑 찬 손을 모아요" },
+      { game: "bowling-mayhem", type: "IMPROVE", desc: "🔍 '가볍게' 모드에서도 휴대폰 화면 해상도를 1.5배까지 올려 캐릭터가 또렷하게 — 버벅이면 자동으로 낮춰요" },
+      { game: "mini-golf", type: "IMPROVE", desc: "🔍 '가볍게' 모드에서도 휴대폰 화면 해상도를 1.5배까지 올려 캐릭터가 또렷하게 — 버벅이면 자동으로 낮춰요" },
+    ],
+  },
+  {
     version: "v1.164.0",
     releaseDate: "2026-11-09",
     title: "🏝️ 새 게임 섬 개척자",

@@ -366,7 +366,7 @@ function Scene({ def, frame, meta, lowDetail, replay, focus }: HeistScene3DProps
       {frame.selves.map((s, i) => {
         const m = meta[i];
         if (!m) return null;
-        return <Thief3D key={`s${m.seat}-${m.loop}`} s={s} meta={m} at={at(s.x, s.y)} k={k} carrying={s.carry !== null} />;
+        return <Thief3D key={`s${m.seat}-${m.loop}`} s={s} meta={m} at={at(s.x, s.y)} k={k} carrying={s.carry !== null} lowDetail={lowDetail} />;
       })}
       <CameraRig w={lv.w} h={lv.h} focus={focus ? at(focus.x, focus.y) : null} />
       <AdaptiveResolution max={lowDetail ? 1.5 : 2} />

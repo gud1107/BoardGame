@@ -13,6 +13,7 @@ import { velocityFor, type LiveAim } from "../aim";
 import { alignWindmill, windmillNow, windmillTurn } from "../clock";
 import Golfer, { golferRig, STANCE, type GolferPose } from "./Golfer";
 import { ballTexture, chevronTexture, flagTexture, grassTexture, iceTexture, labelTexture, rockTexture, sandTexture, SEAT_COLORS, stripeTexture, THEME_GRASS } from "./textures";
+import { AdaptiveResolution } from "@/games/shared/three/sceneFx";
 
 /**
  * 미니골프 파티 3D course (rulebook §11). Display + input only — the replay
@@ -1127,7 +1128,7 @@ export default function GolfScene(props: SceneProps) {
   const cx = (bb.x0 + bb.x1) / 2;
   const cy = (bb.y0 + bb.y1) / 2;
   return (
-    <Canvas shadows={high} dpr={high ? [1, 1.75] : 1} gl={{ antialias: high, powerPreference: "high-performance" }} camera={{ fov: 48, position: [0, 2, 2], near: 0.03, far: 160 }} style={{ touchAction: "none" }}>
+    <Canvas shadows={high} dpr={high ? [1, 1.75] : [1, 1.5]} gl={{ antialias: high, powerPreference: "high-performance" }} camera={{ fov: 48, position: [0, 2, 2], near: 0.03, far: 160 }} style={{ touchAction: "none" }}>
       <color attach="background" args={["#cfe9ff"]} />
       <fog attach="fog" args={["#d6ecff", 18, 60]} />
       <Sky />
@@ -1155,6 +1156,7 @@ export default function GolfScene(props: SceneProps) {
       <World {...props} setDisplay={setDisplay} onGolfer={setGolfer} />
       <GolferSlot seat={golfer.seat} pose={golfer.pose} poseKey={golfer.key} names={props.names} lowDetail={!high} />
       <FpsProbe onFps={props.onFps} />
+      <AdaptiveResolution max={high ? 1.75 : 1.5} />
     </Canvas>
   );
 }

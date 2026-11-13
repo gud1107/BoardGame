@@ -11,6 +11,7 @@ import type { ReplayEvent, ReplayPlayer, ReplayView } from "../replay";
 import { releaseFor, type LiveAim } from "../aim";
 import Bowler, { bowlerRig, type BowlerPose } from "./Bowler";
 import { approachTexture, ballTexture, laneTexture, oilTexture, PIN_PROFILE, pinTexture, signTexture, stripeTexture } from "./textures";
+import { AdaptiveResolution } from "@/games/shared/three/sceneFx";
 
 /**
  * 볼링 난장판 3D 볼링장 (rulebook §11). Display + input only — the replay
@@ -758,7 +759,7 @@ export default function BowlingScene(props: SceneProps) {
   const [display, setDisplay] = useState<Display>(() => displayFor(props.state, null));
   const [bowler, setBowler] = useState<{ seat: Seat; pose: BowlerPose; key: string }>({ seat: props.state.activeSeat, pose: "ready", key: "init" });
   return (
-    <Canvas shadows={high} dpr={high ? [1, 1.75] : 1} gl={{ antialias: high, powerPreference: "high-performance" }} camera={{ fov: 44, position: [0, 1.95, 4.4], near: 0.05, far: 90 }} style={{ touchAction: "none" }}>
+    <Canvas shadows={high} dpr={high ? [1, 1.75] : [1, 1.5]} gl={{ antialias: high, powerPreference: "high-performance" }} camera={{ fov: 44, position: [0, 1.95, 4.4], near: 0.05, far: 90 }} style={{ touchAction: "none" }}>
       <color attach="background" args={["#0c0820"]} />
       <fog attach="fog" args={["#0c0820", 26, 60]} />
       <hemisphereLight args={["#f3e8ff", "#1a1030", 0.7]} />
@@ -787,6 +788,7 @@ export default function BowlingScene(props: SceneProps) {
       <World {...props} display={display} setDisplay={setDisplay} onBowler={setBowler} />
       <BowlerSlot seat={bowler.seat} pose={bowler.pose} poseKey={bowler.key} names={props.names} lowDetail={!high} />
       <FpsProbe onFps={props.onFps} />
+      <AdaptiveResolution max={high ? 1.75 : 1.5} />
     </Canvas>
   );
 }

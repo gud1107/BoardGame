@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import {
@@ -21,6 +21,9 @@ import {
 import { buildingType, cellLabel, HELI_STYLES, type CityMapProps } from "../CityMap";
 import { Landmark } from "./landmarks";
 import { clamp01, easeInOut, easeOut } from "@/games/shared/three/tableKit";
+import { resolveLook, type PersonLook } from "@/games/shared/three/SeatedPerson";
+import VrmBody, { BODY, addCrouch, addWalk } from "@/games/shared/three/VrmBody";
+import { roomCharacterOf, useRoomCharacters } from "@/lib/character/roomCharacters";
 
 /**
  * 시티 체이스 입체 도시 (2026-10-23 개편) — 2D `CityMap`과 같은 props.
@@ -183,23 +186,6 @@ function Tag({ text, color, bg, position, height = 0.34, front = false }: { text
       <spriteMaterial map={tex} transparent depthWrite={false} depthTest={!front} />
     </sprite>
   );
-}
-
-let stripeTex: THREE.CanvasTexture | null = null;
-function stripeTexture(): THREE.CanvasTexture {
-  if (stripeTex) return stripeTex;
-  const c = document.createElement("canvas");
-  c.width = 16;
-  c.height = 64;
-  const ctx = c.getContext("2d")!;
-  for (let y = 0; y < 8; y++) {
-    ctx.fillStyle = y % 2 ? "#f8fafc" : "#111827";
-    ctx.fillRect(0, y * 8, 16, 8);
-  }
-  stripeTex = new THREE.CanvasTexture(c);
-  stripeTex.colorSpace = THREE.SRGBColorSpace;
-  stripeTex.magFilter = THREE.NearestFilter;
-  return stripeTex;
 }
 
 let tapeTex: THREE.CanvasTexture | null = null;
@@ -493,150 +479,128 @@ function Building({
 
 type FigureAnim = { walk: number; phase: number; crouch: number; cuffed: number; look: number };
 
-/** A small stylised person (≈0.62 tall). The parent drives `anim` every frame. */
-/** `vest` = a glowing hi-vis vest in that colour (the officer unit — navy alone vanishes in the night city). */
+/** Who plays the thief / the officer unit — their VRM characters (set by SceneContents, inside the Canvas). */
+type CastLooks = { thief: PersonLook; officer: PersonLook; lowDetail: boolean };
+const CastContext = createContext<CastLooks>({ thief: resolveLook(0, ["none"]), officer: resolveLook(1, ["none"]), lowDetail: false });
+
+/** Head-bone height in Figure units (the old doll's head centre sat at 0.58). */
+const FIGURE_HEAD_Y = 0.53;
+
+const ACC = {
+  beanie: new THREE.SphereGeometry(0.118, 18, 9, 0, Math.PI * 2, 0, Math.PI / 2),
+  mask: new THREE.CylinderGeometry(0.112, 0.112, 0.045, 20, 1, true, -1.3, 2.6),
+  capTop: new THREE.CylinderGeometry(0.125, 0.115, 0.07, 18),
+  capBrim: new THREE.BoxGeometry(0.17, 0.012, 0.09),
+  badge: new THREE.CircleGeometry(0.022, 10),
+  vest: new THREE.CylinderGeometry(0.145, 0.15, 0.22, 18, 1, true),
+  vestStripe: new THREE.CylinderGeometry(0.153, 0.153, 0.02, 18, 1, true),
+  silhouette: new THREE.CapsuleGeometry(0.09, 0.32, 4, 10),
+};
+
+/**
+ * A city person — the thief player's / the officer pilot's own VRM character, with a black
+ * beanie + domino mask (thief) or a police cap and a glowing hi-vis vest (officer — navy alone
+ * vanishes in the night city). ≈0.62 tall in Figure units; the parent drives `anim` every frame.
+ */
 function Figure({ kind, anim, sack = 0, vest }: { kind: "thief" | "officer"; anim: React.MutableRefObject<FigureAnim>; sack?: number; vest?: string }) {
-  const body = useRef<THREE.Group>(null);
-  const legL = useRef<THREE.Group>(null);
-  const legR = useRef<THREE.Group>(null);
-  const armL = useRef<THREE.Group>(null);
-  const armR = useRef<THREE.Group>(null);
-  const head = useRef<THREE.Group>(null);
+  const cast = useContext(CastContext);
   const cuffs = useRef<THREE.Group>(null);
-  useFrame(() => {
-    const a = anim.current;
-    const swing = Math.sin(a.phase) * 0.75 * a.walk;
-    if (legL.current) legL.current.rotation.x = swing - a.crouch * 1.2;
-    if (legR.current) legR.current.rotation.x = -swing - a.crouch * 1.2;
-    const armForward = -1.05 * a.cuffed;
-    if (armL.current) {
-      armL.current.rotation.x = -swing * 0.9 + armForward - a.crouch * 0.6;
-      armL.current.rotation.z = 0.35 * a.cuffed;
-    }
-    if (armR.current) {
-      armR.current.rotation.x = swing * 0.9 + armForward - a.crouch * 0.6;
-      armR.current.rotation.z = -0.35 * a.cuffed;
-    }
-    if (body.current) {
-      body.current.position.y = -0.17 * a.crouch + Math.abs(Math.sin(a.phase)) * 0.03 * a.walk;
-      body.current.rotation.x = 0.35 * a.crouch;
-    }
-    if (head.current) head.current.rotation.y = a.look;
-    if (cuffs.current) cuffs.current.scale.setScalar(Math.max(0.001, a.cuffed));
-  });
   const thief = kind === "thief";
-  const skin = "#f1c27d";
-  const top = thief ? "#ffffff" : "#1e3a8a";
-  const legs = thief ? "#111827" : "#172554";
+  useFrame(() => {
+    if (cuffs.current) cuffs.current.scale.setScalar(Math.max(0.001, anim.current.cuffed));
+  });
+  const pose = (o: Float32Array) => {
+    const a = anim.current;
+    addWalk(o, a.phase, a.walk);
+    addCrouch(o, a.crouch);
+    o[BODY.head + 1] += a.look;
+    if (a.cuffed > 0.01) {
+      // wrists together in front of the hips
+      const c = a.cuffed;
+      o[BODY.rightUpperArm] += -0.75 * c;
+      o[BODY.leftUpperArm] += -0.75 * c;
+      o[BODY.rightUpperArm + 2] += 0.45 * c;
+      o[BODY.leftUpperArm + 2] -= 0.45 * c;
+      o[BODY.rightLowerArm] += -0.9 * c;
+      o[BODY.leftLowerArm] += -0.9 * c;
+      o[BODY.head] += 0.25 * c;
+    }
+  };
+  const face = () => (thief && anim.current.cuffed > 0.3 ? { sad: 0.8 } : thief ? {} : { angry: anim.current.walk * 0.4 });
+  const head = thief ? (
+    <group position={[0, 0, -0.01]}>
+      <mesh geometry={ACC.beanie}>
+        <meshStandardMaterial color="#111827" roughness={0.9} />
+      </mesh>
+      <mesh geometry={ACC.mask} position={[0, -0.075, 0.012]}>
+        <meshStandardMaterial color="#020617" roughness={0.4} side={THREE.DoubleSide} />
+      </mesh>
+    </group>
+  ) : (
+    <group position={[0, 0.02, -0.005]}>
+      <mesh geometry={ACC.capTop}>
+        <meshStandardMaterial color="#172554" roughness={0.7} />
+      </mesh>
+      <mesh geometry={ACC.capBrim} position={[0, -0.03, 0.1]} rotation-x={0.25}>
+        <meshStandardMaterial color="#020617" />
+      </mesh>
+      <mesh geometry={ACC.badge} position={[0, 0.005, 0.124]}>
+        <meshBasicMaterial color="#fbbf24" />
+      </mesh>
+    </group>
+  );
+  const back = thief ? (
+    sack > 0 ? (
+      <group position={[0, -0.02, -0.2]}>
+        <mesh scale={[1, 1.1, 0.85]}>
+          <sphereGeometry args={[0.12 + sack * 0.014, 12, 10]} />
+          <meshStandardMaterial color="#a16207" roughness={0.95} />
+        </mesh>
+        <mesh position={[0, 0.15 + sack * 0.012, 0]}>
+          <coneGeometry args={[0.045, 0.07, 8]} />
+          <meshStandardMaterial color="#854d0e" />
+        </mesh>
+      </group>
+    ) : null
+  ) : vest ? (
+    <group position={[0, -0.06, 0]}>
+      <mesh geometry={ACC.vest}>
+        <meshStandardMaterial color={vest} emissive={vest} emissiveIntensity={0.9} roughness={0.5} side={THREE.DoubleSide} />
+      </mesh>
+      {[-0.045, 0.045].map((y) => (
+        <mesh key={y} geometry={ACC.vestStripe} position={[0, y, 0]}>
+          <meshBasicMaterial color="#f8fafc" side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+    </group>
+  ) : null;
   return (
     <group>
-      <group ref={body}>
-        {[-1, 1].map((s) => (
-          <group key={s} ref={s < 0 ? legL : legR} position={[s * 0.05, 0.26, 0]}>
-            <mesh position={[0, -0.13, 0]}>
-              <boxGeometry args={[0.075, 0.26, 0.085]} />
-              <meshStandardMaterial color={legs} roughness={0.8} />
-            </mesh>
-          </group>
-        ))}
-        <mesh position={[0, 0.38, 0]}>
-          <boxGeometry args={[0.21, 0.25, 0.13]} />
-          <meshStandardMaterial color={top} map={thief ? stripeTexture() : null} roughness={0.7} />
-        </mesh>
-        {vest && (
-          <>
-            <mesh position={[0, 0.37, 0]}>
-              <boxGeometry args={[0.23, 0.21, 0.15]} />
-              <meshStandardMaterial color={vest} emissive={vest} emissiveIntensity={0.9} roughness={0.5} />
-            </mesh>
-            {[0.33, 0.42].map((y) => (
-              <mesh key={y} position={[0, y, 0]}>
-                <boxGeometry args={[0.235, 0.022, 0.155]} />
-                <meshBasicMaterial color="#f8fafc" />
-              </mesh>
-            ))}
-          </>
-        )}
-        {!thief && (
-          <mesh position={[0.05, 0.45, vest ? 0.077 : 0.067]}>
-            <circleGeometry args={[0.022, 8]} />
-            <meshBasicMaterial color="#fbbf24" />
+      <VrmBody
+        look={thief ? cast.thief : cast.officer}
+        seed={thief ? 11 : 23}
+        headY={FIGURE_HEAD_Y}
+        pose={pose}
+        face={face}
+        lowDetail={cast.lowDetail}
+        head={head}
+        back={back}
+        fallback={
+          <mesh geometry={ACC.silhouette} position={[0, 0.25, 0]}>
+            <meshBasicMaterial color={thief ? "#111827" : (vest ?? "#1e3a8a")} transparent opacity={0.4} />
           </mesh>
-        )}
-        {[-1, 1].map((s) => (
-          <group key={s} ref={s < 0 ? armL : armR} position={[s * 0.135, 0.49, 0]}>
-            <mesh position={[0, -0.11, 0]}>
-              <boxGeometry args={[0.06, 0.22, 0.065]} />
-              <meshStandardMaterial color={thief ? "#111827" : "#1e3a8a"} roughness={0.7} />
+        }
+      />
+      {thief && (
+        <group ref={cuffs} position={[0, 0.27, 0.13]}>
+          {[-0.035, 0.035].map((x) => (
+            <mesh key={x} position={[x, 0, 0]} rotation-y={Math.PI / 2}>
+              <torusGeometry args={[0.03, 0.009, 6, 14]} />
+              <meshStandardMaterial color="#e5e7eb" metalness={0.9} roughness={0.2} />
             </mesh>
-            <mesh position={[0, -0.235, 0]}>
-              <sphereGeometry args={[0.032, 8, 6]} />
-              <meshStandardMaterial color={skin} />
-            </mesh>
-            {!thief && s > 0 && (
-              <mesh position={[0, -0.25, 0.05]} rotation-x={Math.PI / 2}>
-                <cylinderGeometry args={[0.018, 0.024, 0.11, 8]} />
-                <meshStandardMaterial color="#111827" metalness={0.5} />
-              </mesh>
-            )}
-          </group>
-        ))}
-        <group ref={head} position={[0, 0.58, 0]}>
-          <mesh>
-            <sphereGeometry args={[0.08, 14, 12]} />
-            <meshStandardMaterial color={skin} roughness={0.6} />
-          </mesh>
-          {thief ? (
-            <>
-              <mesh position={[0, 0.03, 0]}>
-                <sphereGeometry args={[0.085, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
-                <meshStandardMaterial color="#111827" roughness={0.9} />
-              </mesh>
-              <mesh position={[0, 0.0, 0.035]}>
-                <boxGeometry args={[0.17, 0.035, 0.1]} />
-                <meshStandardMaterial color="#020617" />
-              </mesh>
-            </>
-          ) : (
-            <>
-              <mesh position={[0, 0.06, 0]}>
-                <cylinderGeometry args={[0.085, 0.08, 0.06, 14]} />
-                <meshStandardMaterial color="#172554" />
-              </mesh>
-              <mesh position={[0, 0.035, 0.06]} rotation-x={0.25}>
-                <boxGeometry args={[0.13, 0.012, 0.07]} />
-                <meshStandardMaterial color="#020617" />
-              </mesh>
-              <mesh position={[0, 0.075, 0.08]}>
-                <circleGeometry args={[0.018, 8]} />
-                <meshBasicMaterial color="#fbbf24" />
-              </mesh>
-            </>
-          )}
+          ))}
         </group>
-        {thief && sack > 0 && (
-          <group position={[0, 0.42, -0.13]}>
-            <mesh scale={[1, 1.1, 0.9]}>
-              <sphereGeometry args={[0.1 + sack * 0.012, 12, 10]} />
-              <meshStandardMaterial color="#a16207" roughness={0.95} />
-            </mesh>
-            <mesh position={[0, 0.12 + sack * 0.01, 0]}>
-              <coneGeometry args={[0.04, 0.06, 8]} />
-              <meshStandardMaterial color="#854d0e" />
-            </mesh>
-          </group>
-        )}
-        {thief && (
-          <group ref={cuffs} position={[0, 0.3, 0.2]}>
-            {[-0.035, 0.035].map((x) => (
-              <mesh key={x} position={[x, 0, 0]} rotation-y={Math.PI / 2}>
-                <torusGeometry args={[0.03, 0.009, 6, 14]} />
-                <meshStandardMaterial color="#e5e7eb" metalness={0.9} roughness={0.2} />
-              </mesh>
-            ))}
-          </group>
-        )}
-      </group>
+      )}
     </group>
   );
 }
@@ -1336,10 +1300,19 @@ function CameraRig({ mode, focus }: { mode: CameraMode; focus: Focus | null }) {
   return null;
 }
 
-type SceneProps = CityMapProps & { reveal: Reveal | null; move: Move | null; alarm: Alarm | null; lowDetail: boolean; camMode: CameraMode };
+type SceneProps = CityMapProps & { reveal: Reveal | null; move: Move | null; alarm: Alarm | null; lowDetail: boolean; camMode: CameraMode; names?: Record<number, string> };
 
 function SceneContents(props: SceneProps) {
   const { state, showSecret, revealRoute, thiefTargets, heliControls, heat, latestSearch, reveal, move, alarm, lowDetail, camMode } = props;
+  // the thief player's character and the officer unit's pilot's (unit 1 → policeSeats[1 % n])
+  const chars = useRoomCharacters((st) => st.byName);
+  const officerSeat = state.policeSeats.length ? state.policeSeats[1 % state.policeSeats.length] : 1;
+  const thiefName = props.names?.[state.thiefSeat];
+  const officerName = props.names?.[officerSeat];
+  const cast = useMemo<CastLooks>(
+    () => ({ thief: resolveLook(state.thiefSeat, ["none"], roomCharacterOf(chars, thiefName)), officer: resolveLook(officerSeat, ["none"], roomCharacterOf(chars, officerName)), lowDetail }),
+    [chars, state.thiefSeat, officerSeat, thiefName, officerName, lowDetail],
+  );
   // the colour of the first unit that can search each building = the watch zone painted on its sidewalk
   const zone = new Map<Cell, string>();
   state.helis.forEach((p, h) => {
@@ -1357,7 +1330,7 @@ function SceneContents(props: SceneProps) {
     fn();
   };
   return (
-    <>
+    <CastContext.Provider value={cast}>
       <color attach="background" args={["#070b18"]} />
       <fog attach="fog" args={["#070b18", 20, 42]} />
       <ambientLight intensity={0.6} color="#bfdbfe" />
@@ -1424,7 +1397,7 @@ function SceneContents(props: SceneProps) {
         mode={camMode}
         focus={reveal ? { x: cx(cellRC(reveal.cell)[1]), z: cz(cellRC(reveal.cell)[0]), key: reveal.key, shake: reveal.result === "empty" ? 0.03 : reveal.result === "trail" ? 0.08 : 0.16 } : null}
       />
-    </>
+    </CastContext.Provider>
   );
 }
 
@@ -1436,7 +1409,7 @@ function readCamMode(): CameraMode {
   }
 }
 
-export default function CityMap3D(props: CityMapProps & { lowDetail: boolean; alarm?: Alarm | null }) {
+export default function CityMap3D(props: CityMapProps & { lowDetail: boolean; alarm?: Alarm | null; names?: Record<number, string> }) {
   const { state } = props;
   const [reveal, setReveal] = useState<Reveal | null>(null);
   const [move, setMove] = useState<Move | null>(null);
