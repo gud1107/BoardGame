@@ -41,7 +41,7 @@ export default function SiteNoticeBanner() {
   const style = STYLES[notice.level] ?? STYLES.info;
 
   return (
-    <div className={`flex items-start gap-2 px-4 py-2 text-sm ${style.box}`} role="status">
+    <div data-site-chrome className={`flex items-start gap-2 px-4 py-2 text-sm ${style.box}`} role="status">
       <span aria-hidden>{style.icon}</span>
       <p className="flex-1 whitespace-pre-line break-keep">{notice.message}</p>
       {notice.level !== "maintenance" && (

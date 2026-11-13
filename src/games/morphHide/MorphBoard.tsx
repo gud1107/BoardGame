@@ -259,7 +259,7 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct,
       stageRef.current?.requestFullscreen?.().catch(() => {});
     } else {
       setFull(false);
-      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      if (document.fullscreenElement === stageRef.current) document.exitFullscreen().catch(() => {});
     }
   }
   // 숨는 사람 증강 카드가 뜨면 전체 화면을 잠시 풀고, 고르고 나면 원래대로 되돌린다
@@ -281,13 +281,13 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct,
       if (fullRef.current) {
         restoreFullRef.current = true;
         setFull(false);
-        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+        if (document.fullscreenElement === stageRef.current) document.exitFullscreen().catch(() => {});
       }
     } else restoreFull();
   }, [hiderAugOpen]);
   useEffect(() => {
     const onChange = () => {
-      if (!document.fullscreenElement) setFull(false);
+      if (document.fullscreenElement !== stageRef.current) setFull(false);
     };
     document.addEventListener("fullscreenchange", onChange);
     return () => document.removeEventListener("fullscreenchange", onChange);

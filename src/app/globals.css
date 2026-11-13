@@ -6547,3 +6547,9 @@ html {
 @media (prefers-reduced-motion: reduce) {
   .poster-rays, .poster-float, .group\/poster:hover .poster-shine { animation: none; }
 }
+
+/* ⛶ 게임 전체화면(공용 GamePlayPage 셸, components/common/GameFullscreen.tsx):
+   사이트 헤더·공지 띠를 숨겨 게임이 화면을 다 쓰게 한다. */
+html[data-game-full] [data-site-chrome] {
+  display: none !important;
+}

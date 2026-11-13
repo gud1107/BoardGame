@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getGameMeta } from "@/games/registry";
@@ -15,6 +15,7 @@ import RoundResultEntry from "@/components/betting/RoundResultEntry";
 import GameThumbnail from "@/components/GameThumbnail";
 import BugReportFloatingButton from "@/components/bugReport/BugReportFloatingButton";
 import ThemeToggle from "@/components/theme/ThemeToggle";
+import { GameFullscreenButton, MAX_W_PX, useGameFullscreen } from "@/components/common/GameFullscreen";
 import { recordMatchStat } from "@/lib/stats/playerStats";
 import MatchRecordCard, { type MatchRecord } from "@/components/stats/MatchRecordCard";
 import GameChampionChip from "@/components/stats/GameChampionChip";
@@ -350,9 +351,12 @@ export default function GamePlayPage() {
           : "max-w-2xl";
 
   return (
-    <div className={`mx-auto ${pageMaxWidth} px-4 pt-8 pb-24 sm:px-6 sm:pb-8`}>
-      <div className="mb-6 flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
+    <GamePageFrame pageMaxWidth={pageMaxWidth} playing={stage === "playing"}>
+      {(fs) => (
+    <>
+      <div className={`flex items-center justify-between gap-3 ${fs.full ? "mb-2" : "mb-6"}`}>
+        {/* 전체화면에선 제목 영역을 접는다(좌상단 🎁 보상 배지와 겹침 방지) */}
+        <div className={`min-w-0 items-center gap-3 ${fs.full ? "hidden" : "flex"}`}>
           <div className="relative flex h-14 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white/5 light:bg-slate-100">
             <GameThumbnail
               game={game}
@@ -377,7 +381,11 @@ export default function GamePlayPage() {
             GamePlayPage 셸)을 거치므로 게임별로 따로 배치할 필요 없음. 이미
             SiteHeader에도 있지만(로비/모든 페이지 공통), 턴 진행 중 손이 가는
             위치인 게임 제목 바로 옆에도 하나 더 노출해 달라는 요청 사항. */}
-        <ThemeToggle />
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {/* ⛶ 전체화면 — 모든 게임 공통(화면 해상도에 맞춰 확대/확장) */}
+          {stage === "playing" && <GameFullscreenButton full={fs.full} onToggle={fs.toggle} />}
+          <ThemeToggle />
+        </div>
       </div>
 
       {stage === "select" && (
@@ -468,9 +476,11 @@ export default function GamePlayPage() {
         </div>
       )}
 
-      {stage === "playing" && hydrated && (
-        <GameComponent participants={activeParticipants} onComplete={handleGameComplete} />
-      )}
+      <div ref={fs.contentRef} style={fs.contentStyle}>
+        {stage === "playing" && hydrated && (
+          <GameComponent participants={activeParticipants} onComplete={handleGameComplete} />
+        )}
+      </div>
 
       {/* 🎁 보상 도전 — 모든 게임 공통, 클라이언트에서만(localStorage로 접힘 상태를 기억) */}
       {stage === "playing" && hydrated && <RewardTracker />}
@@ -515,6 +525,34 @@ export default function GamePlayPage() {
       )}
 
       <BugReportFloatingButton gameId={game.id} gameName={game.name} />
+    </>
+      )}
+    </GamePageFrame>
+  );
+}
+
+/**
+ * Page column + shared fullscreen state. Immersive mode drops the fixed
+ * column width (the board itself is scaled/widened by `useGameFullscreen`).
+ */
+function GamePageFrame({
+  pageMaxWidth,
+  playing,
+  children,
+}: {
+  pageMaxWidth: string;
+  playing: boolean;
+  children: (fs: ReturnType<typeof useGameFullscreen>) => ReactNode;
+}) {
+  const fs = useGameFullscreen(MAX_W_PX[pageMaxWidth] ?? 672);
+  const { full, toggle } = fs;
+  // 게임이 끝나 결과 화면으로 넘어가면 전체화면도 정리
+  useEffect(() => {
+    if (!playing && full) toggle();
+  }, [playing, full, toggle]);
+  return (
+    <div className={full ? "mx-auto w-full max-w-none px-2 pt-2 pb-24 sm:px-4 sm:pb-6" : `mx-auto ${pageMaxWidth} px-4 pt-8 pb-24 sm:px-6 sm:pb-8`}>
+      {children(fs)}
     </div>
   );
 }

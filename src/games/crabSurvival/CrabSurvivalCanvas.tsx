@@ -159,6 +159,8 @@ export default function CrabSurvivalCanvas({
   const [isTouch] = useState(() => typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0));
   const [joyView, setJoyView] = useState<{ ox: number; oy: number; x: number; y: number } | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  // iPhone Safari has no element fullscreen — fall back to a fixed full-window layer.
+  const cssFullRef = useRef(false);
   const [down, setDown] = useState<{ by: string; score: number; revives: number } | null>(null);
   const [ended, setEnded] = useState(false);
   const [miniSize, setMiniSize] = useState(132);
@@ -198,7 +200,7 @@ export default function CrabSurvivalCanvas({
     const wrap = wrapRef.current, canvas = canvasRef.current;
     if (!wrap || !canvas) return;
     const resize = () => {
-      const fs = !!document.fullscreenElement;
+      const fs = document.fullscreenElement === wrap || cssFullRef.current;
       const w = wrap.clientWidth;
       const vh = window.innerHeight;
       // Portrait phones get a tall arena; desktop keeps the whole canvas (and its HUD) above the fold.
@@ -215,7 +217,7 @@ export default function CrabSurvivalCanvas({
     const ro = new ResizeObserver(resize);
     ro.observe(wrap);
     const onFs = () => {
-      setFullscreen(!!document.fullscreenElement);
+      setFullscreen(document.fullscreenElement === wrap || cssFullRef.current);
       resize();
     };
     document.addEventListener("fullscreenchange", onFs);
@@ -704,8 +706,19 @@ export default function CrabSurvivalCanvas({
   const toggleFullscreen = () => {
     const el = wrapRef.current;
     if (!el) return;
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else void el.requestFullscreen?.().catch(() => {});
+    const refit = () => requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+    const enterCss = () => {
+      cssFullRef.current = true;
+      setFullscreen(true);
+      refit();
+    };
+    if (document.fullscreenElement === el) void document.exitFullscreen().catch(() => {});
+    else if (cssFullRef.current) {
+      cssFullRef.current = false;
+      setFullscreen(false);
+      refit();
+    } else if (typeof el.requestFullscreen === "function" && document.fullscreenEnabled !== false) void el.requestFullscreen().catch(enterCss);
+    else enterCss();
   };
 
   const revive = () => {
@@ -734,7 +747,7 @@ export default function CrabSurvivalCanvas({
   return (
     <div
       ref={wrapRef}
-      className={`relative w-full select-none overflow-hidden bg-sky-900 ${fullscreen ? "" : "rounded-2xl border border-white/10 light:border-slate-300"}`}
+      className={`relative w-full select-none overflow-hidden bg-sky-900 ${fullscreen ? "fixed inset-0 z-[80]" : "rounded-2xl border border-white/10 light:border-slate-300"}`}
       style={{ touchAction: "none" }}
     >
       <style>{`@keyframes csBanner{0%{opacity:0;transform:scale(.6)}10%{opacity:1;transform:scale(1.1)}18%{transform:scale(1)}82%{opacity:1}100%{opacity:0;transform:translateY(-14px)}}.cs-banner{animation:csBanner 2.6s ease-out forwards}`}</style>

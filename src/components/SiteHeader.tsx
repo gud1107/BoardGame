@@ -59,6 +59,7 @@ export default function SiteHeader() {
 
   return (
     <header
+      data-site-chrome
       ref={headerRef}
       className="sticky top-0 z-40 border-b border-amber-500/20 bg-neutral-950/70 backdrop-blur-xl light:border-slate-200 light:bg-white/90 light:shadow-sm"
     >

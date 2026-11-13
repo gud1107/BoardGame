@@ -172,13 +172,13 @@ export default function HideAndSeekBoard(props: HideAndSeekBoardProps) {
       stageRef.current?.requestFullscreen?.().catch(() => {});
     } else {
       setFull(false);
-      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      if (document.fullscreenElement === stageRef.current) document.exitFullscreen().catch(() => {});
     }
   }
   useEffect(() => {
     if (!full) return;
     const onChange = () => {
-      if (!document.fullscreenElement) setFull(false);
+      if (document.fullscreenElement !== stageRef.current) setFull(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setFull(false);

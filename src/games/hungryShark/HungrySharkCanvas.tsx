@@ -136,6 +136,8 @@ export default function HungrySharkCanvas({
   const [isTouch] = useState(() => typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0));
   const [joyView, setJoyView] = useState<{ ox: number; oy: number; x: number; y: number } | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  // iPhone Safari has no element fullscreen — fall back to a fixed full-window layer.
+  const cssFullRef = useRef(false);
   const [dead, setDead] = useState<string | null>(null);
   const [bestiary, setBestiary] = useState<{ eaten: World["run"]["eaten"] } | null>(null);
   // 🧬 잠수 증강: mirrors world.augOffer (the engine freezes itself while it's set).
@@ -217,7 +219,7 @@ export default function HungrySharkCanvas({
     const wrap = wrapRef.current, canvas = canvasRef.current;
     if (!wrap || !canvas) return;
     const resize = () => {
-      const fs = !!document.fullscreenElement;
+      const fs = document.fullscreenElement === wrap || cssFullRef.current;
       const w = wrap.clientWidth;
       const vh = window.innerHeight;
       const h = fs ? vh : Math.round(Math.max(360, Math.min(w * 0.62, vh - 150)));
@@ -231,7 +233,7 @@ export default function HungrySharkCanvas({
     const ro = new ResizeObserver(resize);
     ro.observe(wrap);
     const onFs = () => {
-      setFullscreen(!!document.fullscreenElement);
+      setFullscreen(document.fullscreenElement === wrap || cssFullRef.current);
       resize();
     };
     document.addEventListener("fullscreenchange", onFs);
@@ -539,8 +541,19 @@ export default function HungrySharkCanvas({
   const toggleFullscreen = () => {
     const el = wrapRef.current;
     if (!el) return;
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else void el.requestFullscreen?.().catch(() => {});
+    const refit = () => requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+    const enterCss = () => {
+      cssFullRef.current = true;
+      setFullscreen(true);
+      refit();
+    };
+    if (document.fullscreenElement === el) void document.exitFullscreen().catch(() => {});
+    else if (cssFullRef.current) {
+      cssFullRef.current = false;
+      setFullscreen(false);
+      refit();
+    } else if (typeof el.requestFullscreen === "function" && document.fullscreenEnabled !== false) void el.requestFullscreen().catch(enterCss);
+    else enterCss();
   };
 
   const hpPct = hud ? Math.max(0, hud.hp / hud.maxHp) : 1;
@@ -551,7 +564,7 @@ export default function HungrySharkCanvas({
   return (
     <div
       ref={wrapRef}
-      className={`relative w-full select-none overflow-hidden bg-slate-950 ${fullscreen ? "" : "rounded-2xl border border-white/10 light:border-slate-300"}`}
+      className={`relative w-full select-none overflow-hidden bg-slate-950 ${fullscreen ? "fixed inset-0 z-[80]" : "rounded-2xl border border-white/10 light:border-slate-300"}`}
       style={{ touchAction: "none" }}
     >
       <style>{`@keyframes hsBanner{0%{opacity:0;transform:scale(.6)}12%{opacity:1;transform:scale(1.08)}20%{transform:scale(1)}80%{opacity:1}100%{opacity:0;transform:translateY(-16px)}}.hs-banner{animation:hsBanner 2.2s ease-out forwards}`}</style>

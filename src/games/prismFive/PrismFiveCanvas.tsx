@@ -273,22 +273,31 @@ export default function PrismFiveCanvas({
   const toggleFull = () => {
     const el = wrapRef.current;
     if (!el) return;
-    if (document.fullscreenElement) void document.exitFullscreen().then(() => setFull(false));
-    else
+    if (document.fullscreenElement === el) void document.exitFullscreen().catch(() => setFull(false));
+    else if (full) setFull(false); // 아이폰 등: 창 가득 모드 해제
+    else if (typeof el.requestFullscreen === "function" && document.fullscreenEnabled !== false)
       void el
-        .requestFullscreen?.()
+        .requestFullscreen()
         .then(() => setFull(true))
-        .catch(() => setFull(false));
+        .catch(() => setFull(true)); // 실패하면 창 가득 모드로
+    else setFull(true);
   };
+  // Esc·뒤로가기로 빠져나와도 버튼 상태가 맞도록
+  useEffect(() => {
+    const on = () => setFull(document.fullscreenElement === wrapRef.current);
+    document.addEventListener("fullscreenchange", on);
+    return () => document.removeEventListener("fullscreenchange", on);
+  }, []);
 
   const hd = HEROES[hero];
 
   return (
-    <div ref={wrapRef} className={`relative mx-auto w-full select-none ${full ? "flex h-full items-center bg-black" : ""}`} style={{ touchAction: "none" }}>
+    <div ref={wrapRef} className={`select-none ${full ? "fixed inset-0 z-[80] flex h-[100dvh] w-screen items-center justify-center bg-black" : "relative mx-auto w-full"}`} style={{ touchAction: "none" }}>
       <canvas
         ref={canvasRef}
-        className="block w-full rounded-xl border border-white/10 bg-black shadow-2xl"
-        style={{ aspectRatio: `${VIEW_W} / ${VIEW_H}` }}
+        className={`block rounded-xl border border-white/10 bg-black shadow-2xl ${full ? "" : "w-full"}`}
+        // 전체화면: 비율 그대로 화면 안에 맞춤(21:9·가로 폰에서 위아래 잘림 방지)
+        style={full ? { aspectRatio: `${VIEW_W} / ${VIEW_H}`, width: `min(100vw, calc(100dvh * ${VIEW_W} / ${VIEW_H}))` } : { aspectRatio: `${VIEW_W} / ${VIEW_H}` }}
         onPointerDown={() => audioRef.current?.unlock()}
       />
       {/* Top-right controls */}

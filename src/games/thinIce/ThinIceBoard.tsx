@@ -680,15 +680,18 @@ export default function ThinIceBoard({ snap, buf, fresh, mySeat, names, onInput,
   // 전체화면
   const [full, setFull] = useState(false);
   useEffect(() => {
-    const on = () => setFull(!!document.fullscreenElement);
+    // 이 무대만 비교 — 페이지 전체화면(공용 셸) 안에서도 상태가 꼬이지 않게
+    const on = () => setFull(document.fullscreenElement === stageRef.current);
     document.addEventListener("fullscreenchange", on);
     return () => document.removeEventListener("fullscreenchange", on);
   }, []);
   const toggleFull = () => {
     const el = stageRef.current;
     if (!el) return;
-    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
-    else void el.requestFullscreen?.().catch(() => {});
+    if (document.fullscreenElement === el) void document.exitFullscreen().catch(() => {});
+    else if (full) setFull(false); // 아이폰 등: 창 가득 모드 해제
+    else if (typeof el.requestFullscreen === "function" && document.fullscreenEnabled !== false) void el.requestFullscreen().catch(() => setFull(true));
+    else setFull(true);
   };
 
   const quality: "high" | "low" = view.quality === "auto" ? (touch || lowFps ? "low" : "high") : view.quality;
@@ -794,7 +797,7 @@ export default function ThinIceBoard({ snap, buf, fresh, mySeat, names, onInput,
       {/* 무대 */}
       <div
         ref={stageRef}
-        className={`relative w-full overflow-hidden rounded-2xl border border-white/10 bg-[#0d3a5c] select-none light:border-slate-200 ${full ? "h-screen rounded-none" : touch ? "h-[64svh] min-h-[340px]" : "aspect-[16/10] max-h-[76vh]"}`}
+        className={`relative w-full overflow-hidden rounded-2xl border border-white/10 bg-[#0d3a5c] select-none light:border-slate-200 ${full ? "fixed inset-0 z-[80] h-[100dvh] w-screen rounded-none border-0" : touch ? "h-[64svh] min-h-[340px]" : "aspect-[16/10] max-h-[76vh]"}`}
       >
         {use3d ? (
           <LakeScene shared={shared} names={names} seatCount={snap.seatCount} quality={quality} fx={fx} onFps={(f) => f < 28 && !lowFps && setLowFps(true)} />
