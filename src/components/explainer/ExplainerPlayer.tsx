@@ -649,7 +649,9 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
               </CtlButton>
               {menu && (
                 <div
-                  className="absolute right-0 bottom-10 z-10 w-60 overflow-hidden rounded-xl bg-black/90 py-1.5 text-sm text-white shadow-2xl"
+                  className="absolute right-0 bottom-10 z-10 w-60 overflow-y-auto overscroll-contain rounded-xl bg-black/90 py-1.5 text-sm text-white shadow-2xl"
+                  // phones: the picture is only ~200px tall — never let the menu run off its top
+                  style={{ maxHeight: Math.max(150, scale * STAGE_H - (isFull ? 70 : 48)) }}
                   onClick={(e) => e.stopPropagation()}
                 >
                   {menu === "main" && (
@@ -684,18 +686,30 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
                           </button>
                         </div>
                       </div>
-                      <div className="max-h-56 overflow-y-auto border-t border-white/10 pt-1">
-                        {SPEED_PRESETS.map((s) => (
-                          <button
-                            key={s}
-                            type="button"
-                            onClick={() => setRate(s)}
-                            className={`flex w-full items-center gap-2 px-4 py-1.5 text-left hover:bg-white/10 ${Math.abs(s - speed) < 1e-6 ? "font-bold text-red-400" : ""}`}
-                          >
-                            <span className="w-4">{Math.abs(s - speed) < 1e-6 ? "✓" : ""}</span>
-                            {speedLabel(s)}
-                          </button>
-                        ))}
+                      <div className={`border-t border-white/10 ${narrow ? "grid grid-cols-4 gap-1 p-2" : "pt-1"}`}>
+                        {SPEED_PRESETS.map((s) => {
+                          const on = Math.abs(s - speed) < 1e-6;
+                          return narrow ? (
+                            <button
+                              key={s}
+                              type="button"
+                              onClick={() => setRate(s)}
+                              className={`rounded-md py-1.5 text-xs font-bold ${on ? "bg-red-600 text-white" : "bg-white/10"}`}
+                            >
+                              {s === 1 ? "1×" : `${s}×`}
+                            </button>
+                          ) : (
+                            <button
+                              key={s}
+                              type="button"
+                              onClick={() => setRate(s)}
+                              className={`flex w-full items-center gap-2 px-4 py-1.5 text-left hover:bg-white/10 ${on ? "font-bold text-red-400" : ""}`}
+                            >
+                              <span className="w-4">{on ? "✓" : ""}</span>
+                              {speedLabel(s)}
+                            </button>
+                          );
+                        })}
                       </div>
                     </>
                   )}
