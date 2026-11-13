@@ -12,19 +12,36 @@ export function speakable(text: string): string {
     .replace(/(\d)\s*~\s*(\d)/g, "$1에서 $2")
     .replace(/×\s*(\d)/g, " 곱하기 $1")
     .replace(/MAX→0/g, "맥스 제로")
+    // English glosses in parentheses ("위신 점수(Prestige)") — Korean voices spell them oddly
+    .replace(/\s*\(\s*[A-Za-z][A-Za-z\s.'-]*\)/g, "")
+    .replace(/\bLv\.?\s*/gi, "레벨 ")
+    .replace(/\bvs\.?\s*/gi, "대 ")
+    .replace(/\bOK\b/g, "오케이")
+    .replace(/\bAI\b/g, "에이아이")
+    .replace(/\bBGM\b/g, "배경음악")
+    .replace(/\+(\d)/g, "플러스 $1")
+    .replace(/≥/g, " 이상 ")
+    .replace(/≤/g, " 이하 ")
+    .replace(/\s*[/|]\s*/g, ", ")
     .replace(/[→⇒]/g, ", ")
     .replace(/[()[\]「」『』'"“”‘’]/g, " ")
     .replace(/[·…~—–]/g, ", ")
     .replace(/\s*,\s*(,\s*)+/g, ", ")
+    .replace(/\s+,/g, ",")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-/** How long a cue stays on screen at 1× — roughly Korean TTS speed plus a breath. */
+/**
+ * How long a cue stays on screen at 1×. Fitted 2026-11-13 to real phrase-by-
+ * phrase TTS at 0.97× (64 lines, Windows Korean voice): speech ≈ 0.12s +
+ * 0.225s/char. A bit of lead on top; slower outliers are covered by the
+ * player's hold-at-boundary, faster neural voices just get a short breath.
+ */
 export function cueSeconds(text: string): number {
   const chars = speakable(text).replace(/\s/g, "").length;
   if (chars === 0) return 1.6;
-  return Math.min(14, Math.max(2.2, 0.9 + chars * 0.165));
+  return Math.min(16, Math.max(2.2, 0.6 + chars * 0.225));
 }
 
 export interface TimelineCue {

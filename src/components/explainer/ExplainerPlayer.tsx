@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ExplainerScript } from "./types";
 import { buildTimeline, chapterAt, formatTime, locate } from "./timeline";
-import { isSpeaking, siteMuted, speak, speechSupported, stopSpeech, unlockSpeech } from "./narration";
+import { isSpeaking, speak, speechSupported, stopSpeech, unlockSpeech } from "./narration";
 import { STAGE_H, STAGE_W } from "./stage";
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2] as const;
@@ -44,7 +44,10 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
   const [controlsShown, setControlsShown] = useState(true);
   const [hover, setHover] = useState<{ x: number; t: number; w: number } | null>(null);
   const [scale, setScale] = useState(0.5);
-  const [isFull, setIsFull] = useState(false);
+  const [nativeFull, setNativeFull] = useState(false);
+  /** iPhone Safari has no element Fullscreen API — fill the window with CSS instead. */
+  const [cssFull, setCssFull] = useState(false);
+  const isFull = nativeFull || cssFull;
   const [ended, setEnded] = useState(false);
   const flatScenes = useMemo(() => script.chapters.flatMap((c) => c.scenes), [script]);
 
@@ -72,7 +75,7 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
   }, []);
 
   useEffect(() => {
-    const onFs = () => setIsFull(document.fullscreenElement === shellRef.current);
+    const onFs = () => setNativeFull(document.fullscreenElement === shellRef.current);
     document.addEventListener("fullscreenchange", onFs);
     return () => document.removeEventListener("fullscreenchange", onFs);
   }, []);
@@ -82,7 +85,7 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
       cancelSpeechRef.current();
       cancelSpeechRef.current = () => {};
       if (!voiceRef.current || cueIndex < 0) return;
-      cancelSpeechRef.current = speak(tl.cues[cueIndex].text, 1.05 * speedRef.current);
+      cancelSpeechRef.current = speak(tl.cues[cueIndex].text, speedRef.current);
     },
     [tl],
   );
@@ -219,12 +222,30 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
       writePref("explainer:captions", !c);
       return !c;
     });
-  const toggleFull = () => {
+  const cssFullRef = useRef(false);
+  useEffect(() => {
+    cssFullRef.current = cssFull;
+  }, [cssFull]);
+  const toggleFull = useCallback(() => {
     const el = shellRef.current;
     if (!el) return;
-    if (document.fullscreenElement) void document.exitFullscreen?.();
-    else void el.requestFullscreen?.().catch(() => {});
-  };
+    if (cssFullRef.current) return setCssFull(false);
+    if (document.fullscreenElement) return void document.exitFullscreen?.();
+    if (typeof el.requestFullscreen === "function" && document.fullscreenEnabled !== false) {
+      el.requestFullscreen().catch(() => setCssFull(true));
+    } else setCssFull(true);
+  }, []);
+  useEffect(() => {
+    if (!cssFull) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopImmediatePropagation();
+        setCssFull(false);
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [cssFull]);
 
   const chapterIdx = chapterAt(tl, time);
   const jumpChapter = (dir: 1 | -1) => {
@@ -256,7 +277,7 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggle, seek, poke]);
+  }, [toggle, seek, poke, toggleFull]);
 
   // Seek bar pointer handling.
   const timeFromX = (clientX: number) => {
@@ -295,11 +316,16 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
     <div className="flex w-full flex-col gap-3 lg:flex-row lg:items-start">
       <div
         ref={shellRef}
-        className={`group relative w-full overflow-hidden bg-black select-none ${isFull ? "flex items-center" : "rounded-xl"} lg:flex-1`}
+        className={`group relative overflow-hidden bg-black select-none ${
+          cssFull ? "fixed inset-0 z-[300] flex items-center justify-center" : `w-full lg:flex-1 ${isFull ? "flex items-center" : "rounded-xl"}`
+        }`}
         onPointerMove={poke}
         style={{ cursor: chrome ? undefined : "none" }}
       >
-        <div ref={frameRef} className="relative aspect-video w-full overflow-hidden" onClick={() => (speedMenu ? setSpeedMenu(false) : toggle())}>
+        <div
+          ref={frameRef}
+          style={cssFull ? { width: "min(100vw, calc(100dvh * 16 / 9))" } : undefined}
+          className="relative aspect-video w-full overflow-hidden" onClick={() => (speedMenu ? setSpeedMenu(false) : toggle())}>
           <div className="absolute top-0 left-0 origin-top-left" style={{ width: STAGE_W, height: STAGE_H, transform: `scale(${scale})` }}>
             {frame}
           </div>
@@ -421,7 +447,7 @@ export default function ExplainerPlayer({ script, onFinish, finishLabel = "방 �
               ⏭
             </CtlButton>
             <CtlButton label={voiceOn ? "내레이션 끄기 (M)" : "내레이션 켜기 (M)"} onClick={toggleVoice}>
-              {voiceOn && !siteMuted() ? "🔊" : "🔇"}
+              {voiceOn ? "🔊" : "🔇"}
             </CtlButton>
             <span className="ml-1 text-xs tabular-nums text-white/90 sm:text-sm">
               {formatTime(time)} / {formatTime(tl.duration)}

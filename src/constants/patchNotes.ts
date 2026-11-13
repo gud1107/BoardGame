@@ -69,6 +69,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     title: "🎬 유튜브처럼 보는 룰 설명 영상",
     changes: [
       { game: "common", type: "FEAT", desc: "🎬 방 만들기 화면에 '영상' 탭 — 자막·내레이션·챕터·배속·전체화면이 있는 룰 설명 영상, 30초 룰북이 있는 모든 게임" },
+      { game: "common", type: "IMPROVE", desc: "🎙️ 영상 내레이션 — 첫 방문자도 소리가 나게(사이트 음소거와 분리), 더 자연스러운 음성 우선·문장 끊어 읽기·자막 박자 재조정 · 아이폰 전체화면" },
       { game: "dalmuti", type: "FEAT", desc: "🎬 애니메이션 룰 영상 — 실제 카드로 보는 계급·세금·혁명·카드 내기 예시" },
       { game: "coyote", type: "FEAT", desc: "🎬 애니메이션 룰 영상 — 이마 카드·선언·코요테 판정·특수 카드 계산 순서 예시" },
       { game: "perudo", type: "FEAT", desc: "🎬 애니메이션 룰 영상 — 컵·와일드 1·선언·페루도!/맞아! 차등 페널티 예시" },

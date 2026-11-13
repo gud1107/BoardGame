@@ -6,6 +6,7 @@ import { getRoomRulebookSummary } from "@/constants/roomRulebookSummaries";
 import { buildTimeline, chapterAt, cueSeconds, locate, speakable } from "./timeline";
 import { ANIMATED_EXPLAINERS, getExplainerScript } from "./scripts";
 import type { ExplainerScript } from "./types";
+import { phrases, voiceScore } from "./narration";
 
 const tiny: ExplainerScript = {
   gameId: "x",
@@ -41,6 +42,7 @@ describe("timeline", () => {
   it("gives longer lines more time and strips emoji for speech", () => {
     expect(cueSeconds("가".repeat(40))).toBeGreaterThan(cueSeconds("가나다"));
     expect(speakable("🎯 3~35 카드 ×2 (보너스)")).toBe("3에서 35 카드 곱하기 2 보너스");
+    expect(speakable("위신 점수(Prestige) 15점 / 봇 Lv.1~10 · +1 찬스")).toBe("위신 점수 15점, 봇 레벨 1에서 10, 플러스 1 찬스");
   });
 });
 
@@ -84,6 +86,24 @@ describe("explainer scripts", () => {
       if (!s || s.kind !== "summary") continue;
       renderAll(s);
     }
+  });
+});
+
+describe("narration", () => {
+  it("splits a line into breath groups without choppy fragments", () => {
+    expect(phrases("여우는 남들 합이 15니까, 내 카드까지 생각해 18을 불렀어요. 첫 선언은 1 이상이어야 합니다.")).toEqual([
+      "여우는 남들 합이 15니까,",
+      "내 카드까지 생각해 18을 불렀어요.",
+      "첫 선언은 1 이상이어야 합니다.",
+    ]);
+    expect(phrases("둘째, 인수. 토끼는 카드를 가져가기로 했어요.")).toEqual(["둘째, 인수.", "토끼는 카드를 가져가기로 했어요."]);
+    expect(phrases("하나, 둘, 셋을 세요.")).toEqual(["하나, 둘, 셋을 세요."]);
+  });
+
+  it("prefers natural/premium Korean voices over the robotic SAPI one", () => {
+    expect(voiceScore("Microsoft SunHi Online (Natural) - Korean (Korea)")).toBeGreaterThan(voiceScore("Google 한국의"));
+    expect(voiceScore("Yuna (Enhanced)")).toBeGreaterThan(voiceScore("Yuna"));
+    expect(voiceScore("Google 한국의")).toBeGreaterThan(voiceScore("Microsoft Heami - Korean (Korean)"));
   });
 });
 
