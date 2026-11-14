@@ -63,7 +63,8 @@ describe("game sound suites", () => {
     // + thin ice party (살얼음 파티).
     // + hundred tales (백 개의 괴담).
     // + strange corridor (이상한 복도).
-    expect(suites.length).toBe(49);
+    // + hushed ward (숨죽인 병동).
+    expect(suites.length).toBe(50);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

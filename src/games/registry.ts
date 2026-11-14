@@ -156,6 +156,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "hushed-ward",
+    name: "숨죽인 병동",
+    nameEn: "Hushed Ward",
+    description:
+      "새벽 3시, 문 닫은 요양병원 3병동에 갇힌 1~4명이 손전등 하나씩 들고 빠져나가는 1인칭 3D 협동 공포 게임! 병동을 떠도는 청귀(聽鬼)는 눈이 멀어 소리만 들어요 — 발소리, 문소리, 무서워서 뛰는 심장 소리까지. 앉아서 걷고, 벽에 붙어 숨을 참고, 약병을 던져 따돌리며 서랍 속 🧧 봉인 부적을 찾아 기도실 제단에 붙이면 현관이 열려요. 🔔 종이 세 번 울리면 온 병동이 귀를 기울이니 멈추세요. 쓰러진 동료 일으키기, 난이도 4단계, 혼자 하기·AI 동료 Lv.1~10. 🔊 소리를 켜고 하세요.",
+    players: { min: 1, max: 4 },
+    playTime: { minMinutes: 5, maxMinutes: 12 },
+    category: "party",
+    thumbnail: { emoji: "🔦", gradient: ["#1f3a34", "#020405"] },
+    tags: ["공포", "협동", "1인칭", "잠입", "소리", "실시간", "3D", "혼자", "AI봇"],
+    genres: ["party", "strategy"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "thin-ice-party",
     name: "살얼음 파티",
     nameEn: "Thin Ice Party",

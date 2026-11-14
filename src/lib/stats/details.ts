@@ -89,6 +89,14 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "캐슬링 / 앙파상", value: (d) => `${n(d.castles)} / ${n(d.enPassants)}` },
     { label: "승진 (언더프로모션)", value: (d) => `${n(d.promotions)} (${n(d.underPromotions)})` },
   ],
+  "hushed-ward": [
+    { label: "🚪 탈출 / 팀 승리 (전원 무사 S)", value: (d) => `${n(d.escapes)} / ${n(d.teamWins)} (${n(d.perfect)})` },
+    { label: "🧧 부적 찾음 / 붙임 · 뒤진 서랍", value: (d) => `${n(d.talFound)} / ${n(d.talPlaced)} · ${n(d.searches)}` },
+    { label: "😱 쫓김 / 붙잡힘 · 🧿 타 버린 부적", value: (d) => `${n(d.hunted)} / ${n(d.downs)} · ${n(d.charmsBurnt)}` },
+    { label: "✚ 일으킨 동료 · 🔔 들키지 않고 넘긴 종", value: (d) => `${n(d.revives)} · ${n(d.hushOk)}` },
+    { label: "🍾 던진 약병 / 💊 진정제", value: (d) => `${n(d.bottles)} / ${n(d.pills)}` },
+    { label: "⏱ 가장 빠른 탈출 · 🔦 혼자 탈출 · 💀 악몽 탈출", value: (d) => `${d.minEscapeSec !== undefined ? `${n(d.minEscapeSec)}초` : "-"} · ${n(d.soloEscapes)} · ${n(d.nightmareEscapes)}` },
+  ],
   "thin-ice-party": [
     { label: "💥 KO / 🌊 빠짐 (혼자)", value: (d) => `${n(d.kos)} / ${n(d.falls)} (${n(d.selfFalls)})` },
     { label: "🏆 라운드 1등 / 3등 안", value: (d) => `${n(d.roundWins)} / ${n(d.podiums)}` },

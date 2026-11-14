@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.173.0",
+    releaseDate: "2026-11-14",
+    title: "🔦 새 게임 숨죽인 병동",
+    changes: [
+      { game: "hushed-ward", type: "FEAT", desc: "🔦 새 게임 — 문 닫은 병동에서 손전등 하나로 빠져나가는 1~4인 1인칭 3D 협동 공포 · 혼자 하기·AI 동료 Lv.1~10 · 난이도 4단계" },
+      { game: "hushed-ward", type: "FEAT", desc: "👂 눈먼 귀신 '청귀'는 소리만 들어요 — 앉아 걷기·숨 참기·벽에 붙기·🍾 약병 던져 따돌리기 · 💓 공포가 오르면 심장 소리가 들켜요" },
+      { game: "hushed-ward", type: "FEAT", desc: "🧧 봉인 부적을 찾아 제단에 붙이면 현관이 열려요 · 🔔 종이 세 번 울리면 멈추기 · ✚ 쓰러진 동료 일으키기 · 방장이 나가도 판이 이어져요" },
+    ],
+  },
+  {
     version: "v1.172.0",
     releaseDate: "2026-11-14",
     title: "🚪 새 게임 이상한 복도",

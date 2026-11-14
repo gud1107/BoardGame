@@ -112,6 +112,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "체크", key: "checks", unit: "번" },
     { label: "승진", key: "promotions", unit: "번" },
   ],
+  "hushed-ward": [
+    { label: "부적 붙임", key: "talPlaced", unit: "장" },
+    { label: "뒤진 서랍", key: "searches", unit: "개" },
+    { label: "일으킨 동료", key: "revives", unit: "번" },
+    { label: "붙잡힘", key: "downs", unit: "번" },
+  ],
   "thin-ice-party": [
     { label: "KO", key: "kos", unit: "번" },
     { label: "라운드 1등", key: "roundWins", unit: "번" },
@@ -331,6 +337,10 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "chs-mates", label: "체크메이트 승", num: "mateWins", format: "count", unit: "번" },
     { id: "chs-captures", label: "잡은 기물", num: "captures", format: "count", unit: "개" },
     { id: "chs-quick", label: "번개 메이트", num: "quickMates", format: "count", unit: "번" },
+  ],
+  "hushed-ward": [
+    { id: "hw-escapes", label: "🚪 탈출", num: "escapes", format: "count", unit: "번" },
+    { id: "hw-revives", label: "✚ 일으킨 동료", num: "revives", format: "count", unit: "번" },
   ],
   "thin-ice-party": [
     { id: "ti-kos", label: "💥 KO", num: "kos", format: "count", unit: "번" },
