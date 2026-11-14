@@ -151,6 +151,13 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "👻 다섯 귀신 · 💀 저주", value: (d) => `${n(d.perfects)} · ${n(d.curses)}` },
     { label: "🧂 부적으로 버팀 / 🕯️ 새 초 / 🪞 거울", value: (d) => `${n(d.saltSaves)} / ${n(d.relit)} / ${n(d.mirrors)}` },
   ],
+  "hush-night": [
+    { label: "🗝️ 주운 열쇠 / 🕳️ 가져간 열쇠", value: (d) => `${n(d.picked)} / ${n(d.banked)}` },
+    { label: "한 번에 가져간 최대 · 한 판 최고", value: (d) => `${n(d.maxBank)} · ${n(d.maxScore)}` },
+    { label: "😱 잡힘 / 떨어뜨린 열쇠", value: (d) => `${n(d.caught)} / ${n(d.dropped)}` },
+    { label: "🤫 숨죽임 / 🚶 걷기 / 🏃 달리기", value: (d) => `${n(d.hushes)} / ${n(d.walks)} / ${n(d.runs)}` },
+    { label: "🪨 던진 돌 / 괴물을 끈 돌", value: (d) => `${n(d.throws)} / ${n(d.lured)}` },
+  ],
   "strange-corridor": [
     { label: "🚪 걸은 복도 / 정답", value: (d) => `${n(d.rounds)} / ${n(d.correct)}` },
     { label: "🔍 찾은 이상 / 놓친 이상", value: (d) => `${n(d.found)} / ${n(d.missed)}` },

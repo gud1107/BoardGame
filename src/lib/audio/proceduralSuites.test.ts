@@ -64,7 +64,8 @@ describe("game sound suites", () => {
     // + hundred tales (백 개의 괴담).
     // + strange corridor (이상한 복도).
     // + hushed ward (숨죽인 병동).
-    expect(suites.length).toBe(50);
+    // + hush night (숨죽인 밤).
+    expect(suites.length).toBe(51);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

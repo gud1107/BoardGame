@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.174.0",
+    releaseDate: "2026-11-14",
+    title: "🤫 새 게임 숨죽인 밤",
+    changes: [
+      { game: "hush-night", type: "FEAT", desc: "🤫 새 게임 — 불 꺼진 집에서 열쇠를 주워 지하실 문까지 가져가는 2~4인 3D 동시 선택 눈치 싸움 · AI 봇 Lv.1~10" },
+      { game: "hush-night", type: "FEAT", desc: "👹 눈먼 괴물은 가장 큰 소리로 다가와요 — 숨죽이기·걷기·달리기, 🪨 돌을 던져 남에게 보내기 · 잡히면 열쇠를 떨어뜨려요" },
+      { game: "hush-night", type: "FEAT", desc: "🔒 고른 행동은 펼치기 전까지 아무도 몰라요 · 😡 막판엔 괴물이 빨라져요 · 🔰 소리 도우미 · BGM과 모든 행동 효과음" },
+    ],
+  },
+  {
     version: "v1.173.0",
     releaseDate: "2026-11-14",
     title: "🔦 새 게임 숨죽인 병동",

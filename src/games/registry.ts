@@ -291,6 +291,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "hush-night",
+    name: "숨죽인 밤",
+    nameEn: "Hush Night",
+    description:
+      "불 꺼진 집에서 열쇠를 주워 한가운데 지하실 문까지 가져가는 2~4인 3D 눈치 싸움! 매 밤 모두 몰래 🤫 숨죽이기·🚶 걷기·🏃 달리기·🪨 돌 던지기 중 하나를 고르고 한꺼번에 펼쳐요. 눈먼 괴물은 가장 크게 들린 소리로 다가와, 지나간 칸의 사람을 잡아요 — 잡히면 열쇠를 떨어뜨리고 처음 자리로. 돌을 던져 괴물을 남에게 보낼 수도 있어요. 밤의 마지막 ⅓엔 괴물이 빨라져요. 10/14밤, 🔰 소리 도우미, AI 봇 Lv.1~10.",
+    players: { min: 2, max: 4 },
+    playTime: { minMinutes: 6, maxMinutes: 10 },
+    category: "strategy",
+    thumbnail: { emoji: "🤫", gradient: ["#312e81", "#0c0a09"] },
+    tags: ["공포", "눈치", "동시선택", "잠입", "블러핑", "전략", "3D", "AI봇"],
+    genres: ["strategy", "party"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "strange-corridor",
     name: "이상한 복도",
     nameEn: "Strange Corridor",

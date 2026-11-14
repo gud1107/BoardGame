@@ -58,6 +58,7 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   "island-pioneers": dynamic(() => import("./islandPioneers/IslandPioneersGame"), { ssr: false }),
   "mini-golf": dynamic(() => import("./miniGolf/MiniGolfGame"), { ssr: false }),
   "cargo-stack": dynamic(() => import("./cargoStack/CargoStackGame"), { ssr: false }),
+  "hush-night": dynamic(() => import("./hushNight/HushNightGame"), { ssr: false }),
   "strange-corridor": dynamic(() => import("./strangeCorridor/StrangeCorridorGame"), { ssr: false }),
   "hundred-tales": dynamic(() => import("./hundredTales/HundredTalesGame"), { ssr: false }),
   "wobble-tower": dynamic(() => import("./wobbleTower/WobbleTowerGame"), { ssr: false }),

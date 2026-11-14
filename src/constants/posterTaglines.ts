@@ -24,6 +24,7 @@ export const POSTER_TAGLINES: Partial<Record<GameId, string>> = {
   "island-pioneers": "한 장씩 이어 붙여라, 섬은 함께 자라고 땅은 내 것!",
   "mini-golf": "한 타에 쏙? 풍차에 퉁? 구름 아래로 풍덩?",
   "cargo-stack": "한 층만 더… 기우뚱, 풍덩!",
+  "hush-night": "쉿… 발소리 하나에 그것이 온다",
   "strange-corridor": "아까랑… 뭔가 달라졌어",
   "hundred-tales": "한 이야기만 더… 후우, 촛불이 꺼진다",
   "wobble-tower": "한 칸만 더… 와르르!",

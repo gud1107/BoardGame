@@ -160,6 +160,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "씌임", key: "busts", unit: "번" },
     { label: "최종 점수", key: "maxScore", unit: "점" },
   ],
+  "hush-night": [
+    { label: "가져간 열쇠", key: "banked", unit: "개" },
+    { label: "잡힘", key: "caught", unit: "번" },
+    { label: "괴물을 끈 돌", key: "lured", unit: "번" },
+    { label: "한 판 최고", key: "maxScore", unit: "개" },
+  ],
   "strange-corridor": [
     { label: "정답", key: "correct", unit: "개" },
     { label: "찾은 이상", key: "found", unit: "개" },
@@ -372,6 +378,10 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
   "hundred-tales": [
     { id: "ht-told", label: "🕯️ 들려준 괴담", num: "told", format: "count", unit: "개" },
     { id: "ht-best", label: "😨 최고 점수", num: "maxScore", format: "count", unit: "점" },
+  ],
+  "hush-night": [
+    { id: "hn-banked", label: "🗝️ 가져간 열쇠", num: "banked", format: "count", unit: "개" },
+    { id: "hn-best", label: "🤫 한 판 최고", num: "maxScore", format: "count", unit: "개" },
   ],
   "strange-corridor": [
     { id: "sc-found", label: "🔍 찾은 이상", num: "found", format: "count", unit: "개" },
