@@ -40,6 +40,15 @@
 - **2026-11-01 두 번째 정리**: 같은 일이 또 일어나 7,311줄/약 1MB가 됐다. 10-25 이전 날짜 섹션 104개(2026-09-14~10-23, 약 7,000줄)를 `docs/history.md` "Phase 30+" 아카이브로 원문 그대로 옮겼다. 3,500줄이 넘던 "🌗 테마 토글" 섹션도 함께 옮겼다. 한 헤더 밑에 여러 날짜의 후속 세션 기록을 `_이전 갱신: ..._` 식으로 계속 이어 붙이지 말 것.
 - **세션을 마칠 때마다** 내 섹션을 맨 위에 추가하고, 1주일 넘은 섹션은 그 자리에서 history.md 맨 끝 아카이브(현재 Phase 30+, "앞으로 이 문서에 추가할 때" 바로 위)로 옮길 것. 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 🚪 이상한 복도 (새 게임) — 2026-11-14 (패치 v1.172.0)
+
+요청: 3D 공포게임 추천 중 두 번째, 백 개의 괴담 다음 순서. 자체 창작 "이상 현상 찾기" 파티 레이스(특정 게임 복제 아님 — 동시 진행·직접 눌러 찾기·점수 레이스). 규칙 원전: [boardGameRule/이상한복도/이상한복도.md](./boardGameRule/이상한복도/이상한복도.md) (§1~§10).
+- **게임**: 1~8인. 시드로 복도(문 6·벽 소품 9·등 4·CCTV·비상구·창문) 생성 → 기억하기 20초 → 복도 8/12번(각 20초, 약 65%에 이상 1개) → 정답 공개 4.5초. 맞히면 100 + 속도(≤100) + 연속(25씩 ≤100). 보통/어려움(옮겨짐·기울어짐 추가), 🫣 공포 연출(그림자·붉은 깜빡임) 끄기.
+- **구조** `src/games/strangeCorridor/`: `engine.ts`(`buildLayout`/`buildScript`/`shownProps` — 3D·2D가 같은 함수로 그림, 모든 행동은 `step`으로 묶음) · `bot.ts`(눈·침착함·반응 시간) · `three/CorridorScene.tsx`(자체 Canvas, 걷는 카메라 + 드래그 둘러보기, 투명 터치 상자, 등 깜빡임) · `Corridor2D.tsx`(1점 투시 SVG) · `StrangeCorridorBoard.tsx` · `StrangeCorridorGame.tsx`(백 개의 괴담 방 복제 → 동시 진행: 드라이버가 봇 답·`advance` 전송, 멍때림 투표 없음) · `strangeCorridorSound.ts`("Fluorescent Hum" 70BPM) · `RulebookModal.tsx`(5탭) · `stats.ts`.
+- **등록**: registry(🚪, party/family)/playableGames/gameDifficulty(1)/posterTaglines/roomRulebookSummaries/achievements(7)/details/presentation/patchNotes v1.172.0, page max-w-3xl, proceduralSuites +1.
+- **확인**: `StrangeCorridor.test.ts` 10개(배치·대본 제약·점수·흐름·봇 레벨 정답률 Lv.10>85%/Lv.1<65%) 통과, tsc 0, eslint 0(ref를 렌더 중 읽던 것 고침). 헤드리스 3D 캡처 1280(정답 공개)·360(걷기) — 가로 넘침 0, 문 번호를 이름표 알약 텍스처 대신 글자 텍스처로 고침.
+- **남은 것**: 실제 다기기 온라인 미확인(동시 진행 첫 게임 패턴이라 특히), 소리 귀로 미확인, 실기기 FPS 미확인, 포스터·호버 영상 없음. 정답·남의 답이 클라이언트에 보임(락스텝 한계, 룰북 §6).
+
 ## 🕯️ 백 개의 괴담 (새 게임) — 2026-11-14 (패치 v1.171.0)
 
 요청: 3D 공포게임 추천 중 "백 개의 괴담" 제작(이어서 이상한 복도·숨죽인 밤까지 한 세션). 자체 창작 푸시 유어 럭. 규칙 원전: [boardGameRule/백개의괴담/백개의괴담.md](./boardGameRule/백개의괴담/백개의괴담.md) (§1~§12).

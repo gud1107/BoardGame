@@ -143,6 +143,13 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "👻 다섯 귀신 · 💀 저주", value: (d) => `${n(d.perfects)} · ${n(d.curses)}` },
     { label: "🧂 부적으로 버팀 / 🕯️ 새 초 / 🪞 거울", value: (d) => `${n(d.saltSaves)} / ${n(d.relit)} / ${n(d.mirrors)}` },
   ],
+  "strange-corridor": [
+    { label: "🚪 걸은 복도 / 정답", value: (d) => `${n(d.rounds)} / ${n(d.correct)}` },
+    { label: "🔍 찾은 이상 / 놓친 이상", value: (d) => `${n(d.found)} / ${n(d.missed)}` },
+    { label: "🧘 평범한 복도 통과 / 헛것", value: (d) => `${n(d.cleared)} / ${n(d.falseAlarms)}` },
+    { label: "🔥 최고 연속 · ⚡ 최고 속도", value: (d) => `${n(d.maxStreak)} · ${n(d.maxSpeed)}` },
+    { label: "🏆 완벽한 판 · ⏰ 시간 초과", value: (d) => `${n(d.perfectGames)} · ${n(d.timeouts)}` },
+  ],
   "mini-golf": [
     { label: "⛳ 홀인원 / 이글 / 버디", value: (d) => `${n(d.holeInOnes)} / ${n(d.eagles)} / ${n(d.birdies)}` },
     { label: "파 / 보기 이상", value: (d) => `${n(d.pars)} / ${n(d.bogeys)}` },

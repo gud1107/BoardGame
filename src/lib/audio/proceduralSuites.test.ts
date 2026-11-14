@@ -62,7 +62,8 @@ describe("game sound suites", () => {
     // + cargo stack (화물선 쌓기) + island pioneers (섬 개척자) + fog manor (안개 저택 살인사건)
     // + thin ice party (살얼음 파티).
     // + hundred tales (백 개의 괴담).
-    expect(suites.length).toBe(48);
+    // + strange corridor (이상한 복도).
+    expect(suites.length).toBe(49);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

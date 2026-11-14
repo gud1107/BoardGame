@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.172.0",
+    releaseDate: "2026-11-14",
+    title: "🚪 새 게임 이상한 복도",
+    changes: [
+      { game: "strange-corridor", type: "FEAT", desc: "🚪 새 게임 — 같은 밤 복도를 여러 번 걸으며 달라진 곳을 찾는 1~8인 3D 동시 레이스 · 혼자 하기·AI 봇 Lv.1~10" },
+      { game: "strange-corridor", type: "FEAT", desc: "👀 처음 복도를 외우고, 사라짐·색·크기·문 번호·그림·손자국·그림자까지 · 어려움은 옮겨짐·기울어짐 · 2D 원근 보기" },
+      { game: "strange-corridor", type: "FEAT", desc: "⚡ 속도·🔥 연속 보너스 · 🫣 공포 연출 조절 · 형광등 BGM과 모든 행동 효과음" },
+    ],
+  },
+  {
     version: "v1.171.0",
     releaseDate: "2026-11-14",
     title: "🕯️ 새 게임 백 개의 괴담",

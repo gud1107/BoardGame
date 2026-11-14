@@ -154,6 +154,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "씌임", key: "busts", unit: "번" },
     { label: "최종 점수", key: "maxScore", unit: "점" },
   ],
+  "strange-corridor": [
+    { label: "정답", key: "correct", unit: "개" },
+    { label: "찾은 이상", key: "found", unit: "개" },
+    { label: "최고 연속", key: "maxStreak", unit: "연속" },
+    { label: "최종 점수", key: "maxScore", unit: "점" },
+  ],
   "mini-golf": [
     { label: "홀인원", key: "holeInOnes", unit: "번" },
     { label: "버디", key: "birdies", unit: "번" },
@@ -356,6 +362,10 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
   "hundred-tales": [
     { id: "ht-told", label: "🕯️ 들려준 괴담", num: "told", format: "count", unit: "개" },
     { id: "ht-best", label: "😨 최고 점수", num: "maxScore", format: "count", unit: "점" },
+  ],
+  "strange-corridor": [
+    { id: "sc-found", label: "🔍 찾은 이상", num: "found", format: "count", unit: "개" },
+    { id: "sc-best", label: "🚪 최고 점수", num: "maxScore", format: "count", unit: "점" },
   ],
   "mini-golf": [
     { id: "mg-hio", label: "⛳ 홀인원", num: "holeInOnes", format: "count", unit: "번" },

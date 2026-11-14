@@ -274,6 +274,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "strange-corridor",
+    name: "이상한 복도",
+    nameEn: "Strange Corridor",
+    description:
+      "한밤의 같은 복도를 몇 번이고 걷는 1~8인 3D 이상 현상 찾기 레이스! 처음 본 평범한 복도를 외워 두고, 걸을 때마다 딱 한 곳이 바뀌었는지 찾아요 — 사라진 화분, 번호가 바뀐 문, 거꾸로 걸린 그림, 복도 끝에 서 있는 그림자… 이상한 곳을 직접 누르거나 '이상 없음'. 모두 동시에 답하고, 빨리·연달아 맞힐수록 점수가 커요. 8/12복도, 보통·어려움, 공포 연출 조절, 혼자 하기·AI 봇 Lv.1~10.",
+    players: { min: 1, max: 8 },
+    playTime: { minMinutes: 4, maxMinutes: 8 },
+    category: "party",
+    thumbnail: { emoji: "🚪", gradient: ["#14532d", "#0c0a09"] },
+    tags: ["공포", "관찰", "기억력", "틀린그림찾기", "실시간", "파티", "3D", "AI봇"],
+    genres: ["party", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "wobble-tower",
     name: "와르르 타워",
     nameEn: "Wobble Tower",
