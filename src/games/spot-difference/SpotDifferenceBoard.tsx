@@ -305,7 +305,7 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
 
       {kind !== "classic" && (
         <div
-          key={state.currentStageIndex}
+          key={`bonus-banner-${state.currentStageIndex}`}
           className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 rounded-2xl border border-amber-300/40 bg-gradient-to-r from-amber-400/15 via-fuchsia-400/10 to-amber-400/15 px-3 py-2 text-center animate-[spot-diff-pop_0.35s_ease-out] light:border-amber-300 light:from-amber-50 light:via-fuchsia-50 light:to-amber-50"
         >
           <span className="text-sm font-black text-amber-200 light:text-amber-700">
@@ -334,7 +334,7 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
       </div>
 
       <StageArea
-        key={state.currentStageIndex}
+        key={`stage-area-${state.currentStageIndex}`}
         state={state}
         stage={stage}
         now={now}
