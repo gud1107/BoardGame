@@ -130,6 +130,24 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "퍼펙트", key: "perfects", unit: "개" },
     { label: "최고 점수", key: "maxScore", unit: "점" },
   ],
+  "billiards-party": [
+    { label: "넣은 공", key: "pots", unit: "개" },
+    { label: "연속 득점", key: "bestRun", unit: "타" },
+    { label: "캐롬", key: "caroms", unit: "번" },
+    { label: "최고 점수", key: "maxScore", unit: "점" },
+  ],
+  "domino-chain": [
+    { label: "울린 종", key: "bells", unit: "번" },
+    { label: "가로챔", key: "steals", unit: "개" },
+    { label: "최장 사슬", key: "maxChain", unit: "개" },
+    { label: "최고 점수", key: "maxScore", unit: "점" },
+  ],
+  "snowball-fort": [
+    { label: "얼림", key: "freezes", unit: "명" },
+    { label: "맞힘", key: "hits", unit: "번" },
+    { label: "눈사람 명중", key: "snowmanHits", unit: "번" },
+    { label: "세운 벽", key: "walls", unit: "개" },
+  ],
   "thin-ice-party": [
     { label: "KO", key: "kos", unit: "번" },
     { label: "라운드 1등", key: "roundWins", unit: "번" },
@@ -367,6 +385,18 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
   "beat-mayhem": [
     { id: "bm-perfects", label: "✨ 퍼펙트", num: "perfects", format: "count", unit: "개" },
     { id: "bm-wins", label: "🏆 곡 1등", num: "roundWins", format: "count", unit: "번" },
+  ],
+  "billiards-party": [
+    { id: "bp-pots", label: "🎱 넣은 공", num: "pots", format: "count", unit: "개" },
+    { id: "bp-caroms", label: "🎯 캐롬", num: "caroms", format: "count", unit: "번" },
+  ],
+  "domino-chain": [
+    { id: "dc-bells", label: "🔔 울린 종", num: "bells", format: "count", unit: "번" },
+    { id: "dc-steals", label: "🦝 가로챔", num: "steals", format: "count", unit: "개" },
+  ],
+  "snowball-fort": [
+    { id: "sf-freezes", label: "❄️ 얼림", num: "freezes", format: "count", unit: "명" },
+    { id: "sf-wins", label: "🏆 팀 승리", num: "matchWins", format: "count", unit: "번" },
   ],
   "thin-ice-party": [
     { id: "ti-kos", label: "💥 KO", num: "kos", format: "count", unit: "번" },

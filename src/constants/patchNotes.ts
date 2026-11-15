@@ -64,6 +64,22 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.176.0",
+    releaseDate: "2026-11-15",
+    title: "🎱 새 게임 당구 파티 · 🁢 새 게임 도미노 연쇄 · ⛄ 새 게임 눈싸움 요새전",
+    changes: [
+      { game: "billiards-party", type: "FEAT", desc: "🎱 새 게임 — 2~4명이 같은 3D 당구대에서 돌아가며 치는 턴제 당구 · 모두가 같은 물리로 결과를 다시 계산 · AI 봇 Lv.1~10" },
+      { game: "billiards-party", type: "FEAT", desc: "🕳️ 럭키 포켓(낮은 번호부터, ★9 3점, 옮겨 다니는 ×2 포켓) · 🎯 캐롬 파티(빨간 공 둘, 쓰리쿠션 ⭐+2)" },
+      { game: "billiards-party", type: "FEAT", desc: "🌀 밀어치기·끌어치기·좌우 회전 당점 · 반칙 뒤 🖐 프리볼 · 📐 유령 공 가이드 · 조준 시점/위에서 보기" },
+      { game: "domino-chain", type: "FEAT", desc: "🁢 새 게임 — 각자 색 도미노를 세운 뒤 모두 동시에 밀어 와르르! 2~4인 3D 연쇄 퍼즐 대결 · AI 봇 Lv.1~10" },
+      { game: "domino-chain", type: "FEAT", desc: "🦝 남의 사슬에 먼저 닿으면 그 뒤가 전부 내 것 · 곧게 빠르고 대각선은 느린 타이밍 싸움 · 🔔 종 1~3점" },
+      { game: "domino-chain", type: "FEAT", desc: "🔀 갈림길 · 🧱 벽 · 💣 폭탄(−2 대신 주변 다 쓰러뜨림) · 🔮 '지금 쓰러지면' 미리보기 · 라운드마다 새 지도" },
+      { game: "snowball-fort", type: "FEAT", desc: "⛄ 새 게임 — 🍓 딸기팀 vs 🥤 소다팀 2~8인 실시간 3D 눈싸움 · 상대 ☃️ 눈사람 대장을 먼저 무너뜨려요" },
+      { game: "snowball-fort", type: "FEAT", desc: "🎯 힘 조절 포물선(세게 던지면 벽을 넘겨요) · ⛄ 눈 뭉치기 · 🧱 눈벽 · 💨 구르기 · 3번 맞으면 꽁꽁" },
+      { game: "snowball-fort", type: "FEAT", desc: "🍫 핫초코 · 🧊 왕눈덩이 · ❄️ 마지막 40초 눈보라 · 적은 팀 보정 · 혼자 연습 · 방장이 나가도 판이 이어져요" },
+    ],
+  },
+  {
     version: "v1.175.0",
     releaseDate: "2026-11-15",
     title: "🧗 새 게임 한 줄 등반대 · 🥁 새 게임 박자 난장판",
