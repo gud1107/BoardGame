@@ -14,7 +14,11 @@ import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity
 import type { PlayableGameProps } from "@/games/types";
 import {
   applyAction,
+  botBonusFirstDelayMs,
   botScanDelayMs,
+  BONUS_EXTRA_SECONDS,
+  MAX_BONUS_ROUNDS,
+  stageKind,
   BUILTIN_STAGE_POOL_SIZE,
   chooseHumanizedBotAction,
   computeRankings,
@@ -69,7 +73,8 @@ import { DESYNC_DIGEST_EVENT, desyncOnDigest, desyncSkipSyncAnswer, useDesyncGua
  * single most game-defining "correct guess" moment in Spot the Difference
  * (vs. a miss, which just locks that seat out for a moment).
  */
-function formatSpotDifferenceFindLog(name: string, teamLabel: string): string {
+function formatSpotDifferenceFindLog(name: string, teamLabel: string, same = false): string {
+  if (same) return `${name}님이 (${teamLabel}) 똑같은 그림을 골랐습니다 🔍`;
   return `${name}님이 (${teamLabel}) 틀린 곳을 찾았습니다`;
 }
 
@@ -157,6 +162,7 @@ const TIMER_PRESETS = [60, 90, 120, 180];
 // Up to 4 = one full pass through every themed scene (engine.ts orders themes first).
 const STAGE_COUNT_PRESETS = [1, 2, 3, 4].filter((n) => n <= BUILTIN_STAGE_POOL_SIZE);
 const DIFF_COUNT_PRESETS = [5, 8, 10];
+const BONUS_ROUND_PRESETS = [0, 1, 2, MAX_BONUS_ROUNDS];
 const MAX_PHOTO_DIMENSION = 900;
 const MAX_PHOTO_BYTES = 170_000;
 
@@ -209,6 +215,7 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
   const [mode, setMode] = useState<GameMode>("builtin");
   const [stageCount, setStageCount] = useState(1);
   const [diffCount, setDiffCount] = useState(5);
+  const [bonusRounds, setBonusRounds] = useState(2);
   const [timerSeconds, setTimerSeconds] = useState(DEFAULT_TIMER_SECONDS);
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
@@ -284,6 +291,7 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
   const sourceRef = useRef<StageSource>({ kind: "builtin" });
   const stageCountRef = useRef(stageCount);
   const diffCountRef = useRef(diffCount);
+  const bonusRoundsRef = useRef(bonusRounds);
   const timerSecondsRef = useRef(timerSeconds);
   const isHost = intent === "create";
   // Host broadcasts a digest of its settled state; a drifted client pulls the host's copy back.
@@ -349,6 +357,7 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
     sourceRef.current = mode === "photo" && photoDataUrl ? { kind: "photo", imageDataUrl: photoDataUrl } : { kind: "builtin" };
     stageCountRef.current = stageCount;
     diffCountRef.current = diffCount;
+    bonusRoundsRef.current = mode === "builtin" ? bonusRounds : 0;
     timerSecondsRef.current = timerSeconds;
     setMyName(name);
     setMyPlayerId(identity.name.trim() ? identity.playerId : undefined);
@@ -384,6 +393,7 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
       const source = (payload?.source as StageSource | undefined) ?? { kind: "builtin" };
       const stageCountPayload = payload?.stageCount as number | undefined;
       const diffCountPayload = payload?.diffCount as number | undefined;
+      const bonusRoundsPayload = (payload?.bonusRounds as number | undefined) ?? 0;
       const timerSecondsPayload = payload?.timerSeconds as number | undefined;
       const roster = (payload?.botSeats as SeatIndex[] | undefined) ?? [];
       const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
@@ -391,6 +401,7 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
       sourceRef.current = source;
       stageCountRef.current = stageCountPayload ?? 1;
       diffCountRef.current = diffCountPayload ?? 5;
+      bonusRoundsRef.current = bonusRoundsPayload;
       timerSecondsRef.current = timerSecondsPayload ?? DEFAULT_TIMER_SECONDS;
       botSeatsRef.current = roster;
       setBotSeats(roster);
@@ -406,6 +417,7 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
         stageCount: stageCountPayload,
         recentSceneIds,
         diffCount: diffCountPayload,
+        bonusRounds: bonusRoundsPayload,
         timerSeconds: timerSecondsPayload,
       });
       if (source.kind === "builtin") rememberScenes(started.builtinSceneIds);
@@ -428,7 +440,7 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
       // (unlike user messages), since every client would otherwise write a
       // duplicate row, and it's trivially re-derivable from the replayed
       // action log anyway.
-      if (action.type === "click" && prevState) {
+      if ((action.type === "click" || action.type === "pick") && prevState) {
         const nextState = applyAction(prevState, action);
         const countFound = (s: SpotDifferenceState) => s.stages.reduce((sum, stage) => sum + Object.keys(stage.foundBy).length, 0);
         if (countFound(nextState) > countFound(prevState)) {
@@ -440,7 +452,7 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
               channel: chatChannel,
               deviceId: "system",
               senderName: "시스템",
-              body: formatSpotDifferenceFindLog(namesRef.current[action.seat] ?? "상대", team === "A" ? "A팀" : "B팀"),
+              body: formatSpotDifferenceFindLog(namesRef.current[action.seat] ?? "상대", team === "A" ? "A팀" : "B팀", action.type === "pick"),
               type: "SYSTEM",
               createdAt: new Date().toISOString(),
             },
@@ -667,6 +679,7 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
         source: sourceRef.current,
         stageCount: stageCountRef.current,
         diffCount: diffCountRef.current,
+        bonusRounds: bonusRoundsRef.current,
         timerSeconds: timerSecondsRef.current,
         botSeats: botSeatsRef.current,
         botLevels: botLevelsRef.current,
@@ -819,7 +832,8 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
         const stageIdx = gameStateRef.current.currentStageIndex;
         const firstOfStage = scannedStage !== stageIdx;
         scannedStage = stageIdx;
-        timers.push(window.setTimeout(tick, extraMs + botScanDelayMs(level, firstOfStage)));
+        const bonusMs = firstOfStage ? botBonusFirstDelayMs(stageKind(gameStateRef.current.stages[stageIdx])) : 0;
+        timers.push(window.setTimeout(tick, extraMs + bonusMs + botScanDelayMs(level, firstOfStage)));
       };
       const tick = () => {
         if (cancelled) return;
@@ -1171,6 +1185,31 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
                     </button>
                   ))}
                 </div>
+              </label>
+            )}
+
+            {mode === "builtin" && (
+              <label className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
+                🎁 보너스 라운드
+                <div className="flex flex-wrap gap-1.5">
+                  {BONUS_ROUND_PRESETS.map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setBonusRounds(n)}
+                      className={`rounded-full border px-3 py-1 text-xs transition ${
+                        bonusRounds === n
+                          ? "border-amber-400/60 bg-amber-400/15 text-amber-200 light:border-amber-500 light:bg-amber-50 light:text-amber-700"
+                          : "border-white/15 text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-500 light:hover:border-slate-400"
+                      }`}
+                    >
+                      {n === 0 ? "없음" : `${n}판`}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-[11px] text-white/40 light:text-slate-500">
+                  🪞 대칭 거울 · 🧠 기억력 · 🌫️ 흐려지는 그림 · 🔍 같은 그림 찾기 중 무작위 (서로 다른 종류). 스테이지 사이사이에 끼고, 점수 2~3배 · 판마다 제한 시간 +{BONUS_EXTRA_SECONDS}초
+                </span>
               </label>
             )}
 

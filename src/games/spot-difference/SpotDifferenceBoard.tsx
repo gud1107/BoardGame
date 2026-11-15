@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
+import { STAGE_KIND_META } from "./bonusRounds";
 import { getSpotSound } from "./spotSound";
 import SpotSoundHud from "./SpotSoundHud";
 import StageClearFx, { STAGE_CLEAR_FX_MS } from "./StageClearFx";
@@ -12,8 +13,12 @@ import { activeThemeMutationIds } from "./themeScenes";
 import {
   computeTeamRankings,
   computeTeamScores,
+  FADE_FULL_MS,
   foundSpotCount,
+  MEMORY_PREVIEW_MS,
+  stageKind,
   totalSpotCount,
+  type StageResult,
   type EngineAction,
   type PhotoDiffSpot,
   type SeatIndex,
@@ -179,14 +184,20 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
   const isLocked = lockedUntil !== undefined && now < lockedUntil;
   const lockSecondsLeft = isLocked ? Math.ceil((lockedUntil - now) / 1000) : 0;
 
-  function handleClick(e: MouseEvent<HTMLDivElement>) {
+  function handleClick(xPct: number, yPct: number) {
     if (state.phase !== "playing" || isLocked) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const xPct = ((e.clientX - rect.left) / rect.width) * 100;
-    const yPct = ((e.clientY - rect.top) / rect.height) * 100;
     getSpotSound().unlock();
     onAction({ type: "click", seat: viewerSeat, xPct, yPct, atMs: Date.now() });
   }
+
+  function handlePick(index: number) {
+    if (state.phase !== "playing" || isLocked) return;
+    getSpotSound().unlock();
+    onAction({ type: "pick", seat: viewerSeat, index, atMs: Date.now() });
+  }
+
+  const kind = stageKind(stage);
+  const kindMeta = STAGE_KIND_META[kind];
 
   function handleUseHint() {
     if (!myTeam || state.hints[myTeam] <= 0) return;
@@ -292,49 +303,49 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
         </p>
       )}
 
-      <div className="flex items-center justify-between">
+      {kind !== "classic" && (
+        <div
+          key={state.currentStageIndex}
+          className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 rounded-2xl border border-amber-300/40 bg-gradient-to-r from-amber-400/15 via-fuchsia-400/10 to-amber-400/15 px-3 py-2 text-center animate-[spot-diff-pop_0.35s_ease-out] light:border-amber-300 light:from-amber-50 light:via-fuchsia-50 light:to-amber-50"
+        >
+          <span className="text-sm font-black text-amber-200 light:text-amber-700">
+            🎁 보너스 라운드 · {kindMeta.emoji} {kindMeta.label}
+          </span>
+          <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-[11px] font-bold text-amber-100 light:bg-amber-100 light:text-amber-800">{kindMeta.points}</span>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-white/50 light:text-slate-500">
           {isLocked ? (
-            <span className="text-rose-300 light:text-rose-600">🔒 오답! {lockSecondsLeft}초 후 다시 클릭할 수 있어요</span>
+            <span className="text-rose-300 light:text-rose-600">🔒 오답! {lockSecondsLeft}초 후 다시 {kind === "same" ? "고를" : "클릭할"} 수 있어요</span>
           ) : (
-            "양쪽 그림에서 다른 부분을 찾아 클릭하세요"
+            kindMeta.howTo
           )}
         </p>
         <button
           onClick={handleUseHint}
-          disabled={state.hints[myTeam] <= 0}
+          disabled={state.hints[myTeam] <= 0 || kind === "same"}
+          title={kind === "same" ? "같은 그림 찾기에서는 힌트를 쓸 수 없어요" : undefined}
           className="rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1.5 text-xs font-semibold text-amber-200 transition hover:border-amber-400/70 disabled:cursor-not-allowed disabled:opacity-30 light:border-amber-400/60 light:bg-amber-50 light:text-amber-700"
         >
           💡 힌트 ({state.hints[myTeam]}남음)
         </button>
       </div>
 
-      <div
-        className={`grid grid-cols-1 gap-3 sm:grid-cols-2 transition ${
-          flash === "wrong" ? "ring-2 ring-rose-500" : flash === "correct" ? "ring-2 ring-emerald-400" : ""
-        } rounded-2xl`}
-      >
-        <StagePanel
-          state={state}
-          stage={stage}
-          variant="original"
-          onClick={handleClick}
-          activeHintSpot={activeHintSpot}
-          isLocked={isLocked}
-          missMarks={missMarks}
-          names={names}
-        />
-        <StagePanel
-          state={state}
-          stage={stage}
-          variant="modified"
-          onClick={handleClick}
-          activeHintSpot={activeHintSpot}
-          isLocked={isLocked}
-          missMarks={missMarks}
-          names={names}
-        />
-      </div>
+      <StageArea
+        key={state.currentStageIndex}
+        state={state}
+        stage={stage}
+        now={now}
+        flash={flash}
+        onClick={handleClick}
+        onPick={handlePick}
+        activeHintSpot={activeHintSpot}
+        isLocked={isLocked}
+        missMarks={missMarks}
+        names={names}
+      />
 
       <p className="text-center text-[11px] text-white/30 light:text-slate-400">
         {Array.from({ length: state.playerCount }, (_, seat) => seat)
@@ -347,85 +358,276 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
   );
 }
 
-function StagePanel({
+type MissMark = { key: string; seat: SeatIndex; xPct: number; yPct: number };
+type HintSpot = { xPct: number; yPct: number; rPct: number } | undefined;
+
+/** Max CSS blur (px) a 🌫️ fade round reaches at FADE_FULL_MS — still readable up close, hard at a glance. */
+const FADE_MAX_BLUR_PX = 5;
+
+/**
+ * One stage's play area. Keyed by stage index in the parent, so `arrivedAt`
+ * (lazy-initialised on mount) is this device's own arrival time at the
+ * stage — the memory preview and the fade blur both run off it locally,
+ * like the match clock (engine.ts bonus-round doc).
+ */
+function StageArea({
   state,
   stage,
-  variant,
+  now,
+  flash,
   onClick,
+  onPick,
   activeHintSpot,
   isLocked,
   missMarks,
   names,
 }: {
   state: SpotDifferenceState;
-  stage: SpotDifferenceState["stages"][number];
-  variant: "original" | "modified";
-  onClick: (e: MouseEvent<HTMLDivElement>) => void;
-  activeHintSpot: { xPct: number; yPct: number; rPct: number } | undefined;
+  stage: StageResult;
+  now: number;
+  flash: "correct" | "wrong" | null;
+  onClick: (xPct: number, yPct: number) => void;
+  onPick: (index: number) => void;
+  activeHintSpot: HintSpot;
   isLocked: boolean;
-  missMarks: { key: string; seat: SeatIndex; xPct: number; yPct: number }[];
+  missMarks: MissMark[];
   names: Record<number, string>;
 }) {
+  const [arrivedAt] = useState(() => Date.now());
+  const elapsed = Math.max(0, now - arrivedAt);
+  const kind = stageKind(stage);
+  const ring = flash === "wrong" ? "ring-2 ring-rose-500" : flash === "correct" ? "ring-2 ring-emerald-400" : "";
+
+  if (kind === "same") {
+    return (
+      <div className={`rounded-2xl transition ${ring}`}>
+        <SamePanel state={state} stage={stage} onPick={onPick} isLocked={isLocked} names={names} />
+      </div>
+    );
+  }
+
+  const previewing = kind === "memory" && elapsed < MEMORY_PREVIEW_MS;
+  const previewLeft = Math.ceil((MEMORY_PREVIEW_MS - elapsed) / 1000);
+  const blurPx = kind === "fade" ? Math.min(1, elapsed / FADE_FULL_MS) * FADE_MAX_BLUR_PX : 0;
+  const artStyle: CSSProperties | undefined = blurPx > 0 ? { filter: `blur(${blurPx.toFixed(2)}px) saturate(${(1 - blurPx / 12).toFixed(2)})`, transition: "filter 0.25s linear" } : undefined;
+  const common = { state, stage, activeHintSpot, isLocked, missMarks, names, artStyle };
+
+  return (
+    <div className="flex flex-col gap-2">
+      {kind === "fade" && (
+        <div className="flex items-center gap-2 text-[11px] text-white/50 light:text-slate-500">
+          <span>🌫️ 선명도</span>
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
+            <div className="h-full rounded-full bg-gradient-to-r from-sky-300 to-fuchsia-400 transition-[width] duration-200" style={{ width: `${Math.round((1 - blurPx / FADE_MAX_BLUR_PX) * 100)}%` }} />
+          </div>
+        </div>
+      )}
+      <div className={`grid grid-cols-1 gap-3 rounded-2xl transition sm:grid-cols-2 ${ring}`}>
+        <StagePanel
+          {...common}
+          variant="original"
+          onClick={previewing || kind === "memory" ? undefined : onClick}
+          cover={
+            kind === "memory" && !previewing ? (
+              <>
+                <span className="text-4xl">🧠</span>
+                <span className="text-sm font-bold">기억나나요?</span>
+                <span className="text-[11px] opacity-70">오른쪽 그림에서 바뀐 곳을 클릭하세요</span>
+              </>
+            ) : undefined
+          }
+          badge={previewing ? `🧠 외우세요! ${previewLeft}` : undefined}
+        />
+        <StagePanel
+          {...common}
+          variant="modified"
+          mirrored={kind === "mirror"}
+          onClick={previewing ? undefined : onClick}
+          cover={
+            previewing ? (
+              <>
+                <span className="text-4xl tabular-nums">{previewLeft}</span>
+                <span className="text-sm font-bold">왼쪽 원본을 기억하세요</span>
+                <span className="text-[11px] opacity-70">원본이 숨겨지면 바뀐 그림이 나타나요</span>
+              </>
+            ) : undefined
+          }
+          badge={kind === "mirror" ? "🪞 거울" : undefined}
+        />
+      </div>
+    </div>
+  );
+}
+
+function StagePanel({
+  state,
+  stage,
+  variant,
+  mirrored = false,
+  onClick,
+  activeHintSpot,
+  isLocked,
+  missMarks,
+  names,
+  artStyle,
+  cover,
+  badge,
+}: {
+  state: SpotDifferenceState;
+  stage: StageResult;
+  variant: "original" | "modified";
+  /** 🪞 mirror round: art + every marker drawn flipped; clicks converted back to unflipped coordinates. */
+  mirrored?: boolean;
+  /** Omitted = panel not clickable right now (memory preview / hidden original). */
+  onClick?: (xPct: number, yPct: number) => void;
+  activeHintSpot: HintSpot;
+  isLocked: boolean;
+  missMarks: MissMark[];
+  names: Record<number, string>;
+  artStyle?: CSSProperties;
+  /** Replaces the picture entirely (memory round) — the art isn't rendered underneath. */
+  cover?: ReactNode;
+  badge?: string;
+}) {
+  const fx = (x: number) => (mirrored ? 100 - x : x);
+  function handle(e: MouseEvent<HTMLDivElement>) {
+    if (!onClick) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const xPct = ((e.clientX - rect.left) / rect.width) * 100;
+    const yPct = ((e.clientY - rect.top) / rect.height) * 100;
+    onClick(fx(xPct), yPct);
+  }
+  const clickable = !!onClick && !cover;
   return (
     <div
-      onClick={onClick}
+      onClick={clickable ? handle : undefined}
       className={`relative aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 light:border-slate-300 light:shadow-sm ${
-        isLocked ? "cursor-not-allowed" : "cursor-crosshair"
+        !clickable ? "cursor-default" : isLocked ? "cursor-not-allowed" : "cursor-crosshair"
       }`}
     >
-      {state.source.kind === "photo" ? (
-        <PhotoStageCanvas
-          imageDataUrl={state.source.imageDataUrl}
-          spots={stage.spots as PhotoDiffSpot[]}
-          variant={variant}
-          className="h-full w-full object-contain"
-        />
-      ) : (
-        <BuiltinStagePanel sceneId={sceneIdForStage(state)} spotIds={stage.spots.map((s) => s.id)} variant={variant} className="h-full w-full" />
-      )}
-
-      {/* Found-spot markers */}
-      {stage.spots
-        .filter((s) => stage.foundBy[s.id])
-        .map((s) => (
-          <div
-            key={s.id}
-            className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.8)] animate-[spot-diff-pop_0.35s_ease-out]"
-            style={{
-              left: `${s.xPct}%`,
-              top: `${s.yPct}%`,
-              width: `${s.rPct * 2}%`,
-              height: `${s.rPct * 2}%`,
-            }}
-          />
-        ))}
-
-      {/* Other seats' wrong clicks */}
-      {missMarks.map((m) => (
-        <div
-          key={m.key}
-          className="pointer-events-none absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center animate-[spot-diff-pop_0.35s_ease-out]"
-          style={{ left: `${m.xPct}%`, top: `${m.yPct}%` }}
-        >
-          <span className="text-lg font-black leading-none text-rose-500 drop-shadow">❌</span>
-          <span className="mt-0.5 whitespace-nowrap rounded bg-black/70 px-1 text-[10px] font-bold text-rose-200">
-            {names[m.seat] ?? `${m.seat + 1}번`}
-          </span>
+      {cover ? (
+        <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-gradient-to-br from-indigo-950 via-slate-900 to-fuchsia-950 text-center text-white/90 light:from-indigo-100 light:via-white light:to-fuchsia-100 light:text-slate-800">
+          {cover}
         </div>
-      ))}
+      ) : (
+        <>
+          <div className="h-full w-full" style={{ ...artStyle, ...(mirrored ? { transform: "scaleX(-1)" } : undefined) }}>
+            {state.source.kind === "photo" ? (
+              <PhotoStageCanvas
+                imageDataUrl={state.source.imageDataUrl}
+                spots={stage.spots as PhotoDiffSpot[]}
+                variant={variant}
+                className="h-full w-full object-contain"
+              />
+            ) : (
+              <BuiltinStagePanel sceneId={sceneIdForStage(state)} spotIds={stage.spots.map((s) => s.id)} variant={variant} className="h-full w-full" />
+            )}
+          </div>
 
-      {/* Active team hint wiggle */}
-      {activeHintSpot && (
-        <div
-          className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-dashed border-amber-300 animate-[spot-diff-wiggle_0.6s_ease-in-out_infinite]"
-          style={{
-            left: `${activeHintSpot.xPct}%`,
-            top: `${activeHintSpot.yPct}%`,
-            width: `${activeHintSpot.rPct * 2.4}%`,
-            height: `${activeHintSpot.rPct * 2.4}%`,
-          }}
-        />
+          {/* Found-spot markers */}
+          {stage.spots
+            .filter((s) => stage.foundBy[s.id])
+            .map((s) => (
+              <div
+                key={s.id}
+                className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.8)] animate-[spot-diff-pop_0.35s_ease-out]"
+                style={{
+                  left: `${fx(s.xPct)}%`,
+                  top: `${s.yPct}%`,
+                  width: `${s.rPct * 2}%`,
+                  height: `${s.rPct * 2}%`,
+                }}
+              />
+            ))}
+
+          {/* Other seats' wrong clicks */}
+          {missMarks.map((m) => (
+            <div
+              key={m.key}
+              className="pointer-events-none absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center animate-[spot-diff-pop_0.35s_ease-out]"
+              style={{ left: `${fx(m.xPct)}%`, top: `${m.yPct}%` }}
+            >
+              <span className="text-lg font-black leading-none text-rose-500 drop-shadow">❌</span>
+              <span className="mt-0.5 whitespace-nowrap rounded bg-black/70 px-1 text-[10px] font-bold text-rose-200">
+                {names[m.seat] ?? `${m.seat + 1}번`}
+              </span>
+            </div>
+          ))}
+
+          {/* Active team hint wiggle */}
+          {activeHintSpot && (
+            <div
+              className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-dashed border-amber-300 animate-[spot-diff-wiggle_0.6s_ease-in-out_infinite]"
+              style={{
+                left: `${fx(activeHintSpot.xPct)}%`,
+                top: `${activeHintSpot.yPct}%`,
+                width: `${activeHintSpot.rPct * 2.4}%`,
+                height: `${activeHintSpot.rPct * 2.4}%`,
+              }}
+            />
+          )}
+        </>
       )}
+      {badge && (
+        <span className="pointer-events-none absolute left-2 top-2 rounded-full bg-black/70 px-2 py-0.5 text-[11px] font-bold text-amber-200">{badge}</span>
+      )}
+    </div>
+  );
+}
+
+/** 🔍 같은 그림 찾기: the reference picture + SAME_CANDIDATES look-alike cards, exactly one identical. */
+function SamePanel({
+  state,
+  stage,
+  onPick,
+  isLocked,
+  names,
+}: {
+  state: SpotDifferenceState;
+  stage: StageResult;
+  onPick: (index: number) => void;
+  isLocked: boolean;
+  names: Record<number, string>;
+}) {
+  const sceneId = sceneIdForStage(state);
+  const candidates = stage.candidates ?? [];
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border-2 border-amber-300/70 light:border-amber-400">
+        <ThemeSceneArt themeId={sceneId} active={new Set()} className="h-full w-full" />
+        <span className="pointer-events-none absolute left-2 top-2 rounded-full bg-black/75 px-2 py-0.5 text-[11px] font-bold text-amber-200">⭐ 원본</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {candidates.map((mutations, index) => {
+          const wrongBy = stage.wrongPicks?.[index];
+          const crossed = wrongBy !== undefined;
+          return (
+            <button
+              key={index}
+              type="button"
+              disabled={crossed || isLocked}
+              onClick={() => onPick(index)}
+              aria-label={`${index + 1}번 그림 고르기`}
+              className={`relative aspect-[4/3] overflow-hidden rounded-xl border-2 transition ${
+                crossed
+                  ? "cursor-not-allowed border-rose-500/60 opacity-50"
+                  : isLocked
+                    ? "cursor-not-allowed border-white/15 light:border-slate-300"
+                    : "border-white/15 hover:scale-[1.03] hover:border-fuchsia-300 light:border-slate-300 light:hover:border-fuchsia-500"
+              }`}
+            >
+              <ThemeSceneArt themeId={sceneId} active={new Set(mutations)} className="h-full w-full" />
+              <span className="pointer-events-none absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/75 text-[11px] font-bold text-white">{index + 1}</span>
+              {crossed && (
+                <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center bg-black/40">
+                  <span className="text-3xl font-black leading-none text-rose-500 drop-shadow">❌</span>
+                  <span className="mt-1 rounded bg-black/70 px-1 text-[10px] font-bold text-rose-200">{names[wrongBy] ?? `${wrongBy + 1}번`}</span>
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

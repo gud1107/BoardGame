@@ -45,8 +45,40 @@ export const MIN_PHOTO_DIFFS = 3;
 export const MAX_PHOTO_DIFFS = 10;
 export const DEFAULT_TIMER_SECONDS = 90;
 
+/**
+ * Bonus rounds (2026-11-16). Builtin mode only — each one reuses a themed
+ * scene's art + mutation pool with a twist, so no new artwork is needed:
+ *  - mirror: the right panel is the left one flipped horizontally (the board
+ *    converts clicks on it back to unflipped coordinates before emitting).
+ *  - memory: the original shows alone for MEMORY_PREVIEW_MS, then hides; the
+ *    changed picture appears and you click its differences from memory.
+ *  - fade: both pictures blur a little more every second (FADE_FULL_MS).
+ *  - same: one reference + SAME_CANDIDATES look-alikes; exactly one is
+ *    identical. A `pick` action, not a click; first correct team scores
+ *    SAME_POINTS, a wrong pick locks the seat for SAME_WRONG_PENALTY_MS and
+ *    publicly crosses that candidate out (helping the rival — guess at a cost).
+ * Preview/fade timing is UI-local (from each device's own arrival at the
+ * stage), not engine-enforced — same "small drift is harmless UX" stance as
+ * the match clock.
+ */
+export type StageKind = "classic" | "mirror" | "memory" | "fade" | "same";
+export type BonusKind = Exclude<StageKind, "classic">;
+export const BONUS_KINDS: BonusKind[] = ["mirror", "memory", "fade", "same"];
+export const MAX_BONUS_ROUNDS = BONUS_KINDS.length;
+/** Each bonus round's found difference is worth this many points (classic = 1). */
+export const BONUS_POINTS_PER_SPOT = 2;
+export const SAME_POINTS = 3;
+export const SAME_CANDIDATES = 4;
+export const SAME_MUTATIONS_PER_DECOY = 2;
+export const SAME_WRONG_PENALTY_MS = 4000;
+export const MEMORY_PREVIEW_MS = 5000;
+export const MEMORY_DIFFS = 3;
+export const FADE_FULL_MS = 30000;
+/** Seconds added to the configured match timer per bonus round. */
+export const BONUS_EXTRA_SECONDS = 30;
+
 import { tallyAdd, type StatTally } from "@/games/shared/statTally";
-import { findThemeScene, pickThemeMutations, THEME_SCENES, themeSpotId } from "./themeScenes";
+import { findThemeScene, pickThemeMutations, THEME_DIFFS_PER_STAGE, THEME_SCENES, themeSpotId, type ThemeScene } from "./themeScenes";
 
 /** Every scene the builtin mode can chain — one per theme. */
 export const BUILTIN_STAGE_POOL_SIZE = THEME_SCENES.length;
@@ -101,7 +133,21 @@ export interface StageResult {
   spots: Spot[];
   /** spotId -> which team found it. */
   foundBy: Record<string, TeamId>;
+  /** Absent on pre-bonus snapshots = "classic". */
+  kind?: StageKind;
+  /** Points per found spot (absent = 1). */
+  points?: number;
+  /** `same` only: active mutation ids per candidate (the identical one is []). */
+  candidates?: string[][];
+  /** `same` only: candidate index -> seat whose wrong pick crossed it out. */
+  wrongPicks?: Record<number, SeatIndex>;
 }
+
+export function stageKind(stage: StageResult | undefined): StageKind {
+  return stage?.kind ?? "classic";
+}
+
+export const SAME_SPOT_PREFIX = "same:";
 
 export type StageSource = { kind: "builtin" } | { kind: "photo"; imageDataUrl: string };
 
@@ -135,6 +181,7 @@ export interface SpotDifferenceState {
 
 export type EngineAction =
   | { type: "click"; seat: SeatIndex; xPct: number; yPct: number; atMs: number }
+  | { type: "pick"; seat: SeatIndex; index: number; atMs: number }
   | { type: "useHint"; team: TeamId; atMs: number }
   | { type: "timeUp" };
 
@@ -153,6 +200,9 @@ export interface StartGameOptions {
   recentSceneIds?: string[];
   /** Photo mode only — how many diff regions to generate, clamped to [MIN_PHOTO_DIFFS, MAX_PHOTO_DIFFS]. */
   diffCount?: number;
+  /** Builtin mode only — how many bonus rounds (0..MAX_BONUS_ROUNDS), each a distinct kind. */
+  bonusRounds?: number;
+  /** Configured base timer; BONUS_EXTRA_SECONDS per bonus round is added on top. */
   timerSeconds?: number;
   teamAssignment?: Record<SeatIndex, TeamId>;
 }
@@ -165,7 +215,7 @@ export function startGame(playerCount: number, seed: number, options: StartGameO
   const teamOf = options.teamAssignment ?? defaultTeamAssignment(playerCount);
 
   let stages: StageResult[];
-  let builtinSceneIds: string[] = [];
+  const builtinSceneIds: string[] = [];
   if (options.source.kind === "builtin") {
     // Recently played themes (host's deck, broadcast in the start payload so
     // every client orders identically) go to the back, oldest first.
@@ -179,12 +229,29 @@ export function startGame(playerCount: number, seed: number, options: StartGameO
       ...recent.filter((id, i) => recent.indexOf(id) === i),
     ];
     const count = Math.min(Math.max(options.stageCount ?? 1, 1), BUILTIN_STAGE_POOL_SIZE);
-    builtinSceneIds = order.slice(0, count);
-    stages = builtinSceneIds.map((id) => {
+    const bonusCount = Math.min(Math.max(Math.floor(options.bonusRounds ?? 0), 0), MAX_BONUS_ROUNDS, BUILTIN_STAGE_POOL_SIZE - count);
+    const classicIds = order.slice(0, count);
+    const bonusIds = order.slice(count, count + bonusCount);
+    // Classic picks are drawn first so a no-bonus match is identical to the pre-bonus engine for the same seed.
+    const classicStages: StageResult[] = classicIds.map((id) => {
       const theme = findThemeScene(id)!;
       const spots = pickThemeMutations(theme, rng).map((m) => ({ id: themeSpotId(theme.id, m.id), xPct: m.xPct, yPct: m.yPct, rPct: m.rPct }));
       return { spots, foundBy: {} };
     });
+    const kinds = bonusCount > 0 ? shuffle([...BONUS_KINDS], rng).slice(0, bonusCount) : [];
+    const bonusStages = bonusIds.map((id, i) => buildBonusStage(findThemeScene(id)!, kinds[i], rng));
+    // Interleave: classic, bonus, classic, bonus, ... leftover bonuses at the end.
+    stages = [];
+    for (let i = 0; i < Math.max(classicStages.length, bonusStages.length); i++) {
+      if (classicStages[i]) {
+        stages.push(classicStages[i]);
+        builtinSceneIds.push(classicIds[i]);
+      }
+      if (bonusStages[i]) {
+        stages.push(bonusStages[i]);
+        builtinSceneIds.push(bonusIds[i]);
+      }
+    }
   } else {
     const diffCount = options.diffCount ?? 5;
     stages = [{ spots: generatePhotoDiffSpots(seed, diffCount), foundBy: {} }];
@@ -197,13 +264,46 @@ export function startGame(playerCount: number, seed: number, options: StartGameO
     builtinSceneIds,
     stages,
     currentStageIndex: 0,
-    timerSeconds: options.timerSeconds ?? DEFAULT_TIMER_SECONDS,
+    timerSeconds: (options.timerSeconds ?? DEFAULT_TIMER_SECONDS) + BONUS_EXTRA_SECONDS * stages.filter((st) => stageKind(st) !== "classic").length,
     timeUp: false,
     penalties: {},
     hints: { A: HINTS_PER_TEAM, B: HINTS_PER_TEAM },
     activeHint: null,
     phase: "playing",
   };
+}
+
+function buildBonusStage(theme: ThemeScene, kind: BonusKind, rng: () => number): StageResult {
+  if (kind === "same") {
+    // Decoys each get their own SAME_MUTATIONS_PER_DECOY mutations, disjoint
+    // from every other decoy (pools have 8+ candidates), so no two look alike.
+    const decoyCount = SAME_CANDIDATES - 1;
+    const pool = pickThemeMutations(theme, rng, decoyCount * SAME_MUTATIONS_PER_DECOY).map((m) => m.id);
+    const decoys = Array.from({ length: decoyCount }, (_, i) => {
+      const ids = pool.slice(i * SAME_MUTATIONS_PER_DECOY, (i + 1) * SAME_MUTATIONS_PER_DECOY);
+      return ids.length > 0 ? ids : [pool[i % pool.length]];
+    });
+    const answer = Math.floor(rng() * SAME_CANDIDATES);
+    const candidates = [...decoys];
+    candidates.splice(answer, 0, []);
+    return {
+      kind,
+      points: SAME_POINTS,
+      candidates,
+      wrongPicks: {},
+      spots: [{ id: `${SAME_SPOT_PREFIX}${answer}`, xPct: 50, yPct: 50, rPct: 0 }],
+      foundBy: {},
+    };
+  }
+  const n = kind === "memory" ? MEMORY_DIFFS : THEME_DIFFS_PER_STAGE;
+  const spots = pickThemeMutations(theme, rng, n).map((m) => ({ id: themeSpotId(theme.id, m.id), xPct: m.xPct, yPct: m.yPct, rPct: m.rPct }));
+  return { kind, points: BONUS_POINTS_PER_SPOT, spots, foundBy: {} };
+}
+
+/** `same` stage: the identical candidate's index (-1 for any other stage). */
+export function sameAnswerIndex(stage: StageResult): number {
+  const id = stage.spots[0]?.id ?? "";
+  return id.startsWith(SAME_SPOT_PREFIX) ? Number(id.slice(SAME_SPOT_PREFIX.length)) : -1;
 }
 
 // ---------------------------------------------------------------------------
@@ -223,6 +323,7 @@ function click(state: SpotDifferenceState, seat: SeatIndex, xPct: number, yPct: 
 
   const stage = state.stages[state.currentStageIndex];
   if (!stage) return state;
+  if (stageKind(stage) === "same") return state; // answered with `pick`, not coordinates
   const hit = stage.spots.find((s) => Math.hypot(s.xPct - xPct, s.yPct - yPct) <= s.rPct);
 
   if (hit && stage.foundBy[hit.id]) {
@@ -239,10 +340,33 @@ function click(state: SpotDifferenceState, seat: SeatIndex, xPct: number, yPct: 
     };
   }
 
-  const foundBy = { ...stage.foundBy, [hit.id]: team };
+  return creditFind(state, stage, hit.id, team, seat);
+}
+
+function pick(state: SpotDifferenceState, seat: SeatIndex, index: number, atMs: number): SpotDifferenceState {
+  if (state.phase !== "playing") return state;
+  const team = state.teamOf[seat];
+  if (!team || isLocked(state, seat, atMs)) return state;
+  const stage = state.stages[state.currentStageIndex];
+  if (!stage || stageKind(stage) !== "same" || !stage.candidates) return state;
+  if (!Number.isInteger(index) || index < 0 || index >= stage.candidates.length) return state;
+  if (stage.wrongPicks?.[index] !== undefined) return state; // already crossed out
+  if (index === sameAnswerIndex(stage)) return creditFind(state, stage, stage.spots[0].id, team, seat);
+  const newStage: StageResult = { ...stage, wrongPicks: { ...stage.wrongPicks, [index]: seat } };
+  return {
+    ...state,
+    stages: state.stages.map((s, i) => (i === state.currentStageIndex ? newStage : s)),
+    penalties: { ...state.penalties, [seat]: atMs + SAME_WRONG_PENALTY_MS },
+    statTally: tallyAdd(state.statTally, seat, "missClicks"),
+  };
+}
+
+/** Records `spotId` as found by `team`, then advances the stage / ends the match when it was the stage's last. */
+function creditFind(state: SpotDifferenceState, stage: StageResult, spotId: string, team: TeamId, seat: SeatIndex): SpotDifferenceState {
+  const foundBy = { ...stage.foundBy, [spotId]: team };
   const newStage: StageResult = { ...stage, foundBy };
   const stages = state.stages.map((s, i) => (i === state.currentStageIndex ? newStage : s));
-  const activeHint = state.activeHint?.spotId === hit.id ? null : state.activeHint;
+  const activeHint = state.activeHint?.spotId === spotId ? null : state.activeHint;
   const stageCleared = Object.keys(foundBy).length >= newStage.spots.length;
   const statTally = tallyAdd(state.statTally, seat, "spotsFound");
 
@@ -262,7 +386,7 @@ function applyHint(state: SpotDifferenceState, team: TeamId, atMs: number): Spot
   if (state.phase !== "playing") return state;
   if ((state.hints[team] ?? 0) <= 0) return state;
   const stage = state.stages[state.currentStageIndex];
-  if (!stage) return state;
+  if (!stage || stageKind(stage) === "same") return state; // a hint there would just name the answer
   const undiscovered = stage.spots.find((s) => !stage.foundBy[s.id]);
   if (!undiscovered) return state;
   return { ...state, hints: { ...state.hints, [team]: state.hints[team] - 1 }, activeHint: { team, spotId: undiscovered.id } };
@@ -278,6 +402,8 @@ export function applyAction(state: SpotDifferenceState, action: EngineAction): S
   switch (action.type) {
     case "click":
       return click(state, action.seat, action.xPct, action.yPct, action.atMs);
+    case "pick":
+      return pick(state, action.seat, action.index, action.atMs);
     case "useHint":
       return applyHint(state, action.team, action.atMs);
     case "timeUp":
@@ -294,7 +420,7 @@ export function applyAction(state: SpotDifferenceState, action: EngineAction): S
 export function computeTeamScores(state: SpotDifferenceState): Record<TeamId, number> {
   const scores: Record<TeamId, number> = { A: 0, B: 0 };
   for (const stage of state.stages) {
-    for (const team of Object.values(stage.foundBy)) scores[team] += 1;
+    for (const team of Object.values(stage.foundBy)) scores[team] += stage.points ?? 1;
   }
   return scores;
 }
@@ -361,6 +487,13 @@ export function getValidMoves(state: SpotDifferenceState, seat: SeatIndex, atMs:
   if (isLocked(state, seat, atMs)) return [];
   const stage = state.stages[state.currentStageIndex];
   if (!stage) return [];
+  if (stageKind(stage) === "same") {
+    if (Object.keys(stage.foundBy).length > 0) return [];
+    return (stage.candidates ?? [])
+      .map((_, index) => index)
+      .filter((index) => stage.wrongPicks?.[index] === undefined)
+      .map((index): EngineAction => ({ type: "pick", seat, index, atMs }));
+  }
   const undiscovered = stage.spots.filter((s) => !stage.foundBy[s.id]);
   if (undiscovered.length === 0) return [];
   const moves: EngineAction[] = undiscovered.map((s) => ({ type: "click", seat, xPct: s.xPct, yPct: s.yPct, atMs }));
@@ -378,8 +511,13 @@ export function getValidMoves(state: SpotDifferenceState, seat: SeatIndex, atMs:
  * highlighted for teammates) over an unhinted one.
  */
 export function scoreMove(state: SpotDifferenceState, seat: SeatIndex, move: EngineAction, tier: BotTier): number {
-  if (move.type !== "click") return 0;
   const stage = state.stages[state.currentStageIndex];
+  if (move.type === "pick") {
+    const right = stage ? move.index === sameAnswerIndex(stage) : false;
+    if (tier === "novice") return right ? 1 : 0;
+    return right ? 10 : -1000;
+  }
+  if (move.type !== "click") return 0;
   const hit = stage?.spots.find((s) => Math.hypot(s.xPct - move.xPct, s.yPct - move.yPct) <= s.rPct);
 
   if (tier === "novice") return hit ? 1 : 0;
@@ -451,6 +589,17 @@ export function botScanDelayMs(level: BotLevel, firstOfStage: boolean, rng: () =
   return Math.floor(min + ((rng() + rng()) / 2) * (max - min));
 }
 
+/**
+ * Extra wait before a bot's first attempt on a bonus stage: a memory round
+ * hides the changed picture during its preview, and comparing four
+ * thumbnails against a reference takes longer than one side-by-side pair.
+ */
+export function botBonusFirstDelayMs(kind: StageKind): number {
+  if (kind === "memory") return MEMORY_PREVIEW_MS;
+  if (kind === "same") return 3000;
+  return 0;
+}
+
 export type HumanizedBotDecision =
   | { kind: "find"; action: EngineAction }
   | { kind: "miss"; action: EngineAction; stunMs: number };
@@ -474,9 +623,20 @@ export function chooseHumanizedBotAction(
   if (!team || isLocked(state, seat, atMs)) return null;
   const stage = state.stages[state.currentStageIndex];
   if (!stage) return null;
+  const cfg = BOT_PACING[botPaceTier(level)];
+  if (stageKind(stage) === "same") {
+    if (Object.keys(stage.foundBy).length > 0) return null;
+    const answer = sameAnswerIndex(stage);
+    const wrong = (stage.candidates ?? []).map((_, i) => i).filter((i) => i !== answer && stage.wrongPicks?.[i] === undefined);
+    // Comparing four thumbnails is harder than spotting one change — bots guess wrong more often here.
+    if (wrong.length > 0 && rng() < Math.min(0.85, cfg.missClickChance * 2 + 0.1)) {
+      const index = wrong[Math.floor(rng() * wrong.length)];
+      return { kind: "miss", action: { type: "pick", seat, index, atMs }, stunMs: cfg.stunMs };
+    }
+    return { kind: "find", action: { type: "pick", seat, index: answer, atMs } };
+  }
   const remaining = stage.spots.filter((s) => !stage.foundBy[s.id]);
   if (remaining.length === 0) return null;
-  const cfg = BOT_PACING[botPaceTier(level)];
 
   if (rng() < cfg.missClickChance) {
     const near = remaining[Math.floor(rng() * remaining.length)];

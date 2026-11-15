@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.177.0",
+    releaseDate: "2026-11-16",
+    title: "🎁 틀린 그림 찾기 보너스 라운드",
+    changes: [
+      { game: "spot-difference", type: "FEAT", desc: "🎁 보너스 라운드 — 스테이지 사이사이에 끼는 특별 판, 점수 2배 · 판마다 제한 시간 +30초 · 방 만들 때 없음/1/2/4판" },
+      { game: "spot-difference", type: "FEAT", desc: "🪞 대칭 거울(좌우가 뒤집힌 그림) · 🧠 기억력(원본 5초 보고 가림) · 🌫️ 흐려지는 그림(점점 뿌예져요)" },
+      { game: "spot-difference", type: "FEAT", desc: "🔍 같은 그림 찾기 — 4장 중 원본과 똑같은 1장을 먼저 고르면 3점 · 틀리면 4초 잠기고 그 카드는 모두에게 ❌" },
+    ],
+  },
+  {
     version: "v1.176.0",
     releaseDate: "2026-11-15",
     title: "🎱 새 게임 당구 파티 · 🁢 새 게임 도미노 연쇄 · ⛄ 새 게임 눈싸움 요새전",

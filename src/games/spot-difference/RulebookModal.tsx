@@ -56,6 +56,29 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
             </li>
           </ul>
         </section>
+
+        <section>
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">🎁 보너스 라운드 (기본 스테이지)</h3>
+          <p className="mb-2 text-white/70 light:text-slate-600">
+            방장이 고른 수(없음/1/2/4판)만큼 스테이지 사이사이에 끼어요. 한 판에 같은 종류는 한 번씩, 보너스마다 제한 시간{" "}
+            <span className="text-amber-300 light:text-amber-600">+30초</span>.
+          </p>
+          <ul className="list-disc space-y-1 pl-4 text-white/70 light:text-slate-600">
+            <li>
+              <span className="text-white/90 light:text-slate-900">🪞 대칭 거울</span> — 오른쪽은 좌우가 뒤집힌 거울 속 그림. 차이 5곳, 1곳 = 2점.
+            </li>
+            <li>
+              <span className="text-white/90 light:text-slate-900">🧠 기억력</span> — 원본을 5초만 보여 주고 가려요. 바뀐 그림에서 기억으로 3곳을 찾아요. 1곳 = 2점.
+            </li>
+            <li>
+              <span className="text-white/90 light:text-slate-900">🌫️ 흐려지는 그림</span> — 30초에 걸쳐 두 그림이 점점 뿌예져요. 차이 5곳, 1곳 = 2점.
+            </li>
+            <li>
+              <span className="text-white/90 light:text-slate-900">🔍 같은 그림 찾기</span> — 4장 중 원본과 완전히 같은 1장을 먼저 고른 팀이{" "}
+              <span className="text-amber-300 light:text-amber-600">3점</span>. 틀리면 4초 잠기고 그 카드는 모두에게 ❌로 공개돼요. 이 판에선 힌트를 못 써요.
+            </li>
+          </ul>
+        </section>
       </div>
     </Overlay>
   );

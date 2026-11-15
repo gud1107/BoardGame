@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   applyAction,
+  BONUS_EXTRA_SECONDS,
+  BONUS_KINDS,
+  BONUS_POINTS_PER_SPOT,
+  botBonusFirstDelayMs,
+  MAX_BONUS_ROUNDS,
+  MEMORY_DIFFS,
+  MEMORY_PREVIEW_MS,
+  SAME_CANDIDATES,
+  SAME_POINTS,
+  SAME_WRONG_PENALTY_MS,
+  sameAnswerIndex,
+  stageKind,
   BOT_PACING,
   BUILTIN_STAGE_POOL_SIZE,
   botPaceTier,
@@ -487,5 +499,109 @@ describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 gameOver�
     const state = playFullBotGame(6, 901, 2, (seat) => (seat % 2 === 0 ? 1 : 10));
     expect(state.phase).toBe("gameOver");
     expect(foundSpotCount(state)).toBe(totalSpotCount(state));
+  });
+});
+
+describe("bonus rounds (🪞 대칭 거울 · 🧠 기억력 · 🌫️ 흐려지는 그림 · 🔍 같은 그림 찾기)", () => {
+  const opts = (bonusRounds: number, stageCount = 1) => ({ source: { kind: "builtin" } as const, stageCount, bonusRounds });
+
+  it("a no-bonus match is unchanged by the feature (same seed → same classic stages)", () => {
+    const a = startGame(4, 77, { source: { kind: "builtin" }, stageCount: 2 });
+    const b = startGame(4, 77, opts(0, 2));
+    expect(b.stages).toEqual(a.stages);
+    expect(b.timerSeconds).toBe(a.timerSeconds);
+  });
+
+  it("interleaves distinct bonus kinds after classic stages, each on its own theme, and extends the timer", () => {
+    const s = startGame(4, 78, { ...opts(MAX_BONUS_ROUNDS, 2), timerSeconds: 90 });
+    const kinds = s.stages.map(stageKind);
+    expect(kinds[0]).toBe("classic");
+    expect(kinds[2]).toBe("classic");
+    expect(kinds.filter((k) => k !== "classic").sort()).toEqual([...BONUS_KINDS].sort());
+    expect(new Set(s.builtinSceneIds).size).toBe(s.stages.length);
+    expect(s.builtinSceneIds).toHaveLength(s.stages.length);
+    expect(s.timerSeconds).toBe(90 + BONUS_EXTRA_SECONDS * MAX_BONUS_ROUNDS);
+  });
+
+  it("clamps bonus rounds so classic + bonus never exceeds the theme count", () => {
+    const s = startGame(4, 79, opts(99, BUILTIN_STAGE_POOL_SIZE));
+    expect(s.stages).toHaveLength(BUILTIN_STAGE_POOL_SIZE);
+  });
+
+  it("photo mode ignores bonusRounds", () => {
+    const s = startGame(2, 80, { source: { kind: "photo", imageDataUrl: "x" }, bonusRounds: 4 });
+    expect(s.stages.every((st) => stageKind(st) === "classic")).toBe(true);
+  });
+
+  function findBonus(kind: string): { state: SpotDifferenceState; index: number } {
+    for (let seed = 1; seed < 500; seed++) {
+      const state = startGame(4, seed, opts(MAX_BONUS_ROUNDS, 1));
+      const index = state.stages.findIndex((st) => stageKind(st) === kind);
+      if (index >= 0) return { state: { ...state, currentStageIndex: index }, index };
+    }
+    throw new Error("no stage");
+  }
+
+  it("bonus differences score double; memory rounds have fewer of them", () => {
+    const { state, index } = findBonus("mirror");
+    const spot = state.stages[index].spots[0];
+    const next = applyAction(state, { type: "click", seat: 0, xPct: spot.xPct, yPct: spot.yPct, atMs: 0 });
+    expect(computeTeamScores(next).A).toBe(BONUS_POINTS_PER_SPOT);
+    expect(findBonus("memory").state.stages[findBonus("memory").index].spots).toHaveLength(MEMORY_DIFFS);
+  });
+
+  it("same-picture round: exactly one identical candidate, decoys all differ from each other", () => {
+    const { state, index } = findBonus("same");
+    const stage = state.stages[index];
+    expect(stage.candidates).toHaveLength(SAME_CANDIDATES);
+    const answer = sameAnswerIndex(stage);
+    expect(stage.candidates![answer]).toEqual([]);
+    const decoys = stage.candidates!.filter((_, i) => i !== answer);
+    expect(decoys.every((d) => d.length > 0)).toBe(true);
+    expect(new Set(decoys.flat()).size).toBe(decoys.flat().length);
+  });
+
+  it("a wrong pick locks the seat, crosses the card out publicly, and can't be re-picked; the right pick scores and advances", () => {
+    const { state, index } = findBonus("same");
+    const answer = sameAnswerIndex(state.stages[index]);
+    const wrong = answer === 0 ? 1 : 0;
+    let s = applyAction(state, { type: "pick", seat: 0, index: wrong, atMs: 1000 });
+    expect(s.stages[index].wrongPicks?.[wrong]).toBe(0);
+    expect(s.penalties[0]).toBe(1000 + SAME_WRONG_PENALTY_MS);
+    // locked
+    expect(applyAction(s, { type: "pick", seat: 0, index: answer, atMs: 2000 })).toBe(s);
+    // crossed-out card ignored for everyone
+    expect(applyAction(s, { type: "pick", seat: 1, index: wrong, atMs: 2000 })).toBe(s);
+    // clicks are ignored on a same round
+    expect(applyAction(s, { type: "click", seat: 1, xPct: 50, yPct: 50, atMs: 2000 })).toBe(s);
+    // hints are refused there
+    expect(applyAction(s, { type: "useHint", team: "B", atMs: 2000 })).toBe(s);
+    s = applyAction(s, { type: "pick", seat: 1, index: answer, atMs: 2000 });
+    expect(computeTeamScores(s).B).toBe(SAME_POINTS);
+    expect(s.currentStageIndex === index + 1 || s.phase === "gameOver").toBe(true);
+  });
+
+  it("bots handle same-picture rounds (valid picks only) and finish a bonus-heavy match", () => {
+    const { state, index } = findBonus("same");
+    const moves = getValidMoves(state, 0, 0);
+    expect(moves).toHaveLength(SAME_CANDIDATES);
+    expect(moves.every((m) => m.type === "pick")).toBe(true);
+    for (let r = 0; r < 20; r++) {
+      const d = chooseHumanizedBotAction(state, 0, 10, Math.random, 0);
+      expect(d?.action.type).toBe("pick");
+      if (d?.kind === "find") expect((d.action as { index: number }).index).toBe(sameAnswerIndex(state.stages[index]));
+    }
+    let s = startGame(4, 321, opts(MAX_BONUS_ROUNDS, 2));
+    let atMs = 0;
+    for (let round = 0; round < 2000 && s.phase === "playing"; round++) {
+      for (let seat = 0; seat < 4; seat++) {
+        const d = chooseHumanizedBotAction(s, seat, seat % 2 === 0 ? 3 : 10, Math.random, atMs);
+        if (d) s = applyAction(s, d.action);
+      }
+      atMs += 1000;
+    }
+    expect(s.phase).toBe("gameOver");
+    expect(foundSpotCount(s)).toBe(totalSpotCount(s));
+    expect(botBonusFirstDelayMs("memory")).toBe(MEMORY_PREVIEW_MS);
   });
 });

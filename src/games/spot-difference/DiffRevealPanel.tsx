@@ -4,7 +4,8 @@ import { useState } from "react";
 import PhotoStageCanvas from "./PhotoStageCanvas";
 import ThemeSceneArt from "./ThemeSceneArt";
 import { activeThemeMutationIds, findThemeScene, themeMutationForSpotId } from "./themeScenes";
-import type { EffectKind, PhotoDiffSpot, Spot, SpotDifferenceState, TeamId } from "./engine";
+import { sameAnswerIndex, stageKind, type EffectKind, type PhotoDiffSpot, type Spot, type SpotDifferenceState, type TeamId } from "./engine";
+import { STAGE_KIND_META } from "./bonusRounds";
 
 const EFFECT_LABEL: Record<EffectKind, string> = {
   hue: "색조 변경",
@@ -41,6 +42,7 @@ export default function DiffRevealPanel({ state }: { state: SpotDifferenceState 
   const sceneId = state.builtinSceneIds[stageIndex];
   const theme = sceneId ? findThemeScene(sceneId) : undefined;
   const spotIds = stage.spots.map((s) => s.id);
+  const kind = stageKind(stage);
 
   const tab = (on: boolean) =>
     `rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
@@ -67,14 +69,21 @@ export default function DiffRevealPanel({ state }: { state: SpotDifferenceState 
 
       {state.stages.length > 1 && (
         <div className="mb-2 flex flex-wrap gap-1">
-          {state.stages.map((_, i) => (
-            <button key={i} type="button" className={tab(i === stageIndex)} onClick={() => setStageIndex(i)}>
-              스테이지 {i + 1}
-            </button>
-          ))}
+          {state.stages.map((st, i) => {
+            const k = stageKind(st);
+            return (
+              <button key={i} type="button" className={tab(i === stageIndex)} onClick={() => setStageIndex(i)}>
+                {k === "classic" ? `스테이지 ${i + 1}` : `${i + 1}. ${STAGE_KIND_META[k].emoji} ${STAGE_KIND_META[k].label}`}
+              </button>
+            );
+          })}
         </div>
       )}
 
+      {kind === "same" && theme ? (
+        <SameReveal state={state} stageIndex={stageIndex} themeId={theme.id} />
+      ) : (
+      <>
       <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-white/10 light:border-slate-300">
         {state.source.kind === "photo" ? (
           <PhotoStageCanvas imageDataUrl={state.source.imageDataUrl} spots={stage.spots as PhotoDiffSpot[]} variant={variant} className="h-full w-full object-contain" />
@@ -111,6 +120,42 @@ export default function DiffRevealPanel({ state }: { state: SpotDifferenceState 
           );
         })}
       </ol>
+      </>
+      )}
     </section>
+  );
+}
+
+/** 🔍 round answer: every candidate with the identical one starred and each decoy's changes named. */
+function SameReveal({ state, stageIndex, themeId }: { state: SpotDifferenceState; stageIndex: number; themeId: string }) {
+  const stage = state.stages[stageIndex];
+  const answer = sameAnswerIndex(stage);
+  const winner = stage.foundBy[stage.spots[0]?.id ?? ""];
+  const theme = findThemeScene(themeId);
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-xs text-white/60 light:text-slate-600">
+        정답은 {answer + 1}번 —{" "}
+        {winner ? <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${TEAM_MARK[winner].chip}`}>{TEAM_MARK[winner].label} 정답</span> : "아무도 못 맞혔어요"}
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        {(stage.candidates ?? []).map((mutations, i) => (
+          <div key={i} className={`overflow-hidden rounded-xl border-2 ${i === answer ? "border-emerald-400" : "border-white/10 light:border-slate-300"}`}>
+            <div className="relative aspect-[4/3]">
+              <ThemeSceneArt themeId={themeId} active={new Set(mutations)} className="h-full w-full" />
+              <span className="absolute left-1 top-1 rounded-full bg-black/75 px-1.5 text-[11px] font-bold text-white">
+                {i + 1}
+                {i === answer ? " ⭐ 똑같음" : ""}
+              </span>
+            </div>
+            {i !== answer && (
+              <p className="bg-white/[0.04] px-2 py-1 text-[10px] text-white/60 light:bg-slate-50 light:text-slate-600">
+                {mutations.map((id) => theme?.mutations.find((m) => m.id === id)?.name ?? id).join(" · ")}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
