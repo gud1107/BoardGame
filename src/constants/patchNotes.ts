@@ -64,6 +64,19 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.175.0",
+    releaseDate: "2026-11-15",
+    title: "🧗 새 게임 한 줄 등반대 · 🥁 새 게임 박자 난장판",
+    changes: [
+      { game: "rope-climbers", type: "FEAT", desc: "🧗 새 게임 — 옆 사람과 밧줄 한 줄로 묶여 암벽을 오르는 2~4인 실시간 3D 협동 등반 · 혼자 연습·AI 봇 Lv.1~10" },
+      { game: "rope-climbers", type: "FEAT", desc: "🪢 떨어지면 줄이 받아 주고 당겨서 끌어올리기 · 💪 체력과 바위 턱 · 🪨 낙석 · 💨 돌풍 · 부서지는 바위 · ⛑ 팀 추락" },
+      { game: "rope-climbers", type: "FEAT", desc: "🌲 뒷산·🏔️ 빙벽·🌋 화산 3곳 · ⛺ 캠프 체크포인트 · ⭐ 3단계 등급 · 방장이 나가도 판이 이어져요" },
+      { game: "beat-mayhem", type: "FEAT", desc: "🥁 새 게임 — 모두가 같은 곡을 동시에 치는 1~8인 3D 리듬 대결 · 곡은 판마다 새로 만들어져요 · AI 봇 Lv.1~10" },
+      { game: "beat-mayhem", type: "FEAT", desc: "⚡ 게이지를 모아 바로 위 등수에게 장난 — 🌫️ 안개·🔀 뒤집기·🐜 콩알·🌀 흔들흔들·⚡ 급가속 · 🛡 남겨 두면 자동 방어" },
+      { game: "beat-mayhem", type: "FEAT", desc: "🎧 판정은 내 기기에서 — 인터넷이 느려도 박자가 안 밀려요 · 판정 보정 · 노트 빠르기 · 소리 없이도 플레이" },
+    ],
+  },
+  {
     version: "v1.174.0",
     releaseDate: "2026-11-14",
     title: "🤫 새 게임 숨죽인 밤",

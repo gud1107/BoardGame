@@ -97,6 +97,21 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "🍾 던진 약병 / 💊 진정제", value: (d) => `${n(d.bottles)} / ${n(d.pills)}` },
     { label: "⏱ 가장 빠른 탈출 · 🔦 혼자 탈출 · 💀 악몽 탈출", value: (d) => `${d.minEscapeSec !== undefined ? `${n(d.minEscapeSec)}초` : "-"} · ${n(d.soloEscapes)} · ${n(d.nightmareEscapes)}` },
   ],
+  "rope-climbers": [
+    { label: "🚩 완등 (⭐⭐⭐ · 🌋 화산)", value: (d) => `${n(d.summits)} (${n(d.stars3)} · ${n(d.volcano)})` },
+    { label: "🧗 선등 / 💪 끌어올림", value: (d) => `${n(d.leadM)}m / ${n(d.haulM)}m` },
+    { label: "🪢 받아냄 / 줄 덕에 삶", value: (d) => `${n(d.catches)} / ${n(d.saved)}` },
+    { label: "😵 손 놓침 / 🪨 낙석 맞음 / 💥 팀 추락", value: (d) => `${n(d.slips)} / ${n(d.rockHits)} / ${n(d.falls)}` },
+    { label: "⭐ 별 · 📍 최고 높이", value: (d) => `${n(d.stars)}개 · ${n(d.maxAlt)}m` },
+    { label: "🪢 줄에 매달린 시간", value: (d) => `${n(d.hangSec)}초` },
+  ],
+  "beat-mayhem": [
+    { label: "🎵 친 곡 / 🏆 곡 1등", value: (d) => `${n(d.songs)} / ${n(d.roundWins)}` },
+    { label: "퍼펙트 / 그레이트 / 굿 / 미스", value: (d) => `${n(d.perfects)} / ${n(d.greats)} / ${n(d.goods)} / ${n(d.misses)}` },
+    { label: "🔥 최대 콤보 · ✨ 풀 콤보", value: (d) => `${n(d.maxCombo)} · ${n(d.fullCombos)}곡` },
+    { label: "🎯 한 곡 최고 정확도", value: (d) => `${n(d.maxAcc)}%` },
+    { label: "⚡ 쏜 장난 / 🛡 막음 / 😵 걸림", value: (d) => `${n(d.pranksSent)} / ${n(d.pranksBlocked)} / ${n(d.pranksTaken)}` },
+  ],
   "thin-ice-party": [
     { label: "💥 KO / 🌊 빠짐 (혼자)", value: (d) => `${n(d.kos)} / ${n(d.falls)} (${n(d.selfFalls)})` },
     { label: "🏆 라운드 1등 / 3등 안", value: (d) => `${n(d.roundWins)} / ${n(d.podiums)}` },

@@ -65,7 +65,8 @@ describe("game sound suites", () => {
     // + strange corridor (이상한 복도).
     // + hushed ward (숨죽인 병동).
     // + hush night (숨죽인 밤).
-    expect(suites.length).toBe(51);
+    // + rope climbers (한 줄 등반대) + beat mayhem (박자 난장판).
+    expect(suites.length).toBe(53);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

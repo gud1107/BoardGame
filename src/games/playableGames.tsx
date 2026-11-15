@@ -51,6 +51,8 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   "word-tower": dynamic(() => import("./wordTower/WordTowerGame"), { ssr: false }),
   chess: dynamic(() => import("./chess/ChessGame"), { ssr: false }),
   curling: dynamic(() => import("./curling/CurlingGame"), { ssr: false }),
+  "rope-climbers": dynamic(() => import("./ropeClimb/RopeClimbGame"), { ssr: false }),
+  "beat-mayhem": dynamic(() => import("./beatMayhem/BeatMayhemGame"), { ssr: false }),
   "thin-ice-party": dynamic(() => import("./thinIce/ThinIceGame"), { ssr: false }),
   "hushed-ward": dynamic(() => import("./hushedWard/HushedWardGame"), { ssr: false }),
   alkkagi: dynamic(() => import("./alkkagi/AlkkagiGame"), { ssr: false }),

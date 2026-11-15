@@ -446,6 +446,21 @@ export class ProceduralSuite {
     }
   }
 
+  /* ── Self-scheduled music (박자 난장판) ──────────────────────────────── */
+
+  /** The audio clock in seconds, or null while `bus` is muted or the context isn't running. For games that schedule their own song against it. */
+  clock(bus: "sfx" | "bgm" = "bgm"): number | null {
+    return this.ready(bus)?.currentTime ?? null;
+  }
+
+  /** Schedules one instrument note at an absolute `clock()` time. A time already in the past plays now. */
+  noteAt(bus: "sfx" | "bgm", inst: string, note: string | number, when: number, dur = 0.3, gain = 1) {
+    const ctx = this.ready(bus);
+    const dest = bus === "sfx" ? this.sfxBus : this.bgmBus;
+    if (!ctx || !dest) return;
+    this.note(ctx, dest, inst, typeof note === "number" ? note : noteToFreq(note), Math.max(when, ctx.currentTime), dur, gain);
+  }
+
   /* ── BGM ─────────────────────────────────────────────────────────────── */
 
   /** Board mount/unmount or phase. Playback additionally needs BGM unmuted in the site settings. */

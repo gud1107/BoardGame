@@ -118,6 +118,18 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "일으킨 동료", key: "revives", unit: "번" },
     { label: "붙잡힘", key: "downs", unit: "번" },
   ],
+  "rope-climbers": [
+    { label: "완등", key: "summits", unit: "번" },
+    { label: "선등", key: "leadM", unit: "m" },
+    { label: "받아냄", key: "catches", unit: "번" },
+    { label: "최고 높이", key: "maxAlt", unit: "m" },
+  ],
+  "beat-mayhem": [
+    { label: "최대 콤보", key: "maxCombo", unit: "" },
+    { label: "최고 정확도", key: "maxAcc", unit: "%" },
+    { label: "퍼펙트", key: "perfects", unit: "개" },
+    { label: "최고 점수", key: "maxScore", unit: "점" },
+  ],
   "thin-ice-party": [
     { label: "KO", key: "kos", unit: "번" },
     { label: "라운드 1등", key: "roundWins", unit: "번" },
@@ -347,6 +359,14 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
   "hushed-ward": [
     { id: "hw-escapes", label: "🚪 탈출", num: "escapes", format: "count", unit: "번" },
     { id: "hw-revives", label: "✚ 일으킨 동료", num: "revives", format: "count", unit: "번" },
+  ],
+  "rope-climbers": [
+    { id: "rc-summits", label: "🚩 완등", num: "summits", format: "count", unit: "번" },
+    { id: "rc-catches", label: "🪢 받아냄", num: "catches", format: "count", unit: "번" },
+  ],
+  "beat-mayhem": [
+    { id: "bm-perfects", label: "✨ 퍼펙트", num: "perfects", format: "count", unit: "개" },
+    { id: "bm-wins", label: "🏆 곡 1등", num: "roundWins", format: "count", unit: "번" },
   ],
   "thin-ice-party": [
     { id: "ti-kos", label: "💥 KO", num: "kos", format: "count", unit: "번" },
