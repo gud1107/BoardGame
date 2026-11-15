@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, type ReactNode } from "react";
+import { SceneRenderFx } from "./sceneRenderFx";
 import { Arcade, Bakery, Bazaar, Camping, Haunted, Orbital } from "./ThemeSceneArtMore";
 
 /**
@@ -40,8 +41,12 @@ export default function ThemeSceneArt({
   else if (themeId === "theme-camping") art = <Camping on={on} p={p} />;
   else if (themeId === "theme-haunted") art = <Haunted on={on} p={p} />;
   return (
-    <svg viewBox="0 0 100 100" preserveAspectRatio="none" className={className}>
-      {art}
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none" shapeRendering="geometricPrecision" className={className}>
+      {art && (
+        <SceneRenderFx themeId={themeId} p={p}>
+          {art}
+        </SceneRenderFx>
+      )}
     </svg>
   );
 }
