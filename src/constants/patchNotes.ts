@@ -72,6 +72,8 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       { game: "spot-difference", type: "FEAT", desc: "🪞 대칭 거울(좌우가 뒤집힌 그림) · 🧠 기억력(원본 5초 보고 가림) · 🌫️ 흐려지는 그림(점점 뿌예져요)" },
       { game: "spot-difference", type: "FEAT", desc: "🔍 같은 그림 찾기 — 4장 중 원본과 똑같은 1장을 먼저 고르면 3점 · 틀리면 4초 잠기고 그 카드는 모두에게 ❌" },
       { game: "spot-difference", type: "IMPROVE", desc: "✨ 그림 화질 업 — 테마별 조명, 네온·촛불·모닥불 빛 번짐, 더 선명한 색과 윤곽, 가장자리 비네트" },
+      { game: "spot-difference", type: "FIX", desc: "📸 내 사진 모드 — 세로·정사각 사진에서 클릭 판정이 어긋나던 문제 수정(사진을 4:3으로 잘라 써요)" },
+      { game: "spot-difference", type: "IMPROVE", desc: "내 오답 위치 ❌ · 그림별 진행 점(●●○○○) · 찾은 곳은 팀 색 동그라미 · 색맹도 보이게 빨강↔초록 차이 4곳 모양 추가" },
     ],
   },
   {

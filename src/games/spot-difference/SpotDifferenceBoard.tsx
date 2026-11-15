@@ -131,10 +131,11 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
     if (!state.lastMiss || state.lastMiss === prev) return;
     const fresh = Object.entries(state.lastMiss)
       .map(([seat, m]) => ({ seat: Number(seat), ...m }))
-      .filter((m) => m.seat !== viewerSeat && prev?.[m.seat]?.atMs !== m.atMs)
+      .filter((m) => prev?.[m.seat]?.atMs !== m.atMs)
       .map((m) => ({ key: `${m.seat}:${m.atMs}`, seat: m.seat, xPct: m.xPct, yPct: m.yPct }));
     if (fresh.length === 0) return;
-    getSpotSound().playMissClick(true); // soft "통" — one per update, however many seats missed at once
+    // Own misses already buzz via the penalty effect; others get a soft "통" — one per update, however many seats missed at once.
+    if (fresh.some((m) => m.seat !== viewerSeat)) getSpotSound().playMissClick(true);
     setMissMarks((marks) => [...marks, ...fresh]);
     const keys = new Set(fresh.map((m) => m.key));
     setTimeout(() => setMissMarks((marks) => marks.filter((m) => !keys.has(m.key))), 900);
@@ -297,11 +298,31 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
         </div>
       </div>
 
-      {state.stages.length > 1 && (
-        <p className="text-center text-xs text-white/40 light:text-slate-500">
-          스테이지 {state.currentStageIndex + 1} / {state.stages.length}
-        </p>
-      )}
+      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-white/40 light:text-slate-500">
+        {state.stages.length > 1 && (
+          <span>
+            스테이지 {state.currentStageIndex + 1} / {state.stages.length}
+          </span>
+        )}
+        {kind !== "same" && (
+          <span className="flex items-center gap-1" aria-label={`이 그림에서 ${Object.keys(stage.foundBy).length}/${stage.spots.length}개 찾음`}>
+            {stage.spots.map((s) => {
+              const t = stage.foundBy[s.id];
+              return (
+                <span
+                  key={s.id}
+                  className={`h-2.5 w-2.5 rounded-full border ${
+                    t === "A" ? "border-sky-300 bg-sky-400" : t === "B" ? "border-rose-300 bg-rose-400" : "border-white/30 bg-transparent light:border-slate-400"
+                  }`}
+                />
+              );
+            })}
+            <span className="ml-1 tabular-nums">
+              {Object.keys(stage.foundBy).length}/{stage.spots.length}
+            </span>
+          </span>
+        )}
+      </div>
 
       {kind !== "classic" && (
         <div
@@ -344,7 +365,7 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
         activeHintSpot={activeHintSpot}
         isLocked={isLocked}
         missMarks={missMarks}
-        names={names}
+        names={{ ...names, [viewerSeat]: "나" }}
       />
 
       <p className="text-center text-[11px] text-white/30 light:text-slate-400">
@@ -393,7 +414,8 @@ function StageArea({
   missMarks: MissMark[];
   names: Record<number, string>;
 }) {
-  const [arrivedAt] = useState(() => Date.now());
+  // Later stages open under the 1.8s stage-clear overlay — start the memory/fade clocks after it.
+  const [arrivedAt] = useState(() => Date.now() + (state.currentStageIndex > 0 ? STAGE_CLEAR_FX_MS : 0));
   const elapsed = Math.max(0, now - arrivedAt);
   const kind = stageKind(stage);
   const ring = flash === "wrong" ? "ring-2 ring-rose-500" : flash === "correct" ? "ring-2 ring-emerald-400" : "";
@@ -501,7 +523,7 @@ function StagePanel({
   return (
     <div
       onClick={clickable ? handle : undefined}
-      className={`relative aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 light:border-slate-300 light:shadow-sm ${
+      className={`relative aspect-[4/3] touch-manipulation select-none overflow-hidden rounded-2xl border border-white/10 light:border-slate-300 light:shadow-sm ${
         !clickable ? "cursor-default" : isLocked ? "cursor-not-allowed" : "cursor-crosshair"
       }`}
     >
@@ -530,7 +552,9 @@ function StagePanel({
             .map((s) => (
               <div
                 key={s.id}
-                className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.8)] animate-[spot-diff-pop_0.35s_ease-out]"
+                className={`pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] animate-[spot-diff-pop_0.35s_ease-out] ${
+                  stage.foundBy[s.id] === "B" ? "border-rose-400 shadow-[0_0_12px_rgba(251,113,133,0.85)]" : "border-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.85)]"
+                }`}
                 style={{
                   left: `${fx(s.xPct)}%`,
                   top: `${s.yPct}%`,
@@ -608,7 +632,7 @@ function SamePanel({
               disabled={crossed || isLocked}
               onClick={() => onPick(index)}
               aria-label={`${index + 1}번 그림 고르기`}
-              className={`relative aspect-[4/3] overflow-hidden rounded-xl border-2 transition ${
+              className={`relative aspect-[4/3] touch-manipulation overflow-hidden rounded-xl border-2 transition ${
                 crossed
                   ? "cursor-not-allowed border-rose-500/60 opacity-50"
                   : isLocked

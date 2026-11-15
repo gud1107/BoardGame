@@ -159,6 +159,8 @@ export function Orbital({ on, p }: ArtProps) {
       <rect x="6" y="36" width="12" height="16" rx="1.5" fill="#0f172a" stroke="#475569" strokeWidth="0.4" />
       <circle cx="12" cy="41" r="2" fill={on("dockLight") ? "#ef4444" : "#22c55e"} />
       <circle cx="12" cy="41" r="3.2" fill={on("dockLight") ? "#ef4444" : "#22c55e"} opacity="0.2" />
+      {/* shape cue too, not just red↔green (colour-blind players) */}
+      {on("dockLight") && <path d="M11,40 L13,42 M13,40 L11,42" stroke="#fff" strokeWidth="0.45" strokeLinecap="round" />}
       <rect x="8.5" y="46" width="7" height="1" fill="#64748b" />
       <rect x="8.5" y="48.5" width="5" height="1" fill="#64748b" />
       {/* floor */}
@@ -376,7 +378,8 @@ export function Arcade({ on, p }: ArtProps) {
       {/* coin door (28,82) */}
       <rect x="22" y="76" width="10" height="9" rx="0.6" fill="#0f172a" stroke="#475569" strokeWidth="0.4" />
       <rect x="26.5" y="78" width="0.8" height="3" fill="#94a3b8" />
-      <circle cx="29.5" cy="79.5" r="0.8" fill={on("coinLed") ? "#334155" : "#ef4444"} />
+      {!on("coinLed") && <circle cx="29.5" cy="79.5" r="2" fill="#ef4444" opacity="0.3" />}
+      <circle cx="29.5" cy="79.5" r="1.3" fill={on("coinLed") ? "#334155" : "#ef4444"} />
       {/* jukebox (58,58) */}
       <path d="M50,76 L50,50 Q58,40 66,50 L66,76 Z" fill="#7c2d12" stroke="#fbbf24" strokeWidth="0.6" />
       <path d="M52.5,52 Q58,45 63.5,52" stroke="#fbbf24" strokeWidth="0.5" fill="none" />
@@ -531,7 +534,7 @@ export function Camping({ on, p }: ArtProps) {
 // 10. 할로윈 유령의 대저택 (hall interior)
 // ---------------------------------------------------------------------------
 export function Haunted({ on, p }: ArtProps) {
-  const pupilDx = on("portrait") ? 0.6 : -0.6;
+  const pupilDx = -0.5; // eyes glance left; the "portrait" mutation shuts them
   return (
     <>
       <defs>
@@ -587,17 +590,26 @@ export function Haunted({ on, p }: ArtProps) {
       <rect x="5" y="46" width="14" height="1.5" fill="#57534e" />
       <path d="M8,46 Q8,39 12,38.5 Q16,39 16,46 Z" fill="#57534e" />
       <path d="M9,40 L8,36.5 L10.5,39 M15,40 L16,36.5 L13.5,39" fill="#57534e" />
-      <circle cx="10.7" cy="41.8" r="0.7" fill={on("gargoyle") ? "#ef4444" : "#1c1917"} />
-      <circle cx="13.3" cy="41.8" r="0.7" fill={on("gargoyle") ? "#ef4444" : "#1c1917"} />
+      {/* glowing amber (bright for every colour vision), not dark red on dark stone */}
+      {on("gargoyle") && <ellipse cx="12" cy="41.8" rx="3.4" ry="1.6" fill="#fbbf24" opacity="0.3" />}
+      <circle cx="10.7" cy="41.8" r={on("gargoyle") ? 0.9 : 0.7} fill={on("gargoyle") ? "#fbbf24" : "#1c1917"} />
+      <circle cx="13.3" cy="41.8" r={on("gargoyle") ? 0.9 : 0.7} fill={on("gargoyle") ? "#fbbf24" : "#1c1917"} />
       {/* portrait (84,38) */}
       <rect x="76" y="27" width="16" height="22" fill="#78350f" stroke="#ca8a04" strokeWidth="1" />
       <rect x="78" y="29" width="12" height="18" fill="#292524" />
       <ellipse cx="84" cy="37" rx="3.6" ry="4.6" fill="#d6d3d1" />
       <path d="M80,47 Q84,41 88,47 Z" fill="#1c1917" />
-      <circle cx="82.6" cy="36.4" r="0.8" fill="#fff" />
-      <circle cx="85.4" cy="36.4" r="0.8" fill="#fff" />
-      <circle cx={82.6 + pupilDx} cy="36.4" r="0.4" fill="#1c1917" />
-      <circle cx={85.4 + pupilDx} cy="36.4" r="0.4" fill="#1c1917" />
+      {/* eyes big enough to read at phone size; the change is open → shut (shape, not a 1px pupil shift) */}
+      {on("portrait") ? (
+        <path d="M81.4,36.6 Q82.6,37.6 83.8,36.6 M84.2,36.6 Q85.4,37.6 86.6,36.6" stroke="#1c1917" strokeWidth="0.45" fill="none" strokeLinecap="round" />
+      ) : (
+        <>
+          <circle cx="82.6" cy="36.4" r="1.2" fill="#fff" />
+          <circle cx="85.4" cy="36.4" r="1.2" fill="#fff" />
+          <circle cx={82.6 + pupilDx} cy="36.4" r="0.6" fill="#1c1917" />
+          <circle cx={85.4 + pupilDx} cy="36.4" r="0.6" fill="#1c1917" />
+        </>
+      )}
       {/* floating candle (32,57) */}
       {!on("floatCandle") && (
         <g>

@@ -176,7 +176,7 @@ export const THEME_SCENES: ThemeScene[] = [
       { id: "atticHand", name: "다락방 창문 손자국", xPct: 60, yPct: 15, rPct: 6 },
       { id: "gargoyle", name: "가고일 눈빛", xPct: 12, yPct: 42, rPct: 6 },
       { id: "spider", name: "샹들리에 거미", xPct: 46, yPct: 36, rPct: 6 },
-      { id: "portrait", name: "초상화 눈동자", xPct: 84, yPct: 38, rPct: 6 },
+      { id: "portrait", name: "초상화 눈 감김", xPct: 84, yPct: 38, rPct: 6 },
       { id: "floatCandle", name: "떠 있는 촛불", xPct: 32, yPct: 57, rPct: 6 },
       { id: "ghost", name: "창가 유령", xPct: 87, yPct: 64, rPct: 6 },
       { id: "pumpkin", name: "호박 입 모양", xPct: 68, yPct: 78, rPct: 7 },

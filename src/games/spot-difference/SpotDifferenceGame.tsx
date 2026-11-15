@@ -180,13 +180,21 @@ async function compressImageToDataUrl(file: File): Promise<string> {
     el.onerror = () => reject(new Error("이미지를 불러오지 못했습니다."));
     el.src = rawDataUrl;
   });
-  const scale = Math.min(1, MAX_PHOTO_DIMENSION / Math.max(img.naturalWidth, img.naturalHeight));
+  // Centre-crop to the board's 4:3 frame. Without it a portrait/square photo
+  // was letterboxed by object-contain while clicks were measured against the
+  // whole 4:3 panel — the hit circles drifted off the visible changes.
+  const srcAspect = img.naturalWidth / img.naturalHeight;
+  const cropW = srcAspect > 4 / 3 ? img.naturalHeight * (4 / 3) : img.naturalWidth;
+  const cropH = srcAspect > 4 / 3 ? img.naturalHeight : img.naturalWidth * (3 / 4);
+  const cropX = (img.naturalWidth - cropW) / 2;
+  const cropY = (img.naturalHeight - cropH) / 2;
+  const scale = Math.min(1, MAX_PHOTO_DIMENSION / Math.max(cropW, cropH));
   const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
-  canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+  canvas.width = Math.max(1, Math.round(cropW * scale));
+  canvas.height = Math.max(1, Math.round(cropH * scale));
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("이 브라우저는 이미지 편집을 지원하지 않습니다.");
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
 
   let quality = 0.8;
   let out = canvas.toDataURL("image/jpeg", quality);
@@ -1215,7 +1223,7 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
 
             {mode === "photo" && (
               <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
-                사진 업로드
+                사진 업로드 (가운데를 4:3으로 잘라서 써요)
                 <input
                   type="file"
                   accept="image/*"

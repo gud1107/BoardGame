@@ -569,6 +569,8 @@ function DeepSea({ on, p }: ArtProps) {
       {/* warning lamp (36,82) */}
       <circle cx="36" cy="82" r="3.2" fill={on("warnLight") ? "#ef4444" : "#22c55e"} opacity="0.25" />
       <circle cx="36" cy="82" r="1.8" fill={on("warnLight") ? "#ef4444" : "#22c55e"} stroke="#0f172a" strokeWidth="0.3" />
+      {/* shape cue too, not just red↔green (colour-blind players) */}
+      {on("warnLight") && <path d="M36,80.9 V82.3 M36,83.05 V83.2" stroke="#fff" strokeWidth="0.5" strokeLinecap="round" />}
       {/* buttons */}
       {range(4).map((i) => (
         <rect key={i} x={32 + i * 3} y="90" width="2" height="1.4" rx="0.3" fill={["#f59e0b", "#38bdf8", "#a3e635", "#f472b6"][i]} />
