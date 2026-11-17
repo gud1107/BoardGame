@@ -67,7 +67,8 @@ describe("game sound suites", () => {
     // + hush night (숨죽인 밤).
     // + rope climbers (한 줄 등반대) + beat mayhem (박자 난장판).
     // + billiards party (당구 파티) + domino chain (도미노 연쇄) + snowball fort (눈싸움 요새전).
-    expect(suites.length).toBe(56);
+    // + cctv alibi (CCTV 알리바이).
+    expect(suites.length).toBe(57);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

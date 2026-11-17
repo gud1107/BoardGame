@@ -1052,6 +1052,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "cctv-alibi",
+    name: "CCTV 알리바이",
+    nameEn: "CCTV Alibi",
+    description:
+      "저택의 밤, 지하 금고실의 보석이 사라졌다! 모두가 몰래 짠 밤 동선이 CCTV에 그대로 찍혀 공개되지만, 범인 한 명의 영상은 1~3칸이 가짜. 3~6인 숨은 범인 추리 게임. 🌙 동시에 비밀로 동선 짜기(범인은 금고실에 들르고 영상 바꿔치기) → 📼 3D 저택에서 영상 돌려 보기 → 🔎 센서 대조(그 시각 그 방의 실제 인원)와 🗣️ 증언(내 기억과 영상이 다르다!)으로 좁히고 → 🗳️ 비밀 투표. 범인도 거짓 증언으로 맞받을 수 있어요. 범인·실제 동선·표는 서버가 숨겨요. 사건 1~3번 · 3D/2D · AI 봇 Lv.1~10.",
+    players: { min: 3, max: 6 },
+    playTime: { minMinutes: 8, maxMinutes: 25 },
+    category: "party",
+    thumbnail: { emoji: "📹", gradient: ["#0c4a6e", "#0b0a12"] },
+    tags: ["추리", "숨은범인", "숨겨진정보", "영상판독", "투표", "블러핑", "3D", "AI봇"],
+    genres: ["party", "strategy"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "fog-manor",
     name: "안개 저택 살인사건",
     nameEn: "Fog Manor Murder",

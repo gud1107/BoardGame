@@ -226,6 +226,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "최고 연승", key: "bestStreak", unit: "연승" },
     { label: "쌓은 단어", key: "words", unit: "개" },
   ],
+  "cctv-alibi": [
+    { label: "범인 검거", key: "catches", unit: "번" },
+    { label: "범인으로 도주", key: "escapes", unit: "번" },
+    { label: "범인 적중 표", key: "correctVotes", unit: "번" },
+    { label: "센서 적중", key: "hits", unit: "번" },
+  ],
   "fog-manor": [
     { label: "사건 해결", key: "solves", unit: "번" },
     { label: "대질 심문", key: "asks", unit: "번" },
@@ -456,6 +462,11 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "wt-height", label: "한 라운드 최고 층수", num: "maxHeight", format: "count", unit: "층" },
     { id: "wt-wins", label: "라운드 1등", num: "roundWins", format: "count", unit: "번" },
     { id: "wt-streak", label: "최고 연승", num: "bestStreak", format: "count", unit: "연승" },
+  ],
+  "cctv-alibi": [
+    { id: "ca-catch", label: "🚔 범인 검거", num: "catches", format: "count", unit: "번" },
+    { id: "ca-escape", label: "💨 완전 범죄", num: "escapes", format: "count", unit: "번" },
+    { id: "ca-eye", label: "🎯 범인 적중률", num: "correctVotes", den: "guestCases", minDen: 10, format: "percent" },
   ],
   "fog-manor": [
     { id: "fm-solves", label: "🕯️ 사건 해결", num: "solves", format: "count", unit: "번" },

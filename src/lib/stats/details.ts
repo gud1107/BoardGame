@@ -325,6 +325,15 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "엉뚱한 걸 친 횟수", value: (d) => n(d.wrongHits) },
     { label: "만든 분신", value: (d) => n(d.decoys) },
   ],
+  "cctv-alibi": [
+    { label: "손님으로 검거 / 손님 사건", value: (d) => `${n(d.catches)} / ${n(d.guestCases)}` },
+    { label: "범인 적중 표", value: (d) => n(d.correctVotes) },
+    { label: "범인으로 도주 / 범인 사건", value: (d) => `${n(d.escapes)} / ${n(d.culpritCases)}` },
+    { label: "한 표도 안 받고 도주", value: (d) => n(d.cleanEscapes) },
+    { label: "센서 대조 (가짜 칸 적중)", value: (d) => `${n(d.checks)} (${n(d.hits)})` },
+    { label: "증언 / 목격한 사건", value: (d) => `${n(d.testimonies)} / ${n(d.witnessed)}` },
+    { label: "결백한데 받은 표", value: (d) => n(d.framedVotes) },
+  ],
   "fog-manor": [
     { label: "해결 (고발 / 새벽)", value: (d) => `${n(d.solves)} (${n(d.accuseSolves)} / ${n(d.dawnSolves)})` },
     { label: "빠른 해결 (자정의 추리)", value: (d) => n(d.fastSolves) },

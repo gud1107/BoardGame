@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.178.0",
+    releaseDate: "2026-11-17",
+    title: "📹 새 게임 CCTV 알리바이",
+    changes: [
+      { game: "cctv-alibi", type: "FEAT", desc: "📹 새 게임 — 모두의 밤 동선이 CCTV에 찍히고 범인 한 명의 영상만 일부가 가짜인 3~6인 숨은 범인 추리 · 3D 저택 · AI 봇 Lv.1~10" },
+      { game: "cctv-alibi", type: "FEAT", desc: "🌙 몰래 동선 짜기 → 📼 영상 돌려 보기 → 🔎 센서 대조(그 시각 그 방의 실제 인원) · 🗣️ 증언 → 🗳️ 비밀 투표" },
+      { game: "cctv-alibi", type: "FEAT", desc: "🦹 범인은 금고실 구간을 가짜 장면으로 바꾸고 거짓 증언으로 맞받아요 · 범인·실제 동선·표는 서버가 숨겨요 · 사건 1~3번" },
+    ],
+  },
+  {
     version: "v1.177.0",
     releaseDate: "2026-11-16",
     title: "🎁 틀린 그림 찾기 보너스 라운드",
