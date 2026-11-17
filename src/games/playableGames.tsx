@@ -58,6 +58,7 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   "snowball-fort": dynamic(() => import("./snowballFort/SnowballGame"), { ssr: false }),
   "thin-ice-party": dynamic(() => import("./thinIce/ThinIceGame"), { ssr: false }),
   "hushed-ward": dynamic(() => import("./hushedWard/HushedWardGame"), { ssr: false }),
+  "tagger-among-us": dynamic(() => import("./taggerAmongUs/TaggerAmongUsGame"), { ssr: false }),
   alkkagi: dynamic(() => import("./alkkagi/AlkkagiGame"), { ssr: false }),
   "bowling-mayhem": dynamic(() => import("./bowlingMayhem/BowlingMayhemGame"), { ssr: false }),
   "island-pioneers": dynamic(() => import("./islandPioneers/IslandPioneersGame"), { ssr: false }),

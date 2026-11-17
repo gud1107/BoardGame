@@ -89,6 +89,14 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "캐슬링 / 앙파상", value: (d) => `${n(d.castles)} / ${n(d.enPassants)}` },
     { label: "승진 (언더프로모션)", value: (d) => `${n(d.promotions)} (${n(d.underPromotions)})` },
   ],
+  "tagger-among-us": [
+    { label: "🏃 탈출 / 도망자 판 (한 번도 안 얼고)", value: (d) => `${n(d.escapes)} / ${n(d.runnerGames)} (${n(d.cleanEscapes)})` },
+    { label: "🧧 봉인 · 🫱 땡! · ❄ 얼음", value: (d) => `${n(d.seals)} · ${n(d.thaws)} · ${n(d.frozen)}` },
+    { label: "🧂 소금 명중 / 뿌림 (변장 들춤 · 친구 맞힘)", value: (d) => `${n(d.saltHits)} / ${n(d.salts)} (${n(d.unmasks)} · ${n(d.friendly)})` },
+    { label: "👹 술래 승 / 술래 판 (전원 저지)", value: (d) => `${n(d.taggerWins)} / ${n(d.taggerGames)} (${n(d.sweeps)})` },
+    { label: "❄ 얼린 횟수 (한 판 최다) · 👣 걷어참", value: (d) => `${n(d.catches)} (${n(d.maxCatches)}) · ${n(d.kicks)}` },
+    { label: "⏱ 가장 빠른 탈출", value: (d) => (d.minEscapeSec !== undefined ? `${n(d.minEscapeSec)}초` : "-") },
+  ],
   "hushed-ward": [
     { label: "🚪 탈출 / 팀 승리 (전원 무사 S)", value: (d) => `${n(d.escapes)} / ${n(d.teamWins)} (${n(d.perfect)})` },
     { label: "🧧 부적 찾음 / 붙임 · 뒤진 서랍", value: (d) => `${n(d.talFound)} / ${n(d.talPlaced)} · ${n(d.searches)}` },

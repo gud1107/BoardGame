@@ -156,6 +156,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "tagger-among-us",
+    name: "술래는 우리 중에",
+    nameEn: "Tagger Among Us",
+    description:
+      "한밤의 폐교 달빛초등학교에 갇힌 3~5명 — 그런데 이 중 한 명이 술래! 술래는 평소엔 다른 아이와 똑같이 보이다가 👹 탈을 쓰는 순간 빨라지고 벽 너머 발소리까지 봐요. 도망자는 눈이 붉은 🧧 장승을 봉인해 교문을 열고 절반 넘게 빠져나가면 승리. 붙잡히면 ❄ 얼음 — 친구가 와서 땡! 해 줘야 풀리고, 세 번 얼면 끌려가요. 🧂 소금을 뿌리면 술래가 멈추고, 변장 중이면 정체까지 드러나요. 1인칭 3D 비대칭 술래잡기 · 혼자 연습(도망자/술래 선택) · AI 봇 Lv.1~10. 🔊 소리를 켜고 하세요.",
+    players: { min: 3, max: 5 },
+    playTime: { minMinutes: 4, maxMinutes: 12 },
+    category: "party",
+    thumbnail: { emoji: "👹", gradient: ["#3b1d4a", "#05060c"] },
+    tags: ["공포", "술래잡기", "비대칭", "숨은역할", "1인칭", "얼음땡", "실시간", "3D", "AI봇"],
+    genres: ["party", "strategy"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "hushed-ward",
     name: "숨죽인 병동",
     nameEn: "Hushed Ward",

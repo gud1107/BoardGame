@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.179.0",
+    releaseDate: "2026-11-17",
+    title: "👹 새 게임 술래는 우리 중에",
+    changes: [
+      { game: "tagger-among-us", type: "FEAT", desc: "👹 새 게임 — 한밤의 폐교, 아이들 틈에 술래 한 명이 섞여 있는 3~5인 1인칭 3D 비대칭 술래잡기 · 혼자 연습 · AI 봇 Lv.1~10" },
+      { game: "tagger-among-us", type: "FEAT", desc: "🧧 도망자는 장승을 봉인해 교문을 열고 탈출 · ❄ 붙잡히면 얼음, 친구가 땡! · 🧂 소금을 뿌리면 술래가 멈추고 변장도 벗겨져요" },
+      { game: "tagger-among-us", type: "FEAT", desc: "🎭 술래는 봉인하는 척 섞여 있다가 탈을 쓰고 덮쳐요 — 벽 너머 발소리가 파문으로 보이고, 탈 기운이 다하면 벗겨져요" },
+    ],
+  },
+  {
     version: "v1.178.0",
     releaseDate: "2026-11-17",
     title: "📹 새 게임 CCTV 알리바이",

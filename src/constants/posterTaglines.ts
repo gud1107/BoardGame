@@ -24,6 +24,7 @@ export const POSTER_TAGLINES: Partial<Record<GameId, string>> = {
   "snowball-fort": "뭉치고, 던지고, 무너뜨려라!",
   "thin-ice-party": "오래 서 있으면 쩍— 첨벙!",
   "hushed-ward": "쉿— 그것은 소리만 듣는다",
+  "tagger-among-us": "이 중 한 명은, 탈을 쓴다",
   alkkagi: "튕겨라, 떨어뜨려라, 딱!",
   "bowling-mayhem": "스트라이크냐, 거터냐, 고깔이냐!",
   "island-pioneers": "한 장씩 이어 붙여라, 섬은 함께 자라고 땅은 내 것!",

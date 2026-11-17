@@ -28,6 +28,7 @@ export const GAME_DIFFICULTY: Record<string, 1 | 2 | 3 | 4 | 5> = {
   "hide-and-seek": 2,
   "time-loop-heist": 3,
   "cctv-alibi": 3,
+  "tagger-among-us": 2,
   "fog-manor": 3,
   "lantern-keepers": 2,
   "morph-hide": 2,
