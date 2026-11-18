@@ -154,6 +154,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "눈사람 명중", key: "snowmanHits", unit: "번" },
     { label: "세운 벽", key: "walls", unit: "개" },
   ],
+  "crown-thief": [
+    { label: "왕관 시간", key: "crownSec", unit: "초" },
+    { label: "뺏기", key: "steals", unit: "번" },
+    { label: "최장 집권", key: "bestReignSec", unit: "초" },
+    { label: "떨어뜨림", key: "kos", unit: "명" },
+  ],
   "thin-ice-party": [
     { label: "KO", key: "kos", unit: "번" },
     { label: "라운드 1등", key: "roundWins", unit: "번" },
@@ -414,6 +420,10 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
   "snowball-fort": [
     { id: "sf-freezes", label: "❄️ 얼림", num: "freezes", format: "count", unit: "명" },
     { id: "sf-wins", label: "🏆 팀 승리", num: "matchWins", format: "count", unit: "번" },
+  ],
+  "crown-thief": [
+    { id: "ct-steals", label: "🦹 왕관 뺏기", num: "steals", format: "count", unit: "번" },
+    { id: "ct-crown", label: "👑 왕관 시간", num: "crownSec", format: "count", unit: "초" },
   ],
   "thin-ice-party": [
     { id: "ti-kos", label: "💥 KO", num: "kos", format: "count", unit: "번" },

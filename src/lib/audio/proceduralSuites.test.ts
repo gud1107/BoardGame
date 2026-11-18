@@ -68,7 +68,8 @@ describe("game sound suites", () => {
     // + rope climbers (한 줄 등반대) + beat mayhem (박자 난장판).
     // + billiards party (당구 파티) + domino chain (도미노 연쇄) + snowball fort (눈싸움 요새전).
     // + cctv alibi (CCTV 알리바이) + tagger among us (술래는 우리 중에).
-    expect(suites.length).toBe(58);
+    // + crown thief (왕관 도둑).
+    expect(suites.length).toBe(59);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

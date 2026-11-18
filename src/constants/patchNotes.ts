@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.181.0",
+    releaseDate: "2026-11-19",
+    title: "👑 새 게임 왕관 도둑",
+    changes: [
+      { game: "crown-thief", type: "FEAT", desc: "👑 새 게임 — 왕관을 쓴 시간만큼 점수, 왕을 만지면 내가 왕! 구름 위 왕궁 안뜰의 2~8인 실시간 3D 뺏기 액션 · 혼자 연습 · AI 봇 Lv.1~10" },
+      { game: "crown-thief", type: "FEAT", desc: "💨 돌진·📣 왕의 호령 · 🛡 새 왕 무적·✋ 복수 금지·🪨 무거운 왕관 · ✨ 마지막 20초 황금 왕관 2배 · 🏛 기둥·🌳 덤불·🌀 점프대" },
+      { game: "crown-thief", type: "FEAT", desc: "⚔️ 팀전(해 팀 vs 달 팀) · 💀 저주의 왕관(만져서 떠넘기기) · 🍌 바나나·🧲 자석·🎭 가짜 왕관 · 방장이 나가도 판이 이어져요" },
+    ],
+  },
+  {
     version: "v1.180.0",
     releaseDate: "2026-11-19",
     title: "🧊 허브 3D·2D 필터",

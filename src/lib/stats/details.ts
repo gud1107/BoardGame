@@ -143,6 +143,14 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "🌈 포물선 명중 · 🥶 얼음", value: (d) => `${n(d.lobHits)} · ${n(d.frozen)}` },
     { label: "⛄ 뭉친 눈덩이 · 🍫 아이템 · 🌟 MVP", value: (d) => `${n(d.gathered)} · ${n(d.items)} · ${n(d.mvps)}` },
   ],
+  "crown-thief": [
+    { label: "👑 왕관 쓴 시간 합 · 한 번 최장", value: (d) => `${n(d.crownSec)}초 · ${n(d.bestReignSec)}초` },
+    { label: "🦹 뺏기 / 뺏김 / 바닥 줍기", value: (d) => `${n(d.steals)} / ${n(d.lost)} / ${n(d.pickups)}` },
+    { label: "💨 돌진 (박치기) · 📣 호령 (밀침)", value: (d) => `${n(d.dashes)} (${n(d.dashHits)}) · ${n(d.roars)} (${n(d.roarHits)})` },
+    { label: "☁️ 떨어짐 (혼자) / 💥 떨어뜨림 (왕)", value: (d) => `${n(d.falls)} (${n(d.selfFalls)}) / ${n(d.kos)} (${n(d.kingKos)})` },
+    { label: "🎁 아이템 · 🍌 미끄러뜨림 · 🌀 점프대", value: (d) => `${n(d.items)} · ${n(d.bananaHits)} · ${n(d.padJumps)}` },
+    { label: "💀 저주 쌓인 시간 · 저주 모드 1등", value: (d) => `${n(d.curseSec)}초 · ${n(d.curseWins)}` },
+  ],
   "thin-ice-party": [
     { label: "💥 KO / 🌊 빠짐 (혼자)", value: (d) => `${n(d.kos)} / ${n(d.falls)} (${n(d.selfFalls)})` },
     { label: "🏆 라운드 1등 / 3등 안", value: (d) => `${n(d.roundWins)} / ${n(d.podiums)}` },

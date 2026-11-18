@@ -43,6 +43,7 @@ export const GAME_DIFFICULTY: Record<string, 1 | 2 | 3 | 4 | 5> = {
   "billiards-party": 2,
   "domino-chain": 3,
   "snowball-fort": 2,
+  "crown-thief": 1,
   "thin-ice-party": 2,
   "hushed-ward": 2,
   alkkagi: 1,

@@ -275,6 +275,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "crown-thief",
+    name: "왕관 도둑",
+    nameEn: "Crown Thief",
+    description:
+      "왕관은 딱 하나, 쓰고 있는 동안만 점수가 올라요. 왕을 만지면 내가 새 왕! 하늘에 뜬 왕궁 안뜰에서 뺏고 도망치는 2~8인 실시간 3D 파티 액션. 💨 돌진으로 따라붙고, 왕이 되면 📣 호령으로 밀쳐내요. 🛡 새 왕 무적·✋ 복수 금지·🪨 무거운 왕관 덕분에 왕관이 계속 돌고, 마지막 20초 ✨ 황금 왕관은 점수 2배. 🏛 기둥·🌳 덤불·🌀 점프대, 🍌🧲🎭 아이템, 👑 개인전·⚔️ 팀전·💀 저주의 왕관 모드, 혼자 연습·AI 봇 Lv.1~10.",
+    players: { min: 2, max: 8 },
+    playTime: { minMinutes: 2, maxMinutes: 5 },
+    category: "party",
+    thumbnail: { emoji: "👑", gradient: ["#fbbf24", "#1e3a8a"] },
+    tags: ["왕관", "술래잡기", "뺏기", "실시간", "액션", "파티", "팀전", "3D", "AI봇"],
+    genres: ["party", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "thin-ice-party",
     name: "살얼음 파티",
     nameEn: "Thin Ice Party",
