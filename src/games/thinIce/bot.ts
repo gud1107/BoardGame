@@ -56,19 +56,21 @@ export interface BotParams {
   noise: number;
   /** 유령 투표를 "똑똑하게" 할 확률 (나머지는 아무 구역) */
   vote: number;
+  /** 최후의 2인에서 상대를 노리는 정도 */
+  hunt: number;
 }
 
 export const BOT_PARAMS: Record<number, BotParams> = {
-  1: { think: 520, aim: 0.6, scan: 2.6, thawAware: 0.1, doomMs: 0, holeCare: 0.2, jumper: false, restless: 0.1, stomp: 0.06, stompSafe: false, greed: 1.5, wander: 0.3, noise: 2.4, vote: 0 },
-  2: { think: 460, aim: 0.5, scan: 3, thawAware: 0.25, doomMs: 200, holeCare: 0.35, jumper: false, restless: 0.25, stomp: 0.08, stompSafe: false, greed: 2, wander: 0.24, noise: 2, vote: 0.15 },
-  3: { think: 400, aim: 0.42, scan: 3.4, thawAware: 0.4, doomMs: 400, holeCare: 0.5, jumper: true, restless: 0.4, stomp: 0.1, stompSafe: false, greed: 2.5, wander: 0.18, noise: 1.6, vote: 0.3 },
-  4: { think: 350, aim: 0.35, scan: 3.8, thawAware: 0.55, doomMs: 600, holeCare: 0.65, jumper: true, restless: 0.55, stomp: 0.13, stompSafe: false, greed: 3, wander: 0.13, noise: 1.3, vote: 0.45 },
-  5: { think: 300, aim: 0.28, scan: 4.2, thawAware: 0.7, doomMs: 800, holeCare: 0.85, jumper: true, restless: 0.7, stomp: 0.16, stompSafe: true, greed: 3.5, wander: 0.09, noise: 1.05, vote: 0.6 },
-  6: { think: 255, aim: 0.22, scan: 4.6, thawAware: 0.8, doomMs: 1000, holeCare: 0.95, jumper: true, restless: 0.8, stomp: 0.2, stompSafe: true, greed: 4, wander: 0.06, noise: 0.85, vote: 0.7 },
-  7: { think: 215, aim: 0.17, scan: 5, thawAware: 0.88, doomMs: 1200, holeCare: 1, jumper: true, restless: 0.9, stomp: 0.24, stompSafe: true, greed: 4.5, wander: 0.04, noise: 0.65, vote: 0.8 },
-  8: { think: 180, aim: 0.12, scan: 5.4, thawAware: 0.94, doomMs: 1400, holeCare: 1, jumper: true, restless: 1, stomp: 0.28, stompSafe: true, greed: 5, wander: 0.02, noise: 0.5, vote: 0.88 },
-  9: { think: 150, aim: 0.08, scan: 5.8, thawAware: 0.98, doomMs: 1600, holeCare: 1, jumper: true, restless: 1.1, stomp: 0.32, stompSafe: true, greed: 5.5, wander: 0.01, noise: 0.38, vote: 0.94 },
-  10: { think: 120, aim: 0.05, scan: 6.2, thawAware: 1, doomMs: 1800, holeCare: 1, jumper: true, restless: 1.2, stomp: 0.36, stompSafe: true, greed: 6, wander: 0, noise: 0.28, vote: 1 },
+  1: { think: 520, aim: 0.6, scan: 2.6, thawAware: 0.1, doomMs: 0, holeCare: 0.2, jumper: false, restless: 0.1, stomp: 0.06, stompSafe: false, greed: 1.5, wander: 0.3, noise: 2.4, vote: 0, hunt: 0.15 },
+  2: { think: 460, aim: 0.5, scan: 3, thawAware: 0.25, doomMs: 200, holeCare: 0.35, jumper: false, restless: 0.25, stomp: 0.08, stompSafe: false, greed: 2, wander: 0.24, noise: 2, vote: 0.15, hunt: 0.25 },
+  3: { think: 400, aim: 0.42, scan: 3.4, thawAware: 0.4, doomMs: 400, holeCare: 0.5, jumper: true, restless: 0.4, stomp: 0.1, stompSafe: false, greed: 2.5, wander: 0.18, noise: 1.6, vote: 0.3, hunt: 0.35 },
+  4: { think: 350, aim: 0.35, scan: 3.8, thawAware: 0.55, doomMs: 600, holeCare: 0.65, jumper: true, restless: 0.55, stomp: 0.13, stompSafe: false, greed: 3, wander: 0.13, noise: 1.3, vote: 0.45, hunt: 0.45 },
+  5: { think: 300, aim: 0.28, scan: 4.2, thawAware: 0.7, doomMs: 800, holeCare: 0.85, jumper: true, restless: 0.7, stomp: 0.16, stompSafe: true, greed: 3.5, wander: 0.09, noise: 1.05, vote: 0.6, hunt: 0.55 },
+  6: { think: 255, aim: 0.22, scan: 4.6, thawAware: 0.8, doomMs: 1000, holeCare: 0.95, jumper: true, restless: 0.8, stomp: 0.2, stompSafe: true, greed: 4, wander: 0.06, noise: 0.85, vote: 0.7, hunt: 0.62 },
+  7: { think: 215, aim: 0.17, scan: 5, thawAware: 0.88, doomMs: 1200, holeCare: 1, jumper: true, restless: 0.9, stomp: 0.24, stompSafe: true, greed: 4.5, wander: 0.04, noise: 0.65, vote: 0.8, hunt: 0.7 },
+  8: { think: 180, aim: 0.12, scan: 5.4, thawAware: 0.94, doomMs: 1400, holeCare: 1, jumper: true, restless: 1, stomp: 0.28, stompSafe: true, greed: 5, wander: 0.02, noise: 0.5, vote: 0.88, hunt: 0.78 },
+  9: { think: 150, aim: 0.08, scan: 5.8, thawAware: 0.98, doomMs: 1600, holeCare: 1, jumper: true, restless: 1.1, stomp: 0.32, stompSafe: true, greed: 5.5, wander: 0.01, noise: 0.38, vote: 0.94, hunt: 0.85 },
+  10: { think: 120, aim: 0.05, scan: 6.2, thawAware: 1, doomMs: 1800, holeCare: 1, jumper: true, restless: 1.2, stomp: 0.36, stompSafe: true, greed: 6, wander: 0, noise: 0.28, vote: 1, hunt: 0.92 },
 };
 
 export function paramsFor(lv: number): BotParams {
@@ -183,6 +185,17 @@ export function botThink(rt: HostRuntime, seat: number) {
     }
   }
 
+  // 최후의 2인(2인전은 처음부터): 상대가 약한 얼음·구멍 옆에 있으면 다가가 밀거나 내려찍을 자리를 노린다.
+  // 이게 없으면 둘이 호수 양 끝에서 버티기만 해서 2인전 KO가 라운드당 0.18번이었다(룰북 §13, 2026-11-19).
+  const rivals = s.players.filter((o) => o !== me && o.alive);
+  let prey: { x: number; z: number; w: number } | null = null;
+  if (rivals.length === 1 && !airborne(rivals[0])) {
+    const o = rivals[0];
+    const oi = tileAt(s, o.x, o.z);
+    const w = (oi >= 0 ? 1 - s.hp[oi] : 1) + holesAround(s, o.x, o.z, 1.6) * 0.18 + 0.25;
+    if (here < 0 || s.hp[here] > 0.35) prey = { x: o.x, z: o.z, w: w * P.hunt };
+  }
+
   // ① 칸 고르기
   let best = -1;
   let bestScore = -Infinity;
@@ -198,6 +211,10 @@ export function botThink(rt: HostRuntime, seat: number) {
     if (i === here) sc -= 0.4 + P.restless * 0.6;
     for (const o of s.players) if (o !== me && o.alive && Math.hypot(o.x - t.x, o.z - t.z) < 1.1) sc -= 0.9;
     sc -= (t.ring / geo.rings) * (s.sudden ? 2.2 : 0.7);
+    if (prey) {
+      const dp = Math.hypot(prey.x - t.x, prey.z - t.z);
+      if (dp > 0.7 && dp < 3) sc += prey.w * (1 - dp / 3) * 3.6;
+    }
     if (P.holeCare > 0.5) sc -= holesAround(s, t.x, t.z, HEX * 1.2) * 0.12;
     let path: 0 | 1 | 2 = 0;
     if (careHoles && d > HEX * 0.8) {
@@ -255,7 +272,7 @@ export function botThink(rt: HostRuntime, seat: number) {
   }
 
   // ③ 내려찍기
-  if (s.t >= me.stompCdAt && rnd(rt.botRng) < P.stomp) {
+  if (s.t >= me.stompCdAt && rnd(rt.botRng) < P.stomp * (prey ? 2 : 1)) {
     if (P.stompSafe && here >= 0 && s.hp[here] <= STOMP_CENTER_DMG + 0.08) return;
     const lead = leaderSeat(s, seat);
     let value = 0;
@@ -267,7 +284,7 @@ export function botThink(rt: HostRuntime, seat: number) {
       const weak = oi >= 0 ? 1 - s.hp[oi] : 1;
       value += weak * 1.6 + holesAround(s, o.x, o.z, 1.6) * 0.35 + (o.seat === lead ? 0.4 : 0) + (1 - d / KNOCK_R) * 0.5;
     }
-    if (value > (P.stompSafe ? 1.1 : 0.5)) press(rt, seat, "stomp");
+    if (value > (P.stompSafe ? (prey ? 0.85 : 1.1) : 0.5)) press(rt, seat, "stomp");
   }
 }
 

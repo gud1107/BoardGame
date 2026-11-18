@@ -64,6 +64,21 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.181.1",
+    releaseDate: "2026-11-19",
+    title: "⚖️ AI 봇 밸런스 점검 — 8개 게임",
+    changes: [
+      { game: "cctv-alibi", type: "IMPROVE", desc: "📹 기본 AI 범인이 조작 구간을 짧게 잡고 의심받으면 맞증언해요 — 봇끼리 검거율 82~84% → 66~70%" },
+      { game: "fog-manor", type: "IMPROVE", desc: "🕯️ AI가 다 풀어도 바로 고발하지 않고 한 번 더 확인해요(Lv.10만 즉시) — 레벨마다 실력 차이가 생겼어요" },
+      { game: "lantern-keepers", type: "IMPROVE", desc: "🏮 AI 동료 실력이 Lv.1~10에 걸쳐 고르게 올라가요 — 괴물 퇴치·반딧불 병 거리가 레벨별로 달라요" },
+      { game: "thin-ice-party", type: "IMPROVE", desc: "🧊 최후의 2인이 되면 AI가 약한 얼음 위 상대를 노려요 · 2인 호수 한 고리 넓게 — 2인 KO 0.18 → 0.33회/라운드" },
+      { game: "tagger-among-us", type: "IMPROVE", desc: "👹 탈 기운·봉인 시간을 조금 줄이고 AI 술래에 덮치기 반응 시간 추가 — 사람 도망자가 AI 술래에 덜 일방적으로 져요" },
+      { game: "avalon", type: "FIX", desc: "⚔️ AI가 다섯 번째 제안은 꼭 찬성하고, 자기 자신을 의심하지 않아요 — 봇끼리 판의 절반이 5연속 거부로 끝나던 문제" },
+      { game: "coup", type: "FIX", desc: "🃏 고수 AI가 거의 모든 주장에 이의를 걸어 카드를 잃던 문제 · 막힌 갈취를 끝없이 반복하던 문제 고침" },
+      { game: "mafia", type: "FIX", desc: "🕵️ AI 시민이 지목 수와 남은 인원을 보고 처형에 찬성해요 — 봇끼리 처형이 거의 안 나던 문제(4~6인 시민 6~23% → 34~43%)" },
+    ],
+  },
+  {
     version: "v1.181.0",
     releaseDate: "2026-11-19",
     title: "👑 새 게임 왕관 도둑",

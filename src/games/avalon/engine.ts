@@ -49,6 +49,8 @@ export interface QuestResult {
   team: SeatIndex[];
   failCount: number;
   success: boolean;
+  /** 이 팀을 원정 보낸 투표에서 찬성한 자리 (공개 투표라 모두가 본 정보). 2026-11-19 추가 — 옛 상태엔 없음 */
+  approvers?: SeatIndex[];
 }
 
 export type WinReason = "three-fails" | "five-rejects" | "assassin-correct" | "three-successes";
@@ -282,6 +284,10 @@ function resolveQuest(state: AvalonState): AvalonState {
     team: [...state.proposedTeam],
     failCount,
     success,
+    approvers: Object.entries(state.votes)
+      .filter(([, v]) => v === "approve")
+      .map(([k]) => Number(k))
+      .sort((a, b) => a - b),
   };
 
   const questSuccesses = state.questSuccesses + (success ? 1 : 0);
@@ -381,6 +387,21 @@ function suspicionFromFailedQuests(state: AvalonState): Record<SeatIndex, number
   return scores;
 }
 
+/**
+ * 고수(expert) 선의 의심: 실패한 원정에 낀 사람 + 그 팀에 찬성한 바깥 사람(공개 투표의 "누가 나쁜 팀을 밀었나").
+ * 이게 없을 때 고수 악은 "악이 낀 팀만 찬성"하는 뻔한 투표로도 고수 선을 97% 이겼다(2026-11-19).
+ */
+function expertSuspicion(state: AvalonState, viewer: SeatIndex): Record<SeatIndex, number> {
+  const scores = suspicionFromFailedQuests(state);
+  for (const q of state.questResults) {
+    if (q.success || !q.approvers) continue;
+    for (const s of q.approvers) if (!q.team.includes(s)) scores[s] += 0.6;
+  }
+  // 나는 내가 선인 걸 안다 — 예전엔 실패한 원정에 낀 자기 자신까지 의심해 자기가 낸 팀에도 반대했다.
+  scores[viewer] = 0;
+  return scores;
+}
+
 /** How many successful quests each seat has been part of — also fully public; used by the Assassin's expert-tier Merlin guess (a real Merlin tends to end up steering successful teams). */
 function successParticipation(state: AvalonState): Record<SeatIndex, number> {
   const scores: Record<SeatIndex, number> = {};
@@ -431,6 +452,13 @@ export function getValidMoves(state: AvalonState, seat: SeatIndex): EngineAction
  * propose/vote more convincingly and to guess Merlin at the Assassination.
  */
 export function scoreMove(state: AvalonState, seat: SeatIndex, move: EngineAction, tier: BotTier): number {
+  // 다섯 번째 제안(4번 연속 거부 뒤): 거부하면 악이 바로 이긴다. 선은 무조건 찬성, 악은 거부 —
+  // 사람이라면 첫 판에도 룰북에서 배우는 수라 초보 봇도 따른다. 이게 없을 때는 봇끼리 판의 절반 이상이
+  // "5연속 거부"로 끝났다(6인 Lv.5 72%, 2026-11-19 balance.sim.test.ts).
+  if (move.type === "vote" && state.consecutiveRejects >= 4) {
+    const good = state.players[seat].team === "good";
+    return (move.vote === "approve") === good ? 1000 : -1000;
+  }
   if (tier === "novice") return 0;
   const expert = tier === "expert";
   const knowledge = getKnowledge(state, seat);
@@ -439,9 +467,14 @@ export function scoreMove(state: AvalonState, seat: SeatIndex, move: EngineActio
     case "propose-team": {
       const evilKnown = new Set(knowledge.evilSeatsKnown);
       if (knowledge.team === "good") {
-        if (!expert) return 0;
+        // 선은 자기 자신이 선인 건 확실히 안다 → 나를 넣는다. 고수는 실패한 원정에 끼었던 사람을 뺀다.
+        // 중수(core)도 자기 역할로 아는 것(멀린이 아는 악)은 쓴다 — 예전엔 고수만 써서, 투표에선 악을 알아보는
+        // 멀린이 제안할 땐 악을 그대로 태웠다. 실패한 원정 기록은 공개 단서라 중수도 절반 무게로 본다.
+        const selfBonus = move.seats.includes(seat) ? 2 : 0;
         const evilIncluded = move.seats.filter((s) => evilKnown.has(s)).length;
-        return -evilIncluded * 100 + (move.seats.includes(seat) ? 2 : 0);
+        const sus = expert ? expertSuspicion(state, seat) : { ...suspicionFromFailedQuests(state), [seat]: 0 };
+        const susSum = move.seats.reduce((sum, s) => sum + (sus[s] ?? 0), 0);
+        return -evilIncluded * 100 - susSum * (expert ? 6 : 3) + selfBonus;
       }
       // Evil leader: exactly one evil seat (ideally self) on the team is the
       // sweet spot — enough to fail it, not so many it's an obvious tell.
@@ -454,15 +487,23 @@ export function scoreMove(state: AvalonState, seat: SeatIndex, move: EngineActio
       const team = state.proposedTeam;
       if (knowledge.team === "good") {
         const evilKnownInTeam = team.filter((s) => knowledge.evilSeatsKnown.includes(s)).length;
-        const patternSuspicion = expert ? team.reduce((sum, s) => sum + (suspicionFromFailedQuests(state)[s] ?? 0), 0) : 0;
-        const badness = evilKnownInTeam * 100 + patternSuspicion * 5;
+        const sus = expert ? expertSuspicion(state, seat) : null;
+        const patternSuspicion = sus ? team.reduce((sum, s) => sum + (sus[s] ?? 0), 0) : 0;
+        // 내가 낀 팀은 그만큼 믿을 만하고, 거부가 쌓일수록 찬성 쪽으로 기운다(5연속 거부 = 악 승리)
+        // 고수는 거부가 적을 땐 내가 빠진 팀에 살짝 반대한다(악이 끼기 쉬운 팀을 그냥 통과시키지 않게)
+        const onTeam = (team.includes(seat) ? 1.5 : expert ? -0.5 : 0) + (state.leader === seat ? 3 : 0);
+        const pressure = state.consecutiveRejects * 1.5;
+        const badness = evilKnownInTeam * 100 + patternSuspicion * 2 - onTeam - pressure;
         return move.vote === "approve" ? -badness : badness;
       }
       if (!expert) return 0; // core evil: no reliable read, stays close to random
       const evilTeammates = new Set<SeatIndex>([seat, ...knowledge.evilSeatsKnown]);
       const hasEvilTeammate = team.some((s) => evilTeammates.has(s));
-      if (move.vote === "approve") return hasEvilTeammate ? 20 : -5;
-      return hasEvilTeammate ? -20 : 5;
+      // 악이 없는 팀을 매번 막으면 "늘 거부하는 사람"으로 찍힌다 — 거부가 두 번 쌓이면 묻어간다.
+      // 이 덮기가 없을 때 고수 악은 짝수 인원에서 고수 선을 93~98% 이겼다(동률 = 거부라 팀이 안 나가서).
+      const blend = !hasEvilTeammate && state.consecutiveRejects >= 2;
+      if (move.vote === "approve") return hasEvilTeammate ? 20 : blend ? 5 : -5;
+      return hasEvilTeammate ? -20 : blend ? -5 : 5;
     }
     case "play-quest-card": {
       // Good seats only ever get "success" as a candidate (getValidMoves),

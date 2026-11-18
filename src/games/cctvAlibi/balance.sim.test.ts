@@ -87,10 +87,13 @@ describe("cctv alibi balance (self-play)", () => {
     expect(st.caught / st.games).toBeLessThan(0.85);
   });
 
-  it.each([3, 4, 6])("%d players, all Lv.5 (default bot) finish", (n) => {
+  // 2026-11-19: 기본 봇 범인이 조작을 길게 잡아 검거 82~84%였다 → 계획 6번 비교 + 맞증언 후 66~70%
+  it.each([3, 4, 6])("%d players, all Lv.5 (default bot): guests are not a lock", (n) => {
     const st = run(Array(n).fill(5), GAMES, 21);
     report(`${n}인 Lv5`, st);
     expect(st.games).toBe(GAMES);
+    expect(st.caught / st.games).toBeGreaterThan(0.4);
+    expect(st.caught / st.games).toBeLessThan(0.8);
   });
 
   it.each([3, 5])("%d players, all Lv.1", (n) => {

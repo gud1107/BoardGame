@@ -11,6 +11,8 @@ import { culpritAutoPlan, guestAutoRoute, type Plan } from "./planner";
  * 범인: 조작 구간은 짧게, 대조는 아무것도 안 드러나는 칸에, 지목당하면 맞증언, 표는 남들이 가장 의심하는 사람에게.
  */
 
+export const CULPRIT_TRIES_MID = 6;
+
 const MISTAKE = [0.5, 0.4, 0.3, 0.22, 0.15, 0.1, 0.06, 0.03, 0.01, 0];
 
 export function deduceOptionsFor(level: BotLevel): DeduceOptions {
@@ -43,10 +45,11 @@ function argmax(values: number[], allowed: (s: number) => boolean, rng: () => nu
 /** 범인의 밤 계획 */
 export function botCulpritPlan(start: number, level: number, rng: () => number): Plan {
   if (level <= 3) return culpritAutoPlan(start, rng, 0.2);
-  if (level <= 6) return culpritAutoPlan(start, rng, 0.7);
-  // 여러 번 짜 보고 조작 구간이 가장 짧은 계획을 고른다
-  let best = culpritAutoPlan(start, rng, 1);
-  for (let i = 0; i < 7; i++) {
+  // 여러 번 짜 보고 조작 구간이 가장 짧은 계획을 고른다. 기본 봇(Lv.4~6)도 몇 번은 비교한다 —
+  // 한 번만 짜면 긴 조작이 자주 나와 손님이 82~84% 검거했다(규칙서 §9, 2026-11-19).
+  const tries = level <= 6 ? CULPRIT_TRIES_MID : 8;
+  let best = culpritAutoPlan(start, rng, level <= 6 ? 0.85 : 1);
+  for (let i = 1; i < tries; i++) {
     const p = culpritAutoPlan(start, rng, 1);
     if ((p.forge?.rooms.length ?? 9) < (best.forge?.rooms.length ?? 9)) best = p;
   }
@@ -136,7 +139,7 @@ function culpritTurn(view: GameState, seat: Seat, level: number, rng: () => numb
         rng,
       );
       return { type: "TESTIFY", seat, stage, target, t: 1 + Math.floor(rng() * TICKS) };
-    } else if (level >= 6 && pub.prob[seat] > 0.5) {
+    } else if (level >= 5 && pub.prob[seat] > (level >= 6 ? 0.5 : 0.6)) {
       // 이미 나에게 의심이 몰렸다 — 두 번째로 의심받는 사람에게 뒤집어씌운다
       const target = argmax(pub.prob, (s) => s !== seat && pub.prob[s] > 0, rng);
       const t = target >= 0 ? frameTick(view, seat, target, null, rng) : null;
@@ -153,7 +156,8 @@ function culpritTurn(view: GameState, seat: Seat, level: number, rng: () => numb
     const c = pick(cells, rng);
     return { type: "CHECK", seat, stage, t: c.t, room: c.room };
   }
-  if (level <= 5) {
+  // Lv.4~5는 대체로 아무도 풀려나지 않는 칸을 고르지만 가끔 아무 칸이나 대조한다(손님 쪽 숨통)
+  if (level <= 3 || (level <= 5 && rng() < 0.35)) {
     const cells = openCells(view, true).filter((c) => !exposes(c));
     if (cells.length === 0) return { type: "PASS", seat, stage };
     const c = pick(cells, rng);

@@ -271,6 +271,11 @@ export interface CoupState {
   eliminationOrder: SeatIndex[];
   /** Set the instant only one seat still holds any influence (§5 최종 승리 조건). */
   winnerSeat: SeatIndex | null;
+  /**
+   * 아무도 이의 없이 성립한 막기 횟수 `"<막은 자리>:<행동>"` → 횟수. 모두가 본 공개 정보(실제 판에서 사람이 기억하는 것).
+   * 2026-11-19 추가 — 고수 봇이 진짜 사령관에게 막힌 갈취를 끝없이 되풀이해 판이 안 끝나던 것을 막는다. 옛 상태엔 없음.
+   */
+  standingBlocks?: Record<string, number>;
 }
 
 export type EngineAction =
@@ -622,8 +627,10 @@ function passBlockChallengeWindow(state: CoupState, seat: SeatIndex): CoupState 
   if (awaitingSeats.length > 0) return { ...state, awaitingSeats };
   // Nobody disputed the block — it stands, and the original action is cancelled.
   const pending = state.pendingAction!;
+  const key = `${state.pendingBlock!.blockerSeat}:${pending.action}`;
   return endTurn({
     ...state,
+    standingBlocks: { ...state.standingBlocks, [key]: (state.standingBlocks?.[key] ?? 0) + 1 },
     awaitingSeats: [],
     pendingAction: null,
     pendingBlock: null,
@@ -866,13 +873,33 @@ function totalRevealedCount(state: CoupState): number {
 }
 
 /** From `seat`'s own info-fair vantage (their hand + public reveals only): estimated probability the claimed character copy the actor is holding is real. Used when `seat` is the one deciding whether to challenge. */
-function claimCredibility(state: CoupState, seat: SeatIndex, character: Character): number {
+/** 이 자리가 이 행동을 막아 낸 적이 있으면 그 행동의 값어치를 줄인다 (한 번 0.3배, 두 번 0.09배...) */
+function blockMemory(state: CoupState, target: SeatIndex, action: ActionKind): number {
+  return Math.pow(0.3, state.standingBlocks?.[`${target}:${action}`] ?? 0);
+}
+
+/** 사람들이 진짜 카드 없이 주장하는 비율(추정). 대부분은 진짜로 주장한다. */
+const ASSUMED_BLUFF_RATE = 0.2;
+
+/**
+ * "이 주장이 진짜일 확률" — 주장한 사람의 남은 카드(1~2장) 중 한 장이라도 그 캐릭터일 확률에
+ * 사람들이 대부분 정직하게 주장한다는 사전 확률을 합친다.
+ * 2026-11-19 고침: 예전엔 "아무 카드 한 장이 그 캐릭터일 확률"(약 0.23)을 그대로 써서 고수 봇이
+ * 거의 모든 주장에 이의를 걸었고, 블러핑을 안 하는 중수 봇 상대로 계속 카드를 잃었다
+ * (Lv.9 1명 vs Lv.5 4인 2%, 6인 0% — balance.sim.test.ts).
+ */
+function claimCredibility(state: CoupState, seat: SeatIndex, character: Character, claimerSeat?: SeatIndex): number {
   const revealed = revealedCountOf(state, character);
   const ownHand = getPlayer(state, seat)?.influence ?? [];
   const ownCopies = ownHand.filter((c) => c.character === character).length;
   const unseenOfChar = Math.max(0, CHAR_COPIES - revealed - ownCopies);
   const unseenTotal = Math.max(1, DECK_SIZE - totalRevealedCount(state) - ownHand.length);
-  return unseenOfChar / unseenTotal;
+  const k = claimerSeat !== undefined ? Math.max(1, getPlayer(state, claimerSeat)?.influence.length ?? 2) : 2;
+  // 1 - P(k장 모두 그 캐릭터가 아님)
+  let none = 1;
+  for (let i = 0; i < k; i++) none *= Math.max(0, unseenTotal - unseenOfChar - i) / Math.max(1, unseenTotal - i);
+  const hold = 1 - none;
+  return hold / (hold + (1 - hold) * ASSUMED_BLUFF_RATE);
 }
 
 /** Seat-agnostic, public-only version — a stand-in for "how sketchy does this claim look to the rest of the table", used when the bot itself is deciding whether to make/bluff a claim (it can't read anyone else's hand to know their actual read). */
@@ -973,10 +1000,20 @@ export function scoreMove(state: CoupState, seat: SeatIndex, move: EngineAction,
         }
         case "income":
           return 5;
-        case "foreignAid":
-          return expert ? 9 - (aliveSeats(state).length - 1) : 8; // more rivals at the table -> more likely someone holds a blocking Duke
-        case "exchange":
-          return expert ? 9 : 6;
+        case "foreignAid": {
+          if (!expert) return 8;
+          // more rivals at the table -> more likely someone holds a blocking Duke; 이미 원조를 막아 낸 사람이 살아 있으면 더 낮게
+          const blockers = aliveSeats(state).filter((t) => t !== seat && (state.standingBlocks?.[`${t}:foreignAid`] ?? 0) > 0).length;
+          return 9 - (aliveSeats(state).length - 1) - blockers * 3;
+        }
+        case "exchange": {
+          if (!expert) return 6;
+          // 교환은 동전이 안 생긴다 — 손패가 약할 때만 쓸 만하다. 예전엔 고수가 늘 9점(동전 행동보다 위)으로
+          // 매겼고 대사 없이도 블러핑해서 차례를 버렸다(2026-11-19).
+          const weak = !self.influence.some((c) => c.character === "duke" || c.character === "captain" || c.character === "assassin");
+          const hasAmbassador = self.influence.some((c) => c.character === "ambassador");
+          return hasAmbassador ? (weak ? 9 : 3) : weak ? 4 : 0;
+        }
         case "tax": {
           if (self.influence.some((c) => c.character === "duke")) return 20; // real claim — safe and the best coin rate in the game
           if (!expert) return -5; // core never bluffs
@@ -986,16 +1023,18 @@ export function scoreMove(state: CoupState, seat: SeatIndex, move: EngineAction,
         case "steal": {
           const target = getPlayer(state, move.targetSeat!)!;
           if (target.coins === 0) return -20;
-          const base = 10 + target.coins;
-          if (self.influence.some((c) => c.character === "captain")) return base + 10;
+          // 고수는 이 사람이 갈취를 막아 낸 걸 기억한다 — 막힐 게 뻔하면 차례를 버리는 셈
+          const base = (10 + target.coins) * (expert ? blockMemory(state, move.targetSeat!, "steal") : 1);
+          if (self.influence.some((c) => c.character === "captain")) return base + (expert ? 10 * blockMemory(state, move.targetSeat!, "steal") : 10);
           if (!expert) return base - 15;
           const credibility = publicCredibility(state, "captain");
           return base * credibility - (1 - credibility) * 15;
         }
         case "assassinate": {
           const target = getPlayer(state, move.targetSeat!)!;
-          const base = 25 - target.influence.length * 3; // extra valuable against a seat already down to 1 influence
-          if (self.influence.some((c) => c.character === "assassin")) return base + 15;
+          const memory = expert ? blockMemory(state, move.targetSeat!, "assassinate") : 1;
+          const base = (25 - target.influence.length * 3) * memory; // extra valuable against a seat already down to 1 influence
+          if (self.influence.some((c) => c.character === "assassin")) return base + 15 * memory;
           if (!expert) return base - 20;
           const credibility = publicCredibility(state, "assassin");
           return base * credibility - (1 - credibility) * 20;
@@ -1013,8 +1052,11 @@ export function scoreMove(state: CoupState, seat: SeatIndex, move: EngineAction,
     case "challenge": {
       const claimedCharacter = state.phase === "blockChallengeWindow" ? state.pendingBlock!.claimedCharacter : state.pendingAction!.claimedCharacter!;
       if (!expert) return -10; // core never challenges — no reliable read at this tier
-      const credibility = claimCredibility(state, seat, claimedCharacter);
-      return (1 - credibility) * 60 - credibility * 40; // only pays off when the claim looks unlikely to be real
+      const claimer = state.phase === "blockChallengeWindow" ? state.pendingBlock!.blockerSeat : state.pendingAction!.actorSeat;
+      const credibility = claimCredibility(state, seat, claimedCharacter, claimer);
+      // 틀린 이의는 내 카드 한 장 — 마지막 한 장이면 탈락이라 더 조심한다
+      const lastCard = self.influence.length <= 1 ? 15 : 0;
+      return (1 - credibility) * 45 - credibility * 50 - lastCard; // only pays off when the claim looks unlikely to be real
     }
     case "pass":
       return expert ? 5 : (state.phase === "blockWindow" ? 6 : 8);

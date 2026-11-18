@@ -80,7 +80,8 @@ function hold(rt: HostRuntime, seat: number, mx: number, mz: number, ms: number)
 
 describe("호수 (lake)", () => {
   it("인원별 고리 수와 칸 수", () => {
-    expect([2, 3, 4, 5, 6].map(ringsFor)).toEqual([4, 5, 5, 6, 6]);
+    // 2026-11-19: 2인도 5고리 — 최후의 2인 사냥 AI와 함께 KO 0.18→0.33회/라운드, 라운드 길이는 그대로(룰북 §13)
+    expect([2, 3, 4, 5, 6].map(ringsFor)).toEqual([5, 5, 5, 6, 6]);
     expect(lakeGeo(4).tiles.length).toBe(61);
     expect(lakeGeo(5).tiles.length).toBe(91);
     expect(lakeGeo(6).tiles.length).toBe(127);

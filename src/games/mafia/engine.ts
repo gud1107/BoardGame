@@ -1018,8 +1018,20 @@ export function chooseBotAction(
     const known = knownRoleFor(state, seat, suspect);
     if (known !== null) return { type: "finalVote", seat, vote: known.isMafia ? "yes" : "no", atMs };
 
+    // 2026-11-19: 예전엔 공개 의심도 60 이상일 때만 찬성했는데, 의심도는 모두 50에서 시작해 처형이 거의 안 났다
+    // (봇끼리 시민 승률 클래식 7~8인 0% — balance.sim.test.ts). 이제 ① 이번에 몇 명이 이 사람을 지목했는지
+    // ② 시민이 줄어 "오늘 못 잡으면 진다"는 압박을 함께 본다. 경찰이 찾아 지목하면 다른 시민이 따라 지목하고,
+    // 그 지목 수가 찬성으로 이어진다.
     const suspicion = computeSuspicion(state);
-    return { type: "finalVote", seat, vote: (suspicion.get(suspect) ?? 50) >= 60 ? "yes" : "no", atMs };
+    const alive = state.players.filter((p) => p.alive).length;
+    const nominatedBy = Object.values(state.nominations).filter((t) => t === suspect).length;
+    const share = nominatedBy / Math.max(1, alive);
+    const mafiaTotal = state.players.filter((p) => teamForRole(p.role) === "mafia").length; // 직업 구성표는 공개 정보
+    // 판이 늘어지면(살아 있는 사람 수보다 날이 길어지면) 더 과감해진다.
+    const drag = Math.min(20, Math.max(0, state.dayNumber - alive) * 4);
+    const urgency = (alive <= mafiaTotal * 2 + 1 ? 12 : alive <= mafiaTotal * 2 + 3 ? 6 : 0) + drag;
+    const guilty = (suspicion.get(suspect) ?? 50) + share * 25 + urgency + (rng() - 0.5) * 8;
+    return { type: "finalVote", seat, vote: guilty >= 60 ? "yes" : "no", atMs };
   }
 
   if (state.phase === "terroristRevenge" && state.pendingTerroristRevenge) {

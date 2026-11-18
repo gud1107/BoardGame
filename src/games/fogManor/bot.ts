@@ -11,14 +11,22 @@ import { fogView, showableCards, type EngineAction, type GameState, type Guess, 
  * - 행동: 확신하면 고발, 아니면 수색(단서가 남았으면)과 심문(정보량 최대 조합) 중 값이 큰 쪽
  */
 
+/** Lv.4~9가 본 카드 중 잊는 비율 */
+const FORGET = [0, 0, 0, 0.12, 0.08, 0.05, 0.03, 0.015, 0.005, 0];
+
+/** 다 풀었을 때 이번 차례에 바로 고발할 확률 */
+const CONFIRM = [0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.72, 0.85, 1];
+
 const MISTAKE = [0.45, 0.35, 0.25, 0.16, 0.1, 0.07, 0.05, 0.02, 0, 0];
 
 export function deduceOptionsFor(level: BotLevel): DeduceOptions {
   const lv = clampBotLevel(level);
+  // 2026-11-19: 예전엔 Lv.6~10이 거의 같은 완전 추리라 승률 차이가 없었다(2인 Lv.10 vs Lv.5 52%).
+  // 이제 한 단계마다 쓰는 제약 하나 또는 기억 누락을 덜어 사다리를 만든다. Lv.10만 완벽한 논리가.
   if (lv <= 3) return { counts: false, fullCounts: false, handSizes: false, wrongAccusations: false, forget: [0.3, 0.15, 0.05][lv - 1] };
-  if (lv <= 5) return { counts: true, fullCounts: lv === 5, handSizes: false, wrongAccusations: false, forget: 0 };
-  if (lv <= 7) return { counts: true, fullCounts: true, handSizes: true, wrongAccusations: false, forget: 0 };
-  return { counts: true, fullCounts: true, handSizes: true, wrongAccusations: true, forget: 0 };
+  if (lv <= 5) return { counts: true, fullCounts: lv === 5, handSizes: false, wrongAccusations: false, forget: FORGET[lv - 1] };
+  if (lv <= 7) return { counts: true, fullCounts: true, handSizes: lv === 7, wrongAccusations: false, forget: FORGET[lv - 1] };
+  return { counts: true, fullCounts: true, handSizes: true, wrongAccusations: lv >= 9, forget: FORGET[lv - 1] };
 }
 
 interface AskPick {
@@ -77,8 +85,10 @@ function roomValue(view: GameState, me: Seat, k: Knowledge, room: number, level:
 }
 
 function shouldAccuse(view: GameState, k: Knowledge, level: number, rng: () => number): boolean {
-  if (k.combos === 1) return true;
   const lastRound = view.round >= view.maxRounds;
+  // 다 풀었어도 바로 고발하진 않는다 — 사람처럼 "한 번 더 확인"하느라 차례를 쓴다(Lv.10만 즉시).
+  // 경주 게임이라 이 속도가 곧 레벨 차이다(2026-11-19, 규칙서 §13).
+  if (k.combos === 1) return lastRound || rng() < CONFIRM[level - 1];
   if (level <= 3) {
     const limit = level === 1 ? 4 : 2;
     return k.combos <= limit && rng() < (level === 3 ? 0.25 : 0.45);

@@ -9,6 +9,16 @@ import { applyAct, isExposed, isStunned, taggerHears, taggerOf, taggerRooted, ya
  * 레벨이 낮을수록 늦게 알아채고, 술래는 멀리서부터 가면을 써 기운을 낭비하고 헛손질이 많다.
  */
 
+/**
+ * 덮치기 반응 시간(ms): 손이 닿는 거리에 들어온 뒤 이만큼 계속 닿아 있어야 덮친다(Lv.9부터 즉시).
+ * 이게 없으면 Lv.4~8이 모두 "닿는 순간 잡는" 술래라, 사람 속도로 움직이는 도망자를 기본 봇(Lv.5)이
+ * 66~81% 이겼다(룰북 §12, 2026-11-19).
+ */
+export function lungeReactMs(lvl: number): number {
+  return lvl >= 9 ? 0 : (9 - lvl) * LUNGE_REACT_STEP_MS;
+}
+const LUNGE_REACT_STEP_MS = 160;
+
 interface Mem {
   stamina: number;
   /** 위험을 처음 알아챈 시각 / 마지막으로 느낀 시각 */
@@ -26,12 +36,15 @@ interface Mem {
   patrolUntil: number;
   /** 술래가 덮칠 때 굳힌 방향 */
   lungeYaw: number;
+  /** 술래: 지금 손 닿는 거리에 있는 도망자와 그때부터의 시각 (반응 시간) */
+  reachSeat: number;
+  reachSince: number;
 }
 
 function memOf(rt: HostRuntime, seat: number): Mem {
   let m = rt.mem[seat] as Mem | undefined;
   if (!m) {
-    m = { stamina: 100, seenAt: -1, threatAt: -99_999, mode: "work", fleeCell: -1, fleePickAt: 0, target: -1, lastX: 0, lastZ: 0, lastAt: -99_999, patrol: -1, patrolUntil: 0, lungeYaw: 0 };
+    m = { stamina: 100, seenAt: -1, threatAt: -99_999, mode: "work", fleeCell: -1, fleePickAt: 0, target: -1, lastX: 0, lastZ: 0, lastAt: -99_999, patrol: -1, patrolUntil: 0, lungeYaw: 0, reachSeat: -1, reachSince: -1 };
     rt.mem[seat] = m;
   }
   return m;
@@ -322,7 +335,13 @@ function taggerThink(rt: HostRuntime, p: PlayerState, m: Mem, dtMs: number) {
     const d = Math.hypot(tgt.x - p.x, tgt.z - p.z);
     const los = clearLine(p.x, p.z, tgt.x, tgt.z, s.doors);
     const reach = lvl >= 6 ? 1.3 : lvl >= 3 ? 1.7 : 2.1;
-    if (los && d <= reach && s.t >= tg.recoverUntil && s.t >= tgt.safeUntil) {
+    const inReach = los && d <= reach && s.t >= tg.recoverUntil && s.t >= tgt.safeUntil;
+    if (!inReach) m.reachSince = -1;
+    else if (m.reachSince < 0 || m.reachSeat !== tgt.seat) {
+      m.reachSince = s.t;
+      m.reachSeat = tgt.seat;
+    }
+    if (inReach && s.t - m.reachSince >= lungeReactMs(lvl)) {
       m.lungeYaw = yawTo(p.x, p.z, tgt.x, tgt.z);
       p.yaw = m.lungeYaw;
       applyAct(rt, p.seat, { k: "hit" });

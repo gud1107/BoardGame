@@ -82,7 +82,7 @@ export const RECOVER_MUL = 0.4;
 export const MASK_ON_MS = 1500;
 export const MASK_OFF_MS = 800;
 /** 탈 기운: 가면을 쓰면 100에서 maskSecFor(도망자 수)초에 바닥, 벗으면 GAUGE_REGEN_SEC초에 가득 */
-const MASK_SEC = [12, 12, 12, 20, 27] as const;
+const MASK_SEC = [11, 11, 11, 17, 23] as const;
 /** 도망자가 적을수록 가면을 오래 못 쓴다 (2명 12초 · 3명 20초 · 4명 27초) — 셀프플레이로 맞춘 값 */
 export function maskSecFor(runners: number): number {
   return MASK_SEC[Math.max(0, Math.min(MASK_SEC.length - 1, Math.round(runners)))];
@@ -117,7 +117,7 @@ export const HEART_R = 13;
 /* ── 봉인 ───────────────────────────────────────────────────────────── */
 
 /** 혼자 봉인 터 하나를 끝내는 시간. 함께 하면 한 명 늘 때마다 +SEAL_HELP 배속 */
-const SEAL_MS_BY = [15_000, 15_000, 15_000, 20_000, 24_000] as const;
+const SEAL_MS_BY = [13_000, 13_000, 13_000, 17_000, 20_000] as const;
 /** 도망자가 많을수록 봉인 하나가 오래 걸린다 (2명 15초 · 3명 20초 · 4명 24초) */
 export function sealMsFor(runners: number): number {
   return SEAL_MS_BY[Math.max(0, Math.min(SEAL_MS_BY.length - 1, Math.round(runners)))];

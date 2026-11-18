@@ -34,7 +34,7 @@ export interface LakeGeo {
 }
 
 export function ringsFor(players: number): number {
-  return players <= 2 ? 4 : players <= 4 ? 5 : 6;
+  return players <= 4 ? 5 : 6;
 }
 
 export function hexToWorld(q: number, r: number): { x: number; z: number } {

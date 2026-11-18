@@ -32,6 +32,19 @@ import { WORD_STOP, type Dir, type PingMark } from "./show";
 
 const INF = 1e9;
 
+/**
+ * 레벨 사다리 (2026-11-19, 규칙서 §12). 예전엔 아래 두 실수가 Lv.3 이하에서만 났고 Lv.5·7·10의 탈출률이 같았다.
+ * 이제 레벨이 오를수록 조금씩 줄어든다. 등유는 Lv.10 기준으로 맞췄으므로 Lv.10은 0 그대로.
+ */
+/** 탐험 목표를 엉뚱하게 고를 확률 */
+const NOISY = [0.35, 0.35, 0.35, 0.3, 0.25, 0.18, 0.12, 0.06, 0.03, 0];
+/** 걸음을 다 쓰지 않고 일찍 멈출 확률 */
+const SHORT_STEP = [0.25, 0.25, 0.25, 0.22, 0.18, 0.13, 0.08, 0.04, 0.02, 0];
+/** 내 색 괴물을 퇴치하러 가는 최대 걸음 (Lv.4부터, 동료가 핑했으면 Lv.6부터는 거리 무시) */
+const MONSTER_REACH = [0, 0, 0, 3, 4, 6, 9, 11, 12, 12];
+/** 반딧불 병을 주우러 가는 최대 걸음 (Lv.5부터) */
+const JAR_REACH = [0, 0, 0, 0, 2, 3, 5, 6, 6, 6];
+
 interface Know {
   v: GameState;
   seat: Seat;
@@ -274,7 +287,7 @@ export function planFor(full: GameState, seat: Seat, level: BotLevel, rng: () =>
     }
     const haveGoal = cands.length > 0;
     if (level >= 5 && roundsLeft > 6) {
-      const lim = level >= 7 ? 6 : 3;
+      const lim = JAR_REACH[level - 1];
       for (const j of v.jars) if (!j.taken && reach(j.cell) && dist[j.cell] <= lim) cands.push({ cell: j.cell, score: dist[j.cell] + 1 });
     }
     // 내 색 괴물 퇴치 — 옆 칸에서 멈추면 된다
@@ -287,7 +300,7 @@ export function planFor(full: GameState, seat: Seat, level: BotLevel, rng: () =>
         );
         // 동료가 이 괴물을 핑했으면(길이 막혔다는 뜻) 멀어도 간다
         const called = m.path.some((c) => pingAt(v, c, ["monster", "danger"], seat));
-        const lim = called ? INF : level >= 7 ? 12 : 7;
+        const lim = called && level >= 6 ? INF : MONSTER_REACH[level - 1];
         if (spot >= 0 && dist[spot] <= lim) cands.push({ cell: spot, score: dist[spot] - (called ? 4 : 1) });
       }
     }
@@ -301,7 +314,7 @@ export function planFor(full: GameState, seat: Seat, level: BotLevel, rng: () =>
       if (spot >= 0) cands.push({ cell: spot, score: dist[spot] + (haveGoal ? 6 : 2) });
     }
     const fr = frontier(v, k).filter(reach);
-    const noisy = level <= 3 && rng() < 0.35;
+    const noisy = rng() < NOISY[level - 1];
     const towardAltar = (c: number) => (shardsLeft <= 0 ? Math.abs((c % v.w) - (v.altar % v.w)) + Math.abs(Math.floor(c / v.w) - Math.floor(v.altar / v.w)) : 0);
     for (const c of fr) cands.push({ cell: c, score: dist[c] + (haveGoal ? 10 : 0) + (closestIsMe(c) ? 0 : spread) + (noisy ? rng() * 20 : rng() * 0.5) + towardAltar(c) * 0.3, exploring: true });
     if (cands.length > 0) {
@@ -349,7 +362,7 @@ export function planFor(full: GameState, seat: Seat, level: BotLevel, rng: () =>
   const cut = cells.findIndex((c) => v.tiles[c] === T_UNKNOWN);
   if (cut >= 0) cells = cells.slice(0, cut);
   let take = Math.min(MOVE_MAX, cells.length);
-  if (level <= 3 && take > 1 && rng() < 0.25) take = 1 + Math.floor(rng() * take);
+  if (take > 1 && rng() < SHORT_STEP[level - 1]) take = 1 + Math.floor(rng() * take);
   cells = cells.slice(0, take);
   if (!choice.risky) while (cells.length > 0 && k.noEnd.has(cells[cells.length - 1])) cells.pop();
   // 제자리가 괴물이 올 칸이면 비켜선다
