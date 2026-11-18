@@ -107,35 +107,41 @@ function Clouds({ radius, quality }: { radius: number; quality: "high" | "low" }
 /* ── 광장 ───────────────────────────────────────────────────────────── */
 
 function floorTexture(): THREE.Texture {
+  // 1024px · 굵고 옅은 줄눈 — 얇은 방사선은 비스듬한 카메라에서 물결무늬(모아레)가 생겨서 피한다
   const c = document.createElement("canvas");
-  c.width = c.height = 512;
+  c.width = c.height = 1024;
   const g = c.getContext("2d")!;
+  const m = 512;
   g.fillStyle = "#e9dcc3";
-  g.fillRect(0, 0, 512, 512);
-  // 동심원 돌 고리 + 방사형 줄눈
-  for (let r = 0; r < 10; r++) {
+  g.fillRect(0, 0, 1024, 1024);
+  // 동심원 돌 고리 (고리마다 살짝 다른 색)
+  for (let r = 9; r >= 0; r--) {
     g.beginPath();
-    g.arc(256, 256, 26 + r * 24, 0, Math.PI * 2);
-    g.strokeStyle = r % 2 ? "rgba(140,110,80,0.35)" : "rgba(120,90,60,0.25)";
-    g.lineWidth = r === 0 ? 6 : 2.5;
+    g.arc(m, m, 52 + r * 48, 0, Math.PI * 2);
+    g.fillStyle = r % 2 ? "#e6d7bc" : "#eadfc8";
+    g.fill();
+    g.strokeStyle = "rgba(140,110,80,0.22)";
+    g.lineWidth = 6;
     g.stroke();
   }
-  for (let k = 0; k < 24; k++) {
-    const a = (k / 24) * Math.PI * 2;
+  // 방사형 줄눈은 12개만, 굵고 옅게
+  for (let k = 0; k < 12; k++) {
+    const a = (k / 12) * Math.PI * 2;
     g.beginPath();
-    g.moveTo(256 + Math.cos(a) * 26, 256 + Math.sin(a) * 26);
-    g.lineTo(256 + Math.cos(a) * 256, 256 + Math.sin(a) * 256);
-    g.strokeStyle = "rgba(120,90,60,0.22)";
-    g.lineWidth = 2;
+    g.moveTo(m + Math.cos(a) * 52, m + Math.sin(a) * 52);
+    g.lineTo(m + Math.cos(a) * 512, m + Math.sin(a) * 512);
+    g.strokeStyle = "rgba(140,110,80,0.14)";
+    g.lineWidth = 6;
     g.stroke();
   }
   // 가운데 왕관 문장
   g.fillStyle = "rgba(200,150,40,0.35)";
   g.beginPath();
-  g.arc(256, 256, 24, 0, Math.PI * 2);
+  g.arc(m, m, 48, 0, Math.PI * 2);
   g.fill();
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
   return t;
 }
 
