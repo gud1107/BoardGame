@@ -111,7 +111,7 @@ export default function BettingSidebar() {
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
         aria-label="내기 관리 사이드바 열기"
-        className="fixed right-4 bottom-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-rose-500 text-2xl text-white shadow-xl transition hover:bg-rose-400"
+        className="fixed right-4 bottom-4 z-40 flex h-13 w-13 items-center justify-center rounded-full border border-amber-200/50 bg-gradient-to-b from-[#2a2118] to-[#120e0a] text-xl text-white shadow-[0_10px_28px_-6px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,236,200,0.18)] transition hover:-translate-y-0.5 hover:border-amber-100/80 light:border-amber-700/40 light:from-white light:to-[#f3eee6] light:shadow-[0_10px_28px_-8px_rgba(15,23,42,0.35)]"
       >
         🎲
         {session && (

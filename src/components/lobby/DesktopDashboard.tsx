@@ -116,14 +116,14 @@ export default function DesktopDashboard({
     >
       {/* 은은한 배경 앰비언트 골드 오라 — 다크 럭셔리 리뉴얼(2026-09-12) */}
       <div className="pointer-events-none absolute top-0 left-1/2 h-32 w-3/4 -translate-x-1/2 bg-amber-500/5 blur-[120px]" />
-      <main className="relative flex min-h-0 flex-1 flex-col rounded-2xl border border-amber-500/20 bg-neutral-900/60 p-4 shadow-[0_4px_20px_rgba(0,0,0,0.5)] backdrop-blur-md light:border-slate-200 light:bg-white/90 light:shadow-md">
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-amber-500/15 pb-3 light:border-slate-200">
-          <div className="flex items-center gap-2">
-            <span className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-500 bg-clip-text font-serif text-sm font-bold tracking-wide text-transparent">
-              🎮 게임 선택
+      <main className="relative flex min-h-0 flex-1 flex-col rounded-2xl border border-white/[0.07] bg-neutral-900/50 p-4 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_24px_48px_-24px_rgba(0,0,0,0.7)] backdrop-blur-md light:border-slate-900/[0.07] light:bg-white/90 light:shadow-[0_24px_48px_-28px_rgba(15,23,42,0.25)]">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] pb-3 light:border-slate-900/[0.07]">
+          <div className="flex items-baseline gap-3">
+            <span className="font-display text-lg font-bold tracking-[0.02em] text-amber-50 light:text-slate-900">
+              게임 선택
             </span>
             <span className="text-xs font-normal text-white/40 light:text-slate-500">
-              플레이할 보드게임을 선택하여 방을 개설하세요
+              플레이할 보드게임을 골라 방을 여세요
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -148,8 +148,8 @@ export default function DesktopDashboard({
               <NewOnlyChip value={newOnly} onChange={onNewOnlyChange} compact />
             </div>
             <ViewFilterChips value={viewFilter} onChange={onViewFilterChange} compact />
-            <span className="shrink-0 text-xs font-medium text-amber-500/60 light:text-amber-700">
-              총 {totalCount}개 게임 · 플레이 가능 {playableCount}개
+            <span className="shrink-0 text-xs text-white/40 tabular-nums light:text-slate-500">
+              {totalCount === playableCount ? `${totalCount}종` : `${playableCount}/${totalCount}종`}
             </span>
             <SortFilterChips value={sortOption} onChange={onSortChange} admin={adminSort} className="shrink-0" />
           </div>
@@ -192,7 +192,7 @@ export default function DesktopDashboard({
 
         {/* 실시간 검색창 — 상단 헤더 복잡도를 줄이기 위해 그리드 바로 아래,
             바닥 바로 직전에 배치 (2026-09-16). */}
-        <div className="mt-3 flex shrink-0 justify-center border-t border-amber-500/15 pt-3 light:border-slate-200">
+        <div className="mt-3 flex shrink-0 justify-center border-t border-white/[0.06] pt-3 light:border-slate-900/[0.07]">
           <div className="relative w-full max-w-md">
             <span className="absolute top-1/2 left-3 -translate-y-1/2 text-xs text-white/40 light:text-slate-400">
               🔍

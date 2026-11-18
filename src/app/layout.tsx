@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Noto_Serif_KR } from "next/font/google";
 import "./globals.css";
 import SiteHeader from "@/components/SiteHeader";
 import SiteNoticeBanner from "@/components/siteNotice/SiteNoticeBanner";
@@ -21,6 +21,17 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Hub display serif (wordmark, lobby headings) — exposed as the `font-display`
+// utility only, so the games' own `font-serif` usages keep their look.
+// Korean glyphs come as unicode-range slices, so preloading is off.
+const displaySerif = Noto_Serif_KR({
+  variable: "--font-display-serif",
+  weight: ["500", "700"],
+  subsets: ["latin"],
+  display: "swap",
+  preload: false,
+});
+
 export const metadata: Metadata = {
   title: "보드게임 허브",
   description: "핸드폰과 데스크톱에서 함께 즐기는 보드게임 모음 + 내기 정산 시스템",
@@ -34,7 +45,7 @@ export default function RootLayout({
   return (
     <html
       lang="ko"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${displaySerif.variable} h-full antialiased`}
     >
       <head>
         {/* Sets data-theme="light" (if that's what's saved) before hydration

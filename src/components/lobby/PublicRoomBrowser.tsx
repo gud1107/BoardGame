@@ -53,13 +53,13 @@ export default function PublicRoomBrowser({
   return (
     <section
       aria-label="공개방 목록"
-      className={`flex w-full flex-col gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.04] p-3 text-left light:border-emerald-200 light:bg-emerald-50/60 ${className}`}
+      className={`flex w-full flex-col gap-2 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3 text-left light:border-slate-900/[0.07] light:bg-white/60 ${className}`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-bold text-emerald-200 light:text-emerald-800">🌐 {gameId ? "이 게임의 공개방" : "공개방"}</span>
-          <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-300 light:bg-emerald-100 light:text-emerald-700">
-            {publicRooms.length > 0 && <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400 align-middle" />}
+          <span className="font-display text-sm font-bold tracking-[0.02em] text-amber-50 light:text-slate-900">{gameId ? "이 게임의 공개방" : "공개방"}</span>
+          <span className="flex items-center rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-white/55 tabular-nums light:border-slate-300 light:text-slate-600">
+            <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${publicRooms.length > 0 ? "animate-pulse bg-emerald-400" : "bg-white/25 light:bg-slate-400"}`} />
             {publicRooms.length}개 대기중
           </span>
         </div>
@@ -69,7 +69,7 @@ export default function PublicRoomBrowser({
               value={activeFilter}
               onChange={(e) => setFilter(e.target.value)}
               aria-label="게임별 공개방 필터"
-              className="rounded-lg border border-white/10 bg-neutral-900 px-2 py-1 text-xs text-white/80 focus:border-emerald-400 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-700"
+              className="rounded-lg border border-white/10 bg-neutral-900 px-2 py-1 text-xs text-white/80 focus:border-amber-300/60 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-700"
             >
               <option value="all">전체 게임</option>
               {gameOptions.map((id) => (
@@ -82,9 +82,9 @@ export default function PublicRoomBrowser({
           <button
             type="button"
             onClick={quickJoin}
-            className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-emerald-500 active:scale-95"
+            className="rounded-full border border-amber-300/40 bg-amber-300/[0.06] px-3.5 py-1 text-xs font-semibold tracking-wide text-amber-100 transition hover:border-amber-200/80 hover:bg-amber-300/[0.12] active:scale-95 light:border-amber-700/35 light:bg-amber-50/70 light:text-amber-900 light:hover:border-amber-700/60"
           >
-            ⚡ 빠른 참가
+            빠른 참가
           </button>
         </div>
       </div>
@@ -103,7 +103,7 @@ export default function PublicRoomBrowser({
         </ul>
       ) : (
         <p className="py-1 text-xs text-white/40 light:text-slate-500">
-          {gameId ? "아직 열린 공개방이 없어요. 공개방으로 만들면 여기에 바로 보여요." : "지금 열린 공개방이 없어요. 게임을 골라 🌐 공개방을 만들어 보세요!"}
+          {gameId ? "아직 열린 공개방이 없어요. 공개방으로 만들면 여기에 바로 보여요." : "지금 열린 공개방이 없어요. 게임을 골라 공개방을 만들어 보세요."}
         </p>
       )}
     </section>

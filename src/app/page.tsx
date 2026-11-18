@@ -345,11 +345,15 @@ export default function DashboardPage() {
       </div>
 
       <div className="mt-6 mb-8 sm:mt-0">
-        <h1 className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-500 bg-clip-text font-serif text-2xl font-bold text-transparent sm:text-3xl">
+        <p className="text-[10px] font-medium tracking-[0.32em] text-amber-200/55 uppercase light:text-amber-800/70">
+          Tonight&apos;s Table
+        </p>
+        <h1 className="mt-2 font-display text-[26px] leading-tight font-bold tracking-[-0.01em] text-amber-50 break-keep sm:text-[32px] light:text-slate-900">
           함께할 보드게임을 골라보세요
         </h1>
-        <p className="mt-1 text-sm text-white/50 light:text-slate-500">
-          총 {catalog.length}종 · 플레이 가능 {playableCount}종 · 1~10명, 폰이나 데스크톱으로 즐기세요
+        <div aria-hidden className="mt-3 h-px w-12 bg-gradient-to-r from-amber-300/70 to-transparent light:from-amber-700/60" />
+        <p className="mt-3 text-[13px] text-white/50 break-keep light:text-slate-500">
+          {catalog.length}종의 게임 · 1~10명 · 폰과 데스크톱 어디서나
         </p>
       </div>
 
@@ -367,8 +371,9 @@ export default function DashboardPage() {
             search query is active (kept in-flow, not collapsed, since this
             IS the replacement content for that moment — no animation needed
             for a text swap). Reverts to the static heading once cleared. */}
-        <h2 className="mb-3 text-base font-bold text-white sm:hidden light:text-slate-900">
-          {isSearching ? `검색 결과 (${filtered.length}개)` : "🔍 전체 게임 검색"}
+        <h2 className="mb-3 flex items-baseline gap-2 font-display text-[17px] font-bold text-white sm:hidden light:text-slate-900">
+          {isSearching ? "검색 결과" : "전체 게임"}
+          <span className="font-sans text-xs font-normal text-white/40 light:text-slate-500">{filtered.length}</span>
         </h2>
         {/* Mobile now gets these from the sticky bar above instead (so they
             stay reachable mid-scroll) — hidden here below `sm` only;

@@ -14,6 +14,19 @@ import { OwnPortraitKeeper, PublicPortraitPublisher, useProfilePhoto } from "@/c
 import ProfileModal from "@/components/profile/ProfileModal";
 import { useIsSiteAdmin } from "@/lib/admin/useIsSiteAdmin";
 
+const NAV_LINKS = [
+  { href: "/lobby", label: "로비" },
+  { href: "/stats", label: "전적" },
+  { href: "/history", label: "기록" },
+  { href: "/bug-reports", label: "버그 리포트" },
+] as const;
+
+const NAV_LINK_CLASS =
+  "relative shrink-0 whitespace-nowrap break-keep px-2.5 py-1 text-[13px] tracking-wide text-white/55 transition hover:text-amber-100 after:absolute after:inset-x-2.5 after:-bottom-0.5 after:h-px after:origin-left after:scale-x-0 after:bg-amber-300/60 after:transition after:duration-300 hover:after:scale-x-100 light:text-slate-500 light:hover:text-slate-900 light:after:bg-amber-600/60";
+
+const MOBILE_LINK_CLASS =
+  "whitespace-nowrap break-keep rounded-xl border border-white/[0.07] bg-white/[0.03] px-3 py-2.5 text-sm text-white/80 transition active:scale-[0.98] light:border-slate-900/[0.07] light:bg-white/70 light:text-slate-700";
+
 export default function SiteHeader() {
   const session = useBettingStore((s) => s.session);
   const setSidebarOpen = useBettingStore((s) => s.setSidebarOpen);
@@ -28,6 +41,7 @@ export default function SiteHeader() {
   const profileAvatarUrl = useProfilePhoto();
   const initProfile = useProfileStore((s) => s.init);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const headerRef = useRef<HTMLElement>(null);
 
@@ -39,12 +53,20 @@ export default function SiteHeader() {
     void initProfile();
   }, [initProfile]);
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
+
   // Publishes this header's real rendered height as a CSS var so other
   // sticky layers (e.g. the mobile lobby's sticky search bar, page.tsx) can
-  // stack directly beneath it without guessing a fixed px offset — this bar
-  // wraps to a second line on narrow viewports (see the flex-wrap comment
-  // below) and grows/shrinks as async content (tier badge, avatar) resolves,
-  // so a hardcoded top offset would either leave a gap or clip under it.
+  // stack directly beneath it without guessing a fixed px offset. The mobile
+  // ☰ menu is absolutely positioned below the bar, so opening it never
+  // changes this height (and never shoves the sticky layers around).
   useLayoutEffect(() => {
     const el = headerRef.current;
     if (!el) return;
@@ -57,123 +79,172 @@ export default function SiteHeader() {
     return () => observer.disconnect();
   }, []);
 
+  const tierLabel = userId ? (tier ? TIER_LABELS[tier] : "…") : "게스트";
+  const tierTitle = entitlement
+    ? `오늘 ${entitlement.unit === "games" ? "이용 횟수" : "이용 시간"}: ${entitlement.used}/${entitlement.cap}`
+    : undefined;
+
   return (
     <header
       data-site-chrome
       ref={headerRef}
-      className="sticky top-0 z-40 border-b border-amber-500/20 bg-neutral-950/70 backdrop-blur-xl light:border-slate-200 light:bg-white/90 light:shadow-sm"
+      className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#0b0b12]/80 backdrop-blur-xl light:border-slate-900/[0.07] light:bg-[#eceff3]/85"
     >
-      {/* flex-wrap + shrink-0 on every child below is the actual fix for the
-          "보\n드\n게\n임" vertical-splitting bug reported on this bar: with no
-          flex-wrap, a too-narrow viewport made the flex row shrink every
-          child (default flex-shrink:1) down toward its min-content width —
-          and a CJK text node's min-content width is a single character
-          (default East Asian line-break allows a break between any two
-          characters), so squeezed labels collapsed into one-glyph-per-line
-          columns. shrink-0 stops labels from being squeezed below their
-          natural width at all; flex-wrap lets the row spill onto a second
-          line instead when things don't fit, so nothing ever gets that
-          squeeze. break-keep is extra insurance for the multi-word labels
-          (버그 리포트/내기 진행 중) so a wrap point can't land mid-word either. */}
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-3 py-2 sm:px-6 sm:py-3">
-        {/* 다크 럭셔리 리뉴얼(2026-09-12): 시그니처 엠블럼 + 골드 그라데이션
-            워드마크. 이전엔 이 자리 옆(`hidden xl:flex`)에 데스크톱 전용 초대
-            코드 입력창(`InviteCodeJoin`)이 있었으나, 대체 없이 완전히
-            제거하기로 확정(모달/공유링크 자동입장 파이프라인 모두 이 코드베이스에
-            존재하지 않음) — 헤더를 미니멀하게 비웠다. */}
-        <Link href="/" className="flex shrink-0 items-center gap-2.5 whitespace-nowrap break-keep">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-300 to-amber-600 text-sm font-black text-neutral-950 shadow-[0_0_14px_rgba(245,158,11,0.35)]">
-            ✦
+      {/* Hairline gold rule under the bar — the one accent the chrome keeps. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-amber-300/35 to-transparent light:via-amber-600/30"
+      />
+      {/* flex-wrap + shrink-0 + break-keep on every label: a squeezed CJK text
+          node's min-content width is a single glyph, so without these a narrow
+          viewport used to split "보드게임" one character per line. Below `sm`
+          the nav and utilities fold into the ☰ menu so the bar stays one row. */}
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-4 py-2.5 sm:px-6 sm:py-3">
+        <Link href="/" className="group flex shrink-0 items-center gap-3 whitespace-nowrap break-keep">
+          <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-amber-300/45 font-display text-[13px] font-bold text-amber-200 transition group-hover:border-amber-200/80 light:border-amber-700/40 light:text-amber-800">
+            <span aria-hidden className="absolute inset-[3px] rounded-full border border-amber-300/15 light:border-amber-700/15" />
+            보
           </span>
           <span className="flex flex-col leading-none">
-            <span className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-500 bg-clip-text font-serif text-sm font-bold tracking-wide text-transparent sm:text-base light:from-amber-700 light:via-amber-600 light:to-orange-700">
+            <span className="font-display text-[15px] font-bold tracking-[0.06em] text-amber-100 sm:text-base light:text-slate-900">
               보드게임 허브
             </span>
-            <span className="hidden text-[9px] font-medium tracking-[0.2em] text-amber-500/50 uppercase sm:block light:text-amber-800">
+            <span className="mt-1 hidden text-[9px] font-medium tracking-[0.32em] text-amber-200/45 uppercase sm:block light:text-amber-800/60">
               Private Lounge
             </span>
           </span>
         </Link>
-        <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1.5 sm:gap-3">
-          {/* guests too: game nickname + character live in localStorage (ProfileModal) */}
+
+        {/* < sm: avatar + ☰ only */}
+        <div className="flex items-center gap-2 sm:hidden">
           <button
             onClick={() => setProfileModalOpen(true)}
-            className="shrink-0 rounded-full ring-1 ring-amber-400/40 transition hover:opacity-80 hover:ring-amber-300/70"
+            className="shrink-0 rounded-full ring-1 ring-amber-300/35 transition hover:ring-amber-200/70"
             aria-label="프로필 수정"
-            title="프로필 수정"
           >
             <Avatar src={profileAvatarUrl} size={28} />
           </button>
-          <OwnPortraitKeeper />
-          <PublicPortraitPublisher />
-          {configured && (
-            <Link
-              href={userId ? "/account" : "/login"}
-              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-amber-500/20 px-2.5 py-1 text-[11px] text-white/70 hover:border-amber-400/60 sm:text-xs light:border-slate-300 light:text-slate-700 light:hover:border-amber-500"
-              title={
-                entitlement
-                  ? `오늘 ${entitlement.unit === "games" ? "이용 횟수" : "이용 시간"}: ${entitlement.used}/${entitlement.cap}`
-                  : undefined
-              }
-            >
-              <span className="rounded-full bg-rose-500/20 px-1.5 py-0.5 font-semibold text-rose-200 light:bg-rose-100 light:text-rose-700">
-                {userId ? (tier ? TIER_LABELS[tier] : "…") : "게스트"}
-              </span>
-              {/* TEMP: 무료 이용 횟수(N/N회) 배지 임시 숨김 — 요청에 따라 비활성화. 되돌리려면 이 블록 복원.
-              {entitlement && (
-                <span className="text-white/50">
-                  {entitlement.unit === "games"
-                    ? `${Math.max(0, entitlement.cap - entitlement.used)}/${entitlement.cap}회`
-                    : `${Math.max(0, entitlement.cap - entitlement.used)}/${entitlement.cap}분`}
-                </span>
-              )}
-              */}
-            </Link>
-          )}
-          {isSiteAdmin && (
-            <Link
-              href="/admin/games"
-              className="shrink-0 whitespace-nowrap break-keep rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-500/25 sm:text-sm light:bg-amber-100 light:text-amber-700"
-            >
-              🛠 관리자
-            </Link>
-          )}
-          <Link
-            href="/lobby"
-            className="shrink-0 whitespace-nowrap break-keep text-xs text-white/50 hover:text-amber-200 sm:text-sm light:text-slate-500 light:hover:text-amber-600"
-          >
-            💬 로비
-          </Link>
-          <Link
-            href="/stats"
-            className="shrink-0 whitespace-nowrap break-keep text-xs text-white/50 hover:text-amber-200 sm:text-sm light:text-slate-500 light:hover:text-amber-600"
-          >
-            전적
-          </Link>
-          <Link
-            href="/history"
-            className="shrink-0 whitespace-nowrap break-keep text-xs text-white/50 hover:text-amber-200 sm:text-sm light:text-slate-500 light:hover:text-amber-600"
-          >
-            기록
-          </Link>
-          <Link
-            href="/bug-reports"
-            className="shrink-0 whitespace-nowrap break-keep text-xs text-white/50 hover:text-amber-200 sm:text-sm light:text-slate-500 light:hover:text-amber-600"
-          >
-            🐛 버그 리포트
-          </Link>
-          <PatchNoteButton />
-          <ThemeToggle />
-          <SoundToggleButton />
           <button
-            onClick={() => setSidebarOpen(true)}
-            className="shrink-0 whitespace-nowrap break-keep rounded-full border border-amber-500/30 px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-amber-400/70 hover:text-white hover:shadow-[0_0_16px_rgba(245,158,11,0.25)] light:border-amber-500/40 light:text-slate-800 light:hover:border-amber-500 light:hover:text-slate-900"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-expanded={menuOpen}
+            aria-controls="site-mobile-menu"
+            aria-label={menuOpen ? "메뉴 닫기" : "메뉴 열기"}
+            className="relative flex h-9 w-9 shrink-0 flex-col items-center justify-center gap-[5px] rounded-full border border-white/12 text-white/80 transition hover:border-amber-300/50 light:border-slate-300 light:text-slate-700"
           >
-            {session ? "🎲 내기 진행 중" : "🎲 내기 관리"}
+            <span className={`block h-px w-4 bg-current transition ${menuOpen ? "translate-y-[3px] rotate-45" : ""}`} />
+            <span className={`block h-px w-4 bg-current transition ${menuOpen ? "-translate-y-[3px] -rotate-45" : ""}`} />
+            {session && !menuOpen && (
+              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-[#0b0b12] light:ring-[#eceff3]" />
+            )}
           </button>
         </div>
+
+        {/* sm+: text nav · divider · utilities */}
+        <div className="hidden flex-wrap items-center justify-end gap-x-1 gap-y-1.5 sm:flex">
+          <nav aria-label="사이트 메뉴" className="mr-2 flex items-center">
+            {NAV_LINKS.map((l) => (
+              <Link key={l.href} href={l.href} className={NAV_LINK_CLASS}>
+                {l.label}
+              </Link>
+            ))}
+            {isSiteAdmin && (
+              <Link href="/admin/games" className={`${NAV_LINK_CLASS} text-amber-300/80! light:text-amber-700!`}>
+                관리자
+              </Link>
+            )}
+          </nav>
+          <span aria-hidden className="mr-2 h-4 w-px bg-white/10 light:bg-slate-300" />
+          <div className="flex items-center gap-2">
+            <PatchNoteButton />
+            <ThemeToggle />
+            <SoundToggleButton />
+            {configured && (
+              <Link
+                href={userId ? "/account" : "/login"}
+                className="shrink-0 whitespace-nowrap break-keep rounded-full border border-white/10 px-2.5 py-1 text-xs text-white/65 transition hover:border-amber-300/50 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:text-slate-900"
+                title={tierTitle}
+              >
+                {tierLabel}
+              </Link>
+            )}
+            <button
+              onClick={() => setProfileModalOpen(true)}
+              className="shrink-0 rounded-full ring-1 ring-amber-300/35 transition hover:ring-amber-200/70"
+              aria-label="프로필 수정"
+              title="프로필 수정"
+            >
+              <Avatar src={profileAvatarUrl} size={28} />
+            </button>
+            <BetButton session={!!session} onClick={() => setSidebarOpen(true)} />
+          </div>
+        </div>
+        <OwnPortraitKeeper />
+        <PublicPortraitPublisher />
       </div>
+
+      {menuOpen && (
+        <>
+          <button
+            aria-label="메뉴 닫기"
+            tabIndex={-1}
+            // absolute, not fixed: the header's backdrop-filter makes it the
+            // containing block, so `fixed` would be clipped to the bar itself.
+            className="absolute inset-x-0 top-full h-[100dvh] cursor-default bg-black/50 sm:hidden light:bg-slate-900/20"
+            onClick={() => setMenuOpen(false)}
+          />
+          <div
+            id="site-mobile-menu"
+            className="absolute inset-x-0 top-full border-b border-white/[0.06] bg-[#0d0d15] px-4 pt-3 pb-4 shadow-[0_16px_32px_rgba(0,0,0,0.45)] sm:hidden light:border-slate-900/[0.07] light:bg-[#eceff3] light:shadow-[0_16px_32px_rgba(15,23,42,0.12)]"
+            onClick={(e) => {
+              if ((e.target as HTMLElement).closest("a")) setMenuOpen(false);
+            }}
+          >
+            <nav aria-label="사이트 메뉴" className="grid grid-cols-2 gap-1.5">
+              {NAV_LINKS.map((l) => (
+                <Link key={l.href} href={l.href} className={MOBILE_LINK_CLASS}>
+                  {l.label}
+                </Link>
+              ))}
+              {configured && (
+                <Link href={userId ? "/account" : "/login"} className={MOBILE_LINK_CLASS} title={tierTitle}>
+                  내 계정 <span className="text-white/40 light:text-slate-500">· {tierLabel}</span>
+                </Link>
+              )}
+              {isSiteAdmin && (
+                <Link href="/admin/games" className={MOBILE_LINK_CLASS}>
+                  관리자
+                </Link>
+              )}
+            </nav>
+            <div className="mt-3 flex items-center gap-2">
+              <PatchNoteButton />
+              <ThemeToggle />
+              <SoundToggleButton />
+              <span className="flex-1" />
+              <BetButton
+                session={!!session}
+                onClick={() => {
+                  setMenuOpen(false);
+                  setSidebarOpen(true);
+                }}
+              />
+            </div>
+          </div>
+        </>
+      )}
       {profileModalOpen && <ProfileModal onClose={() => setProfileModalOpen(false)} />}
     </header>
+  );
+}
+
+function BetButton({ session, onClick }: { session: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex shrink-0 items-center gap-1.5 whitespace-nowrap break-keep rounded-full border border-amber-300/40 bg-amber-300/[0.06] px-3.5 py-1.5 text-xs font-semibold tracking-wide text-amber-100 transition hover:border-amber-200/80 hover:bg-amber-300/[0.12] light:border-amber-700/35 light:bg-amber-50/70 light:text-amber-900 light:hover:border-amber-700/60"
+    >
+      {session && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />}
+      {session ? "내기 진행 중" : "내기 관리"}
+    </button>
   );
 }
