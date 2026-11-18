@@ -64,6 +64,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.180.0",
+    releaseDate: "2026-11-19",
+    title: "🧊 허브 3D·2D 필터",
+    changes: [
+      { game: "common", type: "FEAT", desc: "🧊 3D / 🖼️ 2D 필터 — 보드게임허브에서 3D로 열리는 게임과 평면 2D 게임을 골라 볼 수 있어요" },
+    ],
+  },
+  {
     version: "v1.179.0",
     releaseDate: "2026-11-17",
     title: "👹 새 게임 술래는 우리 중에",

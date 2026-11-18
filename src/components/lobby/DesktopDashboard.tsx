@@ -12,6 +12,8 @@ import { LOBBY_CARD_STYLE } from "@/constants/lobbyCardStyle";
 import { getGameFreshnessBadge } from "@/constants/gameUpdateCount";
 import SortFilterChips from "./SortFilterChips";
 import NewOnlyChip from "./NewOnlyChip";
+import ViewFilterChips from "./ViewFilterChips";
+import type { ViewFilter } from "@/games/viewModes";
 
 /**
  * Desktop-only (xl+, ≥1280px) zero-scroll lobby dashboard — a single
@@ -67,6 +69,8 @@ export default function DesktopDashboard({
   onFilterChange,
   newOnly,
   onNewOnlyChange,
+  viewFilter,
+  onViewFilterChange,
   sortOption,
   onSortChange,
   monthPlays,
@@ -84,6 +88,8 @@ export default function DesktopDashboard({
   onFilterChange: (idx: number) => void;
   newOnly: boolean;
   onNewOnlyChange: (next: boolean) => void;
+  viewFilter: ViewFilter;
+  onViewFilterChange: (next: ViewFilter) => void;
   sortOption: SortOption;
   onSortChange: (option: SortOption) => void;
   /** This month's real starts per game (shown as "🔥 10월 N회 플레이"). */
@@ -141,6 +147,7 @@ export default function DesktopDashboard({
               ))}
               <NewOnlyChip value={newOnly} onChange={onNewOnlyChange} compact />
             </div>
+            <ViewFilterChips value={viewFilter} onChange={onViewFilterChange} compact />
             <span className="shrink-0 text-xs font-medium text-amber-500/60 light:text-amber-700">
               총 {totalCount}개 게임 · 플레이 가능 {playableCount}개
             </span>
