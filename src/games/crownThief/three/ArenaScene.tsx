@@ -162,8 +162,9 @@ function Plaza({ geo, quality }: { geo: ArenaGeo; quality: "high" | "low" }) {
         <meshStandardMaterial color="#d4a017" metalness={0.6} roughness={0.35} emissive="#7a5a00" emissiveIntensity={0.25} />
       </mesh>
       {/* 떠 있는 섬 바닥 (아래로 좁아지는 바위) */}
-      <mesh position-y={-1.6}>
-        <cylinderGeometry args={[R, R * 0.55, 3.2, 48, 1]} />
+      {/* 윗면 뚜껑은 없음 — 바닥 원판과 같은 높이라 겹치면 깜빡이는 줄무늬(z-fighting)가 생긴다 */}
+      <mesh position-y={-1.64}>
+        <cylinderGeometry args={[R, R * 0.55, 3.2, 48, 1, true]} />
         <meshStandardMaterial color="#a08566" roughness={1} flatShading />
       </mesh>
       <mesh position-y={-4.2}>
