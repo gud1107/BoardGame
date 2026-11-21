@@ -72,7 +72,8 @@ describe("game sound suites", () => {
     // + finders keepers (만지면 내 꺼!).
     // + toy room race (장난감 방 레이스).
     // + parcel panic (택배 대란).
-    expect(suites.length).toBe(62);
+    // + mannequin mall (마네킹 백화점).
+    expect(suites.length).toBe(63);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

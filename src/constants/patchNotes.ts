@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.187.0",
+    releaseDate: "2026-11-22",
+    title: "🧍 새 게임 마네킹 백화점",
+    changes: [
+      { game: "mannequin-mall", type: "FEAT", desc: "🧍 새 게임 — 폐점한 백화점에서 손전등 하나로 빠져나가는 1~4인 1인칭 3D 협동 공포 · 혼자 하기·AI 동료 Lv.1~10 · 난이도 4단계" },
+      { game: "mannequin-mall", type: "FEAT", desc: "👁 살아 있는 마네킹은 누군가 보는 동안 꼼짝 못 해요 — 돌아보면 자세가 바뀌어 있다 · 🔦 오래 노려보면 와르르 쓰러뜨리기" },
+      { game: "mannequin-mall", type: "FEAT", desc: "⚡ 셔터 퓨즈를 배전반에 꽂아 탈출 · ⚡ 정전 · 📸 플래시·🎀 포장 끈으로 정체 밝히기 · ✚ 굳은 동료 풀어 주기 · 방장 승계" },
+    ],
+  },
+  {
     version: "v1.186.0",
     releaseDate: "2026-11-22",
     title: "📦 새 게임 택배 대란",

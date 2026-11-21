@@ -334,7 +334,7 @@ export default function GamePlayPage() {
   // 2026-09-27 그림 전화기: 그림판(4:3)이 2xl 폭에선 너무 작아 3xl.
   // 2026-10-23 섬광전대 프리즘파이브: 16:9 횡스크롤 캔버스라 상어와 같은 6xl.
   const pageMaxWidth =
-    game.id === "hungry-shark" || game.id === "prism-five" || game.id === "billiards-party" || game.id === "snowball-fort" || game.id === "crown-thief" || game.id === "toy-room-race" || game.id === "parcel-panic" || game.id === "finders-keepers" || game.id === "thin-ice-party" || game.id === "rope-climbers" || game.id === "beat-mayhem" || game.id === "hushed-ward" || game.id === "tagger-among-us"
+    game.id === "hungry-shark" || game.id === "prism-five" || game.id === "billiards-party" || game.id === "snowball-fort" || game.id === "crown-thief" || game.id === "toy-room-race" || game.id === "parcel-panic" || game.id === "finders-keepers" || game.id === "thin-ice-party" || game.id === "rope-climbers" || game.id === "beat-mayhem" || game.id === "hushed-ward" || game.id === "mannequin-mall" || game.id === "tagger-among-us"
       ? "max-w-6xl"
       : game.id === "doodle-phone" || game.id === "liar-game" || game.id === "word-tower" || game.id === "qplay" || game.id === "wobble-tower" || game.id === "alkkagi" || game.id === "domino-chain" || game.id === "curling" || game.id === "bowling-mayhem" || game.id === "mini-golf" || game.id === "cargo-stack" || game.id === "hush-night" || game.id === "strange-corridor" || game.id === "hundred-tales" || game.id === "island-pioneers"
       ? "max-w-3xl"

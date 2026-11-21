@@ -27,6 +27,7 @@ export const POSTER_TAGLINES: Partial<Record<GameId, string>> = {
   "parcel-panic": "라벨 보고, 던지고, 실어라!",
   "finders-keepers": "만지면 내 꺼, 뒤를 조심해!",
   "thin-ice-party": "오래 서 있으면 쩍— 첨벙!",
+  "mannequin-mall": "눈을 돌리는 순간, 그것은 한 걸음 다가온다",
   "hushed-ward": "쉿— 그것은 소리만 듣는다",
   "tagger-among-us": "이 중 한 명은, 탈을 쓴다",
   alkkagi: "튕겨라, 떨어뜨려라, 딱!",

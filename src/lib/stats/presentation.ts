@@ -118,6 +118,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "땡!", key: "thaws", unit: "번" },
     { label: "술래로 얼림", key: "catches", unit: "번" },
   ],
+  "mannequin-mall": [
+    { label: "퓨즈 꽂음", key: "fusePlaced", unit: "개" },
+    { label: "쓰러뜨림", key: "topples", unit: "번" },
+    { label: "풀어 준 동료", key: "revives", unit: "번" },
+    { label: "붙잡힘", key: "downs", unit: "번" },
+  ],
   "hushed-ward": [
     { label: "부적 붙임", key: "talPlaced", unit: "장" },
     { label: "뒤진 서랍", key: "searches", unit: "개" },
@@ -414,6 +420,10 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "tau-escapes", label: "🚪 탈출", num: "escapes", format: "count", unit: "번" },
     { id: "tau-tagger", label: "👹 술래 승", num: "taggerWins", format: "count", unit: "번" },
     { id: "tau-thaws", label: "🫱 땡!", num: "thaws", format: "count", unit: "번" },
+  ],
+  "mannequin-mall": [
+    { id: "mm-escapes", label: "🚪 탈출", num: "escapes", format: "count", unit: "번" },
+    { id: "mm-topples", label: "🔦 쓰러뜨림", num: "topples", format: "count", unit: "번" },
   ],
   "hushed-ward": [
     { id: "hw-escapes", label: "🚪 탈출", num: "escapes", format: "count", unit: "번" },

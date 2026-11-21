@@ -97,6 +97,14 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "❄ 얼린 횟수 (한 판 최다) · 👣 걷어참", value: (d) => `${n(d.catches)} (${n(d.maxCatches)}) · ${n(d.kicks)}` },
     { label: "⏱ 가장 빠른 탈출", value: (d) => (d.minEscapeSec !== undefined ? `${n(d.minEscapeSec)}초` : "-") },
   ],
+  "mannequin-mall": [
+    { label: "🚪 탈출 / 팀 승리 (전원 무사 S)", value: (d) => `${n(d.escapes)} / ${n(d.teamWins)} (${n(d.perfect)})` },
+    { label: "⚡ 퓨즈 찾음 / 꽂음 · 뒤진 상자", value: (d) => `${n(d.fuseFound)} / ${n(d.fusePlaced)} · ${n(d.searches)}` },
+    { label: "👁 붙들어 둔 시간 · 🔦 쓰러뜨림 · 🛡 동료 구함", value: (d) => `${n(d.stareSec)}초 · ${n(d.topples)} · ${n(d.saves)}` },
+    { label: "📸 플래시 (드러냄) · 🎀 묶음 (그냥 마네킹)", value: (d) => `${n(d.flashes)} (${n(d.revealed)}) · ${n(d.binds)} (${n(d.decoys)})` },
+    { label: "✚ 풀어 준 동료 · 붙잡힘", value: (d) => `${n(d.revives)} · ${n(d.downs)}` },
+    { label: "⏱ 가장 빠른 탈출 · 🔦 혼자 탈출 · 💀 악몽 탈출", value: (d) => `${d.minEscapeSec !== undefined ? `${n(d.minEscapeSec)}초` : "-"} · ${n(d.soloEscapes)} · ${n(d.nightmareEscapes)}` },
+  ],
   "hushed-ward": [
     { label: "🚪 탈출 / 팀 승리 (전원 무사 S)", value: (d) => `${n(d.escapes)} / ${n(d.teamWins)} (${n(d.perfect)})` },
     { label: "🧧 부적 찾음 / 붙임 · 뒤진 서랍", value: (d) => `${n(d.talFound)} / ${n(d.talPlaced)} · ${n(d.searches)}` },

@@ -173,6 +173,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "mannequin-mall",
+    name: "마네킹 백화점",
+    nameEn: "Mannequin Mall",
+    description:
+      "밤 10시, 폐점한 백화점에 갇힌 1~4명이 손전등 하나씩 들고 빠져나가는 1인칭 3D 협동 공포 게임! 진열된 마네킹 중 몇 개는 살아 있어요 — 누군가 쳐다보는 동안엔 꼼짝도 못 하지만, 모두가 눈을 돌리는 순간 다가와요. 돌아봤을 때 자리나 포즈가 바뀌어 있으면 살아 있는 것. 서로 등을 맞대고 지켜 주며 계산대·상자 속 ⚡ 셔터 퓨즈를 찾아 배전반에 꽂으면 정문 셔터가 열려요. 🔦 손전등으로 오래 노려보면 와르르 쓰러지고, 📸 플래시와 🎀 포장 끈으로 정체를 밝혀요. 형광등이 지직거리면 ⚡ 정전 — 그때는 아무도 못 봐요. 굳은 동료 풀어 주기, 난이도 4단계, 혼자 하기·AI 동료 Lv.1~10.",
+    players: { min: 1, max: 4 },
+    playTime: { minMinutes: 4, maxMinutes: 12 },
+    category: "party",
+    thumbnail: { emoji: "🧍", gradient: ["#3b2f2a", "#050404"] },
+    tags: ["공포", "협동", "1인칭", "시선", "마네킹", "실시간", "3D", "혼자", "AI봇"],
+    genres: ["party", "strategy"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "hushed-ward",
     name: "숨죽인 병동",
     nameEn: "Hushed Ward",
