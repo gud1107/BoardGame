@@ -151,8 +151,7 @@ export default function StrangeCorridorBoard({ state, viewerSeat, names, connect
             props={shown}
             selectedId={sel}
             revealId={revealId}
-            walkStart={phaseStart}
-            walkMs={state.phase === "reveal" ? 1 : phaseMs(state) * 0.85}
+            resetKey={`${state.phase === "study" ? "s" : "w"}${state.round}`}
             dread={dread}
             lowDetail={lowDetail}
             onPick={canAnswer ? pick : null}
@@ -162,7 +161,7 @@ export default function StrangeCorridorBoard({ state, viewerSeat, names, connect
         )}
         {flash && <div key={state.step} className="pointer-events-none absolute inset-0 animate-pulse bg-rose-700/25" />}
         <span className={`pointer-events-none absolute top-2 left-1/2 max-w-[94%] -translate-x-1/2 truncate rounded-full px-3 py-1 text-xs font-bold ${state.phase === "reveal" && lastResult?.anomaly ? "bg-rose-900/85 text-rose-50" : "bg-black/60 text-white/85"}`}>{hint}</span>
-        {board.view === "3d" && state.phase !== "reveal" && <span className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-[11px] whitespace-nowrap text-white/70">드래그로 둘러보기 · 눌러서 고르기</span>}
+        {board.view === "3d" && state.phase !== "reveal" && <span className="pointer-events-none absolute right-2 bottom-2 max-w-[60%] rounded-2xl bg-black/55 px-3 py-1 text-right text-[11px] leading-snug text-white/70">🕹️ 조이스틱·WASD로 걷기 (Shift 빨리)<br />드래그로 둘러보기 · 눌러서 고르기</span>}
       </div>
 
       <div className={`${PANEL} flex flex-col gap-3`}>

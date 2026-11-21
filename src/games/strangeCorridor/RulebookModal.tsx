@@ -54,7 +54,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
                 <b>기억하기</b>({STUDY_MS / 1000}초): 이상이 없는 원래 복도. 모두 &ldquo;다 외웠어요&rdquo;를 누르면 바로 시작해요.
               </li>
               <li>
-                <b>복도 걷기</b>({LOOK_MS / 1000}초 × 8 또는 12번): 카메라가 천천히 복도를 걸어 들어가요. 모두 답하거나 시간이 끝나면 정답 공개.
+                <b>복도 걷기</b>({LOOK_MS / 1000}초 × 8 또는 12번): 복도 안을 자유롭게 걸어 다니며 살펴봐요(매 복도 입구에서 출발). 모두 답하거나 시간이 끝나면 정답 공개.
               </li>
               <li>
                 <b>정답 공개</b>({REVEAL_MS / 1000}초): 바뀐 곳이 빨갛게 깜빡이고, 누가 맞혔는지 보여줘요.
@@ -96,7 +96,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <section>
             <h3 className={H3}>조작</h3>
             <ul className={LIST}>
-              <li>🧊 3D: 드래그로 둘러보기, 눌러서 고르기 → &ldquo;🚨 여기가 이상해요&rdquo;로 확정. 🖼️ 2D 원근 그림으로도 같은 복도를 볼 수 있어요.</li>
+              <li>🧊 3D: 조이스틱(휴대폰)·WASD/방향키(PC, Shift 빨리 걷기)로 걷고, 드래그로 둘러보기, 눌러서 고르기 → &ldquo;🚨 여기가 이상해요&rdquo;로 확정. 🖼️ 2D 원근 그림으로도 같은 복도를 볼 수 있어요.</li>
               <li>키보드: N = 이상 없음, Enter = 고른 곳으로 확정.</li>
               <li>자리는 색 + 모양(●◆▲■★✚⬟✦)으로 구분해요. 소리로 알리는 정답·오답은 화면 문구로도 나와요.</li>
             </ul>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, type ReactNode, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { AdaptiveResolution } from "@/games/shared/three/sceneFx";
@@ -9,8 +9,9 @@ import { CORRIDOR_H, CORRIDOR_LEN, CORRIDOR_W, type ShownProp } from "../engine"
 
 /**
  * 이상한 복도 3D (rulebook §7). A long night corridor lit by four
- * fluorescent panels; the camera walks slowly down the hall while the round
- * runs and can be dragged to look around. Every prop is tappable — a missing
+ * fluorescent panels. The player walks it freely — WASD / arrow keys (Shift
+ * to hurry) or the on-screen stick — and drags to look around; each new
+ * corridor puts them back at the entrance. Every prop is tappable — a missing
  * prop leaves an invisible hit box where it used to be. Lint: per-frame
  * camera / light mutation lives in plain functions outside components.
  *
@@ -22,9 +23,8 @@ export interface CorridorSceneProps {
   selectedId: string | null;
   /** Revealed answer (prop id) to outline in red, or null. */
   revealId: string | null;
-  /** Date.now() when this walk started. */
-  walkStart: number;
-  walkMs: number;
+  /** Changes when a new walk starts — the player goes back to the entrance. */
+  resetKey: string;
   /** 0..1 how deep into the game — the hall gets darker and flickers more. */
   dread: number;
   lowDetail: boolean;
@@ -32,7 +32,10 @@ export interface CorridorSceneProps {
 }
 
 const W2 = CORRIDOR_W / 2;
-const WALK = 7.5;
+const START_Z = 0.6;
+const BODY_R = 0.28;
+const WALK_SPEED = 1.9;
+const RUN_SPEED = 3.4;
 
 /** Where a prop sits and which way it faces. */
 function placement(p: ShownProp): { pos: [number, number, number]; rotY: number; rotX: number } {
@@ -366,57 +369,253 @@ function flickerFrame(lights: (THREE.PointLight | null)[], idx: number, t: numbe
   });
 }
 
-/** Walk + drag-to-look. Yaw/pitch live in a ref the canvas wrapper writes to. */
-function CameraRig({ walkStart, walkMs, look }: { walkStart: number; walkMs: number; look: RefObject<{ yaw: number; pitch: number }> }) {
-  useFrame(({ camera }) => rigFrame(camera, walkStart, walkMs, look.current));
+/** Player body: position on the floor + look angles + current stick / key input. */
+interface Walker {
+  x: number;
+  z: number;
+  yaw: number;
+  pitch: number;
+  /** Stick input (−1..1; z forward). */
+  sx: number;
+  sz: number;
+  keys: Set<string>;
+  run: boolean;
+  bobT: number;
+}
+
+interface Blocker {
+  x0: number;
+  x1: number;
+  z0: number;
+  z1: number;
+}
+
+/** Floor-standing props you can't walk through (wall props are flat enough to brush past). */
+function blockersOf(props: ShownProp[]): Blocker[] {
+  const out: Blocker[] = [];
+  for (const p of props) {
+    if (p.hidden) continue;
+    const depth = p.kind === "vending" ? 0.75 : p.kind === "plant" ? 0.62 : p.kind === "bench" ? 0.52 : p.kind === "figure" ? 0 : -1;
+    if (depth < 0) continue;
+    const half = (p.kind === "figure" ? 0.25 : p.w / 2) * p.scale;
+    const z = -p.z;
+    if (p.kind === "figure") {
+      const x = 0.4;
+      out.push({ x0: x - half, x1: x + half, z0: z - half, z1: z + half });
+    } else if (p.side === "L") out.push({ x0: -W2, x1: -W2 + depth, z0: z - half, z1: z + half });
+    else if (p.side === "R") out.push({ x0: W2 - depth, x1: W2, z0: z - half, z1: z + half });
+  }
+  return out;
+}
+
+/** Push a circle of radius BODY_R out of each box (one pass is plenty for a hallway). */
+function collide(x: number, z: number, blocks: Blocker[]): [number, number] {
+  x = Math.max(-W2 + BODY_R, Math.min(W2 - BODY_R, x));
+  z = Math.max(-CORRIDOR_LEN + BODY_R + 0.2, Math.min(1.2 - BODY_R, z));
+  for (const b of blocks) {
+    const cx = Math.max(b.x0, Math.min(b.x1, x));
+    const cz = Math.max(b.z0, Math.min(b.z1, z));
+    const dx = x - cx;
+    const dz = z - cz;
+    const d = Math.hypot(dx, dz);
+    if (d >= BODY_R) continue;
+    if (d < 1e-4) {
+      // centre inside the box: shove out across the hall
+      x = b.x0 <= -W2 + 0.01 ? b.x1 + BODY_R : b.x1 >= W2 - 0.01 ? b.x0 - BODY_R : x;
+      continue;
+    }
+    x = cx + (dx / d) * BODY_R;
+    z = cz + (dz / d) * BODY_R;
+  }
+  return [x, z];
+}
+
+const KEY_FWD = ["KeyW", "ArrowUp"];
+const KEY_BACK = ["KeyS", "ArrowDown"];
+const KEY_LEFT = ["KeyA", "ArrowLeft"];
+const KEY_RIGHT = ["KeyD", "ArrowRight"];
+
+function axis(keys: Set<string>, plus: string[], minus: string[]) {
+  return (plus.some((k) => keys.has(k)) ? 1 : 0) - (minus.some((k) => keys.has(k)) ? 1 : 0);
+}
+
+function CameraRig({ walker, blocks }: { walker: RefObject<Walker>; blocks: Blocker[] }) {
+  useFrame(({ camera }, dt) => rigFrame(camera, walker.current, blocks, Math.min(dt, 0.1)));
   return null;
 }
 
-function rigFrame(camera: THREE.Camera, walkStart: number, walkMs: number, look: { yaw: number; pitch: number }) {
-  const t = Math.max(0, Math.min(1, (Date.now() - walkStart) / Math.max(1, walkMs)));
-  const ease = 1 - Math.pow(1 - t, 1.6);
-  const z = 0.6 - ease * WALK;
-  const bob = Math.sin(t * walkMs * 0.0075) * 0.012 * (t < 1 ? 1 : 0);
-  camera.position.set(0, 1.6 + bob, z);
-  camera.rotation.set(look.pitch, look.yaw, 0, "YXZ");
+function rigFrame(camera: THREE.Camera, w: Walker, blocks: Blocker[], dt: number) {
+  let f = axis(w.keys, KEY_FWD, KEY_BACK) + w.sz;
+  let s = axis(w.keys, KEY_RIGHT, KEY_LEFT) + w.sx;
+  const l = Math.hypot(f, s);
+  if (l > 1) {
+    f /= l;
+    s /= l;
+  }
+  const moving = l > 0.05;
+  if (moving) {
+    const hurry = w.run || w.keys.has("ShiftLeft") || w.keys.has("ShiftRight");
+    const sp = (hurry ? RUN_SPEED : WALK_SPEED) * dt;
+    // yaw 0 looks down −z; positive yaw turns left
+    const sin = Math.sin(w.yaw);
+    const cos = Math.cos(w.yaw);
+    const nx = w.x + (-sin * f + cos * s) * sp;
+    const nz = w.z + (-cos * f - sin * s) * sp;
+    [w.x, w.z] = collide(nx, nz, blocks);
+    w.bobT += dt * (hurry ? 11 : 8);
+  }
+  const bob = moving ? Math.sin(w.bobT) * 0.018 : 0;
+  camera.position.set(w.x, 1.6 + bob, w.z);
+  camera.rotation.set(w.pitch, w.yaw, 0, "YXZ");
+}
+
+function freshWalker(keys: Set<string>): Walker {
+  return { x: 0, z: START_Z, yaw: 0, pitch: -0.04, sx: 0, sz: 0, keys, run: false, bobT: 0 };
+}
+
+const STICK_R = 44;
+
+/** Bottom-left thumb stick. Pushed to the rim = hurry. */
+function Stick({ onMove }: { onMove: (v: { x: number; z: number } | null) => void }) {
+  const base = useRef<{ x: number; y: number; id: number } | null>(null);
+  const [knob, setKnob] = useState<{ dx: number; dy: number } | null>(null);
+  const end = () => {
+    base.current = null;
+    setKnob(null);
+    onMove(null);
+  };
+  const clampTo = (cx: number, cy: number, b: { x: number; y: number }) => {
+    let dx = cx - b.x;
+    let dy = cy - b.y;
+    const l = Math.hypot(dx, dy);
+    if (l > STICK_R) {
+      dx = (dx / l) * STICK_R;
+      dy = (dy / l) * STICK_R;
+    }
+    return { dx, dy, l };
+  };
+  return (
+    <div
+      className="absolute bottom-3 left-3 z-20 touch-none select-none"
+      style={{ width: STICK_R * 2 + 16, height: STICK_R * 2 + 16 }}
+      aria-label="이동 조이스틱"
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        if (base.current) return;
+        const r = e.currentTarget.getBoundingClientRect();
+        const b = { x: r.left + r.width / 2, y: r.top + r.height / 2, id: e.pointerId };
+        base.current = b;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        const { dx, dy } = clampTo(e.clientX, e.clientY, b);
+        setKnob({ dx, dy });
+        onMove({ x: dx / STICK_R, z: -dy / STICK_R });
+      }}
+      onPointerMove={(e) => {
+        e.stopPropagation();
+        const b = base.current;
+        if (!b || b.id !== e.pointerId) return;
+        const { dx, dy, l } = clampTo(e.clientX, e.clientY, b);
+        setKnob({ dx, dy });
+        onMove(l < 5 ? { x: 0, z: 0 } : { x: dx / STICK_R, z: -dy / STICK_R });
+      }}
+      onPointerUp={(e) => {
+        e.stopPropagation();
+        if (base.current?.id === e.pointerId) end();
+      }}
+      onPointerCancel={end}
+    >
+      <div className="pointer-events-none absolute inset-2 rounded-full border-2 border-white/25 bg-black/35" />
+      <div
+        className="pointer-events-none absolute flex h-12 w-12 items-center justify-center rounded-full border-2 border-white/60 bg-white/20 text-[10px] font-bold text-white/80"
+        style={{ left: STICK_R + 8 - 24 + (knob?.dx ?? 0), top: STICK_R + 8 - 24 + (knob?.dy ?? 0) }}
+      >
+        {knob ? "" : "이동"}
+      </div>
+    </div>
+  );
+}
+
+const MOVE_KEYS = new Set([...KEY_FWD, ...KEY_BACK, ...KEY_LEFT, ...KEY_RIGHT, "ShiftLeft", "ShiftRight"]);
+
+function isTyping(t: EventTarget | null) {
+  return t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 }
 
 export default function CorridorScene(p: CorridorSceneProps) {
-  const look = useRef({ yaw: 0, pitch: -0.04 });
-  const drag = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null);
+  const walker = useRef<Walker>(freshWalker(new Set()));
+  const drag = useRef<{ x: number; y: number; id: number; yaw: number; pitch: number } | null>(null);
   const lamps = p.props.filter((x) => x.kind === "lamp");
+  const blocks = useMemo(() => blockersOf(p.props), [p.props]);
   const nodes: ReactNode[] = p.props.map((x) => <PropNode key={x.id} p={x} selected={x.id === p.selectedId} revealed={x.id === p.revealId} onPick={p.onPick} />);
   const high = !p.lowDetail;
+
+  // back to the entrance for every new corridor
+  useEffect(() => {
+    walker.current = freshWalker(walker.current.keys);
+  }, [p.resetKey]);
+
+  useEffect(() => {
+    const k = walker.current.keys;
+    const down = (e: KeyboardEvent) => {
+      if (!MOVE_KEYS.has(e.code) || isTyping(e.target)) return;
+      if (e.code.startsWith("Arrow")) e.preventDefault();
+      k.add(e.code);
+    };
+    const up = (e: KeyboardEvent) => k.delete(e.code);
+    const blur = () => k.clear();
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", blur);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", blur);
+      k.clear();
+    };
+  }, []);
+
   return (
     <div
-      className="h-full w-full"
+      className="relative h-full w-full"
       style={{ touchAction: "none", cursor: p.onPick ? "pointer" : "grab" }}
       onPointerDown={(e) => {
-        drag.current = { x: e.clientX, y: e.clientY, yaw: look.current.yaw, pitch: look.current.pitch };
+        if (drag.current) return;
+        drag.current = { x: e.clientX, y: e.clientY, id: e.pointerId, yaw: walker.current.yaw, pitch: walker.current.pitch };
       }}
       onPointerMove={(e) => {
         const d = drag.current;
-        if (!d) return;
-        look.current = { yaw: Math.max(-1.6, Math.min(1.6, d.yaw + (e.clientX - d.x) * 0.006)), pitch: Math.max(-0.7, Math.min(0.6, d.pitch + (e.clientY - d.y) * 0.004)) };
+        if (!d || d.id !== e.pointerId) return;
+        walker.current.yaw = d.yaw + (e.clientX - d.x) * 0.006;
+        walker.current.pitch = Math.max(-0.8, Math.min(0.7, d.pitch + (e.clientY - d.y) * 0.004));
       }}
-      onPointerUp={() => {
+      onPointerUp={(e) => {
+        if (drag.current?.id === e.pointerId) drag.current = null;
+      }}
+      onPointerCancel={() => {
         drag.current = null;
       }}
-      onPointerLeave={() => {
-        drag.current = null;
+      onPointerLeave={(e) => {
+        if (drag.current?.id === e.pointerId) drag.current = null;
       }}
     >
-      <Canvas dpr={high ? [1, 1.75] : 1} gl={{ antialias: high, powerPreference: "high-performance" }} camera={{ fov: 62, position: [0, 1.6, 0.6], near: 0.05, far: 40 }}>
+      <Canvas dpr={high ? [1, 1.75] : 1} gl={{ antialias: high, powerPreference: "high-performance" }} camera={{ fov: 62, position: [0, 1.6, START_Z], near: 0.05, far: 40 }}>
         <color attach="background" args={["#050605"]} />
         <fog attach="fog" args={["#050605", 6, 17 - p.dread * 4]} />
         <AdaptiveResolution max={1.75} />
-        <CameraRig walkStart={p.walkStart} walkMs={p.walkMs} look={look} />
+        <CameraRig walker={walker} blocks={blocks} />
         <ambientLight intensity={0.22 - p.dread * 0.08} color="#d9f99d" />
         <hemisphereLight args={["#e2e8f0", "#1c1917", 0.18]} />
         <Lights lamps={lamps} dread={p.dread} />
         <Shell />
         {nodes}
       </Canvas>
+      <Stick
+        onMove={(v) => {
+          walker.current.sx = v?.x ?? 0;
+          walker.current.sz = v?.z ?? 0;
+          walker.current.run = !!v && Math.hypot(v.x, v.z) > 0.92;
+        }}
+      />
     </div>
   );
 }

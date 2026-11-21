@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.185.0",
+    releaseDate: "2026-11-22",
+    title: "🚪 이상한 복도 자유 이동",
+    changes: [
+      { game: "strange-corridor", type: "FEAT", desc: "🕹️ 복도를 직접 걸어요 — 휴대폰은 왼쪽 아래 조이스틱, PC는 WASD/방향키(Shift 빨리 걷기) · 드래그로 사방 둘러보기, 복도마다 입구에서 출발" },
+      { game: "strange-corridor", type: "IMPROVE", desc: "🛋️ 자판기·화분·벤치·사람 그림자에는 몸이 부딪혀요 — 끝 벽 바로 앞까지 다가가 가까이서 살펴볼 수 있어요" },
+    ],
+  },
+  {
     version: "v1.184.0",
     releaseDate: "2026-11-22",
     title: "🥁 박자 난장판 타격 이펙트·키 설정",
