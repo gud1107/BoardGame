@@ -70,7 +70,8 @@ describe("game sound suites", () => {
     // + cctv alibi (CCTV 알리바이) + tagger among us (술래는 우리 중에).
     // + crown thief (왕관 도둑).
     // + finders keepers (만지면 내 꺼!).
-    expect(suites.length).toBe(60);
+    // + toy room race (장난감 방 레이스).
+    expect(suites.length).toBe(61);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

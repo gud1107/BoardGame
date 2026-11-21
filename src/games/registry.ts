@@ -275,6 +275,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "toy-room-race",
+    name: "장난감 방 레이스",
+    nameEn: "Toy Room Race",
+    description:
+      "거실 러그·욕실 타일·아이 방 바닥에 깔린 놀이 매트 도로를 장난감 차로 달리는 2~8인 실시간 3D 레이싱! 차는 저절로 달리니 핸들·브레이크만 — 🌀 드리프트로 ⚡ 부스트를 모으고, 💨 바람막이·📚 점프대·🚀 출발 부스트로 앞서가요. 🎁 선물 상자의 🔋 건전지·🫧 방패·🧶 털실·🦆 고무 오리·🪀 요요·🌀 팽이로 엎치락뒤치락. 선두가 한 바퀴를 돌 때마다 꼴찌가 받는 🧸 장난감 상자로 선두 앞에 블록 벽을 떨어뜨려요(그림자로 미리 보여서 피할 수 있어요). 🛋️ 거실 서킷·🛁 비누 슬라이드·🧸 8자 책 다리(🚂 기차 건널목) 세 트랙, 🏁 단판·🏆 그랑프리, 🧑‍🦽 주행 보조, 혼자 연습·AI 봇 Lv.1~10.",
+    players: { min: 2, max: 8 },
+    playTime: { minMinutes: 2, maxMinutes: 6 },
+    category: "party",
+    thumbnail: { emoji: "🏎️", gradient: ["#f97316", "#1e3a8a"] },
+    tags: ["레이싱", "카트", "드리프트", "아이템", "실시간", "파티", "3D", "AI봇"],
+    genres: ["party", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "finders-keepers",
     name: "만지면 내 꺼!",
     nameEn: "Finders Keepers",

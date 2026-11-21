@@ -143,6 +143,14 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "🌈 포물선 명중 · 🥶 얼음", value: (d) => `${n(d.lobHits)} · ${n(d.frozen)}` },
     { label: "⛄ 뭉친 눈덩이 · 🍫 아이템 · 🌟 MVP", value: (d) => `${n(d.gathered)} · ${n(d.items)} · ${n(d.mvps)}` },
   ],
+  "toy-room-race": [
+    { label: "🏁 레이스 1등 / 레이스 수 · 🏆 그랑프리 우승", value: (d) => `${n(d.raceWins)} / ${n(d.races)} · ${n(d.gpWins)}` },
+    { label: "⏱ 가장 빠른 랩", value: (d) => (d.minLapCs ? `${Math.floor(d.minLapCs / 6000)}:${((d.minLapCs % 6000) / 100).toFixed(2).padStart(5, "0")}` : null) },
+    { label: "⬆️ 추월 · 🚀 출발 부스트 (시동 꺼짐)", value: (d) => `${n(d.passes)} · ${n(d.rockets)} (${n(d.stalls)})` },
+    { label: "🌀 드리프트 부스트 (2단) · ✨ 완벽한 착지", value: (d) => `${n(d.driftBoosts)} (${n(d.bigDrifts)}) · ${n(d.perfectLands)}` },
+    { label: "🎁 아이템 · 🎯 맞힘 / 💫 맞음 · 🫧 막음", value: (d) => `${n(d.items)} · ${n(d.hits)} / ${n(d.spun)} · ${n(d.blocked)}` },
+    { label: "🧸 장난감 투하 / 선두 명중 · 🧱 박음", value: (d) => `${n(d.toyDrops)} / ${n(d.toyHits)} · ${n(d.crashes)}` },
+  ],
   "finders-keepers": [
     { label: "🧺 넣은 값 (개수) · 한 번 최고", value: (d) => `${n(d.depositValue)} (${n(d.deposits)}) · ${n(d.bestRun)}점` },
     { label: "🧸 바닥 줍기 · ✂️ 가로채기 (값)", value: (d) => `${n(d.picks)} · ${n(d.snatches)} (${n(d.snatchedValue)})` },

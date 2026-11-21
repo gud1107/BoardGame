@@ -154,6 +154,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "눈사람 명중", key: "snowmanHits", unit: "번" },
     { label: "세운 벽", key: "walls", unit: "개" },
   ],
+  "toy-room-race": [
+    { label: "레이스 1등", key: "raceWins", unit: "번" },
+    { label: "추월", key: "passes", unit: "번" },
+    { label: "드리프트 부스트", key: "driftBoosts", unit: "번" },
+    { label: "맞힘", key: "hits", unit: "번" },
+  ],
   "finders-keepers": [
     { label: "넣은 값", key: "depositValue", unit: "점" },
     { label: "가로채기", key: "snatches", unit: "번" },
@@ -426,6 +432,10 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
   "snowball-fort": [
     { id: "sf-freezes", label: "❄️ 얼림", num: "freezes", format: "count", unit: "명" },
     { id: "sf-wins", label: "🏆 팀 승리", num: "matchWins", format: "count", unit: "번" },
+  ],
+  "toy-room-race": [
+    { id: "trr-wins", label: "🏁 레이스 1등", num: "raceWins", format: "count", unit: "번" },
+    { id: "trr-passes", label: "⬆️ 추월", num: "passes", format: "count", unit: "번" },
   ],
   "finders-keepers": [
     { id: "fk-score", label: "🧺 넣은 값", num: "depositValue", format: "count", unit: "점" },

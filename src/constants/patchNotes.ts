@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.183.0",
+    releaseDate: "2026-11-21",
+    title: "🏎️ 새 게임 장난감 방 레이스",
+    changes: [
+      { game: "toy-room-race", type: "FEAT", desc: "🏎️ 새 게임 — 방바닥 놀이 매트 도로를 장난감 차로 달리는 2~8인 실시간 3D 레이싱 · 자동 가속이라 핸들만! · 혼자 연습·AI 봇 Lv.1~10" },
+      { game: "toy-room-race", type: "FEAT", desc: "🛋️ 거실 서킷·🛁 비누 슬라이드·🧸 8자 책 다리(🚂 기차) · 🌀 드리프트 ⚡ 부스트·🚀 출발 부스트·💨 바람막이·📚 점프" },
+      { game: "toy-room-race", type: "FEAT", desc: "🎁 아이템 6종 · 🧸 꼴찌의 장난감 상자(선두 앞 블록 벽) · 🏆 그랑프리 · 🧑‍🦽 주행 보조 · 방장이 나가도 판이 이어져요" },
+    ],
+  },
+  {
     version: "v1.182.0",
     releaseDate: "2026-11-21",
     title: "🖐️ 새 게임 만지면 내 꺼!",
