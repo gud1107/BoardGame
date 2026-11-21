@@ -143,6 +143,13 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "🌈 포물선 명중 · 🥶 얼음", value: (d) => `${n(d.lobHits)} · ${n(d.frozen)}` },
     { label: "⛄ 뭉친 눈덩이 · 🍫 아이템 · 🌟 MVP", value: (d) => `${n(d.gathered)} · ${n(d.items)} · ${n(d.mvps)}` },
   ],
+  "parcel-panic": [
+    { label: "📦 실은 상자 (점수) · 🔥 최고 연속", value: (d) => `${n(d.loads)} (${n(d.loadValue)}) · ${n(d.bestStreak)}` },
+    { label: "🤝 협동 클리어 · ★3 · 최고 팀 점수", value: (d) => `${n(d.coopClears)} · ${n(d.threeStars)} · ${n(d.maxTeamScore)}` },
+    { label: "🎯 슛 / 던지기 · 🙌 받기 · 🔍 스캔", value: (d) => `${n(d.shots)} / ${n(d.throws)} · ${n(d.catches)} · ${n(d.scans)}` },
+    { label: "🛋️ 둘이서 · ⚡ 시간 안 · 🚚 가득 채움", value: (d) => `${n(d.heavyDuo)} · ${n(d.expressOnTime)} · ${n(d.fullTrucks)}` },
+    { label: "🥚 깨뜨림·녹임 · 🚜 지게차 · ⚔️ 들이받기 / 당함", value: (d) => `${n(d.breaks)} · ${n(d.forkHits)} · ${n(d.knocks)} / ${n(d.knocked)}` },
+  ],
   "toy-room-race": [
     { label: "🏁 레이스 1등 / 레이스 수 · 🏆 그랑프리 우승", value: (d) => `${n(d.raceWins)} / ${n(d.races)} · ${n(d.gpWins)}` },
     { label: "⏱ 가장 빠른 랩", value: (d) => (d.minLapCs ? `${Math.floor(d.minLapCs / 6000)}:${((d.minLapCs % 6000) / 100).toFixed(2).padStart(5, "0")}` : null) },

@@ -71,7 +71,8 @@ describe("game sound suites", () => {
     // + crown thief (왕관 도둑).
     // + finders keepers (만지면 내 꺼!).
     // + toy room race (장난감 방 레이스).
-    expect(suites.length).toBe(61);
+    // + parcel panic (택배 대란).
+    expect(suites.length).toBe(62);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

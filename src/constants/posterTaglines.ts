@@ -24,6 +24,7 @@ export const POSTER_TAGLINES: Partial<Record<GameId, string>> = {
   "snowball-fort": "뭉치고, 던지고, 무너뜨려라!",
   "crown-thief": "만지면 왕, 뺏기면 거지!",
   "toy-room-race": "자동으로 달린다, 핸들만 잡아!",
+  "parcel-panic": "라벨 보고, 던지고, 실어라!",
   "finders-keepers": "만지면 내 꺼, 뒤를 조심해!",
   "thin-ice-party": "오래 서 있으면 쩍— 첨벙!",
   "hushed-ward": "쉿— 그것은 소리만 듣는다",

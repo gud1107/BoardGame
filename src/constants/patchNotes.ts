@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.186.0",
+    releaseDate: "2026-11-22",
+    title: "📦 새 게임 택배 대란",
+    changes: [
+      { game: "parcel-panic", type: "FEAT", desc: "📦 새 게임 — 컨베이어에서 쏟아지는 상자를 라벨이 맞는 트럭에 싣는 1~6인 실시간 3D 협동 · ★ 별 3개 도전 · 혼자 연습·AI 봇 Lv.1~10" },
+      { game: "parcel-panic", type: "FEAT", desc: "🥚 깨지는·🧊 녹는·🛋️ 둘이 드는·⚡ 특급·❓ 라벨 없는 상자 · 🎯 던지고 받기, 트럭에 던져 넣으면 슛 보너스 · 🚚 가득 채우면 +15" },
+      { game: "parcel-panic", type: "FEAT", desc: "🎭 역할 4종(배달왕·장사·투수·검수원) · 🚨 돌발 사건 6종(정전·트럭 바꾸기·지게차…) · ⚔️ 실적 경쟁 모드 · 방장이 나가도 판이 이어져요" },
+    ],
+  },
+  {
     version: "v1.185.0",
     releaseDate: "2026-11-22",
     title: "🚪 이상한 복도 자유 이동",

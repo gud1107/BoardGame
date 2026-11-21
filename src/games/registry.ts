@@ -275,6 +275,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "parcel-panic",
+    name: "택배 대란",
+    nameEn: "Parcel Panic",
+    description:
+      "물류 창고 컨베이어에서 상자가 쏟아진다! 상자를 집어 라벨(색·기호)이 같은 🚚 트럭 칸에 들고 들어가면 실려요. 🥚 던지면 깨지는 상자, 45초면 녹는 🧊 냉장, 혼자 들면 엉금엉금 둘이 들면 쌩쌩 🛋️ 대형 가구, 30초 안에 실어야 덤인 ⚡ 특급, 🔍 스캐너에 찍어야 하는 ❓ 라벨 없는 상자까지. 🎯 던져서 받아 주고, 트럭에 바로 던져 넣으면 슛 보너스! 🎭 역할(🏃 배달왕·💪 장사·🎯 투수·🔎 검수원)마다 혼자만 할 수 있는 일이 있고, 🚨 돌발 사건(정전·트럭 자리 바꾸기·지게차·라벨 소동·물청소·주문 폭주)이 판을 흔들어요. 🤝 협동 ★ 별 3개 · ⚔️ 실적 경쟁(들이받아 떨어뜨리기), 1~6인 실시간 3D · 혼자 연습·AI 봇 Lv.1~10.",
+    players: { min: 1, max: 6 },
+    playTime: { minMinutes: 3, maxMinutes: 5 },
+    category: "party",
+    thumbnail: { emoji: "📦", gradient: ["#f59e0b", "#1e293b"] },
+    tags: ["협동", "택배", "던지기", "물류", "실시간", "액션", "파티", "3D", "AI봇"],
+    genres: ["party", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "toy-room-race",
     name: "장난감 방 레이스",
     nameEn: "Toy Room Race",

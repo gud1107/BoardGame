@@ -85,6 +85,10 @@ export const GAME_VIEW_MODES: Record<GameId, GameViewMode> = {
   "cargo-stack": "both",
   "snowball-fort": "both",
   "thin-ice-party": "both",
+  "crown-thief": "both",
+  "finders-keepers": "both",
+  "toy-room-race": "both",
+  "parcel-panic": "both",
 
   // 2D
   "splendor-duel": "2d",
