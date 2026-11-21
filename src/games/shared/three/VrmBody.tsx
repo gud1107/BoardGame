@@ -3,11 +3,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import { createPortal, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import type { VRMHumanBoneName } from "@pixiv/three-vrm";
+import type { VRM, VRMHumanBoneName } from "@pixiv/three-vrm";
 import type { PersonLook } from "./SeatedPerson";
 import { blinkAmount } from "./vrmLife";
 import { tickVrm, useVrmAvatar } from "./VrmPerson";
 import { armJointQuat, toVrm0, upperArmQuat } from "./vrmPose";
+import { cycleAt, GAIT_STYLES, gaitLocal, gaitParents, getGait, sampleGait, type GaitData, type GaitStyle } from "./vrmGait";
 
 /**
  * A standing / walking VRM body for game-specific actors (heist thieves, city-chase
@@ -40,17 +41,48 @@ export function setBone(o: Float32Array, bone: BodyBone, x: number, y = 0, z = 0
   o[at + 2] = z;
 }
 
-/** Arms and legs swinging in a walk cycle (`phase` radians, `amt` 0..1). Adds onto what's there. */
-export function addWalk(o: Float32Array, phase: number, amt: number) {
+/** The channels addWalk swings (x of each), in {@link walkSwing}'s order. */
+const WALK_CH = [BODY.rightUpperLeg, BODY.leftUpperLeg, BODY.rightLowerLeg, BODY.leftLowerLeg, BODY.rightUpperArm, BODY.leftUpperArm, BODY.rightLowerArm, BODY.leftLowerArm];
+
+/** The procedural walk's swing per WALK_CH channel. */
+function walkSwing(phase: number, amt: number, out: Float32Array) {
   const w = Math.sin(phase) * 0.6 * amt;
-  o[BODY.rightUpperLeg] += w;
-  o[BODY.leftUpperLeg] -= w;
-  o[BODY.rightLowerLeg] += Math.max(0, -w) * 1.2;
-  o[BODY.leftLowerLeg] += Math.max(0, w) * 1.2;
-  o[BODY.rightUpperArm] -= w * 0.8;
-  o[BODY.leftUpperArm] += w * 0.8;
-  o[BODY.rightLowerArm] -= 0.25 * amt;
-  o[BODY.leftLowerArm] -= 0.25 * amt;
+  out[0] = w;
+  out[1] = -w;
+  out[2] = Math.max(0, -w) * 1.2;
+  out[3] = Math.max(0, w) * 1.2;
+  out[4] = -w * 0.8;
+  out[5] = w * 0.8;
+  out[6] = -0.25 * amt;
+  out[7] = -0.25 * amt;
+}
+
+/**
+ * What addWalk left in a pose buffer this frame: VrmBody plays the motion-capture cycle
+ * (vrmGait.ts) for every swung joint the caller didn't touch afterwards (`snap` = the
+ * channel values addWalk wrote), and keeps the procedural swing for the ones it did
+ * (crouching legs, an arm holding a crown…).
+ */
+type WalkMark = { phase: number; amt: number; style: GaitStyle | null; swing: Float32Array; snap: Float32Array; fresh: boolean };
+const walkMarks = new WeakMap<Float32Array, WalkMark>();
+
+/**
+ * Arms and legs swinging in a walk cycle (`phase` radians, `amt` 0..1). Adds onto what's there.
+ * On a VRM body this becomes a real motion-capture walk / run (picked from how fast `phase`
+ * advances) or `style`, in step with `phase`.
+ */
+export function addWalk(o: Float32Array, phase: number, amt: number, style?: GaitStyle) {
+  let m = walkMarks.get(o);
+  if (!m) walkMarks.set(o, (m = { phase: 0, amt: 0, style: null, swing: new Float32Array(WALK_CH.length), snap: new Float32Array(WALK_CH.length), fresh: false }));
+  walkSwing(phase, amt, m.swing);
+  for (let j = 0; j < WALK_CH.length; j++) {
+    o[WALK_CH[j]] += m.swing[j];
+    m.snap[j] = o[WALK_CH[j]];
+  }
+  m.phase = phase;
+  m.amt = amt;
+  m.style = style ?? null;
+  m.fresh = true;
 }
 
 /** Deep crouch (0..1): thighs up, knees folded, body sunk, arms on the knees. Adds onto what's there. */
@@ -105,6 +137,55 @@ export interface VrmBodyProps {
 const fQ = new THREE.Quaternion();
 const fE = new THREE.Euler();
 
+/** Which WALK_CH entry decides each mocap bone's weight (−1 = the whole gait; −2 = both thighs). */
+const GAIT_OWNER: Partial<Record<VRMHumanBoneName, number>> = {
+  hips: -2,
+  rightUpperLeg: 0,
+  leftUpperLeg: 1,
+  rightLowerLeg: 2,
+  rightFoot: 2,
+  rightToes: 2,
+  leftLowerLeg: 3,
+  leftFoot: 3,
+  leftToes: 3,
+  rightShoulder: 4,
+  rightUpperArm: 4,
+  leftShoulder: 5,
+  leftUpperArm: 5,
+  rightLowerArm: 6,
+  rightHand: 6,
+  leftLowerArm: 7,
+  leftHand: 7,
+};
+/** Bones the game's channels pose too: the mocap rotation is layered under the channel's own. */
+const BODY_BONES = new Set<VRMHumanBoneName>(BONES);
+const LAYERED = new Set<VRMHumanBoneName>(["spine", "chest", "neck", "head"]);
+
+/** Per model: the normalized gait bones, their parents and the leg length (unscaled, for the hips' bob). */
+type GaitRig = { nodes: (THREE.Object3D | null)[]; parents: number[]; ofBody: Int8Array; hips: number; legLen: number };
+function gaitRig(vrm: VRM, g: GaitData): GaitRig {
+  const node = (b: VRMHumanBoneName) => vrm.humanoid.getNormalizedBoneNode(b);
+  const nodes = g.bones.map(node);
+  const y = (b: VRMHumanBoneName) => node(b)?.getWorldPosition(new THREE.Vector3()).y ?? 0;
+  return {
+    nodes,
+    parents: gaitParents(g.bones, (b) => !!node(b)),
+    ofBody: Int8Array.from(BONES, (b) => g.bones.indexOf(b)),
+    hips: g.bones.indexOf("hips"),
+    legLen: Math.max(0.2, y("hips") - y("leftFoot")),
+  };
+}
+
+/** Per body: where in the stride it is, how much of each style, and each bone's mocap weight. */
+type GaitState = { phase: number; rate: number; mix: Float32Array; boneW: Float32Array; D: THREE.Quaternion[]; local: THREE.Quaternion[]; hips: { x: number; y: number }; on: boolean };
+const gQ = new THREE.Quaternion();
+const gE = new THREE.Euler();
+const ID = new THREE.Quaternion();
+const smoothstep = (a: number, b: number, x: number) => {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
 type GhostMat = THREE.Material & { uniforms?: { opacity?: { value: number }; alphaTest?: { value: number } }; emissive?: THREE.Color; emissiveIntensity?: number };
 
 export default function VrmBody(props: VrmBodyProps) {
@@ -116,6 +197,8 @@ export default function VrmBody(props: VrmBodyProps) {
     live.current = props;
   });
   const st = useRef<{ cur: Float32Array; want: Float32Array; springs: { current: number }; first: boolean } | null>(null);
+  const gait = useRef<GaitState | null>(null);
+  const rig = useRef<{ of: VRM; rig: GaitRig } | null>(null);
 
   const fit = useMemo(() => {
     if (!vrm) return null;
@@ -138,7 +221,36 @@ export default function VrmBody(props: VrmBodyProps) {
     const t = clock.elapsedTime;
     const s = (st.current ??= { cur: new Float32Array(BODY_CHANNELS), want: new Float32Array(BODY_CHANNELS), springs: { current: 0 }, first: true });
     s.want.fill(0);
+    const walk = walkMarks.get(s.want);
+    if (walk) walk.fresh = false;
     p.pose(s.want, t, dt);
+
+    // motion capture: take addWalk's procedural swing back out of the joints the caller left
+    // alone and play the real cycle there instead, blended in and out per joint
+    const gd = vrm ? getGait() : null;
+    const gs = gd ? (gait.current ??= { phase: 0, rate: 0, mix: new Float32Array(GAIT_STYLES.length), boneW: new Float32Array(gd.bones.length), D: gd.bones.map(() => new THREE.Quaternion()), local: gd.bones.map(() => new THREE.Quaternion()), hips: { x: 0, y: 0 }, on: false }) : null;
+    let ownedMask = 0;
+    let gaitAmt = 0;
+    if (gs && walk?.fresh) {
+      for (let j = 0; j < WALK_CH.length; j++)
+        if (s.want[WALK_CH[j]] === walk.snap[j]) {
+          s.want[WALK_CH[j]] -= walk.swing[j];
+          ownedMask |= 1 << j;
+        }
+      const step = walk.phase - gs.phase;
+      if (dt > 0 && Math.abs(step) < 3) gs.rate += (step / dt - gs.rate) * (1 - Math.exp(-dt * 6));
+      gs.phase = walk.phase;
+      gaitAmt = Math.max(0, Math.min(1, walk.amt));
+      // style: the caller's, else walk → run by how fast the stride turns over
+      const run = smoothstep(9, 12.5, Math.abs(gs.rate));
+      const kMix = 1 - Math.exp(-dt * 5);
+      for (let k = 0; k < GAIT_STYLES.length; k++) {
+        const st = GAIT_STYLES[k];
+        const want = walk.style ? (st === walk.style ? 1 : 0) : st === "run" ? run : st === "walk" ? 1 - run : 0;
+        gs.mix[k] += (want - gs.mix[k]) * kMix;
+      }
+    } else if (gs) gs.phase += gs.rate * dt; // keep stepping while it blends out
+
     if (s.first) {
       s.cur.set(s.want);
       s.first = false;
@@ -146,9 +258,37 @@ export default function VrmBody(props: VrmBodyProps) {
       const k = 1 - Math.exp(-dt * (p.follow ?? 14));
       for (let i = 0; i < BODY_CHANNELS; i++) s.cur[i] += (s.want[i] - s.cur[i]) * k;
     }
-    if (bodyRef.current) bodyRef.current.position.y = -s.cur[BODY_DROP] * p.headY;
+    if (bodyRef.current) {
+      bodyRef.current.position.y = -s.cur[BODY_DROP] * p.headY;
+      bodyRef.current.position.x = 0;
+    }
     if (!vrm) return;
     const vrm0 = vrm.meta.metaVersion === "0";
+
+    let gaitOn = false;
+    let gr: GaitRig | null = null;
+    if (gd && gs) {
+      if (rig.current?.of !== vrm) rig.current = { of: vrm, rig: gaitRig(vrm, gd) };
+      gr = rig.current.rig;
+      const kW = 1 - Math.exp(-dt * 10);
+      for (let b = 0; b < gd.bones.length; b++) {
+        const own = GAIT_OWNER[gd.bones[b]];
+        const mine = own === undefined || own === -1 ? true : own === -2 ? (ownedMask & 3) === 3 : (ownedMask >> own) & 1;
+        gs.boneW[b] += ((mine ? gaitAmt : 0) - gs.boneW[b]) * kW;
+        if (gs.boneW[b] > 0.002) gaitOn = true;
+      }
+      if (gaitOn) {
+        sampleGait(gd, gs.mix, cycleAt(gs.phase), gs.D, gs.hips);
+        for (let b = 0; b < gd.bones.length; b++) gaitLocal(gs.D, gr.parents, b, gs.local[b]);
+        const hipsW = gr.hips >= 0 ? gs.boneW[gr.hips] : 0;
+        if (bodyRef.current && fit) {
+          const leg = gr.legLen * fit * hipsW;
+          bodyRef.current.position.y += gs.hips.y * leg;
+          bodyRef.current.position.x = gs.hips.x * leg;
+        }
+      }
+    }
+
     for (let i = 0; i < BONES.length; i++) {
       const bone = BONES[i];
       const node = vrm.humanoid.getNormalizedBoneNode(bone);
@@ -157,8 +297,31 @@ export default function VrmBody(props: VrmBodyProps) {
       if (bone === "rightUpperArm" || bone === "leftUpperArm") upperArmQuat(bone[0] === "r" ? "r" : "l", x, y, z, fQ);
       else if (bone === "rightLowerArm" || bone === "leftLowerArm") armJointQuat(bone[0] === "r" ? "r" : "l", x, z, fQ);
       else fQ.setFromEuler(fE.set(x, y, z));
+      const b = gr ? gr.ofBody[i] : -1;
+      if (gaitOn && gs && b >= 0 && gs.boneW[b] > 0.002) {
+        if (LAYERED.has(bone)) {
+          // the game's lean / look on top of the captured spine and head motion
+          fQ.premultiply(gQ.copy(ID).slerp(gs.local[b], gs.boneW[b]));
+        } else {
+          // swung limbs: the caller's resting offsets (arms held out on the ice…) on top of the capture
+          const base = bone === "rightUpperArm" || bone === "leftUpperArm" ? gE.set(x, y, z) : gE.set(0, 0, 0);
+          gQ.setFromEuler(base).multiply(gs.local[b]);
+          fQ.slerp(gQ, gs.boneW[b]);
+        }
+      }
       node.quaternion.copy(vrm0 ? toVrm0(fQ) : fQ);
     }
+    // the joints only the capture moves (hips, shoulders, hands, feet, toes); back to rest once it's off
+    if (gd && gs && gr && (gaitOn || gs.on)) {
+      for (let b = 0; b < gd.bones.length; b++) {
+        const node = gr.nodes[b];
+        if (!node || BODY_BONES.has(gd.bones[b])) continue;
+        gQ.copy(ID);
+        if (gaitOn) gQ.slerp(gs.local[b], gs.boneW[b]);
+        node.quaternion.copy(vrm0 ? toVrm0(gQ) : gQ);
+      }
+    }
+    if (gs) gs.on = gaitOn;
     const em = vrm.expressionManager;
     if (em) {
       const f = p.face?.(t) ?? {};

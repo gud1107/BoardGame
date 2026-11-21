@@ -56,3 +56,6 @@ next-env.d.ts
 
 # internal IP-risk analysis — kept local only, not for a public repo (see 2026-09-12 decision)
 /저작권, 상표권.md
+
+# CMU mocap BVH downloads (scripts/mocap/bake-gait.mjs)
+/scripts/mocap/.cache/

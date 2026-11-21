@@ -148,3 +148,19 @@ VRoid Hub 라이선스(`corporate_commercial_use=allow`, `modification=allow`, `
 - **Seed-san은 출처 표기가 필요합니다.** 2026-10-27 패치노트(v1.100.0)와 이 문서에 "Seed-san © VirtualCast, Inc."로 표기했습니다.
 - 로봇 팔(`robo_arm` 메시)은 보드게임 테이블에 맞지 않아 화면에서만 숨깁니다(파일은 그대로).
 
+## 모션캡처 걸음걸이 (CMU)
+
+3D 게임의 서 있는 캐릭터([src/games/shared/three/VrmBody.tsx](src/games/shared/three/VrmBody.tsx))가 걷고 뛸 때 쓰는 동작은
+CMU Graphics Lab Motion Capture Database의 실제 사람 모션캡처를 VRM 뼈대에 옮긴 것입니다.
+[scripts/mocap/bake-gait.mjs](scripts/mocap/bake-gait.mjs)가 BVH를 받아 한 걸음 주기로 평균 내
+[public/models/motion/gait.json](public/models/motion/gait.json)(약 60KB)으로 굽습니다.
+
+| 동작 | 원본 테이크 |
+|---|---|
+| 걷기 | 07_01, 08_01, 16_15, 12_02 |
+| 뛰기 | 16_35, 113_07 |
+| 살금살금 | 77_29 |
+
+- 이용 조건(2026-11-21 확인, cgspeed BVH 배포본 READMEFIRST): "This data is free for use in research and commercial projects worldwide." 출처 표기는 논문 발표 시에만 요청.
+- 받은 곳: CMU 원본 http://mocap.cs.cmu.edu · BVH 변환(Bruce Hahne, cgspeed) 미러 https://github.com/una-dinosauria/cmu-mocap
+- The data used in this project was obtained from mocap.cs.cmu.edu. The database was created with funding from NSF EIA-0196217.

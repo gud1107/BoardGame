@@ -119,9 +119,10 @@ export function Thief3D({ s, meta, at, k, carrying, lowDetail = false }: { s: Se
   const pose = (o: Float32Array, time: number) => {
     const a = anim.current;
     const t = time + a.seed;
-    addWalk(o, a.phase, a.amt);
+    addWalk(o, a.phase, a.amt, "sneak");
     // 살금살금: 걸을 때 몸을 살짝 숙임, 서 있으면 두리번
-    o[BODY.spine] += 0.18 * a.amt + Math.sin(t * 2.2) * 0.015;
+    // (the creeping-walk capture already hunches over; only a breath of sway on top)
+    o[BODY.spine] += Math.sin(t * 2.2) * 0.015;
     o[BODY.head + 1] = Math.sin(t * 0.9) * 0.35 * (1 - a.amt) * (a.ok ? 1 : 0);
     // 보석을 들면 두 팔을 머리 위로
     const c = a.carry;

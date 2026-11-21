@@ -64,6 +64,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.181.2",
+    releaseDate: "2026-11-21",
+    title: "🚶 3D 캐릭터 걸음걸이를 실제 사람 모션캡처로",
+    changes: [
+      { game: "common", type: "IMPROVE", desc: "🚶 왕관 도둑·도시 추격전·눈싸움 요새·살얼음 파티·로프 등반·시간 루프 도둑단 캐릭터가 실제 사람 모션캡처로 걷고 뛰어요(도둑단은 살금살금)" },
+    ],
+  },
+  {
     version: "v1.181.1",
     releaseDate: "2026-11-19",
     title: "⚖️ AI 봇 밸런스 점검 — 8개 게임",
