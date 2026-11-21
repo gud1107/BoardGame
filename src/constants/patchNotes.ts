@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.182.0",
+    releaseDate: "2026-11-21",
+    title: "🖐️ 새 게임 만지면 내 꺼!",
+    changes: [
+      { game: "finders-keepers", type: "FEAT", desc: "🖐️ 새 게임 — 만진 물건은 내 뒤에 줄줄이, 남의 줄을 만지면 거기서부터 내 꺼! 장난감 백화점의 2~8인 실시간 3D 줍기·뺏기 · AI 봇 Lv.1~10" },
+      { game: "finders-keepers", type: "FEAT", desc: "🧺 바구니에 넣어야 점수 · ✂️ 줄 끊기·💨 돌진 · 🌈 세트 보너스 · 📢 점장 방송(타임세일·물건 비·물청소) · 🎖 공개 보너스 목표" },
+      { game: "finders-keepers", type: "FEAT", desc: "🔥 마지막 30초 마감 세일(트로피·바구니 털기) · 🐣 꼴찌 보호 · 🤝 팀전(줄 넘겨주기) · 💣 폭탄 세일 · 방장이 나가도 판이 이어져요" },
+    ],
+  },
+  {
     version: "v1.181.2",
     releaseDate: "2026-11-21",
     title: "🚶 3D 캐릭터 걸음걸이를 실제 사람 모션캡처로",

@@ -69,7 +69,8 @@ describe("game sound suites", () => {
     // + billiards party (당구 파티) + domino chain (도미노 연쇄) + snowball fort (눈싸움 요새전).
     // + cctv alibi (CCTV 알리바이) + tagger among us (술래는 우리 중에).
     // + crown thief (왕관 도둑).
-    expect(suites.length).toBe(59);
+    // + finders keepers (만지면 내 꺼!).
+    expect(suites.length).toBe(60);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

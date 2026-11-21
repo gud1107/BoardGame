@@ -23,6 +23,7 @@ export const POSTER_TAGLINES: Partial<Record<GameId, string>> = {
   "domino-chain": "먼저 닿는 사슬이 다 가져간다",
   "snowball-fort": "뭉치고, 던지고, 무너뜨려라!",
   "crown-thief": "만지면 왕, 뺏기면 거지!",
+  "finders-keepers": "만지면 내 꺼, 뒤를 조심해!",
   "thin-ice-party": "오래 서 있으면 쩍— 첨벙!",
   "hushed-ward": "쉿— 그것은 소리만 듣는다",
   "tagger-among-us": "이 중 한 명은, 탈을 쓴다",

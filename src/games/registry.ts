@@ -275,6 +275,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "finders-keepers",
+    name: "만지면 내 꺼!",
+    nameEn: "Finders Keepers",
+    description:
+      "문 닫기 직전 장난감 백화점! 만진 물건은 내 뒤에 줄줄이 매달리고, 내 🧺 바구니에 넣어야 점수가 돼요. 남의 줄을 만지면 거기서부터 끝까지 통째로 내 꺼 — 많이 끌수록 느리고, 뒤를 노리는 손이 늘어나요. ✂️ 줄 끊기로 도망치고, 같은 종류 3개·4종 🌈 무지개로 세트 보너스, 📢 점장 방송(타임세일·물건 비·물청소)과 🎖 공개 보너스 목표, 마지막 30초 🔥 마감 세일엔 남의 바구니도 털어요. 🖐️ 개인전·🤝 팀전·💣 폭탄 세일, 2~8인 실시간 3D · 혼자 연습·AI 봇 Lv.1~10.",
+    players: { min: 2, max: 8 },
+    playTime: { minMinutes: 2, maxMinutes: 5 },
+    category: "party",
+    thumbnail: { emoji: "🖐️", gradient: ["#f472b6", "#3b0764"] },
+    tags: ["줍기", "뺏기", "꼬리", "욕심", "실시간", "액션", "파티", "팀전", "3D", "AI봇"],
+    genres: ["party", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "crown-thief",
     name: "왕관 도둑",
     nameEn: "Crown Thief",

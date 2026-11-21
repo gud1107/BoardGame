@@ -143,6 +143,14 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "🌈 포물선 명중 · 🥶 얼음", value: (d) => `${n(d.lobHits)} · ${n(d.frozen)}` },
     { label: "⛄ 뭉친 눈덩이 · 🍫 아이템 · 🌟 MVP", value: (d) => `${n(d.gathered)} · ${n(d.items)} · ${n(d.mvps)}` },
   ],
+  "finders-keepers": [
+    { label: "🧺 넣은 값 (개수) · 한 번 최고", value: (d) => `${n(d.depositValue)} (${n(d.deposits)}) · ${n(d.bestRun)}점` },
+    { label: "🧸 바닥 줍기 · ✂️ 가로채기 (값)", value: (d) => `${n(d.picks)} · ${n(d.snatches)} (${n(d.snatchedValue)})` },
+    { label: "😱 가로채기 당함 (값) · 😭 줄에 남김", value: (d) => `${n(d.lost)} (${n(d.lostValue)}) · ${n(d.wastedValue)}` },
+    { label: "🌈 세트 보너스 · 🏷️ 타임세일 덤 · 🎖 목표", value: (d) => `${n(d.setBonus)} · ${n(d.saleBonus)} · ${n(d.goalsWon)}` },
+    { label: "🔥 털기 / 털림 · ✂️ 줄 끊기 · 🤝 넘기기", value: (d) => `${n(d.loots)} / ${n(d.looted)} · ${n(d.cuts)} · ${n(d.passes)}` },
+    { label: "🏆 트로피 · 💣 떠넘김 / 펑", value: (d) => `${n(d.trophies)} · ${n(d.bombPasses)} / ${n(d.bombBooms)}` },
+  ],
   "crown-thief": [
     { label: "👑 왕관 쓴 시간 합 · 한 번 최장", value: (d) => `${n(d.crownSec)}초 · ${n(d.bestReignSec)}초` },
     { label: "🦹 뺏기 / 뺏김 / 바닥 줍기", value: (d) => `${n(d.steals)} / ${n(d.lost)} / ${n(d.pickups)}` },
