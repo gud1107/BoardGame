@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.184.0",
+    releaseDate: "2026-11-22",
+    title: "🥁 박자 난장판 타격 이펙트·키 설정",
+    changes: [
+      { game: "beat-mayhem", type: "FEAT", desc: "💥 칠 때마다 이펙트 — 친 줄에서 판정 색 빛기둥이 솟고 불꽃·고리가 튀어요, 25콤보마다 금색 물결 · ⚙️에서 화려하게/가볍게/끄기" },
+      { game: "beat-mayhem", type: "FEAT", desc: "⌨️ 키 설정 — ⚙️에서 줄 1~4와 장난 쏘기 키를 원하는 키로 바꿀 수 있어요 (겹치면 서로 바뀜, 이 기기에 저장)" },
+    ],
+  },
+  {
     version: "v1.183.0",
     releaseDate: "2026-11-21",
     title: "🏎️ 새 게임 장난감 방 레이스",

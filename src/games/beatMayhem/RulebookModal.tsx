@@ -91,6 +91,10 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
                   왼쪽부터 네 줄: <b>{LANE_KEYS.join(" · ")}</b> (또는 ← ↓ ↑ →)
                 </li>
                 <li><b>Space / Enter</b> — 게이지가 가득 찼을 때 장난 쏘기</li>
+                <li>
+                  ⚙️ <b>키 설정</b>에서 다섯 키(줄 1~4 · 장난)를 원하는 키로 바꿀 수 있어요. 이미 쓰는 키를 고르면 두 칸이 서로 바뀌고, 화살표 · Enter는 안 쓰면 예비 키로 그대로 통해요. 이 기기에 저장돼요.
+                </li>
+                <li>⚙️ <b>칠 때 이펙트</b>: 화려하게(빛기둥 + 불꽃 + 25콤보 물결) · 가볍게(빛기둥만) · 끄기</li>
               </ul>
             </section>
             <section>

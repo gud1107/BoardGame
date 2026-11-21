@@ -12,7 +12,6 @@ import {
   JUDGE_INFO,
   LANES,
   LANE_COLORS,
-  LANE_KEYS,
   PRANK_INFO,
   SEAT_COLORS,
   SEAT_SYMBOLS,
@@ -27,6 +26,7 @@ import {
   type Tally,
 } from "./data";
 import Highway2D from "./Highway2D";
+import { FX_LEVELS, type FxLevel } from "./hitFx";
 import type { SnapBuffer, Snap } from "./net";
 import RulebookModal from "./RulebookModal";
 import type { GameEvent, PlayerInput } from "./sim";
@@ -66,9 +66,35 @@ interface Prefs {
   speed: SpeedId;
   /** 판정 보정 (ms): + 면 노트가 소리보다 늦게 온다 */
   offset: number;
+  /** 칠 때 이펙트 세기 */
+  fx: FxLevel;
+  /** 내 키 (KeyboardEvent.code): 줄 1~4 + 장난 쏘기 */
+  keys: string[];
 }
 const PREF_KEY = "beat-mayhem:prefs";
-const DEFAULT_PREFS: Prefs = { mode: "3d", quality: "auto", speed: "normal", offset: 0 };
+/** 줄 1~4, 장난 쏘기 */
+const DEFAULT_KEYS = ["KeyD", "KeyF", "KeyJ", "KeyK", "Space"];
+const KEY_SLOTS = ["1번 줄", "2번 줄", "3번 줄", "4번 줄", "⚡ 장난"];
+const DEFAULT_PREFS: Prefs = { mode: "3d", quality: "auto", speed: "normal", offset: 0, fx: "full", keys: DEFAULT_KEYS };
+/** 키 설정에 쓸 수 없는 키 (취소·포커스 이동·시스템) */
+const UNBINDABLE = new Set(["Escape", "Tab", "MetaLeft", "MetaRight", "ContextMenu", "F5", "F11", "F12"]);
+
+function validKeys(v: unknown): string[] {
+  if (!Array.isArray(v) || v.length !== DEFAULT_KEYS.length) return DEFAULT_KEYS;
+  if (!v.every((k) => typeof k === "string" && k.length > 0 && k.length < 24 && !UNBINDABLE.has(k))) return DEFAULT_KEYS;
+  return new Set(v).size === v.length ? (v as string[]) : DEFAULT_KEYS;
+}
+
+const ARROW_LABEL: Record<string, string> = { ArrowLeft: "←", ArrowDown: "↓", ArrowUp: "↑", ArrowRight: "→" };
+const PUNCT_LABEL: Record<string, string> = { Semicolon: ";", Quote: "'", Comma: ",", Period: ".", Slash: "/", Backslash: "\\", BracketLeft: "[", BracketRight: "]", Minus: "-", Equal: "=", Backquote: "`" };
+const MOD_LABEL: Record<string, string> = { ShiftLeft: "왼Shift", ShiftRight: "오른Shift", ControlLeft: "왼Ctrl", ControlRight: "오른Ctrl", AltLeft: "왼Alt", AltRight: "오른Alt" };
+/** KeyboardEvent.code → 화면에 보일 짧은 글자 */
+function keyLabel(code: string): string {
+  if (code.startsWith("Key")) return code.slice(3);
+  if (code.startsWith("Digit")) return code.slice(5);
+  if (code.startsWith("Numpad")) return `넘패드${code.slice(6)}`;
+  return ARROW_LABEL[code] ?? PUNCT_LABEL[code] ?? MOD_LABEL[code] ?? code;
+}
 
 function loadPrefs(): Prefs {
   try {
@@ -78,6 +104,8 @@ function loadPrefs(): Prefs {
       quality: v.quality === "high" || v.quality === "low" ? v.quality : "auto",
       speed: SPEEDS.some((s) => s.id === v.speed) ? v.speed : "normal",
       offset: Number.isFinite(v.offset) ? Math.max(-200, Math.min(200, Math.round(v.offset))) : 0,
+      fx: v.fx === "lite" || v.fx === "off" ? v.fx : "full",
+      keys: validKeys(v.keys),
     };
   } catch {
     return DEFAULT_PREFS;
@@ -101,8 +129,9 @@ function webglOk(): boolean {
   }
 }
 
-const KEY_LANE: Record<string, number> = { KeyD: 0, KeyF: 1, KeyJ: 2, KeyK: 3, ArrowLeft: 0, ArrowDown: 1, ArrowUp: 2, ArrowRight: 3 };
-const PRANK_KEYS = ["Space", "Enter"];
+/** 내 키에 안 쓴 경우에만 통하는 예비 키 */
+const SPARE_LANE: Record<string, number> = { ArrowLeft: 0, ArrowDown: 1, ArrowUp: 2, ArrowRight: 3 };
+const SPARE_PRANK = "Enter";
 
 /** 이 기기에서 치고 있는 한 곡의 기록 */
 interface LocalPlay {
@@ -145,6 +174,8 @@ export default function BeatMayhemBoard({ snap, buf, fresh, mySeat, names, onInp
   const [lowFps, setLowFps] = useState(false);
   const [rulebook, setRulebook] = useState(false);
   const [settings, setSettings] = useState(false);
+  /** 키 설정 중인 칸 (0~3 줄, 4 장난) */
+  const [binding, setBinding] = useState<number | null>(null);
   const [flash, setFlash] = useState<JudgeFlash | null>(null);
   const [feed, setFeed] = useState<Feed[]>([]);
   const [mine, setMine] = useState<Tally | null>(null);
@@ -189,6 +220,7 @@ export default function BeatMayhemBoard({ snap, buf, fresh, mySeat, names, onInp
     dancers: [],
     over: false,
     winnerSeats: [],
+    fx: "full",
   });
 
   const pushFeed = useCallback((text: ReactNode) => {
@@ -243,9 +275,10 @@ export default function BeatMayhemBoard({ snap, buf, fresh, mySeat, names, onInp
     sh.time = songTime;
     sh.laneOf = laneOf;
     sh.lookahead = SPEEDS.find((s) => s.id === prefs.speed)?.ms ?? 1550;
+    sh.fx = prefs.fx;
     sh.over = snap.phase === "gameOver";
     sh.winnerSeats = snap.ranks ? snap.players.filter((p) => snap.ranks![p.seat] === 1).map((p) => p.seat) : [];
-  }, [songTime, laneOf, prefs.speed, snap.phase, snap.ranks, snap.players]);
+  }, [songTime, laneOf, prefs.speed, prefs.fx, snap.phase, snap.ranks, snap.players]);
 
   const report = useCallback((force = false) => {
     const lp = play.current;
@@ -271,7 +304,7 @@ export default function BeatMayhemBoard({ snap, buf, fresh, mySeat, names, onInp
         s.play(before >= 10 ? "comboBreak" : "miss");
       } else {
         s.play("hit", JUDGES.indexOf(judge));
-        shared.current.bursts.push({ lane, judge, at: performance.now() });
+        shared.current.bursts.push({ lane, judge, at: performance.now(), combo: lp.tally.combo });
       }
       setFlash({ id: ++seq.current, judge, combo: lp.tally.combo, delta });
     },
@@ -375,17 +408,45 @@ export default function BeatMayhemBoard({ snap, buf, fresh, mySeat, names, onInp
     return () => window.clearInterval(id);
   }, [playing]);
 
-  // 키보드
+  // 키 설정: 칸을 누른 뒤 아무 키나 누르면 그 키로 바뀐다 (이미 다른 칸에 쓰던 키면 서로 맞바꿈, Esc = 취소)
+  useEffect(() => {
+    if (binding === null) return;
+    const grab = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (e.repeat) return;
+      if (e.code === "Escape" || !e.code) {
+        setBinding(null);
+        return;
+      }
+      if (UNBINDABLE.has(e.code)) return;
+      const p = live.current.prefs;
+      const keys = [...p.keys];
+      const other = keys.indexOf(e.code);
+      if (other >= 0 && other !== binding) keys[other] = keys[binding];
+      keys[binding] = e.code;
+      const next = { ...p, keys };
+      setPrefs(next);
+      savePrefs(next);
+      sound().play("ui");
+      setBinding(null);
+    };
+    window.addEventListener("keydown", grab, true);
+    return () => window.removeEventListener("keydown", grab, true);
+  }, [binding, sound]);
+
+  // 키보드 (⚙️ 키 설정에서 바꾼 키, 안 쓴 화살표·Enter는 예비)
   useEffect(() => {
     if (ended) return;
     const down = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-      const lane = KEY_LANE[e.code];
+      const idx = live.current.prefs.keys.indexOf(e.code);
+      const lane = idx >= 0 && idx < LANES ? idx : idx < 0 ? SPARE_LANE[e.code] : undefined;
       if (lane !== undefined) {
         e.preventDefault();
         if (!e.repeat) pressLane(lane);
-      } else if (PRANK_KEYS.includes(e.code)) {
+      } else if (idx === LANES || (idx < 0 && e.code === SPARE_PRANK)) {
         e.preventDefault();
         if (!e.repeat) pressPrank();
       }
@@ -497,6 +558,11 @@ export default function BeatMayhemBoard({ snap, buf, fresh, mySeat, names, onInp
   const progress = song ? Math.max(0, Math.min(1, st / song.lengthMs)) : 0;
   const lastRound = snap.history[snap.history.length - 1];
   const uiClick = () => sound().play("ui");
+  const laneKeys = prefs.keys.slice(0, LANES).map(keyLabel);
+  const prankKey = keyLabel(prefs.keys[LANES]);
+  const isDefaultKeys = prefs.keys.every((k, i) => k === DEFAULT_KEYS[i]);
+  const spareArrows = !prefs.keys.some((k) => k in SPARE_LANE);
+  const laneKeyText = `${laneKeys.join(" · ")}${spareArrows ? " (또는 ← ↓ ↑ →)" : ""}`;
 
   // 전체화면
   const [full, setFull] = useState(false);
@@ -574,6 +640,43 @@ export default function BeatMayhemBoard({ snap, buf, fresh, mySeat, names, onInp
             <span className="break-keep text-white/50 light:text-slate-500">박자에 맞춰 쳤는데 계속 &quot;빠름&quot;이 뜨면 +, &quot;늦음&quot;이 뜨면 −. 블루투스 이어폰은 +100~200쯤.</span>
             {!canGl && <span className="text-amber-300">이 기기는 3D(WebGL)를 지원하지 않아 2D로 보여요</span>}
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+            칠 때 이펙트
+            {FX_LEVELS.map((f) => (
+              <button key={f.id} type="button" onClick={() => { uiClick(); updatePrefs({ ...prefs, fx: f.id }); }} className={`rounded-full border px-2.5 py-1 ${prefs.fx === f.id ? "border-fuchsia-400 bg-fuchsia-500/20 text-fuchsia-100 light:text-fuchsia-800" : "border-white/15 light:border-slate-300"}`}>
+                {f.name}
+              </button>
+            ))}
+          </div>
+          {!touch && (
+            <div className="flex flex-wrap items-center gap-2">
+              키 설정
+              {KEY_SLOTS.map((label, i) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={(e) => {
+                    // 포커스를 빼 둔다: 안 그러면 Space를 새 키로 고를 때 손을 떼는 순간 이 버튼이 다시 눌린다
+                    e.currentTarget.blur();
+                    uiClick();
+                    setBinding(binding === i ? null : i);
+                  }}
+                  aria-label={`${label} 키 바꾸기 (지금 ${keyLabel(prefs.keys[i])})`}
+                  className={`flex items-center gap-1 rounded-full border px-2.5 py-1 ${binding === i ? "animate-pulse border-amber-300 bg-amber-400/20 text-amber-100 light:text-amber-800" : "border-white/15 light:border-slate-300"}`}
+                  style={i < LANES ? { borderLeftColor: LANE_COLORS[i], borderLeftWidth: 4 } : undefined}
+                >
+                  <span className="text-white/50 light:text-slate-500">{label}</span>
+                  <b className="min-w-[1.2rem] text-center text-white light:text-slate-900">{binding === i ? "…" : keyLabel(prefs.keys[i])}</b>
+                </button>
+              ))}
+              {!isDefaultKeys && (
+                <button type="button" onClick={() => { uiClick(); setBinding(null); updatePrefs({ ...prefs, keys: DEFAULT_KEYS }); }} className="rounded-full border border-white/15 px-2.5 py-1 light:border-slate-300">
+                  ↺ 기본(D F J K · Space)
+                </button>
+              )}
+              <span className="break-keep text-white/50 light:text-slate-500">{binding !== null ? `${KEY_SLOTS[binding]}에 쓸 키를 누르세요 (Esc 취소 · 이미 쓰는 키면 서로 바뀜)` : "칸을 누른 뒤 원하는 키를 누르세요. 안 쓴 화살표 · Enter는 예비 키로 통해요."}</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -633,11 +736,11 @@ export default function BeatMayhemBoard({ snap, buf, fresh, mySeat, names, onInp
               {Math.min(3, countLeft)}
             </span>
             <span className="mt-1 max-w-sm rounded-2xl bg-black/55 px-3 py-1.5 text-center text-xs leading-relaxed text-white">
-              {touch ? "노트가 흰 선에 닿을 때 아래 네 칸을 톡!" : "노트가 흰 선에 닿을 때 D · F · J · K (또는 ← ↓ ↑ →)"}
+              {touch ? "노트가 흰 선에 닿을 때 아래 네 칸을 톡!" : `노트가 흰 선에 닿을 때 ${laneKeyText}`}
               {snap.options.mayhem && (
                 <>
                   <br />
-                  게이지가 차면 {touch ? "⚡ 버튼" : "Space"}으로 바로 위 등수에게 장난 · {SHIELD_COST} 이상 남겨 두면 🛡 자동 방어
+                  게이지가 차면 {touch ? "⚡ 버튼" : prankKey}(으)로 바로 위 등수에게 장난 · {SHIELD_COST} 이상 남겨 두면 🛡 자동 방어
                 </>
               )}
             </span>
@@ -683,7 +786,7 @@ export default function BeatMayhemBoard({ snap, buf, fresh, mySeat, names, onInp
                   <span className={`block h-full ${gaugeFull ? "animate-pulse bg-amber-300" : "bg-sky-400"}`} style={{ width: `${myGauge}%` }} />
                   <span className="absolute inset-y-0 w-px bg-white/70" style={{ left: `${SHIELD_COST}%` }} aria-hidden />
                 </span>
-                <span>{gaugeFull ? (touch ? "⚡ 버튼!" : "Space!") : myGauge >= SHIELD_COST ? "🛡 방어 가능" : `${Math.round(myGauge)}%`}</span>
+                <span>{gaugeFull ? (touch ? "⚡ 버튼!" : `${prankKey}!`) : myGauge >= SHIELD_COST ? "🛡 방어 가능" : `${Math.round(myGauge)}%`}</span>
               </span>
             )}
           </div>
@@ -746,7 +849,7 @@ export default function BeatMayhemBoard({ snap, buf, fresh, mySeat, names, onInp
                 className={`absolute right-2 z-30 flex h-14 w-14 touch-none flex-col items-center justify-center rounded-full border-2 text-white shadow-lg select-none ${touch ? "bottom-[27%]" : "bottom-16"} ${gaugeFull ? "animate-pulse border-amber-200 bg-amber-500" : "border-white/25 bg-black/40 text-white/40"}`}
               >
                 <span className="text-xl leading-none">⚡</span>
-                <span className="text-[9px] leading-none">{touch ? "장난" : "Space"}</span>
+                <span className="max-w-[3.2rem] truncate text-[9px] leading-none">{touch ? "장난" : prankKey}</span>
               </button>
             )}
             <div className={`absolute inset-x-0 bottom-0 z-20 mx-auto flex max-w-xl ${touch ? "h-[24%]" : "h-12 pointer-events-none"}`}>
@@ -764,7 +867,7 @@ export default function BeatMayhemBoard({ snap, buf, fresh, mySeat, names, onInp
                   className={`flex flex-1 touch-none items-end justify-center border-t-4 pb-2 text-sm font-black text-white select-none ${touch ? "bg-white/[0.06] active:bg-white/25" : ""}`}
                   style={{ borderColor: LANE_COLORS[l] }}
                 >
-                  <span className="rounded bg-black/50 px-1.5">{touch ? l + 1 : LANE_KEYS[l]}</span>
+                  <span className="rounded bg-black/50 px-1.5">{touch ? l + 1 : laneKeys[l]}</span>
                 </button>
               ))}
             </div>
@@ -774,7 +877,7 @@ export default function BeatMayhemBoard({ snap, buf, fresh, mySeat, names, onInp
 
       {!touch && snap.phase !== "gameOver" && (
         <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/50 light:border-slate-200 light:bg-white light:text-slate-500">
-          <b>D F J K</b> (또는 ← ↓ ↑ →) — 노트가 흰 판정선에 닿을 때 누르기{snap.options.mayhem && <> · <b>Space</b> — 게이지가 가득 찼을 때 장난 쏘기</>} · 소리가 꺼져 있으면 위쪽 🔇을 눌러 켜세요 (꺼도 플레이할 수 있어요)
+          <b>{laneKeys.join(" ")}</b>{spareArrows && " (또는 ← ↓ ↑ →)"} — 노트가 흰 판정선에 닿을 때 누르기{snap.options.mayhem && <> · <b>{prankKey}</b> — 게이지가 가득 찼을 때 장난 쏘기</>} · 키는 ⚙️에서 바꿀 수 있어요 · 소리가 꺼져 있으면 위쪽 🔇을 눌러 켜세요 (꺼도 플레이할 수 있어요)
         </div>
       )}
 

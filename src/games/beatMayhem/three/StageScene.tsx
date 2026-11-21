@@ -7,8 +7,9 @@ import { resolveLook, type PersonLook } from "@/games/shared/three/SeatedPerson"
 import { roomCharacterOf, useRoomCharacters } from "@/lib/character/roomCharacters";
 import { AdaptiveResolution } from "@/games/shared/three/sceneFx";
 import VrmBody, { setBone, BODY, BODY_DROP } from "@/games/shared/three/VrmBody";
-import { GOOD_MS, JUDGE_INFO, LANES, LANE_COLORS, SEAT_COLORS, type Judge, type PrankKind, type StyleId } from "../data";
+import { GOOD_MS, JUDGE_INFO, LANES, LANE_COLORS, SEAT_COLORS, type PrankKind, type StyleId } from "../data";
 import type { Song } from "../song";
+import { BEAM_MS, FX_LIFE_MS, MAX_SPARKS, RING_MS, WAVE_MS, latestPerLane, latestWave, spark, sparkCount, type Burst, type FxLevel } from "../hitFx";
 
 /**
  * 박자 난장판 3D 무대 (룰북 §10): 멀리서 달려오는 노트 하이웨이(4줄) + 판정선 + 박자에 맞춰
@@ -31,7 +32,9 @@ export interface StageShared {
   /** 줄별 마지막으로 누른 시각 (performance.now) */
   pressAt: number[];
   /** 최근 판정 효과 */
-  bursts: { lane: number; judge: Judge; at: number }[];
+  bursts: Burst[];
+  /** 타격 이펙트 세기 */
+  fx: FxLevel;
   /** 자리별 춤 상태 */
   dancers: { seat: number; combo: number; pranked: boolean; lead: boolean; missAt: number }[];
   over: boolean;
@@ -156,35 +159,117 @@ function trackFrame(g: THREE.Group | null, fog: THREE.Mesh | null, sway: THREE.G
   }
 }
 
-function burstsFrame(g: THREE.Group | null, sh: StageShared, now: number) {
-  if (!g) return;
-  sh.bursts = sh.bursts.filter((b) => now - b.at < 380).slice(-g.children.length);
-  g.children.forEach((c, i) => {
-    const b = sh.bursts[i];
+const MAX_BURSTS = 12;
+const judgeColors = Object.fromEntries(Object.entries(JUDGE_INFO).map(([k, v]) => [k, new THREE.Color(v.color)])) as Record<keyof typeof JUDGE_INFO, THREE.Color>;
+
+interface FxRefs {
+  rings: THREE.Group | null;
+  beams: THREE.Group | null;
+  sparks: THREE.InstancedMesh | null;
+  wave: THREE.Mesh | null;
+  line: THREE.Mesh | null;
+}
+
+/** 칠 때마다: 판정 고리 + 줄 빛기둥 + 불꽃 + 판정선 번쩍 + 콤보 물결 */
+function burstsFrame(f: FxRefs, sh: StageShared, now: number) {
+  sh.bursts = sh.bursts.filter((b) => now - b.at < WAVE_MS).slice(-MAX_BURSTS);
+  const fx = sh.fx;
+  // 판정 고리 (가장 최근 8개)
+  const ringList = sh.bursts.filter((b) => now - b.at < RING_MS).slice(-8);
+  f.rings?.children.forEach((c, i) => {
+    const b = ringList[i];
     const mesh = c as THREE.Mesh;
     if (!b) {
       mesh.visible = false;
       return;
     }
-    const k = (now - b.at) / 380;
+    const k = (now - b.at) / RING_MS;
     mesh.visible = true;
     mesh.position.set(laneX(b.lane), 0.3 + k * 0.5, HIT_Z);
-    mesh.scale.setScalar(0.5 + k * 1.6);
+    mesh.scale.setScalar((0.5 + k * 1.6) * (b.judge === "perfect" && fx === "full" ? 1.25 : 1));
     const mat = mesh.material as THREE.MeshBasicMaterial;
-    mat.color.set(JUDGE_INFO[b.judge].color);
+    mat.color.copy(judgeColors[b.judge]);
     mat.opacity = 0.9 * (1 - k);
   });
+  // 줄 빛기둥
+  const per = latestPerLane(sh.bursts, LANES);
+  f.beams?.children.forEach((c, l) => {
+    const b = per[l];
+    const mesh = c as THREE.Mesh;
+    const k = b ? (now - b.at) / BEAM_MS : 1;
+    if (fx === "off" || !b || k >= 1) {
+      mesh.visible = false;
+      return;
+    }
+    const tall = b.judge === "perfect" ? 1 : b.judge === "great" ? 0.75 : 0.5;
+    mesh.visible = true;
+    mesh.scale.set(1 - k * 0.5, tall * (0.6 + k * 0.6), 1);
+    mesh.position.set(laneX(l), (3.2 * tall * (0.6 + k * 0.6)) / 2, HIT_Z);
+    const mat = mesh.material as THREE.MeshBasicMaterial;
+    mat.color.copy(judgeColors[b.judge]);
+    mat.opacity = 0.55 * (1 - k) * (fx === "lite" ? 0.6 : 1);
+  });
+  // 불꽃 (화려하게만)
+  const sp = f.sparks;
+  if (sp) {
+    let n = 0;
+    if (fx === "full") {
+      for (const b of sh.bursts) {
+        const k = (now - b.at) / FX_LIFE_MS;
+        if (k >= 1) continue;
+        const cnt = sparkCount(b.judge);
+        for (let i = 0; i < cnt && n < MAX_BURSTS * MAX_SPARKS; i++) {
+          const p = spark(b, i, k);
+          pos.set(laneX(b.lane) + p.x * LANE_W, 0.25 + p.y * 1.4, HIT_Z + 0.05 - p.s * 0.1);
+          const s = 0.06 + p.s * 0.1;
+          scl.set(s, s, s);
+          m4.compose(pos, q0, scl);
+          sp.setMatrixAt(n, m4);
+          col.copy(judgeColors[b.judge]).lerp(WHITE, 0.35 * (1 - k));
+          sp.setColorAt(n, col);
+          n++;
+        }
+      }
+    }
+    sp.count = n;
+    sp.instanceMatrix.needsUpdate = true;
+    if (sp.instanceColor) sp.instanceColor.needsUpdate = true;
+  }
+  // 판정선 번쩍
+  if (f.line) {
+    const last = sh.bursts[sh.bursts.length - 1];
+    const k = last && fx !== "off" ? Math.max(0, 1 - (now - last.at) / 180) : 0;
+    f.line.scale.set(1, 1 + k * 2.5, 1);
+    (f.line.material as THREE.MeshBasicMaterial).color.copy(WHITE).lerp(last ? judgeColors[last.judge] : WHITE, k * 0.6);
+  }
+  // 콤보 물결 (25 콤보마다)
+  if (f.wave) {
+    const w = fx === "off" ? null : latestWave(sh.bursts, now);
+    if (!w) f.wave.visible = false;
+    else {
+      const k = (now - w.at) / WAVE_MS;
+      f.wave.visible = true;
+      f.wave.scale.setScalar(1 + k * 9);
+      (f.wave.material as THREE.MeshBasicMaterial).opacity = 0.8 * (1 - k);
+    }
+  }
 }
+
+const WHITE = new THREE.Color("#ffffff");
 
 function Highway({ shared, theme }: { shared: MutableRefObject<StageShared>; theme: (typeof THEME)[StyleId] }) {
   const parts = useRef<THREE.Group>(null);
   const fog = useRef<THREE.Mesh>(null);
   const sway = useRef<THREE.Group>(null);
-  const bursts = useRef<THREE.Group>(null);
+  const rings = useRef<THREE.Group>(null);
+  const beams = useRef<THREE.Group>(null);
+  const sparks = useRef<THREE.InstancedMesh>(null);
+  const wave = useRef<THREE.Mesh>(null);
+  const line = useRef<THREE.Mesh>(null);
   useFrame(() => {
     const now = performance.now();
     trackFrame(parts.current, fog.current, sway.current, shared.current, now);
-    burstsFrame(bursts.current, shared.current, now);
+    burstsFrame({ rings: rings.current, beams: beams.current, sparks: sparks.current, wave: wave.current, line: line.current }, shared.current, now);
   });
   const w = LANES * LANE_W;
   return (
@@ -202,7 +287,7 @@ function Highway({ shared, theme }: { shared: MutableRefObject<StageShared>; the
         </mesh>
       ))}
       {/* 판정선 */}
-      <mesh position={[0, 0.02, HIT_Z]} rotation-x={-Math.PI / 2}>
+      <mesh ref={line} position={[0, 0.02, HIT_Z]} rotation-x={-Math.PI / 2}>
         <planeGeometry args={[w, 0.16]} />
         <meshBasicMaterial color="#ffffff" />
       </mesh>
@@ -226,7 +311,7 @@ function Highway({ shared, theme }: { shared: MutableRefObject<StageShared>; the
         <boxGeometry args={[w + 1.2, 1.8, LEN * 0.7]} />
         <meshBasicMaterial color="#cbd5e1" transparent opacity={0.9} depthWrite={false} />
       </mesh>
-      <group ref={bursts}>
+      <group ref={rings}>
         {Array.from({ length: 8 }, (_, i) => (
           <mesh key={i} rotation-x={-Math.PI / 2.4} visible={false}>
             <ringGeometry args={[0.32, 0.46, 24]} />
@@ -234,6 +319,25 @@ function Highway({ shared, theme }: { shared: MutableRefObject<StageShared>; the
           </mesh>
         ))}
       </group>
+      {/* 줄 빛기둥: 친 줄에서 위로 솟는 빛 */}
+      <group ref={beams}>
+        {Array.from({ length: LANES }, (_, l) => (
+          <mesh key={l} visible={false}>
+            <boxGeometry args={[LANE_W * 0.8, 3.2, 0.08]} />
+            <meshBasicMaterial transparent opacity={0.5} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+          </mesh>
+        ))}
+      </group>
+      {/* 불꽃 */}
+      <instancedMesh ref={sparks} args={[undefined, undefined, MAX_BURSTS * MAX_SPARKS]} frustumCulled={false}>
+        <octahedronGeometry args={[1, 0]} />
+        <meshBasicMaterial transparent opacity={0.95} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+      </instancedMesh>
+      {/* 콤보 물결 */}
+      <mesh ref={wave} position={[0, 0.03, HIT_Z]} rotation-x={-Math.PI / 2} visible={false}>
+        <ringGeometry args={[0.42, 0.5, 48]} />
+        <meshBasicMaterial color="#fde047" transparent opacity={0.8} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} side={THREE.DoubleSide} />
+      </mesh>
     </group>
   );
 }
