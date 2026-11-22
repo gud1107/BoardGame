@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.194.0",
+    releaseDate: "2026-11-22",
+    title: "⚡ 새 게임 번개 짝꿍",
+    changes: [
+      { game: "lightning-pair", type: "FEAT", desc: "⚡ 새 게임 — 어떤 두 카드든 같은 그림이 딱 하나! 먼저 찾아 누르는 2~8인 실시간 짝 찾기 · AI 봇 Lv.1~10" },
+      { game: "lightning-pair", type: "FEAT", desc: "⚡ 쟁탈전(가운데 카드 모으기, ⚡ 번개 카드 2점) · 🎯 떨이전(내 카드 먼저 다 버리기) · 틀리면 ❄️ 얼음" },
+      { game: "lightning-pair", type: "FEAT", desc: "반응 시간은 내 기기에서 재고 방장이 0.4초 모아서 판정 · 💡 9초 힌트 · 기록·업적 6종" },
+    ],
+  },
+  {
     version: "v1.193.0",
     releaseDate: "2026-11-22",
     title: "🗡️ 새 게임 정오의 발도",

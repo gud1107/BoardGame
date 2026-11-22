@@ -411,6 +411,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "lightning-pair",
+    name: "번개 짝꿍",
+    nameEn: "Lightning Pair",
+    description:
+      "동그란 카드 57장, 한 장에 그림 8개 — 어떤 두 카드를 골라도 똑같은 그림이 딱 하나! 내 카드와 가운데 카드에 같이 있는 그림을 남보다 먼저 찾아 누르세요. 틀리면 ❄️ 1.2초 얼음. ⚡ 쟁탈전(가운데 카드를 가져와 가장 많이 모으기, 6장마다 ⚡ 번개 카드 2점)과 🎯 떨이전(내 카드를 먼저 다 버리기). 반응 시간은 내 기기에서 재서 핑 차이가 적어요. 2~8인 실시간 · AI 봇 Lv.1~10.",
+    players: { min: 2, max: 8 },
+    playTime: { minMinutes: 1, maxMinutes: 2 },
+    category: "party",
+    thumbnail: { emoji: "⚡", gradient: ["#facc15", "#1d4ed8"] },
+    tags: ["눈썰미", "순발력", "짝 찾기", "카드", "실시간", "파티", "가족", "AI봇"],
+    genres: ["party", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "crumble-climb",
     name: "무너지는 탑 오르기",
     nameEn: "Crumbling Tower Climb",

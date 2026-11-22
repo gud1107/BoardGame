@@ -196,6 +196,11 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "스침", key: "grazes", unit: "번" },
     { label: "최고 점수", key: "maxScore", unit: "점" },
   ],
+  "lightning-pair": [
+    { label: "찾은 짝", key: "claims", unit: "번" },
+    { label: "최고 연속", key: "maxStreak", unit: "번" },
+    { label: "틀림", key: "wrong", unit: "번" },
+  ],
   "noon-draw": [
     { label: "최고 반응", key: "minRt", unit: "ms" },
     { label: "이긴 합", key: "boutWins", unit: "번" },
@@ -495,6 +500,10 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
   "cloud-squadron": [
     { id: "cs-clears", label: "🏁 원정 성공", num: "clears", format: "count", unit: "번" },
     { id: "cs-kills", label: "💥 격추", num: "kills", format: "count", unit: "대" },
+  ],
+  "lightning-pair": [
+    { id: "lp-min", label: "⚡ 가장 빠른 짝", num: "minRt", asc: true, format: "count", unit: "ms" },
+    { id: "lp-claims", label: "🃏 찾은 짝", num: "claims", format: "count", unit: "번" },
   ],
   "noon-draw": [
     { id: "nd-min", label: "⚡ 최고 반응", num: "minRt", asc: true, format: "count", unit: "ms" },

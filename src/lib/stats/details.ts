@@ -197,6 +197,12 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "✨ 스침 · ★ 궁극기 (합동) · ⚡ 스킬", value: (d) => `${n(d.grazes)} · ${n(d.ults)} (${n(d.combos)}) · ${n(d.skills)}` },
     { label: "🛡 무피격 원정 성공 · 🎁 아이템", value: (d) => `${n(d.noHitClears)} · ${n(d.items)}` },
   ],
+  "lightning-pair": [
+    { label: "⚡ 가장 빠른 짝 · 평균", value: (d) => `${d.minRt !== undefined ? `${(d.minRt / 1000).toFixed(2)}초` : "-"} · ${d.claims ? `${((d.rtSum ?? 0) / d.claims / 1000).toFixed(2)}초` : "-"}` },
+    { label: "🃏 찾은 짝 · ✨ 1초 안 · 🌟 번개 카드", value: (d) => `${n(d.claims)} · ${n(d.swift)} · ${n(d.goldens)}` },
+    { label: "❄️ 틀림 · 😣 아깝게 늦음 · 🔥 최고 연속", value: (d) => `${n(d.wrong)} · ${n(d.close)} · ${n(d.maxStreak)}` },
+    { label: "🏆 우승 (⚡ 쟁탈전 · 🎯 떨이전)", value: (d) => `${n(d.wins)} (${n(d.grabWins)} · ${n(d.dumpWins)})` },
+  ],
   "noon-draw": [
     { label: "⚡ 최고 반응 · 평균", value: (d) => `${d.minRt !== undefined ? `${n(d.minRt)}ms` : "-"} · ${d.valid ? `${Math.round((d.rtSum ?? 0) / d.valid)}ms` : "-"}` },
     { label: "🗡️ 이긴 합 / 합 · ✨ 200ms 미만", value: (d) => `${n(d.boutWins)} / ${n(d.bouts)} · ${n(d.swift)}` },

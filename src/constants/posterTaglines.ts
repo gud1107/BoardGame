@@ -29,6 +29,7 @@ export const POSTER_TAGLINES: Partial<Record<GameId, string>> = {
   "thin-ice-party": "오래 서 있으면 쩍— 첨벙!",
   "crumble-climb": "아래가 무너진다, 위로 뛰어라!",
   "noon-draw": "먼저 뽑는 자가, 살아남는다",
+  "lightning-pair": "딱 하나 같은 그림, 먼저 본 사람이 임자!",
   "cloud-squadron": "탄막 사이로, 편대는 함께 난다",
   "mannequin-mall": "눈을 돌리는 순간, 그것은 한 걸음 다가온다",
   "possession-night": "혼자 남지 마라 — 그것은 겁먹은 자에게 씐다",
