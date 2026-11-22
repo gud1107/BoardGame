@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.189.0",
+    releaseDate: "2026-11-22",
+    title: "🗂️ 보드게임허브 섹션 정리 + 큰 글씨 + 검색창 위로",
+    changes: [
+      { game: "common", type: "FEAT", desc: "🗂️ 보드게임허브를 🔥 인기·데스게임·장르별 섹션으로 나눴어요 — 섹션마다 두 줄만 보이고 \"모두 보기\"로 펼쳐요" },
+      { game: "common", type: "IMPROVE", desc: "🔤 카드 글씨가 커지고 진해졌어요(장르·인원·시간·플레이 수) · 태블릿은 한 줄에 3~4장으로 시원하게" },
+      { game: "common", type: "IMPROVE", desc: "🔍 검색창을 맨 아래에서 맨 위로 · / 키로 바로 검색 · 검색·필터 초기화 버튼" },
+    ],
+  },
+  {
     version: "v1.188.0",
     releaseDate: "2026-11-22",
     title: "👻 새 게임 빙의의 밤",

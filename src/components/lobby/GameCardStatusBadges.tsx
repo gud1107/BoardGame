@@ -6,7 +6,7 @@ export function FreshnessBadge({ badge }: { badge: GameFreshnessBadge | null }) 
   const isNew = badge === "NEW";
   return (
     <span
-      className={`absolute top-2 right-2 rounded-full px-2 py-0.5 text-[10px] font-extrabold tracking-wider shadow-sm ${
+      className={`absolute top-2 right-2 rounded-full px-2 py-0.5 text-[11px] font-extrabold tracking-wider shadow-sm ${
         isNew
           ? "bg-gradient-to-r from-rose-500 to-orange-400 text-white"
           : "bg-gradient-to-r from-sky-500 to-cyan-400 text-white"

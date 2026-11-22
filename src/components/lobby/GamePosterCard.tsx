@@ -88,7 +88,7 @@ export default function GamePosterCard({
           src={poster}
           alt={`${game.name} 실제 게임 화면`}
           fill
-          sizes={compact ? "240px" : "(min-width: 640px) 280px, 50vw"}
+          sizes={compact ? "240px" : "(min-width: 768px) 280px, 50vw"}
           className="scale-[1.2] object-cover object-center brightness-[1.08] contrast-[1.12] saturate-[1.4] transition-transform duration-[1800ms] ease-out group-hover/poster:scale-[1.32]"
         />
       ) : (
@@ -113,7 +113,7 @@ export default function GamePosterCard({
         style={{ background: `linear-gradient(155deg, ${colorA} 0%, transparent 45%, ${colorB} 100%)` }}
       />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-1/4 bg-gradient-to-b from-black/70 to-transparent" />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[58%] bg-gradient-to-t from-black via-black/75 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[64%] bg-gradient-to-t from-black via-black/80 to-transparent" />
       {/* Bottom glow strip in the game's color. */}
       <div
         className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 opacity-50 mix-blend-screen"
@@ -126,26 +126,26 @@ export default function GamePosterCard({
       <div className="absolute top-2 right-14 left-2">
         <div className="flex min-w-0 flex-wrap gap-1">
           {collection && (
-            <span className="rounded-full bg-red-600/90 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">
+            <span className="rounded-full bg-red-600/90 px-2 py-0.5 text-[11px] font-bold text-white shadow-sm">
               {collection.emoji} 데스게임
             </span>
           )}
           {isFeatured(game) && (
-            <span className="rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 px-1.5 py-0.5 text-[9px] font-extrabold text-black shadow-sm">
+            <span className="rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 px-2 py-0.5 text-[11px] font-extrabold text-black shadow-sm">
               ⭐ 추천
             </span>
           )}
           {genres.map((genre, i) => (
             <span
               key={genre}
-              className={`rounded-full border px-1.5 py-px text-[9px] font-bold text-white/90 backdrop-blur-sm ${i > 0 || collection ? "hidden sm:inline" : ""}`}
+              className={`rounded-full border px-2 py-0.5 text-[11px] font-bold text-white backdrop-blur-sm ${i > 0 || collection ? "hidden sm:inline" : ""}`}
               style={{ borderColor: `${GENRE_META[genre].accent}88`, backgroundColor: `${GENRE_META[genre].accent}40` }}
             >
               {GENRE_META[genre].emoji} {GENRE_META[genre].label}
             </span>
           ))}
           {liveRoomCount > 0 && (
-            <span className="flex items-center gap-1 rounded-full bg-emerald-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">
+            <span className="flex items-center gap-1 rounded-full bg-emerald-500/90 px-2 py-0.5 text-[11px] font-bold text-white shadow-sm">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
               {liveRoomCount}개 방
             </span>
@@ -155,7 +155,7 @@ export default function GamePosterCard({
       {game.playable ? (
         <FreshnessBadge badge={badge} />
       ) : (
-        <span className="absolute top-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/80 backdrop-blur">
+        <span className="absolute top-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white/90 backdrop-blur">
           준비중
         </span>
       )}
@@ -172,24 +172,24 @@ export default function GamePosterCard({
         >
           {game.name}
         </h3>
-        <p className={`line-clamp-2 font-semibold leading-snug break-keep text-white/85 ${compact ? "text-[11px]" : "text-[11px] sm:text-[13px]"}`}>
+        <p className={`font-semibold leading-snug break-keep text-white/90 ${compact ? "line-clamp-2 text-[13px]" : "line-clamp-1 text-xs sm:line-clamp-2 sm:text-sm"}`}>
           {getPosterTagline(game)}
         </p>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-medium text-white/70">
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-semibold text-white/85">
           <span>👥 {formatPlayers(game)}</span>
           <span>⏱ {formatTime(game)}</span>
           {difficulty && (
             <span className="text-amber-300" title={`체감 난이도 ${difficulty}/5`}>
               {"★".repeat(difficulty)}
-              <span className="text-white/25">{"★".repeat(5 - difficulty)}</span>
+              <span className="text-white/30">{"★".repeat(5 - difficulty)}</span>
             </span>
           )}
         </div>
-        <PlayCountLabel plays={plays} now={now} className="text-[10px] font-bold text-orange-300! light:text-orange-300!" />
+        <PlayCountLabel plays={plays} now={now} className="text-[11px] font-bold text-orange-300! sm:text-xs light:text-orange-300!" />
         {adminLine}
         {game.playable && (
           <span
-            className="mt-1 hidden items-center justify-center gap-1 rounded-full py-1.5 text-[11px] font-extrabold text-white shadow-[0_4px_14px_-4px_var(--poster-glow)] transition duration-300 sm:flex sm:translate-y-1 sm:opacity-0 sm:group-hover/poster:translate-y-0 sm:group-hover/poster:opacity-100 [@media(hover:none)]:translate-y-0 [@media(hover:none)]:opacity-100"
+            className="mt-1 hidden items-center justify-center gap-1 rounded-full py-1.5 text-xs font-extrabold text-white shadow-[0_4px_14px_-4px_var(--poster-glow)] transition duration-300 sm:flex sm:translate-y-1 sm:opacity-0 sm:group-hover/poster:translate-y-0 sm:group-hover/poster:opacity-100 [@media(hover:none)]:translate-y-0 [@media(hover:none)]:opacity-100"
             style={{ background: `linear-gradient(90deg, ${colorA}, ${colorB})` }}
           >
             ▶ 지금 플레이

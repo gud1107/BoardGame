@@ -54,10 +54,10 @@ export default function SortFilterChips({
             onClick={() => onChange(next)}
             aria-pressed={isActive}
             title={isActive ? "다시 누르면 반대 순서로 정렬" : undefined}
-            className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap transition-all duration-200 ${
+            className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
               isActive
                 ? "border-amber-400 bg-amber-500/20 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.2)] light:text-amber-700"
-                : "border-white/10 text-white/60 hover:border-amber-400/40 light:border-slate-200 light:text-slate-600 light:hover:border-amber-500/50"
+                : "border-white/10 text-white/70 hover:border-amber-400/40 light:border-slate-200 light:text-slate-600 light:hover:border-amber-500/50"
             }`}
           >
             {label}
@@ -76,7 +76,7 @@ export default function SortFilterChips({
                 onClick={() => onChange(next)}
                 aria-pressed={isActive}
                 title="관리자 전용 — 게임별 최신 커밋의 커밋/푸시/운영 배포 시각 기준 (다시 누르면 반대 순서)"
-                className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap transition-all duration-200 ${
+                className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
                   isActive
                     ? "border-violet-400 bg-violet-500/20 text-violet-200 light:text-violet-700"
                     : "border-violet-400/25 text-violet-300/70 hover:border-violet-400/60 light:border-violet-200 light:text-violet-600"

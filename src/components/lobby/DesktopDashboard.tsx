@@ -14,6 +14,8 @@ import SortFilterChips from "./SortFilterChips";
 import NewOnlyChip from "./NewOnlyChip";
 import ViewFilterChips from "./ViewFilterChips";
 import type { ViewFilter } from "@/games/viewModes";
+import LobbySections from "./LobbySections";
+import type { LobbySection } from "./buildLobbySections";
 
 /**
  * Desktop-only (xl+, ≥1280px) zero-scroll lobby dashboard — a single
@@ -58,6 +60,11 @@ import type { ViewFilter } from "@/games/viewModes";
  * scrollbar. Removing the search input from this row (rather than papering
  * over it with `shrink-0` everywhere) gives the row ~300px of slack back
  * and was needed anyway for the bottom-search relocation.
+ *
+ * 2026-11-22: search moved back to the top — onto the title row (its own
+ * row, right-aligned), not the filter row, so the overflow above can't
+ * recur. The grid became titled sections (`LobbySections`) while nothing is
+ * searched/filtered.
  */
 export default function DesktopDashboard({
   games,
@@ -78,6 +85,8 @@ export default function DesktopDashboard({
   rooms,
   adminSort = false,
   adminLine,
+  sections,
+  onResetFilters,
 }: {
   games: GameMeta[];
   totalCount: number;
@@ -101,6 +110,9 @@ export default function DesktopDashboard({
   adminSort?: boolean;
   /** Set while a 🛠 sort is active: per-card commit/push/deploy line. */
   adminLine?: (gameId: string) => React.ReactNode;
+  /** Browse view (no search/filter): render these sections instead of the flat grid. */
+  sections: LobbySection[] | null;
+  onResetFilters: () => void;
 }) {
 
   const liveCountByGame = useMemo(() => {
@@ -108,6 +120,30 @@ export default function DesktopDashboard({
     for (const r of rooms) map.set(r.gameId, (map.get(r.gameId) ?? 0) + 1);
     return map;
   }, [rooms]);
+
+  const renderCard = (game: GameMeta) =>
+    LOBBY_CARD_STYLE === "poster" ? (
+      <GamePosterCard
+        key={game.id}
+        game={game}
+        liveRoomCount={liveCountByGame.get(game.id) ?? 0}
+        badge={getGameFreshnessBadge(game.id, now)}
+        plays={monthPlays.get(game.id) ?? 0}
+        now={now}
+        adminLine={adminLine?.(game.id)}
+        compact
+      />
+    ) : (
+      <GameShowcaseCard
+        key={game.id}
+        game={game}
+        liveRoomCount={liveCountByGame.get(game.id) ?? 0}
+        badge={getGameFreshnessBadge(game.id, now)}
+        plays={monthPlays.get(game.id) ?? 0}
+        now={now}
+        adminLine={adminLine?.(game.id)}
+      />
+    );
 
   return (
     <div
@@ -117,16 +153,41 @@ export default function DesktopDashboard({
       {/* 은은한 배경 앰비언트 골드 오라 — 다크 럭셔리 리뉴얼(2026-09-12) */}
       <div className="pointer-events-none absolute top-0 left-1/2 h-32 w-3/4 -translate-x-1/2 bg-amber-500/5 blur-[120px]" />
       <main className="relative flex min-h-0 flex-1 flex-col rounded-2xl border border-white/[0.07] bg-neutral-900/50 p-4 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_24px_48px_-24px_rgba(0,0,0,0.7)] backdrop-blur-md light:border-slate-900/[0.07] light:bg-white/90 light:shadow-[0_24px_48px_-28px_rgba(15,23,42,0.25)]">
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] pb-3 light:border-slate-900/[0.07]">
-          <div className="flex items-baseline gap-3">
-            <span className="font-display text-lg font-bold tracking-[0.02em] text-amber-50 light:text-slate-900">
+        <div className="flex shrink-0 items-center justify-between gap-4">
+          <div className="flex min-w-0 items-baseline gap-3">
+            <span className="font-display text-xl font-bold tracking-[0.02em] text-amber-50 light:text-slate-900">
               게임 선택
             </span>
-            <span className="text-xs font-normal text-white/40 light:text-slate-500">
+            <span className="truncate text-[13px] font-normal text-white/60 light:text-slate-500">
               플레이할 보드게임을 골라 방을 여세요
             </span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="relative w-[26rem] max-w-[45%] shrink-0">
+            <span aria-hidden className="absolute top-1/2 left-3.5 -translate-y-1/2 text-sm text-white/50 light:text-slate-400">
+              🔍
+            </span>
+            <input
+              data-lobby-search
+              value={query}
+              onChange={(e) => onQueryChange(e.target.value)}
+              placeholder="게임 이름, 태그로 검색  ( / )"
+              aria-label="게임 검색"
+              className="h-10 w-full rounded-xl border border-amber-500/25 bg-neutral-950/40 pr-10 pl-10 text-sm text-white placeholder:text-white/40 focus:border-amber-400/70 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400 light:shadow-sm"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => onQueryChange("")}
+                aria-label="검색어 지우기"
+                className="absolute top-1/2 right-2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-white/50 transition hover:bg-white/10 hover:text-white light:text-slate-400 light:hover:bg-slate-100 light:hover:text-slate-700"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="mt-3 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] pb-3 light:border-slate-900/[0.07]">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
             {/* 인원수 필터 — 이 대시보드가 검색 인풋만 남기고 조용히 빠뜨렸던 걸
                 복원 (2026-09-12 후속). `PLAYER_FILTERS`/`filterIdx` 상태는
                 `page.tsx`에서 그대로 내려받아 모바일 레이아웃과 결과가 어긋나지
@@ -136,10 +197,10 @@ export default function DesktopDashboard({
                 <button
                   key={f.label}
                   onClick={() => onFilterChange(idx)}
-                  className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
+                  className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium transition ${
                     filterIdx === idx
                       ? "border-amber-400/70 bg-amber-500/20 text-white light:text-slate-900"
-                      : "border-white/10 text-white/60 hover:border-amber-400/40 light:border-slate-200 light:text-slate-600 light:hover:border-amber-500/50"
+                      : "border-white/10 text-white/70 hover:border-amber-400/40 light:border-slate-200 light:text-slate-600 light:hover:border-amber-500/50"
                   }`}
                 >
                   {f.label}
@@ -148,64 +209,36 @@ export default function DesktopDashboard({
               <NewOnlyChip value={newOnly} onChange={onNewOnlyChange} compact />
             </div>
             <ViewFilterChips value={viewFilter} onChange={onViewFilterChange} compact />
-            <span className="shrink-0 text-xs text-white/40 tabular-nums light:text-slate-500">
+            <span className="shrink-0 text-[13px] font-semibold text-white/60 tabular-nums light:text-slate-500">
               {totalCount === playableCount ? `${totalCount}종` : `${playableCount}/${totalCount}종`}
             </span>
             <SortFilterChips value={sortOption} onChange={onSortChange} admin={adminSort} className="shrink-0" />
           </div>
+          {!sections && (
+            <button
+              type="button"
+              onClick={onResetFilters}
+              className="shrink-0 rounded-full border border-white/15 px-3 py-1 text-xs font-semibold text-white/75 transition hover:border-amber-400/50 hover:text-white light:border-slate-300 light:text-slate-600"
+            >
+              ↺ 검색·필터 초기화
+            </button>
+          )}
         </div>
 
         <PublicRoomBrowser rooms={rooms} className="mt-3 shrink-0" />
 
         <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1 [scrollbar-width:thin]">
-          {games.length > 0 ? (
+          {sections ? (
+            <LobbySections sections={sections} layout="dashboard" renderCard={renderCard} />
+          ) : games.length > 0 ? (
             <div className={`grid grid-cols-4 gap-4 xl:grid-cols-5 ${LOBBY_CARD_STYLE === "poster" ? "2xl:grid-cols-6" : ""}`}>
-              {games.map((game) => (
-                LOBBY_CARD_STYLE === "poster" ? (
-                  <GamePosterCard
-                    key={game.id}
-                    game={game}
-                    liveRoomCount={liveCountByGame.get(game.id) ?? 0}
-                    badge={getGameFreshnessBadge(game.id, now)}
-                    plays={monthPlays.get(game.id) ?? 0}
-                    now={now}
-                    adminLine={adminLine?.(game.id)}
-                    compact
-                  />
-                ) : (
-                  <GameShowcaseCard
-                    key={game.id}
-                    game={game}
-                    liveRoomCount={liveCountByGame.get(game.id) ?? 0}
-                    badge={getGameFreshnessBadge(game.id, now)}
-                    plays={monthPlays.get(game.id) ?? 0}
-                    now={now}
-                    adminLine={adminLine?.(game.id)}
-                  />
-                )
-              ))}
+              {games.map(renderCard)}
             </div>
           ) : (
-            <p className="py-16 text-center text-xs text-white/40 light:text-slate-400">검색 결과가 없습니다.</p>
+            <p className="py-16 text-center text-[15px] text-white/60 light:text-slate-500">조건에 맞는 게임이 없습니다.</p>
           )}
         </div>
 
-        {/* 실시간 검색창 — 상단 헤더 복잡도를 줄이기 위해 그리드 바로 아래,
-            바닥 바로 직전에 배치 (2026-09-16). */}
-        <div className="mt-3 flex shrink-0 justify-center border-t border-white/[0.06] pt-3 light:border-slate-900/[0.07]">
-          <div className="relative w-full max-w-md">
-            <span className="absolute top-1/2 left-3 -translate-y-1/2 text-xs text-white/40 light:text-slate-400">
-              🔍
-            </span>
-            <input
-              value={query}
-              onChange={(e) => onQueryChange(e.target.value)}
-              placeholder="게임 이름, 태그로 검색..."
-              aria-label="게임 검색"
-              className="h-10 w-full rounded-xl border border-amber-500/20 bg-neutral-950/40 pr-3 pl-8 text-xs text-white placeholder:text-white/30 focus:border-amber-400/70 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400 light:shadow-sm"
-            />
-          </div>
-        </div>
       </main>
     </div>
   );

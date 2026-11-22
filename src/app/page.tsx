@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { GAME_REGISTRY, sortByPlayability } from "@/games/registry";
 import { GENRE_META, GENRE_ORDER } from "@/games/genres";
 import type { GameGenre } from "@/games/types";
-import GameGrid from "@/components/GameGrid";
-import CollectionShowcase from "@/components/CollectionShowcase";
+import GameGrid, { LobbyCard } from "@/components/GameGrid";
+import LobbySections from "@/components/lobby/LobbySections";
+import { buildLobbySections } from "@/components/lobby/buildLobbySections";
+import { getGameFreshnessBadge } from "@/constants/gameUpdateCount";
 import DesktopDashboard from "@/components/lobby/DesktopDashboard";
 import PublicRoomBrowser from "@/components/lobby/PublicRoomBrowser";
 import { useActiveRooms } from "@/games/shared/room/useActiveRooms";
@@ -237,6 +239,42 @@ export default function DashboardPage() {
   }, [baseFiltered, genreFilter, sortOption, playCounts, releases]);
 
   const playableCount = catalog.filter((g) => g.playable).length;
+
+  // 2026-11-22: with nothing searched/filtered, the catalog is shown as
+  // titled sections (인기/신작/장르별, two rows each + 더 보기) instead of one
+  // 81-card wall. Any search or filter switches back to the flat result grid
+  // — the filter itself is then the grouping. Admin 🛠 sorts stay flat too.
+  const browsing =
+    !isSearching && filterIdx === 0 && genreFilter === "all" && !newOnly && viewFilter === "all" && !adminSort;
+  const sections = useMemo(
+    () => (browsing ? buildLobbySections(filtered, playCounts, now) : []),
+    [browsing, filtered, playCounts, now],
+  );
+  const resetFilters = () => {
+    setQuery("");
+    setFilterIdx(0);
+    setGenreFilter("all");
+    setNewOnly(false);
+    setViewFilter("all");
+  };
+
+  // "/" focuses whichever lobby search box is on screen (tablet/desktop).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      const input = Array.from(document.querySelectorAll<HTMLInputElement>("input[data-lobby-search]")).find(
+        (el) => el.offsetParent !== null,
+      );
+      if (!input) return;
+      e.preventDefault();
+      input.focus();
+      input.select();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   // One Realtime subscription for both layouts' 🌐 공개방 browser and the
   // desktop cards' live room-count badges.
   const rooms = useActiveRooms();
@@ -269,6 +307,8 @@ export default function DashboardPage() {
         rooms={rooms}
         adminSort={isAdmin}
         adminLine={adminLine}
+        sections={browsing ? sections : null}
+        onResetFilters={resetFilters}
       />
 
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 xl:hidden">
@@ -337,7 +377,7 @@ export default function DashboardPage() {
           <ViewFilterChips value={viewFilter} onChange={setViewFilter} />
         </div>
         <div className="flex items-center gap-2">
-          <span className="shrink-0 text-[11px] font-medium text-amber-500/60 light:text-amber-700">
+          <span className="shrink-0 text-xs font-semibold text-amber-400/80 light:text-amber-700">
             정렬
           </span>
           <SortFilterChips value={sortOption} onChange={setSortOption} admin={isAdmin} />
@@ -345,16 +385,45 @@ export default function DashboardPage() {
       </div>
 
       <div className="mt-6 mb-8 sm:mt-0">
-        <p className="text-[10px] font-medium tracking-[0.32em] text-amber-200/55 uppercase light:text-amber-800/70">
+        <p className="text-[11px] font-medium tracking-[0.32em] text-amber-200/70 uppercase light:text-amber-800/70">
           Tonight&apos;s Table
         </p>
         <h1 className="mt-2 font-display text-[26px] leading-tight font-bold tracking-[-0.01em] text-amber-50 break-keep sm:text-[32px] light:text-slate-900">
           함께할 보드게임을 골라보세요
         </h1>
         <div aria-hidden className="mt-3 h-px w-12 bg-gradient-to-r from-amber-300/70 to-transparent light:from-amber-700/60" />
-        <p className="mt-3 text-[13px] text-white/50 break-keep light:text-slate-500">
+        <p className="mt-3 text-sm text-white/65 break-keep light:text-slate-600">
           {catalog.length}종의 게임 · 1~10명 · 폰과 데스크톱 어디서나
         </p>
+      </div>
+
+      {/* sm+ search — moved up here from below the grid (2026-11-22), where
+          it sat under 81 cards and was effectively undiscoverable. Phones
+          keep the sticky bar above instead. "/" focuses it. */}
+      <div className="mb-6 hidden sm:block">
+        <div className="relative w-full max-w-xl">
+          <span aria-hidden className="absolute top-1/2 left-3.5 -translate-y-1/2 text-sm text-white/50 light:text-slate-400">
+            🔍
+          </span>
+          <input
+            data-lobby-search
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="게임 이름, 태그로 검색  ( / )"
+            aria-label="게임 검색"
+            className="h-11 w-full rounded-xl border border-amber-500/25 bg-white/5 pr-10 pl-10 text-[15px] text-white placeholder:text-white/40 focus:border-amber-400/70 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400 light:shadow-sm"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="검색어 지우기"
+              className="absolute top-1/2 right-2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-white/50 transition hover:bg-white/10 hover:text-white light:text-slate-400 light:hover:bg-slate-100 light:hover:text-slate-700"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       <PublicRoomBrowser rooms={rooms} className="mb-2" />
@@ -371,10 +440,12 @@ export default function DashboardPage() {
             search query is active (kept in-flow, not collapsed, since this
             IS the replacement content for that moment — no animation needed
             for a text swap). Reverts to the static heading once cleared. */}
-        <h2 className="mb-3 flex items-baseline gap-2 font-display text-[17px] font-bold text-white sm:hidden light:text-slate-900">
-          {isSearching ? "검색 결과" : "전체 게임"}
-          <span className="font-sans text-xs font-normal text-white/40 light:text-slate-500">{filtered.length}</span>
-        </h2>
+        {!browsing && (
+          <h2 className="mb-3 flex items-baseline gap-2 font-display text-lg font-bold text-white sm:hidden light:text-slate-900">
+            {isSearching ? "검색 결과" : "필터 결과"}
+            <span className="font-sans text-sm font-semibold text-white/60 light:text-slate-500">{filtered.length}</span>
+          </h2>
+        )}
         {/* Mobile now gets these from the sticky bar above instead (so they
             stay reachable mid-scroll) — hidden here below `sm` only;
             tablet/desktop (no sticky bar there) keep this in-flow row. */}
@@ -397,7 +468,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="mb-4 hidden items-center gap-2 sm:flex">
-          <span className="shrink-0 text-[11px] font-medium text-amber-500/60 light:text-amber-700">
+          <span className="shrink-0 text-xs font-semibold text-amber-400/80 light:text-amber-700">
             정렬
           </span>
           <SortFilterChips value={sortOption} onChange={setSortOption} admin={isAdmin} />
@@ -440,59 +511,53 @@ export default function DashboardPage() {
           })}
         </div>
 
-        {genreFilter === "all" && (
-          // 2026-09-06 AskUserQuestion: same mobile-search collapse as the
-          // carousel above, but this section stays visible on sm+ regardless
-          // of search state (`sm:grid-rows-[1fr] sm:opacity-100` overrides
-          // the collapsed classes at that breakpoint) since desktop's layout
-          // isn't in scope for this change.
-          <div
-            className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out sm:grid-rows-[1fr] sm:opacity-100 ${
-              isSearching ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
-            }`}
-          >
-            <div className="overflow-hidden">
-              <CollectionShowcase collectionId="netflix-death-game" games={baseFiltered} monthPlays={monthPlays} now={now} />
-            </div>
-          </div>
-        )}
-
-        {filtered.length > 0 ? (
-          <GameGrid games={filtered} monthPlays={monthPlays} now={now} adminLine={adminLine} />
-        ) : (
-          <p className="py-16 text-center text-sm text-white/40 light:text-slate-400">검색 결과가 없습니다.</p>
-        )}
-
-        {/* sm+ real-time search — moved here from the top filter row
-            (2026-09-16) so the header above the grid stays uncluttered.
-            Hidden below `sm`, where the sticky bar pinned above the page
-            title (2026-09-03) is still the only active search input. */}
-        <div className="mt-6 hidden justify-center sm:flex">
-          <div className="relative w-full max-w-md">
-            <span className="absolute top-1/2 left-3 -translate-y-1/2 text-xs text-white/40 light:text-slate-400">
-              🔍
-            </span>
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="게임 이름, 태그로 검색..."
-              aria-label="게임 검색"
-              className="h-10 w-full rounded-xl border border-amber-500/20 bg-white/5 pr-9 pl-8 text-sm text-white placeholder:text-white/30 focus:border-amber-400/70 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400 light:shadow-sm"
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                aria-label="검색어 지우기"
-                className="absolute top-1/2 right-2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-white/40 transition hover:bg-white/10 hover:text-white light:text-slate-400 light:hover:bg-slate-100 light:hover:text-slate-700"
-              >
-                ✕
-              </button>
+        {browsing ? (
+          <LobbySections
+            sections={sections}
+            layout="hub"
+            renderCard={(game) => (
+              <LobbyCard
+                game={game}
+                badge={getGameFreshnessBadge(game.id, now)}
+                plays={monthPlays.get(game.id) ?? 0}
+                now={now}
+              />
             )}
+          />
+        ) : filtered.length > 0 ? (
+          <>
+            <div className="mb-4 hidden items-center gap-3 sm:flex">
+              <h2 className="font-display text-xl font-bold text-white light:text-slate-900">
+                {isSearching ? "검색 결과" : "필터 결과"}{" "}
+                <span className="font-sans text-base font-semibold text-white/60 light:text-slate-500">{filtered.length}</span>
+              </h2>
+              <ResetFiltersButton onClick={resetFilters} />
+            </div>
+            <div className="mb-4 sm:hidden">
+              <ResetFiltersButton onClick={resetFilters} />
+            </div>
+            <GameGrid games={filtered} monthPlays={monthPlays} now={now} adminLine={adminLine} />
+          </>
+        ) : (
+          <div className="flex flex-col items-center gap-3 py-16 text-center">
+            <p className="text-[15px] text-white/65 light:text-slate-500">조건에 맞는 게임이 없습니다.</p>
+            <ResetFiltersButton onClick={resetFilters} />
           </div>
-        </div>
+        )}
       </div>
       </div>
     </>
+  );
+}
+
+function ResetFiltersButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-full border border-white/15 px-3 py-1.5 text-xs font-semibold text-white/75 transition hover:border-amber-400/50 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:text-slate-900"
+    >
+      ↺ 검색·필터 초기화
+    </button>
   );
 }

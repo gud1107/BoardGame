@@ -4,7 +4,9 @@ import GamePosterCard from "./lobby/GamePosterCard";
 import { LOBBY_CARD_STYLE } from "@/constants/lobbyCardStyle";
 import { getGameFreshnessBadge } from "@/constants/gameUpdateCount";
 
-const Card = LOBBY_CARD_STYLE === "poster" ? GamePosterCard : GameCard;
+/** The lobby card for the active `LOBBY_CARD_STYLE` (also used by the sectioned browse view). */
+export const LobbyCard = LOBBY_CARD_STYLE === "poster" ? GamePosterCard : GameCard;
+const Card = LobbyCard;
 
 export default function GameGrid({
   games,
@@ -20,11 +22,10 @@ export default function GameGrid({
   adminLine?: (gameId: string) => React.ReactNode;
 }) {
   return (
-    // Mobile (base, no breakpoint below sm exists in this Tailwind config):
-    // 2 cols. Tablet (sm/md): 2 cols. Desktop (lg/xl): 3~4 cols — capped at 4
-    // even on very wide viewports so the now-taller (aspect-[4/5]) cover art
-    // stays legible instead of shrinking into a dense wall of tiny cards.
-    <div className={`grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 ${LOBBY_CARD_STYLE === "poster" ? "gap-3 sm:gap-4" : "gap-4 sm:gap-5"}`}>
+    // Phones 2 cols, tablets 3 (md), small laptops 4 (lg) — 2026-11-22: a
+    // 900px tablet used to get two ~430px-wide posters. Capped at 4 so the
+    // cover art stays legible instead of shrinking into tiny cards.
+    <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 ${LOBBY_CARD_STYLE === "poster" ? "gap-3 sm:gap-4" : "gap-4 sm:gap-5"}`}>
       {games.map((game) => (
         <Card
           key={game.id}

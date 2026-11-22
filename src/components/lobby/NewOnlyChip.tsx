@@ -25,11 +25,11 @@ export default function NewOnlyChip({
       aria-pressed={value}
       title={`최근 ${NEW_BADGE_DAYS}일 안에 추가된 게임만 보기`}
       className={`shrink-0 rounded-full border font-medium whitespace-nowrap transition ${
-        compact ? "px-2.5 py-1 text-[11px]" : "px-3 py-1.5 text-xs"
+        compact ? "px-2.5 py-1 text-xs" : "px-3 py-1.5 text-xs"
       } ${
         value
           ? "border-emerald-400/70 bg-emerald-500/20 text-emerald-200 light:text-emerald-800"
-          : "border-white/10 text-white/60 hover:border-emerald-400/40 light:border-slate-200 light:text-slate-600 light:hover:border-emerald-500/50"
+          : "border-white/10 text-white/70 hover:border-emerald-400/40 light:border-slate-200 light:text-slate-600 light:hover:border-emerald-500/50"
       }`}
     >
       🆕 신규만

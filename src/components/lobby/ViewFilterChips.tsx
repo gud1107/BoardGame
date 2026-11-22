@@ -33,11 +33,11 @@ export default function ViewFilterChips({
             aria-pressed={active}
             title={chip.title}
             className={`font-medium whitespace-nowrap transition ${
-              compact ? "px-2.5 py-1 text-[11px]" : "px-3 py-1.5 text-xs"
+              compact ? "px-2.5 py-1 text-xs" : "px-3 py-1.5 text-xs"
             } ${
               active
                 ? "bg-sky-500/20 text-sky-100 light:bg-sky-100 light:text-sky-900"
-                : "text-white/60 hover:bg-white/5 hover:text-white light:text-slate-600 light:hover:bg-slate-50 light:hover:text-slate-900"
+                : "text-white/70 hover:bg-white/5 hover:text-white light:text-slate-600 light:hover:bg-slate-50 light:hover:text-slate-900"
             }`}
           >
             {chip.label}
