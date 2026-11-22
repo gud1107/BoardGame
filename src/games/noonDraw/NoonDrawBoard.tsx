@@ -35,11 +35,12 @@ const REASON_TEXT: Record<PointReason, string> = {
   tie: "완전히 같은 순간 — 다시",
 };
 
-function Tag({ seat, name }: { seat: number; name: string }) {
+/** 자리 색 기호 + 이름. 늘 어두운 판 위에 쓸 땐 `onDark` (라이트 모드에서도 흰 글자 유지). */
+function Tag({ seat, name, onDark }: { seat: number; name: string; onDark?: boolean }) {
   return (
     <span className="inline-flex items-center gap-1 font-bold" style={{ color: SEAT_COLORS[seat] }}>
       <span aria-hidden>{SEAT_SYMBOLS[seat]}</span>
-      <span className="text-white light:text-slate-900">{name}</span>
+      <span className={onDark ? "text-white" : "text-white light:text-slate-900"}>{name}</span>
     </span>
   );
 }
@@ -235,23 +236,23 @@ export default function NoonDrawBoard({ state, mySeat, names, botSeats, onAction
               <span>🔁 {REASON_TEXT[pt.reason]}</span>
             ) : (
               <span>
-                ⚔️ <Tag seat={pt.winner} name={names[pt.winner]} /> 한 판! <span className="text-white/60 light:text-slate-500">({REASON_TEXT[pt.reason]})</span>
+                ⚔️ <Tag seat={pt.winner} onDark name={names[pt.winner]} /> 한 판! <span className="text-white/60">({REASON_TEXT[pt.reason]})</span>
               </span>
             ),
         });
         out.push({
           key: "rt",
           node: (
-            <span className="text-sm text-white/80 light:text-slate-600">
-              <Tag seat={m.a} name={names[m.a]} /> {rtText(m.a)} · <Tag seat={m.b} name={names[m.b]} /> {rtText(m.b)}
+            <span className="text-sm text-white/80">
+              <Tag seat={m.a} onDark name={names[m.a]} /> {rtText(m.a)} · <Tag seat={m.b} onDark name={names[m.b]} /> {rtText(m.b)}
             </span>
           ),
         });
-        if (m.winner !== null) out.push({ key: "w", node: <span className="text-amber-200 light:text-amber-700">🏅 {m.decidedBy === "judge" ? "심판 판정 — " : ""}<Tag seat={m.winner} name={names[m.winner]} /> 승리!</span> });
+        if (m.winner !== null) out.push({ key: "w", node: <span className="text-amber-200">🏅 {m.decidedBy === "judge" ? "심판 판정 — " : ""}<Tag seat={m.winner} onDark name={names[m.winner]} /> 승리!</span> });
       }
     } else {
       const hits = res.hits ?? [];
-      if (res.fastest !== null) out.push({ key: "f", node: <span>⚡ 가장 빠름 <Tag seat={res.fastest} name={names[res.fastest]} /> {rtText(res.fastest)}</span> });
+      if (res.fastest !== null) out.push({ key: "f", node: <span>⚡ 가장 빠름 <Tag seat={res.fastest} onDark name={names[res.fastest]} /> {rtText(res.fastest)}</span> });
       if (hits.length)
         out.push({
           key: "h",
@@ -261,7 +262,7 @@ export default function NoonDrawBoard({ state, mySeat, names, botSeats, onAction
               {hits.map((h, i) => (
                 <span key={h.seat}>
                   {i > 0 && " · "}
-                  <Tag seat={h.seat} name={names[h.seat]} /> {h.reason === "slow" ? `느림 ${rtText(h.seat)}` : rtText(h.seat)}
+                  <Tag seat={h.seat} onDark name={names[h.seat]} /> {h.reason === "slow" ? `느림 ${rtText(h.seat)}` : rtText(h.seat)}
                   {!state.alive[h.seat] && " ☠️ 탈락"}
                 </span>
               ))}

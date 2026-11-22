@@ -30,7 +30,7 @@ export const HEAD_Y = 1.45;
 const bladeGeo = new THREE.BoxGeometry(0.028, 0.82, 0.008);
 const hiltGeo = new THREE.CylinderGeometry(0.018, 0.018, 0.24, 8);
 const guardGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.012, 12);
-const sheathGeo = new THREE.CylinderGeometry(0.024, 0.02, 0.85, 8);
+const sheathGeo = new THREE.CylinderGeometry(0.022, 0.018, 0.62, 8);
 const bladeMat = new THREE.MeshStandardMaterial({ color: "#e8eef5", metalness: 0.95, roughness: 0.15, emissive: "#9fb4c8", emissiveIntensity: 0.15 });
 const hiltMat = new THREE.MeshStandardMaterial({ color: "#2b1d14", roughness: 0.8 });
 const guardMat = new THREE.MeshStandardMaterial({ color: "#b8902c", metalness: 0.7, roughness: 0.35 });
@@ -171,8 +171,8 @@ export default function Samurai({ look, seed, color, lowDetail, out, read }: { l
         <meshBasicMaterial color={color} transparent opacity={0.85} depthWrite={false} />
       </mesh>
       {/* 왼쪽 허리 칼집 (뒤로 비스듬히) */}
-      <group position={[0.17, 0.82, -0.05]} rotation={[1.15, 0, 0.12]}>
-        <mesh geometry={sheathGeo} material={sheathMat} position-y={-0.38} castShadow />
+      <group position={[0.16, 0.8, 0.02]} rotation={[0.55, 0, 0.1]}>
+        <mesh geometry={sheathGeo} material={sheathMat} position-y={-0.29} castShadow />
         <group ref={hilt} position-y={0.02}>
           <mesh geometry={guardGeo} material={guardMat} />
           <mesh geometry={hiltGeo} material={hiltMat} position-y={0.13} />
