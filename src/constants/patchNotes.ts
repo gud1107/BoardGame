@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.199.0",
+    releaseDate: "2026-11-23",
+    title: "🥋 새 게임 묘수 도장",
+    changes: [
+      { game: "myosu-dojo", type: "FEAT", desc: "🥋 새 게임 — 체스·당구·알까기·컬링·도미노 엔진 그대로, 정답이 하나뿐인 한 수를 찾는 1인용 묘수풀이 모음 35문제" },
+      { game: "myosu-dojo", type: "FEAT", desc: "♟️ 1~3수 메이트(흑은 가장 오래 버티는 수로 응수) · 🎱 포켓볼·캐롬 한 큐 · 🥏 알까기 한 번 튕기기 · 🥌 컬링 마지막 스톤" },
+      { game: "myosu-dojo", type: "FEAT", desc: "🁢 도미노 설계 — 최소 조각으로 종 모두 울리기 · 모든 정답을 솔버가 증명 · ⭐ 3단계 조건 · 💡 힌트 · 🔑 정답 보기" },
+    ],
+  },
+  {
     version: "v1.198.0",
     releaseDate: "2026-11-23",
     title: "🔥 새 게임 작심삼일",

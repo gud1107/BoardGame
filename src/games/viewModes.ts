@@ -110,6 +110,7 @@ export const GAME_VIEW_MODES: Record<GameId, GameViewMode> = {
   "pieces-of-language": "2d",
   "prism-five": "2d",
   "one-shot": "2d",
+  "myosu-dojo": "2d",
   "pet-guard": "2d",
   "three-day-resolve": "2d",
   "magic-shop": "2d",

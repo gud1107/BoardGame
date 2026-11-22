@@ -40,6 +40,7 @@ export const SOLO_HEADLINE: Record<string, (d: StatDetails) => string> = {
   "crab-survival": (d) => `최고 ${n(d.maxScore)}점 · 👑 1등 ${n(d.firsts)}회${d.minRank !== undefined ? ` · 최고 ${n(d.minRank)}위` : ""}`,
   "prism-five": (d) => `최고 ${n(d.maxScore)}점 · STAGE ${n(d.maxStage)} · 최대 ${n(d.maxCombo)}콤보`,
   "one-shot": (d) => `⭐ ${n(d.maxStars)}/60 · 클리어 ${n(d.maxCleared)}/20 · 💎 묘수 ${n(d.maxMyosu)}`,
+  "myosu-dojo": (d) => `⭐ ${n(d.maxStars)}/105 · 클리어 ${n(d.maxCleared)}/35 · ⭐⭐⭐ ${n(d.maxPerfect)}`,
 };
 
 /** What /stats shows per game — only games listed here have a detail panel. */
@@ -519,6 +520,13 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "클리어 (도전)", value: (d) => ratio(d.clears, d.attempts) },
     { label: "실전 클리어 · ⭐⭐⭐", value: (d) => `${n(d.liveClears)} · ${n(d.threeStars)}` },
     { label: "인질 오사", value: (d) => `${n(d.hostageFails)}번` },
+  ],
+  "myosu-dojo": [
+    { label: "모은 별", value: (d) => `⭐ ${n(d.maxStars)} / 105` },
+    { label: "푼 문제 · ⭐⭐⭐", value: (d) => `${n(d.maxCleared)} / 35 · ${n(d.maxPerfect)}` },
+    { label: "♟️ 체스 · 🎱 당구", value: (d) => `⭐ ${n(d.maxChessStars)}/45 · ⭐ ${n(d.maxCueStars)}/18` },
+    { label: "🥏 알까기·컬링 · 🁢 도미노", value: (d) => `⭐ ${n(d.maxFlickStars)}/27 · ⭐ ${n(d.maxDominoStars)}/15` },
+    { label: "성공 (도전)", value: (d) => ratio(d.clears, d.attempts) },
   ],
   "prism-five": [
     { label: "최고 점수 (한 스테이지)", value: (d) => n(d.maxScore) },

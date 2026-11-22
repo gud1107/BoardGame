@@ -42,6 +42,7 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   "crab-survival": dynamic(() => import("./crabSurvival/CrabSurvivalGame"), { ssr: false }),
   "prism-five": dynamic(() => import("./prismFive/PrismFiveGame"), { ssr: false }),
   "one-shot": dynamic(() => import("./oneShot/OneShotGame"), { ssr: false }),
+  "myosu-dojo": dynamic(() => import("./myosuDojo/MyosuDojoGame"), { ssr: false }),
   "lost-cities": dynamic(() => import("./lostCities/LostCitiesGame"), { ssr: false }),
   "show-me-the-coin": dynamic(() => import("./showMeTheCoin/ShowMeTheCoinGame"), { ssr: false }),
   "love-wins-all": dynamic(() => import("./loveWinsAll/LoveWinsAllGame"), { ssr: false }),

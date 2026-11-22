@@ -1400,6 +1400,21 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
   },
   {
+    id: "myosu-dojo",
+    name: "묘수 도장",
+    nameEn: "Myosu Dojo",
+    description:
+      "혼자 푸는 묘수풀이 모음. 체스·당구 파티·알까기 대전·컬링 파티·도미노 연쇄의 규칙과 물리를 그대로 써서, 정답이 하나뿐인 한 수를 찾아요. ♟️ 체스 N수 메이트 15문제, 🎱 당구 한 큐 6문제, 🥏 알까기·🥌 컬링 한 수 9문제, 🁢 도미노 설계 5문제 — 모든 정답은 솔버가 증명했고, 문제마다 ⭐ 3단계 조건이 있어요.",
+    players: { min: 1, max: 1 },
+    playTime: { minMinutes: 5, maxMinutes: 40 },
+    category: "strategy",
+    thumbnail: { emoji: "🥋", gradient: ["#10b981", "#0c1a17"] },
+    tags: ["퍼즐", "묘수풀이", "1인용", "체스", "당구", "알까기", "컬링", "도미노"],
+    genres: ["strategy", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+  },
+  {
     id: "lost-cities",
     name: "로스트 시티",
     nameEn: "Lost Cities",

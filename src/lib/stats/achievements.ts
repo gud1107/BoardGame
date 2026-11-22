@@ -638,6 +638,16 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["myosu-4", "🧠", "묘수의 달인", "숨은 묘수 4개 모두 찾기", 4, k("maxMyosu")],
     ["live-10", "🔥", "손이 기억한다", "실전 모드 클리어 누적 10번", 10, k("liveClears")],
   ],
+  "myosu-dojo": [
+    ["clear-1", "🥋", "입문", "문제 하나 풀기", 1, k("maxCleared")],
+    ["clear-35", "🏯", "도장 깨기", "35문제 모두 풀기", 35, k("maxCleared")],
+    ["stars-50", "⭐", "별 수집가", "별 50개 모으기", 50, k("maxStars")],
+    ["stars-105", "🌟", "사범", "별 105개 모두 모으기", 105, k("maxStars")],
+    ["chess-45", "♟️", "메이트 장인", "체스 문제 별 45개 모두", 45, k("maxChessStars")],
+    ["cue-18", "🎱", "한 큐의 달인", "당구 문제 별 18개 모두", 18, k("maxCueStars")],
+    ["flick-27", "🥏", "손끝의 물리학", "알까기·컬링 별 27개 모두", 27, k("maxFlickStars")],
+    ["domino-15", "🔔", "최소의 설계", "도미노 문제 별 15개 모두", 15, k("maxDominoStars")],
+  ],
   "prism-five": [
     ["clear-1", "🦸", "첫 출동", "스테이지 하나 클리어", 1, k("clears")],
     ["final", "👑", "암흑제국 격멸", "FINAL 스테이지 클리어", 1, k("finalClears")],
