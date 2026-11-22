@@ -75,6 +75,7 @@ export const POSTER_TAGLINES: Partial<Record<GameId, string>> = {
   "hungry-shark": "배고프다. 바다 전체가 먹이다",
   "crab-survival": "작은 게가 해변의 왕이 되기까지",
   "prism-five": "변신! 다섯 빛이 하나 될 때, 악은 무너진다",
+  "one-shot": "멈추고, 읽고, 단 한 발에 끝낸다",
   "play-dead": "털썩. 그런데… 진짜 죽었을까?",
   "star-rummy": "쪼개고, 합치고, 다시 빛나게 — 마지막 별은 누구 손에?",
   "hide-and-seek": "쉿… 삐걱. 술래가 바로 옆방에 있다.",

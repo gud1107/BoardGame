@@ -577,6 +577,15 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["loot-20", "🎒", "시체 털이범", "탄약 뺏기로 누적 탄약 20발", 20, k("ammoLooted")],
     ["fake-win", "😏", "사실 살아있었지롱", "죽은 척하는 채로 승리", 1, k("fakeWins")],
   ],
+  "one-shot": [
+    ["clear-1", "🎯", "첫 명중", "스테이지 하나 클리어", 1, k("maxCleared")],
+    ["clear-20", "🤠", "사격장의 전설", "20스테이지 모두 클리어", 20, k("maxCleared")],
+    ["stars-30", "⭐", "별 수집가", "별 30개 모으기", 30, k("maxStars")],
+    ["stars-60", "🌟", "완벽한 한 발", "별 60개 모두 모으기", 60, k("maxStars")],
+    ["myosu-1", "💎", "묘수 발견", "숨은 묘수 하나 찾기", 1, k("maxMyosu")],
+    ["myosu-4", "🧠", "묘수의 달인", "숨은 묘수 4개 모두 찾기", 4, k("maxMyosu")],
+    ["live-10", "🔥", "손이 기억한다", "실전 모드 클리어 누적 10번", 10, k("liveClears")],
+  ],
   "prism-five": [
     ["clear-1", "🦸", "첫 출동", "스테이지 하나 클리어", 1, k("clears")],
     ["final", "👑", "암흑제국 격멸", "FINAL 스테이지 클리어", 1, k("finalClears")],

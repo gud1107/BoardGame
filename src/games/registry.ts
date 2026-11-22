@@ -1286,6 +1286,21 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
   },
   {
+    id: "one-shot",
+    name: "한 발의 묘수",
+    nameEn: "One Shot Puzzle",
+    description:
+      "바둑 묘수풀이처럼 정답이 있는 1인용 타이밍 사격 퍼즐. 장면은 매번 똑같이 움직이니 시간을 멈추고 되감으며 읽은 뒤, 바로 그 순간에 쏘세요. 총알은 날아가는 데 시간이 걸리고 표적을 뚫고 지나가며, 철판에선 튕기고, 밧줄을 끊으면 샹들리에가 떨어지고, 화약통은 연쇄 폭발해요. 인질은 맞히면 실패! 🧩 연습(사격 예약)·🔥 실전(실시간), 5장 20스테이지, ⭐ 3개 평가와 숨은 💎 묘수, 힌트 3단계.",
+    players: { min: 1, max: 1 },
+    playTime: { minMinutes: 5, maxMinutes: 30 },
+    category: "family",
+    thumbnail: { emoji: "🎯", gradient: ["#f59e0b", "#3b1d4a"] },
+    tags: ["퍼즐", "묘수풀이", "1인용", "타이밍", "사격", "도탄"],
+    genres: ["strategy", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+  },
+  {
     id: "lost-cities",
     name: "로스트 시티",
     nameEn: "Lost Cities",

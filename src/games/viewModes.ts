@@ -106,6 +106,7 @@ export const GAME_VIEW_MODES: Record<GameId, GameViewMode> = {
   "memory-feast": "2d",
   "pieces-of-language": "2d",
   "prism-five": "2d",
+  "one-shot": "2d",
   "cloud-squadron": "2d",
 };
 

@@ -498,7 +498,7 @@ function BotLevelTable({ stats }: { stats: StatTotalsRecord[] }) {
   );
 }
 
-const RANKED_GAMES = GAME_REGISTRY.filter((g) => g.playable && g.id !== "hungry-shark" && g.id !== "crab-survival" && g.id !== "prism-five");
+const RANKED_GAMES = GAME_REGISTRY.filter((g) => g.playable && g.id !== "hungry-shark" && g.id !== "crab-survival" && g.id !== "prism-five" && g.id !== "one-shot");
 /** 1-player games: always rank 1 of 1, so they never count toward wins / win rate. */
 const SOLO_GAME_IDS = new Set(GAME_REGISTRY.filter((g) => g.players.max === 1).map((g) => g.id));
 

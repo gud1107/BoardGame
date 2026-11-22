@@ -39,6 +39,7 @@ export const SOLO_HEADLINE: Record<string, (d: StatDetails) => string> = {
   "hungry-shark": (d) => `최고 ${n(d.maxScore)}점 · 🔥 최고 연속 올클리어 ${n(d.maxMissionStreak)}회`,
   "crab-survival": (d) => `최고 ${n(d.maxScore)}점 · 👑 1등 ${n(d.firsts)}회${d.minRank !== undefined ? ` · 최고 ${n(d.minRank)}위` : ""}`,
   "prism-five": (d) => `최고 ${n(d.maxScore)}점 · STAGE ${n(d.maxStage)} · 최대 ${n(d.maxCombo)}콤보`,
+  "one-shot": (d) => `⭐ ${n(d.maxStars)}/60 · 클리어 ${n(d.maxCleared)}/20 · 💎 묘수 ${n(d.maxMyosu)}`,
 };
 
 /** What /stats shows per game — only games listed here have a detail panel. */
@@ -474,6 +475,14 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "탄약 뺏기로 챙긴 탄약", value: (d) => n(d.ammoLooted) },
     { label: "살아서 죽은 척한 라운드", value: (d) => n(d.fakeRounds) },
     { label: "죽은 척하는 채로 승리", value: (d) => n(d.fakeWins) },
+  ],
+  "one-shot": [
+    { label: "모은 별", value: (d) => `⭐ ${n(d.maxStars)} / 60` },
+    { label: "클리어한 스테이지", value: (d) => `${n(d.maxCleared)} / 20` },
+    { label: "찾은 묘수", value: (d) => `💎 ${n(d.maxMyosu)} / 4` },
+    { label: "클리어 (도전)", value: (d) => ratio(d.clears, d.attempts) },
+    { label: "실전 클리어 · ⭐⭐⭐", value: (d) => `${n(d.liveClears)} · ${n(d.threeStars)}` },
+    { label: "인질 오사", value: (d) => `${n(d.hostageFails)}번` },
   ],
   "prism-five": [
     { label: "최고 점수 (한 스테이지)", value: (d) => n(d.maxScore) },

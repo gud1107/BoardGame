@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.192.0",
+    releaseDate: "2026-11-22",
+    title: "🎯 새 게임 한 발의 묘수",
+    changes: [
+      { game: "one-shot", type: "FEAT", desc: "🎯 새 게임 — 정답이 있는 1인용 타이밍 사격 퍼즐 · 시간을 멈추고 되감아 읽은 뒤 그 순간에 쏘기 · 5장 20스테이지" },
+      { game: "one-shot", type: "FEAT", desc: "🪞 철판 도탄·🛡️ 회전 방패·🙅 인질·🪢 밧줄과 샹들리에·🛢️ 화약통 연쇄 — 총알은 날아가는 시간이 있고 표적을 뚫어요" },
+      { game: "one-shot", type: "FEAT", desc: "🧩 연습(사격 예약)·🔥 실전(실시간) · ⭐ 3개 평가 + 숨은 💎 묘수 · 💡 힌트 3단계 · 실패하면 몇 초·몇 도 어긋났는지 알려줘요" },
+    ],
+  },
+  {
     version: "v1.191.0",
     releaseDate: "2026-11-22",
     title: "🧱 새 게임 무너지는 탑 오르기",
