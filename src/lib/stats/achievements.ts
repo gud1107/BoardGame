@@ -321,6 +321,14 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["clean-1", "🎯", "헛손질 없음", "한 번도 안 틀리고 1등", 1, k("cleanWins")],
     ["streak-5", "🔥", "연속 번개", "한 판에서 5번 연속 짝 찾기", 5, k("maxStreak")],
   ],
+  "everyone-choice": [
+    ["win-1", "🏆", "모두의 마음", "1등 하기", 1, k("wins")],
+    ["allin-10", "🪙", "올인 장인", "칩 3개 걸고 이기기 누적 10번", 10, k("allInWins")],
+    ["lone-1", "🐺", "고독한 늑대", "🐺 외톨이로 혼자 이기기", 1, k("loneWolves")],
+    ["reverse-5", "🔄", "반전의 귀재", "🔄 반전 라운드 누적 5번 이기기", 5, k("reverseWins")],
+    ["score-20", "🎯", "대세 감별사", "한 판에 20점 이상", 20, k("maxScore")],
+    ["round-100", "🗳️", "백 번의 눈치", "이긴 라운드 누적 100번", 100, k("roundWins")],
+  ],
   "noon-draw": [
     ["win-1", "🏆", "정오의 승자", "1등 하기", 1, k("wins")],
     ["swift-1", "✨", "번개 손", "200ms 미만으로 뽑기", 1, k("swift")],

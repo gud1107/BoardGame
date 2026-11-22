@@ -96,6 +96,7 @@ export const GAME_VIEW_MODES: Record<GameId, GameViewMode> = {
 
   // 2D
   "splendor-duel": "2d",
+  "everyone-choice": "2d",
   "lotr-duel": "2d",
   worm: "2d",
   "lightning-pair": "2d",

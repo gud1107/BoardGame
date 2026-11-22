@@ -203,6 +203,12 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "❄️ 틀림 · 😣 아깝게 늦음 · 🔥 최고 연속", value: (d) => `${n(d.wrong)} · ${n(d.close)} · ${n(d.maxStreak)}` },
     { label: "🏆 우승 (⚡ 쟁탈전 · 🎯 떨이전)", value: (d) => `${n(d.wins)} (${n(d.grabWins)} · ${n(d.dumpWins)})` },
   ],
+  "everyone-choice": [
+    { label: "🗳️ 이긴 라운드 / 답한 라운드 · 🤐 못 답함", value: (d) => `${n(d.roundWins)} / ${n(d.answers)} · ${n(d.skips)}` },
+    { label: "🪙 올인(칩 3개) 이김 / 짐", value: (d) => `${n(d.allInWins)} / ${n(d.allInLosses)}` },
+    { label: "🔄 반전 승리 · 🐺 외톨이 · 🦄 소수 쪽 선택", value: (d) => `${n(d.reverseWins)} · ${n(d.loneWolves)} · ${n(d.minorityPicks)}` },
+    { label: "🏆 1위 · 한 판 최고 · 한 라운드 최고", value: (d) => `${n(d.wins)} · ${n(d.maxScore)}점 · ${n(d.maxRound)}점` },
+  ],
   "noon-draw": [
     { label: "⚡ 최고 반응 · 평균", value: (d) => `${d.minRt !== undefined ? `${n(d.minRt)}ms` : "-"} · ${d.valid ? `${Math.round((d.rtSum ?? 0) / d.valid)}ms` : "-"}` },
     { label: "🗡️ 이긴 합 / 합 · ✨ 200ms 미만", value: (d) => `${n(d.boutWins)} / ${n(d.bouts)} · ${n(d.swift)}` },

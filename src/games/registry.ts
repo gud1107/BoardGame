@@ -8,6 +8,23 @@ import type { GameMeta } from "./types";
  */
 export const GAME_REGISTRY: GameMeta[] = [
   {
+    id: "everyone-choice",
+    name: "모두의 선택",
+    nameEn: "Everyone's Choice",
+    description:
+      "짜장면 vs 짬뽕, 알람 울리면 바로 일어난다 vs 5분만 더 — 내 취향이 아니라 이 방 사람들이 고를 쪽을 맞히는 4~12인 눈치 파티 게임. 몰래 고르고 🪙 확신 칩을 1~3개 걸어요. 🔄 반전 라운드엔 소수파가, 🐺 외톨이 라운드엔 혼자 고른 사람이 대박, 마지막 ✨ 두 배 라운드로 역전! 질문 105개 · AI 봇 Lv.1~10.",
+    players: { min: 4, max: 12 },
+    playTime: { minMinutes: 4, maxMinutes: 8 },
+    category: "party",
+    thumbnail: { emoji: "🗳️", gradient: ["#a78bfa", "#be185d"] },
+    tags: ["눈치", "다수결", "밸런스게임", "취향", "투표", "베팅", "동시 선택", "파티", "대규모", "AI봇"],
+    genres: ["party", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "hanamikoji",
     name: "하나미코지",
     nameEn: "Hanamikoji",

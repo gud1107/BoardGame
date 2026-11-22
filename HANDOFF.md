@@ -1,5 +1,14 @@
 # HANDOFF — 현재 스냅샷
 
+## 🗳️ 모두의 선택 (새 게임) — 2026-11-22 (패치 v1.196.0)
+
+요청: "새로운 게임 추천" 목록(파티·소셜)의 "모두의 선택 (4~12인)"을 골라 "만들어줘". 자체 창작 4~12인 눈치 파티 게임이다. 규칙·설계 원전은 [boardGameRule/모두의선택/모두의선택.md](./boardGameRule/모두의선택/모두의선택.md) (§1~§12). 코드 `src/games/everyoneChoice/`, id `everyone-choice`.
+- **게임**: 매 라운드 질문 하나(선택지 2~4개, 105개 자체 작성 질문)에 몰래 답하고 🪙 확신 칩 1~3개(이기면 +1/+2/+3, 지면 0/−1/−3)를 건다. 👥 다수파 · 🔄 반전(소수파 승리) · 🐺 외톨이(혼자 고르면 칩+2) · ✨ 마지막 두 배. 8/12문제.
+- **구조**: `hushNight/HushNightGame.tsx` 방을 스크립트로 복제해 `EveryoneChoiceGame.tsx`를 만들었다(commit–reveal, 계획은 localStorage `everyone-choice-plan-<방>-<자리>`). 엔진 `engine.ts` 순수 함수(`scoreRound`를 봇도 공유), 봇 `bot.ts`는 질문 가중치 기반 몬테카를로 160회. 화면은 2D만(`viewModes` "2d").
+- **셀프플레이**: 칩 손실을 0/1/2에서 0/1/3으로 바꿨다(선형이면 2칩이 최적인 구간이 없음). 6인 300판 1위율 Lv.1 5% → Lv.10 45%. 표는 룰북 §11.
+- **테스트**: `EveryoneChoice.test.ts` + `balance.sim.test.ts` 통과. proceduralSuites 개수 +1.
+- **알려진 것**: 여러 기기 온라인·소리 귀 확인·휴대폰 실기기·포스터/호버 영상은 안 했다.
+
 ## 🧙 마법 상점 (새 게임) — 2026-11-22 (패치 v1.195.0)
 
 요청: "🧙 마법 상점 덱빌딩 만들어주세요". 자체 창작 2~4인 **덱빌딩**. 규칙·설계·튜닝 원전: [boardGameRule/마법상점/마법상점.md](./boardGameRule/마법상점/마법상점.md) (§1~§8). 코드 `src/games/magicShop/`, id `magic-shop`.

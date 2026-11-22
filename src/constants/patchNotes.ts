@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.196.0",
+    releaseDate: "2026-11-22",
+    title: "🗳️ 새 게임 모두의 선택",
+    changes: [
+      { game: "everyone-choice", type: "FEAT", desc: "🗳️ 새 게임 — 내 취향 말고 이 방 사람들이 고를 쪽을 맞히는 4~12인 눈치 파티 게임 · 질문 105개 · AI 봇 Lv.1~10" },
+      { game: "everyone-choice", type: "FEAT", desc: "🪙 확신 칩 1~3개(+1/+2/+3, 지면 0/−1/−3) · 고른 답은 펼치기 전까지 암호로 잠겨 아무도 몰라요" },
+      { game: "everyone-choice", type: "FEAT", desc: "🔄 반전(소수파 승리)·🐺 외톨이(혼자 고르면 대박)·✨ 마지막 두 배 라운드 · 대세 감별사/마이웨이 칭호 · 기록·업적 6종" },
+    ],
+  },
+  {
     version: "v1.195.0",
     releaseDate: "2026-11-22",
     title: "🧙 새 게임 마법 상점",

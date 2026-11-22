@@ -79,7 +79,8 @@ describe("game sound suites", () => {
     // + noon draw (정오의 발도).
     // + lightning pair (번개 짝꿍).
     // + magic shop (마법 상점).
-    expect(suites.length).toBe(69);
+    // + everyone choice (모두의 선택).
+    expect(suites.length).toBe(70);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {
