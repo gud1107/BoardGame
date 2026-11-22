@@ -603,11 +603,13 @@ export default function HundredTalesGame({ onComplete }: PlayableGameProps) {
   const [turnSeen, setTurnSeen] = useState<{ turn: number; at: number } | null>(null);
   const turnSeenRef = useRef<{ turn: number; at: number } | null>(null);
   const timeoutSentRef = useRef<number | null>(null);
+  const turnSeenDirtyRef = useRef(false);
   useEffect(() => {
     if (phase !== "playing") return;
     const interval = window.setInterval(() => {
       const now = Date.now();
-      setNowMs(now);
+      // only re-render the room when the visible second changes (the 3D table is heavy)
+      setNowMs((prev) => (Math.floor(prev / 1000) === Math.floor(now / 1000) ? prev : now));
       const state = gameStateRef.current;
       if (!state) return;
       const seen = turnSeenRef.current;
@@ -618,7 +620,12 @@ export default function HundredTalesGame({ onComplete }: PlayableGameProps) {
       if (!seen || seen.turn !== state.turn || animating) {
         const next = { turn: state.turn, at: now };
         turnSeenRef.current = next;
-        setTurnSeen(next);
+        // state only when the turn changes; the settle-time nudges flush once the reveal ends
+        if (!seen || seen.turn !== state.turn) setTurnSeen(next);
+        else turnSeenDirtyRef.current = true;
+      } else if (turnSeenDirtyRef.current) {
+        turnSeenDirtyRef.current = false;
+        setTurnSeen(seen);
       } else if (canDriveRef.current && who !== null && !allBotSeatsRef.current.has(who)) {
         if (now - seen.at >= TURN_TIMEOUT_MS + 800 && timeoutSentRef.current !== state.turn) {
           timeoutSentRef.current = state.turn;

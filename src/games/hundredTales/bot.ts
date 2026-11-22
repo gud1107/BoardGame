@@ -47,16 +47,20 @@ export function chooseBotAction(s: TalesState, seat: Seat, level: BotLevel, rng:
     return s.story.length < roll && odds.bust < 0.6 ? { type: "draw", ...base } : { type: "stop", ...base };
   }
 
-  let threshold = p.margin + p.stakeAversion * stake * stake;
-  if (p.table) {
-    const others = s.scores.filter((_, i) => i !== seat);
-    const best = Math.max(...others);
-    const mine = s.scores[seat] + stake;
-    const lateness = 1 - s.candles / s.candlesMax;
-    // ahead near the end: lock it in; behind: the pie is running out, push
-    if (mine > best) threshold += lateness * 1.5;
-    else threshold -= lateness * Math.min(3, (best - mine) / 6);
-  }
+  const threshold = p.margin + p.stakeAversion * stake * stake + (p.table ? tableShift(s, seat) : 0);
   const ev = odds.gain + (p.noise ? (rng() - 0.5) * 2 * p.noise : 0);
   return ev > threshold ? { type: "draw", ...base } : { type: "stop", ...base };
+}
+
+/**
+ * Lv.8–10 table read (also the 🧭 coach's): ahead near the end, lock it in
+ * (positive = need a better EV to go on); behind, the pie is running out, push.
+ */
+export function tableShift(s: TalesState, seat: Seat): number {
+  const others = s.scores.filter((_, i) => i !== seat);
+  const best = Math.max(...others);
+  const mine = s.scores[seat] + storyPoints(s.story);
+  const lateness = 1 - s.candles / s.candlesMax;
+  if (mine > best) return lateness * 1.5;
+  return -lateness * Math.min(3, (best - mine) / 6);
 }

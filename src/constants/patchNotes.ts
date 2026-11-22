@@ -64,6 +64,18 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.201.0",
+    releaseDate: "2026-11-23",
+    title: "🕯️ 백 개의 괴담 코치 · 연출 · 렉 줄이기",
+    changes: [
+      { game: "hundred-tales", type: "FEAT", desc: "🧭 코치 — 고를 때마다 좋은 판단/욕심/불운/이른 멈춤을 채점하고, 끝나면 나의 판단 리포트와 고칠 습관 한 줄을 보여줘요" },
+      { game: "hundred-tales", type: "FEAT", desc: "🧭 추천 배지·⚠ 위험 % 맥박 버튼, 1위와 점수 차·남은 바퀴 한 줄, 첫 차례 3줄 안내" },
+      { game: "hundred-tales", type: "FEAT", desc: "✨ 모든 행동에 연출 — 귀신 등장·연기, 씌임 붉은 섬광·흔들림, 부적 방패, 새 초 빛, 거울 빛, 다섯 귀신 금빛, 저주 암전, +N/−N 숫자" },
+      { game: "hundred-tales", type: "IMPROVE", desc: "🔊 효과음 추가(버튼·사슬 오르골·위험 심장박동·시간 초과·채점·1위·시작) · 징·초침 소리가 거의 안 들리던 것 고침" },
+      { game: "hundred-tales", type: "IMPROVE", desc: "⚡ 렉 줄이기 — 시계가 돌 때 3D 방을 다시 그리지 않고, 화면 갱신을 1초에 1번으로 줄였어요" },
+    ],
+  },
+  {
     version: "v1.200.0",
     releaseDate: "2026-11-23",
     title: "🏁 변신 숨바꼭질 꼼꼬미 알림 · 렉 줄이기",

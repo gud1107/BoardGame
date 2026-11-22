@@ -7,12 +7,13 @@ import { CURSE_FINE, GHOST_EMOJI, GHOST_LABEL, GHOSTS, PERFECT_BONUS, RELIGHT, S
 const H3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
 const LIST = "list-disc space-y-1.5 pl-4 text-white/70 light:text-slate-600";
 
-type Tab = "basic" | "turn" | "cards" | "end" | "controls";
+type Tab = "basic" | "turn" | "cards" | "end" | "coach" | "controls";
 const TABS: { id: Tab; label: string }[] = [
   { id: "basic", label: "🕯️ 기본" },
   { id: "turn", label: "👻 내 차례" },
   { id: "cards", label: "🃏 카드" },
   { id: "end", label: "💀 끝과 점수" },
+  { id: "coach", label: "🧭 잘하는 법" },
   { id: "controls", label: "🎮 조작" },
 ];
 
@@ -102,6 +103,30 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
               </li>
               <li>촛불이 적게 남으면 &ldquo;최소 한 이야기&rdquo;가 무서워져요 — 화면에 저주 확률이 떠요.</li>
               <li>점수가 가장 높은 사람이 우승. 동점이면 덜 씐 사람이 위.</li>
+            </ul>
+          </section>
+        )}
+
+        {tab === "coach" && (
+          <section>
+            <h3 className={H3}>🧭 코치 — 내가 잘하고 있나?</h3>
+            <ul className={LIST}>
+              <li>
+                내가 고를 때마다 코치가 채점해요: 👍 좋은 판단 · 🙂 무난 · 🤏 이른 멈춤 · 😈 욕심 · 🎲 대담(위험했는데 통함) · 🍀 불운(판단은 좋았는데 씐 것) · ⏰ 시간 초과.
+              </li>
+              <li>씌었다고 다 나쁜 게 아니에요. 씌일 확률이 낮을 때 한 장 더는 좋은 판단이고, 그래도 씌었다면 🍀 불운이에요.</li>
+              <li>
+                🔰 도우미가 켜져 있으면 고르기 전에 <b>🧭 추천</b> 표시가 버튼에 붙어요(최고 난도 봇과 같은 기준).
+              </li>
+              <li>점수판 위 한 줄은 1위와의 점수 차와 촛불이 몇 바퀴 분량 남았는지 알려줘요.</li>
+              <li>게임이 끝나면 &ldquo;나의 판단 리포트&rdquo;에서 코치와 같은 판단 비율과 고칠 습관 한 가지를 보여줘요.</li>
+            </ul>
+            <h3 className={`${H3} mt-3`}>요령</h3>
+            <ul className={LIST}>
+              <li>씌일 확률 20% 아래면 대체로 한 장 더가 이득, 35%를 넘으면 멈추는 게 좋아요.</li>
+              <li>걸린 점수가 클수록 같은 확률도 더 무거워요 — 잃을 게 많으니까요.</li>
+              <li>1위인데 촛불이 얼마 안 남았으면 일찍 지키고, 뒤처져 있으면 조금 더 과감하게.</li>
+              <li>버튼이 붉게 깜빡이며 ⚠ 위험 %가 뜨면, 다음 카드로 씌거나 저주받을 확률이 35% 이상이에요.</li>
             </ul>
           </section>
         )}

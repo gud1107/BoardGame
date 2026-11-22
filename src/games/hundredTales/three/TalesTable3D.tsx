@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import TableScene, { useTableGeo, type TableSeat, type TableTheme } from "@/games/shared/three/TableScene";
@@ -174,7 +174,7 @@ function bubbleFor(s: TalesSeat3D, p: TalesTable3DProps): TableSeat["bubble"] {
   return null;
 }
 
-export default function TalesTable3D(props: TalesTable3DProps) {
+function TalesTable3D(props: TalesTable3DProps) {
   const { viewerSeat, ended } = props;
   const frac = props.candlesMax > 0 ? props.candles / props.candlesMax : 0;
   const ev = props.lastEvent;
@@ -251,3 +251,6 @@ export default function TalesTable3D(props: TalesTable3DProps) {
     />
   );
 }
+
+/** Memoised: the room re-renders on every clock second, the table only when its props change. */
+export default memo(TalesTable3D);

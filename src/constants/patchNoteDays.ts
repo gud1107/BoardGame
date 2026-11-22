@@ -17,6 +17,9 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
  * Keep it short (≤ 80 chars), headline features only.
  */
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
+  "2026-11-23": {
+    "hundred-tales": "🧭 판단 채점 코치·추천·리포트, ✨ 모든 행동 연출, 🔊 효과음 추가, ⚡ 렉 줄이기",
+  },
   "2026-11-22": {
     common: "🗂️ 보드게임허브 개편 — 인기·장르별 섹션, 큰 글씨, 검색창 위로, ⚙ 필터 한 줄, 카드 표시 2개로",
   },

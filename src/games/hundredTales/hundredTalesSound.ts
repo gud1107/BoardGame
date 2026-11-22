@@ -1,6 +1,6 @@
 import { defineSuite, fx, type SfxRecipe, type SuiteConfig } from "@/lib/audio/proceduralSuite";
 import type { SoundCue } from "@/lib/audio/useProceduralSuite";
-import { currentActor, type TalesState } from "./engine";
+import { currentActor, drawOdds, type TalesState } from "./engine";
 
 /**
  * 백 개의 괴담 "Candle Vigil" (rulebook §11) — an original, slow lullaby in
@@ -33,7 +33,7 @@ const SFX = {
     { wave: "sawtooth", freq: 880, to: 1250, glide: 0.25, dur: 0.6, peak: 0.06, at: 0.3, attack: 0.01, vibrato: { rate: 14, depth: 0.04 }, filter: { type: "bandpass", freq: 1800, q: 2 } },
     { wave: "sawtooth", freq: 932, to: 1180, glide: 0.25, dur: 0.6, peak: 0.05, at: 0.3, attack: 0.01, filter: { type: "bandpass", freq: 2200, q: 2 } },
     fx.thud(70, 0.5, 0.5, 0.3),
-    { inst: "gong", note: "C2", at: 0.35, gain: 0.6 },
+    { inst: "gong", note: 1, at: 0.35, gain: 0.6 },
     ...fx.chord("strings", ["C3", "C#3", "G3"], 1.6, 0.5, 0.4),
   ],
   /** 🧂 salt — crystals scatter. */
@@ -50,7 +50,7 @@ const SFX = {
   perfect: [...fx.chord("choir", ["A3", "C4", "E4", "A4"], 2, 0.6, 0.2), ...fx.arp("musicbox", ["A5", "C6", "E6", "A6"], 0.1, 0.8, 0.6)],
   /** 백 번째 이야기 — the room goes dark. */
   curse: [
-    { inst: "gong", note: "A1", at: 0.2, gain: 0.9 },
+    { inst: "gong", note: 0.75, at: 0.2, gain: 0.9 },
     fx.thud(50, 1.2, 0.6, 0.2),
     { wave: "sawtooth", freq: 55, to: 41, glide: 2.4, dur: 3, peak: 0.07, at: 0.3, attack: 0.3, filter: { type: "lowpass", freq: 400 } },
     ...fx.chord("choir", ["A2", "D#3", "A3"], 3, 0.7, 0.6),
@@ -59,9 +59,31 @@ const SFX = {
   /** My turn to tell. */
   turn: [{ inst: "musicbox", note: "E5", dur: 0.5, gain: 0.5 }, { inst: "musicbox", note: "A5", at: 0.18, dur: 0.6, gain: 0.45 }],
   /** Timer running out. */
-  tick: [{ inst: "tick", note: "C6", gain: 0.7 }],
+  tick: [{ inst: "tick", note: 1, gain: 0.7 }],
   /** Fewer than 10 candles left. */
   lastCandles: [fx.thud(60, 0.4, 0.45, 0), fx.thud(60, 0.35, 0.35, 0.3)],
+  /** UI: my button press, heard at once (before the network round trip). */
+  press: [fx.click(1400, 0.08), { wave: "noise", dur: 0.05, peak: 0.03, at: 0.01, filter: { type: "lowpass", freq: 1800 } }],
+  /** arg = tales in the story — a music-box note climbing with the chain. */
+  chain: (n: number) => {
+    const notes = ["A4", "C5", "E5", "G5", "A5"];
+    const note = notes[Math.max(0, Math.min(notes.length - 1, Math.round(n) - 1))];
+    return [{ inst: "musicbox", note, at: 0.55, dur: 0.5, gain: 0.35 }];
+  },
+  /** My next tale is risky (≥ 35% possession) — two slow heartbeats. */
+  danger: [fx.thud(55, 0.35, 0.5, 0.7), fx.thud(55, 0.3, 0.38, 0.98)],
+  /** ⏰ the clock decided for me. */
+  autoStop: [fx.buzz(330, 220, 0.3, 0.08, 0.05), fx.buzz(262, 175, 0.4, 0.08, 0.4)],
+  /** 🧭 coach: a good call (after the action's own sound). */
+  good: [...fx.arp("glock", ["E6", "A6"], 0.08, 0.4, 0.35).map((p) => ({ ...p, at: (p.at ?? 0) + 0.9 }))],
+  /** 🧭 coach: greed / too bold. */
+  greedy: [{ inst: "musicbox", note: "D#5", at: 1.1, dur: 0.6, gain: 0.35 }, { inst: "musicbox", note: "A4", at: 1.3, dur: 0.8, gain: 0.3 }],
+  /** 🧭 coach: unlucky / too early — a soft falling sigh. */
+  sigh: [{ wave: "sine", freq: 660, to: 440, glide: 0.5, dur: 0.6, peak: 0.035, at: 1.1, attack: 0.1 }],
+  /** I'm alone in first place. */
+  lead: [...fx.arp("bell", ["A5", "E6"], 0.1, 0.8, 0.4).map((p) => ({ ...p, at: (p.at ?? 0) + 0.7 }))],
+  /** The night begins. */
+  start: [{ wave: "noise", dur: 0.12, peak: 0.1, at: 0.05, attack: 0.002, filter: { type: "highpass", freq: 2500 } }, { inst: "bell", note: "A3", at: 0.3, dur: 2, gain: 0.5 }, { inst: "choir", note: "A3", at: 0.4, dur: 2, gain: 0.25 }],
   victory: [...fx.arp("musicbox", ["A4", "C5", "E5", "A5", "C6"], 0.14, 0.9), ...fx.chord("pad", ["A3", "C4", "E4"], 2.4, 0.6, 0.5)],
 } satisfies Record<string, SfxRecipe>;
 
@@ -99,16 +121,24 @@ export function hundredTalesCues(viewer: number) {
         else if (c.kind === "candle") cues.push("relight");
         else if (c.kind === "mirror") cues.push("mirror");
         else if (ev.act === "draw" && ev.salted) cues.push("saltSave");
-        else if (ev.act === "draw") cues.push({ name: "ghost", arg: c.fear });
+        else if (ev.act === "draw") {
+          cues.push({ name: "ghost", arg: c.fear });
+          cues.push({ name: "chain", arg: next.story.length });
+        }
       }
       if (ev.act === "bust") cues.push("bust");
       else if (ev.act === "perfect") cues.push("perfect");
-      else if (ev.act === "stop") cues.push("stop");
+      else if (ev.act === "stop") cues.push(ev.auto ? "autoStop" : "stop");
       else if (ev.act === "curse") cues.push("curse");
     }
     if (prev.candles >= 10 && next.candles < 10 && next.phase === "play") cues.push("lastCandles");
     const mine = (s: TalesState) => currentActor(s) === viewer;
     if (mine(next) && !mine(prev)) cues.push("turn");
+    // still my turn after a tale and the next one is risky
+    else if (mine(next) && next.told > 0 && next.lastEvent !== prev.lastEvent) {
+      const o = drawOdds(next, viewer);
+      if (o.bust + o.curse >= 0.35) cues.push("danger");
+    }
     if (prev.phase !== "ended" && next.phase === "ended") cues.push("victory");
     return cues;
   };

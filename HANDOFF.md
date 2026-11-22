@@ -1,5 +1,15 @@
 # HANDOFF — 현재 스냅샷
 
+## 🕯️ 백 개의 괴담 코치·연출·효과음·렉 — 2026-11-23 (패치 v1.201.0)
+
+요청: "사용자가 어떻게 플레이해야 잘하고 있는지 알 수 있게 안내와 효과음, 모든 액션의 이펙트" + 이어서 "렉 걸리지 않게". 원전 [boardGameRule/백개의괴담/백개의괴담.md](./boardGameRule/백개의괴담/백개의괴담.md) §13.
+- **코치** `coach.ts`: Lv.10 봇 기준(`drawOdds.gain − tableShift`, `bot.ts`에서 꺼냄)으로 `advise`(🔰 도우미 켜졌을 때 추천 배지) · `judge`(내 결정마다 👍/🙂/🤏/😈/🎲/🍀/⏰, 첫 의무 이야기는 제외) · `standing`(1위 차 + 남은 바퀴) · 끝 화면 판단 리포트 + `tallyTip`. 보드는 렌더 중 이전 상태와 비교해 채점(effect 아님). `coach.test.ts` 5개.
+- **연출** `TalesFx.tsx`: CSS 키프레임 오버레이만(WebGL 0), 2D/3D 공통 래퍼 위. 이벤트 `turn`을 key로 재생, 흔들림은 짝/홀 클래스 교대로 연속 씌임도 재생. reduced-motion이면 흔들림 끔.
+- **소리**: press/chain/danger/autoStop/good/greedy/sigh/lead/start 추가. gong·tick에 음 이름(C2/A1/C6)을 넘겨 수 kHz로 올라가던 것 → 배수 1/0.75.
+- **렉**: 방의 250ms `setNowMs`를 초가 바뀔 때만, 연출 대기 중 `setTurnSeen` 매 틱 → ref 누적 후 한 번. `TalesTable3D` memo + 보드 `seats3d`/`peek` useMemo, 2D 촛불 띠 memo.
+- **확인**: hundredTales 테스트 + proceduralSuites 통과, tsc 0, eslint 0.
+- **남은 것**: 소리 귀로 미확인, 실기기 FPS 체감 미확인.
+
 ## 🏁 변신 숨바꼭질 꼼꼬미 알림 + 렉 줄이기 — 2026-11-23 (패치 v1.200.0)
 
 요청: "꼼꼼이로 들어왔을 때 모든 사람한테 들어왔다는 표시가 크게 / 전체적으로 렉이 걸리지 않게". 코드 `src/games/morphHide/`.

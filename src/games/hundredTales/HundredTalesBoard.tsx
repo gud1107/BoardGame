@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import { useSoundCues, useSuiteBgm } from "@/lib/audio/useProceduralSuite";
@@ -14,9 +14,11 @@ import {
   GHOST_LABEL,
   GHOSTS,
   nextCard,
+  RELIGHT,
   storyPoints,
   unseenCards,
   type EngineAction,
+  type TaleEvent,
   type Seat,
   type TaleCard,
   type TalesState,
@@ -24,6 +26,8 @@ import {
 import { getHundredTalesSound, hundredTalesCues, talesIntensity } from "./hundredTalesSound";
 import { eventText, seatColor, seatMark } from "./labels";
 import RulebookModal from "./RulebookModal";
+import { addVerdict, advise, EMPTY_TALLY, GRADE_STYLE, judge, standing, tallyTip, tookLead, type CoachTally, type Grade, type Verdict } from "./coach";
+import { shakeFor, TalesFxLayer, TalesFxStyles } from "./TalesFx";
 
 const TalesTable3D = dynamic(() => import("./three/TalesTable3D"), { ssr: false, loading: () => <Loading3D label="🕯️ 촛불을 켜는 중…" /> });
 
@@ -65,14 +69,19 @@ function TaleChip({ card, big }: { card: TaleCard; big?: boolean }) {
 }
 
 /** §7 candle meter — the shared pie. */
-function CandleMeter({ candles, max }: { candles: number; max: number }) {
+const CandleMeter = memo(function CandleMeter({ candles, max, ev }: { candles: number; max: number; ev: TaleEvent | null }) {
   const frac = max > 0 ? candles / max : 0;
   const tone = frac <= 0.1 ? "bg-rose-500" : frac <= 0.33 ? "bg-amber-500" : "bg-amber-300";
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-baseline justify-between text-xs">
         <span className="font-bold text-white/70 light:text-slate-600">🕯️ 남은 촛불</span>
-        <span className={`font-black tabular-nums ${frac <= 0.1 ? "text-rose-300 light:text-rose-600" : "text-amber-100 light:text-amber-700"}`}>
+        <span className={`relative font-black tabular-nums ${frac <= 0.1 ? "text-rose-300 light:text-rose-600" : "text-amber-100 light:text-amber-700"}`}>
+          {ev && "card" in ev && (ev.card.fear > 0 || ev.card.kind === "candle") && (
+            <span key={`${ev.act}-${ev.turn}`} className={`tales-num absolute -top-3 right-full mr-1 text-[11px] ${ev.card.kind === "candle" ? "text-emerald-300 light:text-emerald-600" : "text-rose-300 light:text-rose-600"}`}>
+              {ev.card.kind === "candle" ? `+${RELIGHT}` : `−${ev.card.fear}`}
+            </span>
+          )}
           {frac <= 0.1 && "⚠ "}
           {candles} / {max}
         </span>
@@ -82,6 +91,38 @@ function CandleMeter({ candles, max }: { candles: number; max: number }) {
       </div>
     </div>
   );
+});
+
+/** 2D candle strip — memoised: 100 glowing spans only redraw when the count changes. */
+const CandleStrip = memo(function CandleStrip({ candles, max }: { candles: number; max: number }) {
+  return (
+    <div className="flex flex-wrap justify-center gap-[3px]" aria-hidden>
+      {Array.from({ length: max }, (_, i) => (
+        <span key={i} className={`h-3 w-1.5 rounded-sm ${i < candles ? "bg-amber-200 shadow-[0_0_6px_rgba(251,191,36,.9)]" : "bg-stone-700"}`} />
+      ))}
+    </div>
+  );
+});
+
+const GRADE_TONE: Record<Grade, string> = {
+  good: "border-emerald-400/50 bg-emerald-500/10 text-emerald-100 light:bg-emerald-50 light:text-emerald-800",
+  ok: "border-white/15 bg-white/[0.04] text-white/80 light:border-slate-200 light:bg-slate-50 light:text-slate-700",
+  early: "border-sky-400/40 bg-sky-500/10 text-sky-100 light:bg-sky-50 light:text-sky-800",
+  unlucky: "border-sky-400/40 bg-sky-500/10 text-sky-100 light:bg-sky-50 light:text-sky-800",
+  greedy: "border-rose-400/50 bg-rose-500/10 text-rose-100 light:bg-rose-50 light:text-rose-800",
+  bold: "border-amber-400/50 bg-amber-500/10 text-amber-100 light:bg-amber-50 light:text-amber-800",
+  timeout: "border-rose-400/50 bg-rose-500/10 text-rose-100 light:bg-rose-50 light:text-rose-800",
+};
+const GRADE_SOUND: Record<Grade, string | null> = { good: "good", ok: null, early: "sigh", unlucky: "sigh", greedy: "greedy", bold: "greedy", timeout: null };
+
+interface CoachState {
+  prev: TalesState;
+  verdict: Verdict | null;
+  /** turn of the latest verdict (sound trigger) */
+  at: number;
+  tally: CoachTally;
+  /** turn I last took sole first place */
+  lead: number;
 }
 
 export default function HundredTalesBoard({ state, viewerSeat, names, connectedSeats, botSeats, deadlineMs, nowMs, onAction, onGameEnd }: Props) {
@@ -95,11 +136,33 @@ export default function HundredTalesBoard({ state, viewerSeat, names, connectedS
   const classify = useMemo(() => hundredTalesCues(viewerSeat), [viewerSeat]);
   useSoundCues(state, getHundredTalesSound, classify);
 
+  // 🧭 coach — graded during render from the previous state (no extra effect pass)
+  const [coach, setCoach] = useState<CoachState>(() => ({ prev: state, verdict: null, at: -1, tally: EMPTY_TALLY, lead: -1 }));
+  if (coach.prev !== state) {
+    const v = viewerSeat >= 0 ? judge(coach.prev, state, viewerSeat) : null;
+    const led = viewerSeat >= 0 && state.phase === "play" && tookLead(coach.prev, state, viewerSeat);
+    setCoach({ prev: state, verdict: v ?? coach.verdict, at: v ? state.turn : coach.at, tally: v ? addVerdict(coach.tally, v) : coach.tally, lead: led ? state.turn : coach.lead });
+  }
+  const verdictGrade = coach.verdict?.grade ?? null;
+  useEffect(() => {
+    const cue = verdictGrade ? GRADE_SOUND[verdictGrade] : null;
+    if (coach.at >= 0 && cue) getHundredTalesSound().play(cue);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coach.at]);
+  useEffect(() => {
+    if (coach.lead >= 0) getHundredTalesSound().play("lead");
+  }, [coach.lead]);
+  useEffect(() => {
+    if (state.turn === 0 && state.phase === "play") getHundredTalesSound().play("start");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const myTurn = state.phase === "play" && state.seat === viewerSeat && sentTurn !== state.turn;
   const send = useCallback(
     (type: "draw" | "stop") => {
       if (!myTurn) return;
       setSentTurn(state.turn);
+      getHundredTalesSound().play("press");
       onAction({ type, seat: viewerSeat, turn: state.turn });
     },
     [myTurn, onAction, state.turn, viewerSeat],
@@ -129,7 +192,11 @@ export default function HundredTalesBoard({ state, viewerSeat, names, connectedS
   const winner = ended ? rankings[0].seat : null;
   const odds = drawOdds(state);
   const stake = storyPoints(state.story);
-  const peek = state.peek ? nextCard(state) : null;
+  const peek = useMemo(() => (state.peek ? nextCard(state) : null), [state]);
+  const advice = state.options.helper && myTurn ? advise(state, viewerSeat) : null;
+  const risky = myTurn && state.told > 0 && odds.bust + odds.curse >= 0.35;
+  const stand = viewerSeat >= 0 && viewerSeat < state.playerCount ? standing(state, viewerSeat) : null;
+  const firstTime = myTurn && state.told === 0 && coach.tally.decisions === 0 && !state.log.some((e) => e.seat === viewerSeat);
   const ev = state.lastEvent;
   const inStory = new Set(state.story.map((c) => c.kind));
   const pool = unseenCards(state);
@@ -137,17 +204,24 @@ export default function HundredTalesBoard({ state, viewerSeat, names, connectedS
   const actorName = state.phase === "play" ? name(state.seat) : null;
   const frac = state.candles / state.candlesMax;
 
-  const seats3d = Array.from({ length: state.playerCount }, (_, seat) => ({
-    seat,
-    name: names[seat] ?? `${seat + 1}번`,
-    color: seatColor(seat),
-    away: !connectedSeats.has(seat) && !botSeats.has(seat),
-    score: state.scores[seat],
-    salts: state.salts[seat],
-  }));
+  // stable between clock ticks so the memoised 3D table doesn't re-render
+  const { playerCount, scores, salts } = state;
+  const seats3d = useMemo(
+    () =>
+      Array.from({ length: playerCount }, (_, seat) => ({
+        seat,
+        name: names[seat] ?? `${seat + 1}번`,
+        color: seatColor(seat),
+        away: !connectedSeats.has(seat) && !botSeats.has(seat),
+        score: scores[seat],
+        salts: salts[seat],
+      })),
+    [playerCount, names, connectedSeats, botSeats, scores, salts],
+  );
 
   return (
     <div className="flex flex-col gap-3">
+      <TalesFxStyles />
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded-full bg-rose-900/50 px-2.5 py-1 text-xs font-black text-rose-100 light:bg-rose-100 light:text-rose-800">🕯️ 백 개의 괴담</span>
         {!ended && actorName && (
@@ -165,6 +239,8 @@ export default function HundredTalesBoard({ state, viewerSeat, names, connectedS
         </div>
       </div>
 
+      <div className={`relative ${shakeFor(ev)}`}>
+      <TalesFxLayer ev={ev} />
       {board.view === "3d" ? (
         <Frame3D hint={ended ? undefined : "드래그로 둘러보기 · 🎥/🪑 시점 전환"}>
           <TalesTable3D
@@ -187,11 +263,7 @@ export default function HundredTalesBoard({ state, viewerSeat, names, connectedS
       ) : (
         // 2D: a dark strip of candles that dims with what's left
         <div className="relative overflow-hidden rounded-2xl border border-black/40 p-4 text-center" style={{ background: `radial-gradient(circle at 50% 40%, rgba(251,191,36,${0.08 + frac * 0.3}), #050303 70%)` }}>
-          <div className="flex flex-wrap justify-center gap-[3px]" aria-hidden>
-            {Array.from({ length: state.candlesMax }, (_, i) => (
-              <span key={i} className={`h-3 w-1.5 rounded-sm ${i < state.candles ? "bg-amber-200 shadow-[0_0_6px_rgba(251,191,36,.9)]" : "bg-stone-700"}`} />
-            ))}
-          </div>
+          <CandleStrip candles={state.candles} max={state.candlesMax} />
           <div className="mt-3 flex items-center justify-center gap-3">
             {ev && "card" in ev && <TaleChip card={ev.card} big />}
             {peek && (
@@ -203,6 +275,7 @@ export default function HundredTalesBoard({ state, viewerSeat, names, connectedS
           </div>
         </div>
       )}
+      </div>
 
       {/* last event banner */}
       {ev && (
@@ -215,7 +288,18 @@ export default function HundredTalesBoard({ state, viewerSeat, names, connectedS
       )}
 
       <div className={`${PANEL} flex flex-col gap-3`}>
-        <CandleMeter candles={state.candles} max={state.candlesMax} />
+        <CandleMeter candles={state.candles} max={state.candlesMax} ev={ev} />
+        {stand && <p className="-mt-1 text-[11px] font-bold text-white/60 light:text-slate-500">{stand.text}</p>}
+        {coach.verdict && (
+          <div key={coach.at} className={`rounded-lg border px-2.5 py-1.5 text-xs font-bold ${GRADE_TONE[coach.verdict.grade]}`} aria-live="polite">
+            🧭 {coach.verdict.text}
+            {coach.tally.decisions > 0 && (
+              <span className="ml-1 font-normal opacity-70">
+                · 판단 {coach.tally.agreed}/{coach.tally.decisions}
+              </span>
+            )}
+          </div>
+        )}
         {!ended && (
           <>
             <div className="flex flex-col gap-1.5">
@@ -250,13 +334,38 @@ export default function HundredTalesBoard({ state, viewerSeat, names, connectedS
               </p>
             )}
 
+            {firstTime && (
+              <ol className="list-decimal space-y-0.5 rounded-lg border border-amber-300/30 bg-amber-400/10 py-2 pl-7 pr-2 text-[11px] text-amber-100 light:text-amber-800">
+                <li>
+                  <b>🕯️ 이야기 시작</b>으로 카드를 뒤집어요 — 귀신의 공포 숫자만큼 점수가 쌓여요.
+                </li>
+                <li>
+                  이번 차례에 <b>같은 귀신이 또 나오면 씌어서</b> 쌓인 점수가 날아가요.
+                </li>
+                <li>
+                  적당히 쌓이면 <b>🛑 여기까지</b>로 점수를 지키세요. 🧭 코치가 판단을 채점해 줘요.
+                </li>
+              </ol>
+            )}
+            {advice && (
+              <p className={`rounded-lg border px-2 py-1.5 text-[11px] font-bold ${advice.pick === "stop" ? "border-amber-300/40 text-amber-100 light:text-amber-800" : advice.pick === "draw" ? "border-emerald-400/40 text-emerald-100 light:text-emerald-800" : "border-white/15 text-white/70 light:text-slate-600"}`}>
+                🧭 {advice.text}
+              </p>
+            )}
             {state.seat === viewerSeat ? (
-              <div className="grid grid-cols-2 gap-2">
-                <button className={PRIMARY} onClick={() => send("draw")} disabled={!myTurn}>
+              <div className="tales-myturn grid grid-cols-2 gap-2 rounded-xl">
+                <button
+                  className={`${PRIMARY} relative ${risky ? "tales-danger" : ""} ${advice?.pick === "draw" ? "ring-2 ring-emerald-300" : ""} active:scale-95`}
+                  onClick={() => send("draw")}
+                  disabled={!myTurn}
+                >
                   {state.told === 0 ? "🕯️ 이야기 시작" : "👻 한 이야기 더"}
+                  {risky && <span className="block text-[10px] font-bold text-rose-100">⚠ 위험 {Math.round((odds.bust + odds.curse) * 100)}%</span>}
+                  {advice?.pick === "draw" && <span className="absolute -right-1 -top-2 rounded-full bg-emerald-500 px-1.5 text-[10px] text-white">🧭 추천</span>}
                 </button>
-                <button className={SECOND} onClick={() => send("stop")} disabled={!myTurn || !canStop(state)}>
+                <button className={`${SECOND} relative ${advice?.pick === "stop" ? "ring-2 ring-amber-300" : ""} active:scale-95`} onClick={() => send("stop")} disabled={!myTurn || !canStop(state)}>
                   🛑 여기까지 (+{stake})
+                  {advice?.pick === "stop" && <span className="absolute -right-1 -top-2 rounded-full bg-amber-500 px-1.5 text-[10px] text-white">🧭 추천</span>}
                 </button>
               </div>
             ) : (
@@ -276,7 +385,19 @@ export default function HundredTalesBoard({ state, viewerSeat, names, connectedS
               </span>
               {state.salts[r.seat] > 0 && <span title="소금 부적">🧂{state.salts[r.seat]}</span>}
               {state.busts[r.seat] > 0 && <span title="씌인 횟수" className="text-rose-300 light:text-rose-600">😱{state.busts[r.seat]}</span>}
-              <b className="tabular-nums text-amber-100 light:text-amber-700">{r.score}</b>
+              <b className="relative tabular-nums text-amber-100 light:text-amber-700">
+                {ev && ev.seat === r.seat && (ev.act === "stop" || ev.act === "perfect") && ev.gained > 0 && (
+                  <span key={ev.turn} className="tales-num absolute -top-4 right-0 text-[11px] text-emerald-300 light:text-emerald-600">
+                    +{ev.gained}
+                  </span>
+                )}
+                {ev && ev.seat === r.seat && ev.act === "curse" && (
+                  <span key={ev.turn} className="tales-num absolute -top-4 right-0 text-[11px] text-rose-300">
+                    💀
+                  </span>
+                )}
+                {r.score}
+              </b>
             </li>
           ))}
         </ul>
@@ -296,6 +417,23 @@ export default function HundredTalesBoard({ state, viewerSeat, names, connectedS
               </li>
             ))}
           </ol>
+          {coach.tally.decisions > 0 && (
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-left text-xs text-white/80 light:border-slate-200 light:bg-slate-50 light:text-slate-700">
+              <p className="mb-1 font-black">
+                🧭 나의 판단 리포트 — 코치와 같은 판단 {coach.tally.agreed}/{coach.tally.decisions} ({Math.round((coach.tally.agreed / coach.tally.decisions) * 100)}%)
+              </p>
+              <p className="flex flex-wrap gap-x-2 gap-y-0.5">
+                {(Object.keys(GRADE_STYLE) as Grade[])
+                  .filter((g) => (coach.tally.grades[g] ?? 0) > 0)
+                  .map((g) => (
+                    <span key={g}>
+                      {GRADE_STYLE[g].icon} {GRADE_STYLE[g].label} {coach.tally.grades[g]}
+                    </span>
+                  ))}
+              </p>
+              <p className="mt-1 text-white/60 light:text-slate-500">{tallyTip(coach.tally)}</p>
+            </div>
+          )}
           <button className={PRIMARY} onClick={onGameEnd}>
             🏁 결과 저장하고 마치기
           </button>
