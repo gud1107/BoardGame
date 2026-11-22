@@ -7,7 +7,8 @@
 
 import { dcos, degToRad, dsin, type WeaponStats } from "./analyze";
 
-export const WORLD_W = 960;
+/** 2026-11-23: widened from 960 (16:9) to 1200 (20:9) — "맵을 좀 더 넓게". */
+export const WORLD_W = 1200;
 export const WORLD_H = 540;
 export const COL_W = 8;
 export const TERRAIN_COLS = WORLD_W / COL_W + 1;

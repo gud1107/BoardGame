@@ -481,7 +481,7 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
       onPointerLeave={() => {
         wallJoinRef.current = null;
       }}
-      className="block aspect-[16/9] w-full touch-none select-none rounded-2xl shadow-[0_10px_30px_-8px_rgba(60,40,10,0.45)] ring-1 ring-black/10"
+      className="block aspect-[20/9] w-full touch-none select-none rounded-2xl shadow-[0_10px_30px_-8px_rgba(60,40,10,0.45)] ring-1 ring-black/10"
       style={{ cursor: wallDraft ? penCursor(INK_COLORS[wallDraft.color], cursorKind) : aim ? "pointer" : "default" }}
     />
   );

@@ -251,6 +251,17 @@ function curl(pts: number[]): number {
   return total;
 }
 
+/** Shoelace area with sign (positive = turning the same way as a positive cross product). */
+function polygonSignedArea(pts: number[]): number {
+  let a = 0;
+  const n = pts.length / 2;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    a += pts[i * 2] * pts[j * 2 + 1] - pts[j * 2] * pts[i * 2 + 1];
+  }
+  return a / 2;
+}
+
 function polygonArea(pts: number[]): number {
   let a = 0;
   const n = pts.length / 2;
@@ -272,6 +283,20 @@ function segmentsCross(ax: number, ay: number, bx: number, by: number, cx: numbe
   const d3 = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
   const d4 = (bx - ax) * (dy - ay) - (by - ay) * (dx - ax);
   return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+
+/** Do segments AB and CD cross near the middle of both (an ✕), not just where two sides overlap at a corner? */
+function segmentsCrossMid(ax: number, ay: number, bx: number, by: number, cx: number, cy: number, dx: number, dy: number): boolean {
+  if (!segmentsCross(ax, ay, bx, by, cx, cy, dx, dy)) return false;
+  const rx = bx - ax;
+  const ry = by - ay;
+  const sx = dx - cx;
+  const sy = dy - cy;
+  const den = rx * sy - ry * sx;
+  if (den === 0) return false;
+  const t = ((cx - ax) * sy - (cy - ay) * sx) / den;
+  const u = ((cx - ax) * ry - (cy - ay) * rx) / den;
+  return t > 0.15 && t < 0.85 && u > 0.15 && u < 0.85;
 }
 
 /** Smooth-turn profile of a resampled polyline: total |turning| and how often the bend direction flips. */
@@ -338,22 +363,6 @@ function starPeaks(pts: number[]): number {
   return peaks;
 }
 
-/** Sharp corners of a closed outline, including the one where the pen started/ended. */
-function closedCorners(pts: number[]): number {
-  let corners = countTurns(pts).turns;
-  const n = pts.length;
-  if (n >= 8) {
-    const ax = pts[n - 2] - pts[n - 4];
-    const ay = pts[n - 1] - pts[n - 3];
-    const bx = pts[2] - pts[0];
-    const by = pts[3] - pts[1];
-    const la = Math.sqrt(ax * ax + ay * ay);
-    const lb = Math.sqrt(bx * bx + by * by);
-    if (la > 1e-6 && lb > 1e-6 && (ax * bx + ay * by) / (la * lb) < 0.5) corners++;
-  }
-  return corners;
-}
-
 /** Pen lifts whose ends are this close (pad px) count as one continued line. */
 export const JOIN_DIST = 14;
 
@@ -407,6 +416,112 @@ function chainStrokes(strokes: readonly Stroke[]): number[][] {
   return chains;
 }
 
+function polyLength(p: readonly number[]): number {
+  return strokeLength({ c: 0, p: p as number[] });
+}
+
+/**
+ * The closed loop inside a line, if it has one: the pen came back to where
+ * the loop started — with a small gap, or after running past the start (an
+ * overshoot). Spirals never qualify: their early and late points sit on
+ * different rings. Returns the loop's polyline or null.
+ */
+function findLoop(main: number[], len: number): number[] | null {
+  if (len < 60) return null;
+  const tol = Math.max(18, Math.min(45, len * 0.2));
+  const n = main.length;
+  const d2 = (i: number, j: number) => (main[i] - main[j]) * (main[i] - main[j]) + (main[i + 1] - main[j + 1]) * (main[i + 1] - main[j + 1]);
+  if (d2(0, n - 2) <= tol * tol) return main;
+  if (Math.abs(curl(resample(main, 8))) >= 9) return null;
+  // Overshoot: the closest (early point, late point) pair whose stretch between covers ≥ 70% of the line.
+  const pts = resample(main, 4);
+  const m = pts.length / 2;
+  const cum: number[] = [0];
+  for (let i = 1; i < m; i++) {
+    const dx = pts[i * 2] - pts[i * 2 - 2];
+    const dy = pts[i * 2 + 1] - pts[i * 2 - 1];
+    cum.push(cum[i - 1] + Math.sqrt(dx * dx + dy * dy));
+  }
+  const total = cum[m - 1];
+  let best = tol * tol;
+  let bi = -1;
+  let bj = -1;
+  for (let i = 0; i < m && cum[i] <= total * 0.3; i++) {
+    for (let j = m - 1; j > i && cum[j] - cum[i] >= total * 0.7; j--) {
+      const dx = pts[i * 2] - pts[j * 2];
+      const dy = pts[i * 2 + 1] - pts[j * 2 + 1];
+      const d = dx * dx + dy * dy;
+      if (d < best) {
+        best = d;
+        bi = i;
+        bj = j;
+      }
+    }
+  }
+  return bi < 0 ? null : pts.slice(bi * 2, bj * 2 + 2);
+}
+
+/** Polyline resampled to exactly-spaced points by arc length (scale independent). */
+function uniform(p: number[], count: number): number[] {
+  const len = polyLength(p);
+  if (len <= 0) return p.slice();
+  return resample(p, len / count);
+}
+
+/**
+ * Sharp corners of a polyline, measured over a window (so a hand-rounded
+ * corner still counts as one corner instead of two gentle bends). `pts` must
+ * be uniformly resampled; `cyclic` treats it as a closed loop. Each corner
+ * is reported with its turning sign.
+ */
+function sharpCorners(pts: number[], k: number, maxCos: number, cyclic: boolean, onlySign = 0): number[] {
+  let n = pts.length / 2;
+  if (cyclic && n > 2 && pts[0] === pts[pts.length - 2] && pts[1] === pts[pts.length - 1]) n--;
+  if (n < 2 * k + 1) return [];
+  const at = (i: number) => (cyclic ? ((i % n) + n) % n : i);
+  const cosAt: number[] = new Array<number>(n).fill(1);
+  const signAt: number[] = new Array<number>(n).fill(0);
+  for (let i = cyclic ? 0 : k; i < (cyclic ? n : n - k); i++) {
+    const a = at(i - k) * 2;
+    const b = i * 2;
+    const c = at(i + k) * 2;
+    const ax = pts[b] - pts[a];
+    const ay = pts[b + 1] - pts[a + 1];
+    const bx = pts[c] - pts[b];
+    const by = pts[c + 1] - pts[b + 1];
+    const la = Math.sqrt(ax * ax + ay * ay);
+    const lb = Math.sqrt(bx * bx + by * by);
+    if (la < 1e-6 || lb < 1e-6) continue;
+    cosAt[i] = (ax * bx + ay * by) / (la * lb);
+    signAt[i] = ax * by - ay * bx > 0 ? 1 : -1;
+  }
+  // Group neighbouring sharp samples into one corner (cyclic runs wrap around).
+  // Two same-sign runs only `k` samples apart are one corner cut in two (e.g. the pen's gap at a corner).
+  // With `onlySign`, the other turning direction is ignored and may sit inside a corner (a hook at the pen's start).
+  const sharp = cosAt.map((c, i) => c < maxCos && (onlySign === 0 || signAt[i] === onlySign));
+  const gap = onlySign === 0 ? k : 2 * k;
+  let start = 0;
+  if (cyclic) {
+    if (sharp.every((s) => s)) return [];
+    while (sharp[start]) start++;
+  }
+  const runs: { sign: number; from: number; to: number }[] = [];
+  for (let s = 0; s < n; s++) {
+    const i = cyclic ? (start + s) % n : s;
+    if (!sharp[i]) continue;
+    const last = runs[runs.length - 1];
+    if (last && last.sign === signAt[i] && s - last.to <= gap) last.to = s;
+    else runs.push({ sign: signAt[i], from: s, to: s });
+  }
+  if (cyclic && runs.length > 1) {
+    const first = runs[0];
+    const last = runs[runs.length - 1];
+    if (first.sign === last.sign && first.from + n - last.to <= gap) runs.pop();
+  }
+  const corners = runs.map((r) => r.sign);
+  return corners;
+}
+
 /** Full analysis of a weapon doodle drawn on the PAD_SIZE pad. */
 export function analyzeWeapon(strokes: readonly Stroke[]): WeaponStats {
   const ink = totalInk(strokes);
@@ -439,10 +554,12 @@ export function analyzeWeapon(strokes: readonly Stroke[]): WeaponStats {
   const ey = main[main.length - 1];
   const endDist = Math.sqrt((ex - sx) * (ex - sx) + (ey - sy) * (ey - sy));
   const straightness = mainLen > 0 ? endDist / mainLen : 0;
-  // Gap allowed between pen-down and pen-up for a closed shape (capped so a spiral never counts).
-  const closed = mainLen >= 60 && endDist <= Math.max(18, Math.min(35, mainLen * 0.15));
+  // A closed outline: the pen came back to the loop's start (small gap or a run past it). Spirals never count.
+  const loop = findLoop(main, mainLen);
+  const closed = loop !== null;
   const rs = resample(main, 8);
-  const area = closed ? polygonArea(rs) : 0;
+  const loopRs = loop ? resample(loop, 8) : rs;
+  const area = closed ? polygonArea(loopRs) : 0;
 
   let turns = 0;
   let spikes = 0;
@@ -471,24 +588,33 @@ export function analyzeWeapon(strokes: readonly Stroke[]): WeaponStats {
     for (let j = i + 1; j < straights.length && !crossing; j++) {
       const a = straights[i].p;
       const b = straights[j].p;
-      crossing = segmentsCross(a[0], a[1], a[a.length - 2], a[a.length - 1], b[0], b[1], b[b.length - 2], b[b.length - 1]);
+      crossing = segmentsCrossMid(a[0], a[1], a[a.length - 2], a[a.length - 1], b[0], b[1], b[b.length - 2], b[b.length - 1]);
     }
   }
 
+  // Sharp corners measured over a window, so hand-rounded corners still count (see sharpCorners).
+  const path = uniform(main, 48);
+  const bends = sharpCorners(path, 2, 0.35, false);
+  let bendFlips = 0;
+  for (let i = 1; i < bends.length; i++) if (bends[i] !== bends[i - 1]) bendFlips++;
+  const allSmall = lines.every((p) => polyLength(p) < 50);
+
   let kind: WeaponKind;
-  if (lines.length >= 4 && mainShare < 0.45) kind = "cluster";
-  else if (crossing) kind = "shuriken";
+  if (crossing) kind = "shuriken";
+  else if (lines.length >= 4 && (mainShare < 0.45 || allSmall)) kind = "cluster";
   else if (straightness >= 0.85 && mainLen >= 70) kind = "spear";
-  else if (closed && area >= 900) {
-    const corners = closedCorners(rs);
-    if (starPeaks(rs) >= 4) kind = "shuriken";
+  else if (loop && area >= 900) {
+    // Only convex corners count: a little hook where the pen started or stopped bends the other way.
+    const corners = sharpCorners(uniform(loop, 72), 4, 0.55, true, polygonSignedArea(loopRs) > 0 ? 1 : -1).length;
+    if (starPeaks(loopRs) >= 4) kind = "shuriken";
     else if (corners === 3) kind = "rocket";
-    else if (corners >= 4 && corners <= 5) kind = "anvil";
+    else if (corners >= 4 && corners <= 6) kind = "anvil";
     else kind = "bomb";
-  } else if (zigzag >= 3) kind = "lightning";
+  } else if (bends.length >= 3 && bendFlips >= 2) kind = "lightning";
   else if (!closed && mainLen >= 60 && mainShape.turns <= 3 && Math.abs(mainCurl) >= 9) kind = "drill";
-  else if (!closed && mainLen >= 60 && Math.abs(mainCurl) >= 1.9 && mainShape.turns <= 2 && straightness >= 0.15 && straightness < 0.85) kind = "boomerang";
-  else if (!closed && mainLen >= 80 && mainShape.turns <= 2 && bend.inflections >= 1 && bend.absCurl >= 2.5 && Math.abs(mainCurl) < 1.9) kind = "wave";
+  else if (!closed && mainLen >= 60 && Math.abs(mainCurl) >= 1.9 && bends.length <= 1 && straightness >= 0.15 && straightness < 0.85) kind = "boomerang";
+  else if (!closed && mainLen >= 80 && bends.length <= 1 && bend.inflections >= 1 && bend.absCurl >= 2.5 && Math.abs(mainCurl) < 1.9) kind = "wave";
+  else if (zigzag >= 3) kind = "lightning";
   else kind = "club";
 
   // Centroid (ink-weighted by resampled points), then scale to world units.
@@ -527,9 +653,9 @@ export function analyzeWeapon(strokes: readonly Stroke[]): WeaponStats {
   if (kind === "rocket") {
     // The nose is the outline point farthest from the centroid.
     let best = -1;
-    for (let i = 0; i < rs.length; i += 2) {
-      const dx = rs[i] - cx;
-      const dy = rs[i + 1] - cy;
+    for (let i = 0; i < loopRs.length; i += 2) {
+      const dx = loopRs[i] - cx;
+      const dy = loopRs[i + 1] - cy;
       const d = dx * dx + dy * dy;
       if (d > best) {
         best = d;

@@ -23,6 +23,7 @@ import {
 import { playCardRevealSound, playMyTurnSound, playScribbleTick, playVictorySound, playWallSound } from "./inkDuelAudio";
 import WeaponPad, { DoodleSvg, InkPalette } from "./WeaponPad";
 import { MAPS } from "./maps";
+import ShapeGuide from "./ShapeGuide";
 import { activeStatuses, STATUS_INFO } from "./status";
 
 export const TURN_SECONDS = 45;
@@ -558,6 +559,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
           </div>
 
           {mode !== "wall" ? (
+            <>
             <div className="grid grid-cols-[minmax(0,44%)_1fr] gap-2 sm:grid-cols-[minmax(0,220px)_1fr] sm:gap-3">
               <div className="w-full max-w-[220px]">
                 <WeaponPad
@@ -568,7 +570,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
                   onScribble={playScribbleTick}
                 />
                 <p className="mt-1 hidden text-center text-[10px] text-white/40 sm:block light:text-slate-400">
-                  {mode === "shield" ? "그린 모양이 그대로 방패가 돼요" : "선·원·세모·네모·별·지그재그·C자·소용돌이·S자·점점이 — 모양마다 다른 무기, 두 색을 섞으면 효과 2개"}
+                  {mode === "shield" ? "그린 모양이 그대로 방패가 돼요" : "모양마다 다른 무기 — 아래 📖 그림 사전 참고"}
                 </p>
               </div>
               {mode === "shield" ? (
@@ -624,7 +626,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
                 ) : (
                   <div className="rounded-xl border border-dashed border-white/20 p-3 text-center text-xs text-white/50 sm:p-4 light:border-slate-300 light:text-slate-500">
                     ← 공책에 무기를 그려보세요 ✏️
-                    <span className="mt-1 block text-[10px] sm:hidden">선·원·세모·네모·별·지그재그·C자·소용돌이·S자·점점이</span>
+                    <span className="mt-1 block text-[10px] sm:hidden">아래 📖 그림 사전을 참고하세요</span>
                   </div>
                 )}
                 {shieldReady && (
@@ -666,6 +668,8 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
               </div>
               )}
             </div>
+            {mode === "weapon" && <ShapeGuide current={stats?.kind ?? null} />}
+            </>
           ) : (
             <div className="flex flex-col gap-2">
               <p className="text-xs text-white/60 light:text-slate-500">

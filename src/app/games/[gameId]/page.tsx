@@ -333,6 +333,7 @@ export default function GamePlayPage() {
   // 2026-09-26 배고픈 상어: 실시간 캔버스 액션이라 화면이 넓을수록 시야가 넓어져 6xl.
   // 2026-09-27 그림 전화기: 그림판(4:3)이 2xl 폭에선 너무 작아 3xl.
   // 2026-10-23 섬광전대 프리즘파이브: 16:9 횡스크롤 캔버스라 상어와 같은 6xl.
+  // 2026-11-23 낙서 결투: 경기장을 20:9(1200폭)로 넓히면서 2xl 칸에선 너무 작아 5xl.
   const pageMaxWidth =
     game.id === "hungry-shark" || game.id === "prism-five" || game.id === "one-shot" || game.id === "pet-guard" || game.id === "billiards-party" || game.id === "snowball-fort" || game.id === "crown-thief" || game.id === "toy-room-race" || game.id === "parcel-panic" || game.id === "finders-keepers" || game.id === "thin-ice-party" || game.id === "crumble-climb" || game.id === "cloud-squadron" || game.id === "rope-climbers" || game.id === "beat-mayhem" || game.id === "hushed-ward" || game.id === "mannequin-mall" || game.id === "possession-night" || game.id === "tagger-among-us"
       ? "max-w-6xl"
@@ -342,7 +343,7 @@ export default function GamePlayPage() {
       ? "max-w-[96rem]"
       : game.id === "splendor-duel" || game.id === "tavern-brawl"
       ? "max-w-7xl"
-      : game.id === "summoners-rift" || game.id === "chess" || game.id === "avalon" || game.id === "dalmuti" || game.id === "mafia" || game.id === "god-life-planner"
+      : game.id === "summoners-rift" || game.id === "ink-duel" || game.id === "chess" || game.id === "avalon" || game.id === "dalmuti" || game.id === "mafia" || game.id === "god-life-planner"
         ? "max-w-5xl"
       : game.id === "destiny-war-39"
         ? "max-w-6xl"

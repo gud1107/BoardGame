@@ -257,6 +257,10 @@ export function renderBackground(dpr: number, map: MapId = "meadow"): HTMLCanvas
     bird(600, 190, "#475569");
     star(130, 190, "#fbbf24");
     star(860, 210, "#fbbf24");
+    // Right-hand strip added when the arena widened to 1200.
+    cloud(960, 120, 0.9, "rgba(255,255,255,0.85)", "#7dd3fc");
+    bird(900, 160, "#475569");
+    star(1130, 230, "#fbbf24");
     hills(300, 34, 0.007, 1.2, "#a5b4fc", 0.16);
     hills(340, 26, 0.011, 3.1, "#86efac", 0.16);
   } else if (map === "desert") {
@@ -276,17 +280,18 @@ export function renderBackground(dpr: number, map: MapId = "meadow"): HTMLCanvas
     wash(ctx, mesa, "#ea580c", rng, 0.18);
     crayon(ctx, mesa, "#9a3412", 2, rng, 0.6);
     // Distant cactus silhouettes.
-    for (const cx of [140, 500, 880]) {
+    for (const cx of [140, 500, 880, 1110]) {
       crayon(ctx, [cx, 345, cx, 300], "#65a30d", 7, rng, 0.45);
       crayon(ctx, [cx, 322, cx - 10, 322, cx - 10, 308], "#65a30d", 5, rng, 0.45);
       crayon(ctx, [cx, 316, cx + 10, 316, cx + 10, 302], "#65a30d", 5, rng, 0.45);
     }
     bird(430, 140, "#7c2d12");
     bird(455, 150, "#7c2d12");
+    bird(900, 175, "#7c2d12");
     // Heat shimmer lines.
     for (let i = 0; i < 6; i++) {
       const y = 200 + i * 22;
-      const x = 100 + rng() * 700;
+      const x = 100 + rng() * (WORLD_W - 260);
       crayon(ctx, [x, y, x + 15, y - 3, x + 30, y, x + 45, y - 3], "rgba(234, 88, 12, 0.35)", 1.4, rng);
     }
   } else if (map === "snow") {
@@ -303,6 +308,7 @@ export function renderBackground(dpr: number, map: MapId = "meadow"): HTMLCanvas
       [180, 360, 300, 170],
       [470, 360, 360, 210],
       [800, 360, 300, 160],
+      [1080, 360, 320, 190],
     ]) {
       const peak = [px - w / 2, base, px, base - h, px + w / 2, base];
       wash(ctx, [...peak, px - w / 2, base], "#64748b", rng, 0.22);
@@ -318,7 +324,7 @@ export function renderBackground(dpr: number, map: MapId = "meadow"): HTMLCanvas
       crayon(ctx, peak, "#475569", 2, rng, 0.55);
     }
     // Pine trees.
-    for (const tx of [120, 300, 560, 700, 880]) {
+    for (const tx of [120, 300, 560, 700, 880, 990, 1140]) {
       const base = 372;
       for (let k = 0; k < 3; k++) {
         const w = 22 - k * 5;
@@ -360,7 +366,7 @@ export function renderBackground(dpr: number, map: MapId = "meadow"): HTMLCanvas
     ctx.arc(mx + 10, my - 6, 20, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
-    for (let i = 0; i < 9; i++) star(100 + rng() * 760, 40 + rng() * 150, "#fdba74", 4 + rng() * 3);
+    for (let i = 0; i < 11; i++) star(100 + rng() * (WORLD_W - 200), 40 + rng() * 150, "#fdba74", 4 + rng() * 3);
   }
 
   // Masking tape on the top corners.

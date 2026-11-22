@@ -32,6 +32,7 @@ import { DEFAULT_RT_RULES, RT_INK_MAX, RT_SHIELD_COOLDOWN_MS, type RtCommand, ty
 import type { RtView, RtViewPlayer } from "./rtView";
 import { activeStatuses, STATUS_INFO } from "./status";
 import WeaponPad, { InkPalette } from "./WeaponPad";
+import ShapeGuide from "./ShapeGuide";
 
 type Mode = "weapon" | "shield" | "wall";
 type CommandBody = RtCommand extends infer C ? (C extends RtCommand ? Omit<C, "seat"> : never) : never;
@@ -581,7 +582,7 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
           onPointerLeave={() => {
             wallJoinRef.current = null;
           }}
-          className="block aspect-[16/9] w-full touch-none select-none rounded-2xl shadow-[0_10px_30px_-8px_rgba(60,40,10,0.45)] ring-1 ring-black/10"
+          className="block aspect-[20/9] w-full touch-none select-none rounded-2xl shadow-[0_10px_30px_-8px_rgba(60,40,10,0.45)] ring-1 ring-black/10"
           style={{ cursor: mode === "wall" ? penCursor(INK_COLORS[color], cursorKind) : "pointer" }}
         />
         {me && !me.alive && hud?.phase === "playing" && (
@@ -717,6 +718,7 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
           {mode === "weapon" && stats && <WeaponCard stats={stats} compact />}
           {mode === "weapon" && !stats && <p className="text-[11px] text-white/50 light:text-slate-500">✏️ 공책에 무기를 그려 장전하세요 — 모양마다 다른 무기, 그린 무기는 계속 다시 쏠 수 있어요.</p>}
           {mode === "shield" && <p className="text-[11px] text-white/60 light:text-slate-500">🛡️ 그린 모양이 4초 동안 방패로 서요 — 재장전 없이 바로 세울 수 있고(방패끼리는 6초 간격), 받는 피해는 잉크에 비례해 줄어요. 경기장을 드래그해 방향을 정하세요.</p>}
+          {mode === "weapon" && <ShapeGuide current={stats?.kind ?? null} />}
           <p className="hidden text-[10px] text-white/40 sm:block light:text-slate-400">←/→·A/D 이동 · ↑/W/스페이스 점프 · 경기장 드래그 후 놓으면 발사 · F/Enter 발사</p>
         </div>
       )}

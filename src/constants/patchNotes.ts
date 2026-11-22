@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.202.0",
+    releaseDate: "2026-11-23",
+    title: "✏️ 낙서 결투 넓은 맵 · 그림 인식 개선 · 그림 사전",
+    changes: [
+      { game: "ink-duel", type: "IMPROVE", desc: "🗺️ 경기장이 1.25배 넓어졌어요(20:9) · PC에선 화면도 더 크게 보여요" },
+      { game: "ink-duel", type: "IMPROVE", desc: "🎯 그린 모양대로 나오게 — 손으로 그린 세모·네모·흩뿌린 점·물결이 엉뚱한 무기로 읽히던 문제 개선(네모 11%→94%, 세모 33%→96%)" },
+      { game: "ink-duel", type: "FEAT", desc: "📖 그림 사전 — 무엇을 그리면 어떤 무기가 나오는지 예시 그림·그리는 법·효과, 지금 그린 무기 강조, 색 → 효과 탭" },
+    ],
+  },
+  {
     version: "v1.201.0",
     releaseDate: "2026-11-23",
     title: "🕯️ 백 개의 괴담 코치 · 연출 · 렉 줄이기",
