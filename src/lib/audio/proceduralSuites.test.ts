@@ -74,7 +74,8 @@ describe("game sound suites", () => {
     // + parcel panic (택배 대란).
     // + mannequin mall (마네킹 백화점).
     // + possession night (빙의의 밤).
-    expect(suites.length).toBe(64);
+    // + cloud squadron (구름 편대).
+    expect(suites.length).toBe(65);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

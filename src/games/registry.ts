@@ -394,6 +394,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "cloud-squadron",
+    name: "구름 편대",
+    nameEn: "Cloud Squadron",
+    description:
+      "조종사 6명 중 하나를 골라 1~4명이 함께 구름 위 하늘을 되찾는 세로 스크롤 슈팅 협동 게임! 사격은 자동, 탄막 사이를 누비며 ⚡ 스킬(대시·방패·치유 드론·충전 레이저·은신·네이팜)과 ★ 궁극기로 구름 바다·폭풍 협곡·하늘 요새의 보스를 격파해요. 판정점은 기체 가운데 작은 점뿐 — 아슬아슬하게 스치면 궁극기 게이지가 차요. 쓰러진 동료는 곁에 머물러 구하고, 두 사람이 동시에 궁극기를 쓰면 ✨ 합동 궁극기! 3단계 난이도, 혼자 하기·AI 동료 Lv.1~10.",
+    players: { min: 1, max: 4 },
+    playTime: { minMinutes: 3, maxMinutes: 10 },
+    category: "party",
+    thumbnail: { emoji: "✈️", gradient: ["#5f9fd8", "#0c1830"] },
+    tags: ["슈팅", "탄막", "비행기", "캐릭터", "스킬", "협동", "실시간", "액션", "혼자", "AI봇"],
+    genres: ["party", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "alkkagi",
     name: "알까기 대전",
     nameEn: "Alkkagi Battle",

@@ -190,6 +190,12 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "🎁 아이템 · 🍌 미끄러뜨림 · 🌀 점프대", value: (d) => `${n(d.items)} · ${n(d.bananaHits)} · ${n(d.padJumps)}` },
     { label: "💀 저주 쌓인 시간 · 저주 모드 1등", value: (d) => `${n(d.curseSec)}초 · ${n(d.curseWins)}` },
   ],
+  "cloud-squadron": [
+    { label: "🏁 원정 성공 · 돌파한 스테이지 · 보스 격파", value: (d) => `${n(d.clears)} · ${n(d.stagesCleared)} · ${n(d.bossKills)}` },
+    { label: "💥 격추 · 💚 동료 부활 · 🪂 격추당함", value: (d) => `${n(d.kills)} · ${n(d.revives)} · ${n(d.downs)}` },
+    { label: "✨ 스침 · ★ 궁극기 (합동) · ⚡ 스킬", value: (d) => `${n(d.grazes)} · ${n(d.ults)} (${n(d.combos)}) · ${n(d.skills)}` },
+    { label: "🛡 무피격 원정 성공 · 🎁 아이템", value: (d) => `${n(d.noHitClears)} · ${n(d.items)}` },
+  ],
   "thin-ice-party": [
     { label: "💥 KO / 🌊 빠짐 (혼자)", value: (d) => `${n(d.kos)} / ${n(d.falls)} (${n(d.selfFalls)})` },
     { label: "🏆 라운드 1등 / 3등 안", value: (d) => `${n(d.roundWins)} / ${n(d.podiums)}` },

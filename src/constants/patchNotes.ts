@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.190.0",
+    releaseDate: "2026-11-22",
+    title: "✈️ 새 게임 구름 편대",
+    changes: [
+      { game: "cloud-squadron", type: "FEAT", desc: "✈️ 새 게임 — 조종사 6명 중 하나를 골라 1~4명이 함께 보스를 잡는 세로 스크롤 협동 슈팅 · 혼자 하기·AI 동료 Lv.1~10" },
+      { game: "cloud-squadron", type: "FEAT", desc: "⚡ 조종사마다 다른 기체·사격·스킬·궁극기 · 스침으로 게이지 충전 · 2초 안에 같이 쓰면 ✨ 합동 궁극기" },
+      { game: "cloud-squadron", type: "FEAT", desc: "🗺️ 구름 바다·폭풍 협곡·하늘 요새 3스테이지와 보스 3종 · 🪂 쓰러진 동료 구하기 · 방장이 나가도 판이 이어져요" },
+    ],
+  },
+  {
     version: "v1.189.1",
     releaseDate: "2026-11-22",
     title: "⚙ 보드게임허브 필터 한 줄 정리 + 카드 표시 2개로",

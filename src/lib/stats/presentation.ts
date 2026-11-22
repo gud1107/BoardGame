@@ -190,6 +190,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "최장 집권", key: "bestReignSec", unit: "초" },
     { label: "떨어뜨림", key: "kos", unit: "명" },
   ],
+  "cloud-squadron": [
+    { label: "격추", key: "kills", unit: "대" },
+    { label: "동료 부활", key: "revives", unit: "번" },
+    { label: "스침", key: "grazes", unit: "번" },
+    { label: "최고 점수", key: "maxScore", unit: "점" },
+  ],
   "thin-ice-party": [
     { label: "KO", key: "kos", unit: "번" },
     { label: "라운드 1등", key: "roundWins", unit: "번" },
@@ -474,6 +480,10 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
   "crown-thief": [
     { id: "ct-steals", label: "🦹 왕관 뺏기", num: "steals", format: "count", unit: "번" },
     { id: "ct-crown", label: "👑 왕관 시간", num: "crownSec", format: "count", unit: "초" },
+  ],
+  "cloud-squadron": [
+    { id: "cs-clears", label: "🏁 원정 성공", num: "clears", format: "count", unit: "번" },
+    { id: "cs-kills", label: "💥 격추", num: "kills", format: "count", unit: "대" },
   ],
   "thin-ice-party": [
     { id: "ti-kos", label: "💥 KO", num: "kos", format: "count", unit: "번" },
