@@ -444,6 +444,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "three-day-resolve",
+    name: "작심삼일",
+    nameEn: "Three-Day Resolve",
+    description:
+      "새해마다, 월요일마다 세우는 그 결심! 시즌마다 🙂 가볍게 · 😤 제대로 · 🔥 독하게 중 얼마나 독하게 결심할지, 🤫 혼자 · 💬 친구 · 📢 SNS 중 누구에게 말할지 비밀로 고르고 동시에 공개해요. 그다음 일주일 동안 매일 내 유혹 주머니에서 😴🍜🙄🗯️ 토큰을 뽑으며 버티기 · 🤝 타협 · 🍰 치팅데이 중 하나를 골라요. 유혹이 한계를 넘으면 💥 작심삼일! 특히 3일차 고비엔 두 개를 뽑아요. 무너질 확률은 늘 화면에 계산돼 나오고, 실패하면 😞 자책과 함께 📘 교훈이 남아요. 남의 결심엔 👏 응원이나 🍿 구경을 걸 수도! 2~6인 동시 진행 · AI 봇 Lv.1~10.",
+    players: { min: 2, max: 6 },
+    playTime: { minMinutes: 12, maxMinutes: 20 },
+    category: "family",
+    thumbnail: { emoji: "🔥", gradient: ["#2dd4bf", "#0f172a"] },
+    tags: ["운걸기", "푸시유어럭", "자기계발", "동시진행", "확률", "AI봇"],
+    genres: ["luck", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "magic-shop",
     name: "마법 상점",
     nameEn: "Magic Shop",

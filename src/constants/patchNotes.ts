@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.198.0",
+    releaseDate: "2026-11-23",
+    title: "🔥 새 게임 작심삼일",
+    changes: [
+      { game: "three-day-resolve", type: "FEAT", desc: "🔥 새 게임 — 결심을 세우고 유혹 주머니에서 토큰을 뽑으며 일주일을 버티는 2~6인 동시 진행 운 걸기 · AI 봇 Lv.1~10" },
+      { game: "three-day-resolve", type: "FEAT", desc: "🙂😤🔥 강도 × 🤫💬📢 선언 · ✊ 버티기 · 🤝 타협 · 🍰 치팅데이 · 3일차 고비는 2개 · 무너질 확률이 늘 화면에" },
+      { game: "three-day-resolve", type: "FEAT", desc: "😞 자책과 📘 교훈 · 👏 응원 · 🍿 구경 · 시즌 이벤트 7종 · 🎵 BGM “Morning Routine” · 기록·업적 7종" },
+    ],
+  },
+  {
     version: "v1.197.0",
     releaseDate: "2026-11-23",
     title: "🐶 새 게임 멍냥 방어선",

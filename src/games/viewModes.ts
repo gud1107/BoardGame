@@ -111,6 +111,7 @@ export const GAME_VIEW_MODES: Record<GameId, GameViewMode> = {
   "prism-five": "2d",
   "one-shot": "2d",
   "pet-guard": "2d",
+  "three-day-resolve": "2d",
   "magic-shop": "2d",
   "cloud-squadron": "2d",
 };

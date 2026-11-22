@@ -347,6 +347,15 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["twist-10", "🎴", "훼방꾼", "보낸 변수로 상대 펫이 다친 횟수 누적 10", 10, k("twistHits")],
     ["safe-50", "🏠", "펫 보호소", "누적 50라운드 버티기", 50, k("survived")],
   ],
+  "three-day-resolve": [
+    ["success-1", "✅", "작심 나흘째", "결심 7일 완주하기", 1, k("successes")],
+    ["win-1", "🏆", "결심의 아이콘", "1등 하기", 1, k("gamesWon")],
+    ["hard-5", "🔥", "독한 사람", "🔥 독하게 결심 누적 5번 성공", 5, k("hardSuccess")],
+    ["sns-3", "📢", "인증 완료", "📢 SNS 공개 결심 누적 3번 성공", 3, k("snsSuccess")],
+    ["crisis-20", "🧗", "고비 장인", "3일차 고비 누적 20번 넘기기", 20, k("crisisSurvived")],
+    ["lesson-10", "📘", "실패는 성공의 어머니", "📘 교훈 누적 10번 쓰기", 10, k("lessonsUsed")],
+    ["season-20", "💯", "인생 시즌", "한 시즌에 20점 이상 얻기", 20, k("maxSeasonGain")],
+  ],
   "magic-shop": [
     ["order-1", "📜", "첫 손님", "손님 의뢰 채우기", 1, k("orders")],
     ["win-1", "🧙", "거리 제일 상점", "1등 하기", 1, k("gamesWon")],

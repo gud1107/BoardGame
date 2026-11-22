@@ -53,6 +53,7 @@ export const GAME_DIFFICULTY: Record<string, 1 | 2 | 3 | 4 | 5> = {
   "noon-draw": 1,
   "everyone-choice": 1,
   "pet-guard": 2,
+  "three-day-resolve": 2,
   "magic-shop": 3,
   "lightning-pair": 1,
   "cloud-squadron": 2,
