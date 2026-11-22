@@ -211,6 +211,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "이긴 합", key: "boutWins", unit: "번" },
     { label: "부정 출발", key: "early", unit: "번" },
   ],
+  "pet-guard": [
+    { label: "버틴 라운드", key: "survived", unit: "번" },
+    { label: "남긴 예산", key: "coinsSaved", unit: "🪙" },
+    { label: "변수 적중", key: "twistHits", unit: "번" },
+    { label: "최고 점수", key: "maxScore", unit: "점" },
+  ],
   "magic-shop": [
     { label: "채운 의뢰", key: "orders", unit: "번" },
     { label: "산 카드", key: "bought", unit: "장" },
@@ -523,6 +529,10 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
   "noon-draw": [
     { id: "nd-min", label: "⚡ 최고 반응", num: "minRt", asc: true, format: "count", unit: "ms" },
     { id: "nd-wins", label: "🗡️ 이긴 합", num: "boutWins", format: "count", unit: "번" },
+  ],
+  "pet-guard": [
+    { id: "pg-safe", label: "🛡️ 버틴 라운드", num: "survived", format: "count", unit: "번" },
+    { id: "pg-best", label: "🐶 최고 점수", num: "maxScore", format: "count", unit: "점" },
   ],
   "magic-shop": [
     { id: "ms-orders", label: "📜 채운 의뢰", num: "orders", format: "count", unit: "번" },

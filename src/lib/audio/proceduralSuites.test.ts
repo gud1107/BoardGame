@@ -80,7 +80,8 @@ describe("game sound suites", () => {
     // + lightning pair (번개 짝꿍).
     // + magic shop (마법 상점).
     // + everyone choice (모두의 선택).
-    expect(suites.length).toBe(70);
+    // + pet guard (멍냥 방어선).
+    expect(suites.length).toBe(71);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

@@ -338,6 +338,15 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["predict-10", "🔮", "점쟁이", "🔮 예측 누적 10번 맞히기", 10, k("predictHits")],
     ["brawl-5", "🌪️", "난투의 왕", "🌪️ 난투 우승 누적 5번", 5, k("brawlWins")],
   ],
+  "pet-guard": [
+    ["safe-1", "🛡️", "첫 구조", "재난에서 펫 지키기", 1, k("survived")],
+    ["win-1", "🏆", "동네 수호자", "1등 하기", 1, k("gamesWon")],
+    ["hard-5", "🌋", "재난 전문가", "⭐⭐⭐ 재난 누적 5번 버티기", 5, k("tier3Survived")],
+    ["save-40", "🪙", "알뜰 설계사", "버틴 라운드에서 남긴 🪙 누적 40", 40, k("coinsSaved")],
+    ["flawless", "💎", "무결점 방어선", "한 게임 6라운드 모두 버티기", 1, k("flawless")],
+    ["twist-10", "🎴", "훼방꾼", "보낸 변수로 상대 펫이 다친 횟수 누적 10", 10, k("twistHits")],
+    ["safe-50", "🏠", "펫 보호소", "누적 50라운드 버티기", 50, k("survived")],
+  ],
   "magic-shop": [
     ["order-1", "📜", "첫 손님", "손님 의뢰 채우기", 1, k("orders")],
     ["win-1", "🧙", "거리 제일 상점", "1등 하기", 1, k("gamesWon")],

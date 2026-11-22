@@ -428,6 +428,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "pet-guard",
+    name: "멍냥 방어선",
+    nameEn: "Pet Guard",
+    description:
+      "동네에 재난이 들이닥쳤어요! 모두가 같은 재난을 각자의 판에서 맞으며, 🪙 예산으로 🪵 나무판·🧱 돌벽·🕳️ 배수구·🌻 미끼 꽃·🌀 선풍기·⚡ 피뢰침을 놓아 내 펫을 지켜요. 🚿 수도관 파열·🌊 댐 붕괴·🐝 벌집 습격·🔥 산불·🌋 화산·☠️ 독가스·⛈️ 뇌우·☄️ 유성우까지 17가지 재난이 물리 법칙대로 흘러넘치고 날아들어요. 옆 사람에겐 몰래 🎴 변수 카드(폭주·역방향·지진·산책…)를 보내 방어선을 흔들고, 🔍 시험 가동으로 미리 돌려 볼 수도 있어요. 6라운드 동시 진행 · 2~4인 · AI 봇 Lv.1~10.",
+    players: { min: 2, max: 4 },
+    playTime: { minMinutes: 15, maxMinutes: 20 },
+    category: "strategy",
+    thumbnail: { emoji: "🐶", gradient: ["#38bdf8", "#f59e0b"] },
+    tags: ["퍼즐", "배치", "물리", "디펜스", "동시진행", "전략", "AI봇"],
+    genres: ["strategy", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "magic-shop",
     name: "마법 상점",
     nameEn: "Magic Shop",

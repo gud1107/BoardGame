@@ -65,6 +65,7 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   "crumble-climb": dynamic(() => import("./crumbleClimb/CrumbleClimbGame"), { ssr: false }),
   "noon-draw": dynamic(() => import("./noonDraw/NoonDrawGame"), { ssr: false }),
   "everyone-choice": dynamic(() => import("./everyoneChoice/EveryoneChoiceGame"), { ssr: false }),
+  "pet-guard": dynamic(() => import("./petGuard/PetGuardGame"), { ssr: false }),
   "magic-shop": dynamic(() => import("./magicShop/MagicShopGame"), { ssr: false }),
   "lightning-pair": dynamic(() => import("./lightningPair/LightningPairGame"), { ssr: false }),
   "mannequin-mall": dynamic(() => import("./mannequinMall/MannequinMallGame"), { ssr: false }),

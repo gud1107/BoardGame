@@ -215,6 +215,12 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "⚠️ 부정 출발 · ⌛ 못 뽑음 · 🧘 속지 않음", value: (d) => `${n(d.early)} · ${n(d.misses)} · ${n(d.feintsResisted)}` },
     { label: "🏆 우승 (⚔️ 토너먼트 · 🌪️ 난투) · 🔮 예측", value: (d) => `${n(d.wins)} (${n(d.tournamentWins)} · ${n(d.brawlWins)}) · ${n(d.predictHits)}/${n(d.predictions)}` },
   ],
+  "pet-guard": [
+    { label: "최종 우승 / 최고 점수", value: (d) => `${n(d.gamesWon)} / ${n(d.maxScore)}` },
+    { label: "🛡️ 버틴 라운드 / 전체 · ⭐⭐⭐ 버팀", value: (d) => `${n(d.survived)} / ${n(d.rounds)} · ${n(d.tier3Survived)}` },
+    { label: "🪙 남긴 예산 · 🧱 놓은 기물 · 💎 무결점", value: (d) => `${n(d.coinsSaved)} · ${n(d.pieces)} · ${n(d.flawless)}` },
+    { label: "🕳️ 삼킨 물질 · 💧 빠뜨린 생물 · ⚡ 피뢰침 · 🎴 변수 적중", value: (d) => `${n(d.drained)} · ${n(d.drowned)} · ${n(d.rodCatches)} · ${n(d.twistHits)}` },
+  ],
   "magic-shop": [
     { label: "최종 우승 / 최고 명성", value: (d) => `${n(d.gamesWon)} / ${n(d.maxScore)}` },
     { label: "📜 채운 의뢰 (✨✨ 의뢰) · 한 번 최고", value: (d) => `${n(d.orders)} (${n(d.starOrders)}) · ⭐${n(d.maxOrderFame)}` },

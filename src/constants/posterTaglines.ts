@@ -30,6 +30,7 @@ export const POSTER_TAGLINES: Partial<Record<GameId, string>> = {
   "crumble-climb": "아래가 무너진다, 위로 뛰어라!",
   "noon-draw": "먼저 뽑는 자가, 살아남는다",
   "everyone-choice": "정답은 없다, 대세만 있을 뿐",
+  "pet-guard": "쏟아지는 재난, 내 펫은 내가 지킨다!",
   "magic-shop": "재료를 사고, 덱을 키우고, 손님을 홀려라!",
   "lightning-pair": "딱 하나 같은 그림, 먼저 본 사람이 임자!",
   "cloud-squadron": "탄막 사이로, 편대는 함께 난다",

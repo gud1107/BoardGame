@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.197.0",
+    releaseDate: "2026-11-23",
+    title: "🐶 새 게임 멍냥 방어선",
+    changes: [
+      { game: "pet-guard", type: "FEAT", desc: "🐶 새 게임 — 기물을 놓아 쏟아지는 재난에서 펫을 지키는 2~4인 동시 진행 배치 전략 · AI 봇 Lv.1~10" },
+      { game: "pet-guard", type: "FEAT", desc: "🌊 재난 17가지 — 물·용암·산성비·모래·눈사태·독가스·산불·뇌우·유성우·벌떼·말벌·박쥐·쥐떼가 물리대로 움직여요" },
+      { game: "pet-guard", type: "FEAT", desc: "🎴 옆 사람에게 몰래 보내는 변수 6종 · 🔍 시험 가동 3번 · 🎵 BGM “Rescue Patrol”과 효과음 · 기록·업적 7종" },
+    ],
+  },
+  {
     version: "v1.196.0",
     releaseDate: "2026-11-22",
     title: "🗳️ 새 게임 모두의 선택",
