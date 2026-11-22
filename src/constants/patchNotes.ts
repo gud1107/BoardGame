@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.195.0",
+    releaseDate: "2026-11-22",
+    title: "🧙 새 게임 마법 상점",
+    changes: [
+      { game: "magic-shop", type: "FEAT", desc: "🧙 새 게임 — 재료 카드를 사서 덱을 키우고 🔥💧🌿✨ 원소로 손님 의뢰를 채우는 2~4인 덱빌딩 · AI 봇 Lv.1~10" },
+      { game: "magic-shop", type: "FEAT", desc: "🛒 진열대 5장 + 계산대 3종 · 카드 23종(🧹 폐기·🪞 거울·🐈‍⬛ 거미줄·🪧 간판) · 📜 손님 26명, 4라운드 기다리면 떠나요" },
+      { game: "magic-shop", type: "FEAT", desc: "🧪 남은 원소를 다음 턴으로 보관 · 뒷자리 첫 턴 보정 · 🎵 BGM “Moonlit Apothecary”와 효과음 · 기록·업적 7종" },
+    ],
+  },
+  {
     version: "v1.194.0",
     releaseDate: "2026-11-22",
     title: "⚡ 새 게임 번개 짝꿍",

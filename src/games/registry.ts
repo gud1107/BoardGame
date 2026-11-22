@@ -411,6 +411,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "magic-shop",
+    name: "마법 상점",
+    nameEn: "Magic Shop",
+    description:
+      "견습 마법사들이 한 거리에 연 마법 상점! 🪙 동전 몇 닢과 약초 몇 줌으로 시작해, 진열대의 🕯️ 양초·🐸 개구리 다리·🔮 수정 구슬·🐉 용의 비늘 같은 재료 카드를 사서 나만의 덱을 키워요. 손에 든 카드로 🔥💧🌿✨ 원소를 모아 📜 손님이 원하는 물약을 납품하면 ⭐ 명성! 🧹 빗자루로 덱을 가볍게, 🪞 거울로 앞 카드를 한 번 더, 🐈‍⬛ 검은 고양이로 남의 덱에 🕸️ 거미줄을. 남은 원소는 🧪 보관병에 담아 다음 턴으로. 2~4인 덱빌딩 · AI 봇 Lv.1~10.",
+    players: { min: 2, max: 4 },
+    playTime: { minMinutes: 15, maxMinutes: 25 },
+    category: "card",
+    thumbnail: { emoji: "🧙", gradient: ["#a855f7", "#1e1b4b"] },
+    tags: ["덱빌딩", "카드", "마법", "엔진빌딩", "전략", "AI봇"],
+    genres: ["strategy", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "lightning-pair",
     name: "번개 짝꿍",
     nameEn: "Lightning Pair",

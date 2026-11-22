@@ -78,7 +78,8 @@ describe("game sound suites", () => {
     // + cloud squadron (구름 편대).
     // + noon draw (정오의 발도).
     // + lightning pair (번개 짝꿍).
-    expect(suites.length).toBe(68);
+    // + magic shop (마법 상점).
+    expect(suites.length).toBe(69);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

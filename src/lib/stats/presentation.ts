@@ -206,6 +206,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "이긴 합", key: "boutWins", unit: "번" },
     { label: "부정 출발", key: "early", unit: "번" },
   ],
+  "magic-shop": [
+    { label: "채운 의뢰", key: "orders", unit: "번" },
+    { label: "산 카드", key: "bought", unit: "장" },
+    { label: "폐기", key: "trashed", unit: "장" },
+    { label: "최고 명성", key: "maxScore", unit: "점" },
+  ],
   "crumble-climb": [
     { label: "등정", key: "finishes", unit: "번" },
     { label: "라운드 1등", key: "roundWins", unit: "번" },
@@ -508,6 +514,10 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
   "noon-draw": [
     { id: "nd-min", label: "⚡ 최고 반응", num: "minRt", asc: true, format: "count", unit: "ms" },
     { id: "nd-wins", label: "🗡️ 이긴 합", num: "boutWins", format: "count", unit: "번" },
+  ],
+  "magic-shop": [
+    { id: "ms-orders", label: "📜 채운 의뢰", num: "orders", format: "count", unit: "번" },
+    { id: "ms-best", label: "🧙 최고 명성", num: "maxScore", format: "count", unit: "점" },
   ],
   "crumble-climb": [
     { id: "cc-finishes", label: "👑 등정", num: "finishes", format: "count", unit: "번" },

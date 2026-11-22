@@ -336,7 +336,7 @@ export default function GamePlayPage() {
   const pageMaxWidth =
     game.id === "hungry-shark" || game.id === "prism-five" || game.id === "one-shot" || game.id === "billiards-party" || game.id === "snowball-fort" || game.id === "crown-thief" || game.id === "toy-room-race" || game.id === "parcel-panic" || game.id === "finders-keepers" || game.id === "thin-ice-party" || game.id === "crumble-climb" || game.id === "cloud-squadron" || game.id === "rope-climbers" || game.id === "beat-mayhem" || game.id === "hushed-ward" || game.id === "mannequin-mall" || game.id === "possession-night" || game.id === "tagger-among-us"
       ? "max-w-6xl"
-      : game.id === "doodle-phone" || game.id === "liar-game" || game.id === "word-tower" || game.id === "qplay" || game.id === "wobble-tower" || game.id === "alkkagi" || game.id === "domino-chain" || game.id === "curling" || game.id === "bowling-mayhem" || game.id === "mini-golf" || game.id === "cargo-stack" || game.id === "hush-night" || game.id === "strange-corridor" || game.id === "hundred-tales" || game.id === "island-pioneers" || game.id === "noon-draw" || game.id === "lightning-pair"
+      : game.id === "doodle-phone" || game.id === "liar-game" || game.id === "word-tower" || game.id === "qplay" || game.id === "wobble-tower" || game.id === "alkkagi" || game.id === "domino-chain" || game.id === "curling" || game.id === "bowling-mayhem" || game.id === "mini-golf" || game.id === "cargo-stack" || game.id === "hush-night" || game.id === "strange-corridor" || game.id === "hundred-tales" || game.id === "island-pioneers" || game.id === "noon-draw" || game.id === "magic-shop" || game.id === "lightning-pair"
       ? "max-w-3xl"
       : game.id === "lotr-duel"
       ? "max-w-[96rem]"

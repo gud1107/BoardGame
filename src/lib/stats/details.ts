@@ -209,6 +209,12 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "⚠️ 부정 출발 · ⌛ 못 뽑음 · 🧘 속지 않음", value: (d) => `${n(d.early)} · ${n(d.misses)} · ${n(d.feintsResisted)}` },
     { label: "🏆 우승 (⚔️ 토너먼트 · 🌪️ 난투) · 🔮 예측", value: (d) => `${n(d.wins)} (${n(d.tournamentWins)} · ${n(d.brawlWins)}) · ${n(d.predictHits)}/${n(d.predictions)}` },
   ],
+  "magic-shop": [
+    { label: "최종 우승 / 최고 명성", value: (d) => `${n(d.gamesWon)} / ${n(d.maxScore)}` },
+    { label: "📜 채운 의뢰 (✨✨ 의뢰) · 한 번 최고", value: (d) => `${n(d.orders)} (${n(d.starOrders)}) · ⭐${n(d.maxOrderFame)}` },
+    { label: "🛒 산 카드 / 🧹 폐기 / 🃏 낸 카드", value: (d) => `${n(d.bought)} / ${n(d.trashed)} / ${n(d.played)}` },
+    { label: "🐈‍⬛ 보낸 거미줄 · 🧪 보관한 원소 · 🪧 간판 명성", value: (d) => `${n(d.websSent)} · ${n(d.kept)} · ${n(d.signFame)}` },
+  ],
   "crumble-climb": [
     { label: "👑 등정 / 🥇 라운드 1등 / 💨 휩쓸림", value: (d) => `${n(d.finishes)} / ${n(d.roundWins)} / ${n(d.caught)}` },
     { label: "⚡ 가장 빠른 등정 · ⛰ 가장 높이", value: (d) => `${d.minClimbSec !== undefined ? `${n(d.minClimbSec)}초` : "-"} · ${n(d.maxHeight)}m` },
