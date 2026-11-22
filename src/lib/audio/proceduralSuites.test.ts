@@ -73,7 +73,8 @@ describe("game sound suites", () => {
     // + toy room race (장난감 방 레이스).
     // + parcel panic (택배 대란).
     // + mannequin mall (마네킹 백화점).
-    expect(suites.length).toBe(63);
+    // + possession night (빙의의 밤).
+    expect(suites.length).toBe(64);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

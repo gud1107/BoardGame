@@ -206,6 +206,15 @@ const GAME_SPECS: Record<string, Spec[]> = {
     ["stare-600", "👁", "눈싸움 장인", "살아 있는 마네킹을 누적 600초 붙들어 두기", 600, k("stareSec")],
     ["nightmare-1", "💀", "악몽의 쇼핑", "악몽 난이도에서 탈출하기", 1, k("nightmareEscapes")],
   ],
+  "possession-night": [
+    ["exorcise-1", "🔥", "첫 퇴마", "퇴마사로 이기기", 1, k("hunterWins")],
+    ["haunt-1", "👻", "고택의 주인", "원귀로 이기기", 1, k("ghostWins")],
+    ["clean-1", "🧿", "씌지 않는 마음", "한 번도 빙의 안 당하고 퇴마사로 이기기", 1, k("cleanWins")],
+    ["burn-20", "🪆", "불쏘시개", "저주받은 물건 누적 20개 태우기", 20, k("burned")],
+    ["water-10", "💧", "명중하는 성수", "성수로 원귀 누적 10번 맞히기", 10, k("waterHits")],
+    ["revive-10", "✚", "곁을 지키는 사람", "빙의된 동료 누적 10번 퇴마하기", 10, k("revives")],
+    ["possess-30", "🗣️", "속삭이는 원한", "원귀로 누적 30번 빙의하기", 30, k("possessions")],
+  ],
   "hushed-ward": [
     ["escape-1", "🚪", "첫 새벽", "병동에서 탈출하기", 1, k("escapes")],
     ["perfect-1", "🌅", "아무도 두고 가지 않는다", "전원이 한 번도 안 붙잡히고 탈출 (S등급)", 1, k("perfect")],

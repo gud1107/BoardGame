@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.188.0",
+    releaseDate: "2026-11-22",
+    title: "👻 새 게임 빙의의 밤",
+    changes: [
+      { game: "possession-night", type: "FEAT", desc: "👻 새 게임 — 한 명은 보이지 않는 원귀, 2~5명은 퇴마사가 되는 3~6인 1인칭 3D 비대칭 공포 · 혼자 하기(퇴마사·원귀 골라서)·봇 Lv.1~10" },
+      { game: "possession-night", type: "FEAT", desc: "🪆 고택 곳곳의 저주받은 물건을 마당 화로에 태우고 🔥 퇴마 의식 · 💓 공포가 차면 혼자 남은 사람이 빙의당해요 · 🔮 영기·💧 성수·🏮 등잔" },
+      { game: "possession-night", type: "FEAT", desc: "🗣️ 속삭임·💥 덜컹·🕯️ 소등·👁️ 현신·👻 빙의 — 원귀의 위치는 원귀 기기만 알아요(판정을 원귀 기기가 돌림) · 판정 승계" },
+    ],
+  },
+  {
     version: "v1.187.0",
     releaseDate: "2026-11-22",
     title: "🧍 새 게임 마네킹 백화점",

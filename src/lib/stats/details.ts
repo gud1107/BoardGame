@@ -105,6 +105,14 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "✚ 풀어 준 동료 · 붙잡힘", value: (d) => `${n(d.revives)} · ${n(d.downs)}` },
     { label: "⏱ 가장 빠른 탈출 · 🔦 혼자 탈출 · 💀 악몽 탈출", value: (d) => `${d.minEscapeSec !== undefined ? `${n(d.minEscapeSec)}초` : "-"} · ${n(d.soloEscapes)} · ${n(d.nightmareEscapes)}` },
   ],
+  "possession-night": [
+    { label: "🏆 승리 · 🧿 퇴마사 승/판 · 👻 원귀 승/판", value: (d) => `${n(d.wins)} · ${n(d.hunterWins)}/${n(d.hunterGames)} · ${n(d.ghostWins)}/${n(d.ghostGames)}` },
+    { label: "🪆 찾음 / 태움 · 뒤진 곳 · 🏮 등잔", value: (d) => `${n(d.cursesFound)} / ${n(d.burned)} · ${n(d.searches)} · ${n(d.lanterns)}` },
+    { label: "💧 성수 맞힘/뿌림 · 🍵 청심환 · ✚ 퇴마해 줌", value: (d) => `${n(d.waterHits)}/${n(d.waters)} · ${n(d.teas)} · ${n(d.revives)}` },
+    { label: "👻 빙의당함 · 😱 공황 · 🔥 의식 곁", value: (d) => `${n(d.possessed)} · ${n(d.panics)} · ${n(d.ritualSec)}초` },
+    { label: "👻 원귀: 빙의 · 🗣️ 속삭임 · 💥 덜컹 · 👁️ 현신 · 💧 맞음", value: (d) => `${n(d.possessions)} · ${n(d.whispers)} · ${n(d.slams)} · ${n(d.manifests)} · ${n(d.hits)}` },
+    { label: "⏱ 가장 빠른 승리", value: (d) => (d.minWinSec !== undefined ? `${n(d.minWinSec)}초` : "-") },
+  ],
   "hushed-ward": [
     { label: "🚪 탈출 / 팀 승리 (전원 무사 S)", value: (d) => `${n(d.escapes)} / ${n(d.teamWins)} (${n(d.perfect)})` },
     { label: "🧧 부적 찾음 / 붙임 · 뒤진 서랍", value: (d) => `${n(d.talFound)} / ${n(d.talPlaced)} · ${n(d.searches)}` },

@@ -124,6 +124,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "풀어 준 동료", key: "revives", unit: "번" },
     { label: "붙잡힘", key: "downs", unit: "번" },
   ],
+  "possession-night": [
+    { label: "태운 물건", key: "burned", unit: "개" },
+    { label: "성수 명중", key: "waterHits", unit: "번" },
+    { label: "퇴마해 준 동료", key: "revives", unit: "번" },
+    { label: "빙의 (원귀)", key: "possessions", unit: "번" },
+  ],
   "hushed-ward": [
     { label: "부적 붙임", key: "talPlaced", unit: "장" },
     { label: "뒤진 서랍", key: "searches", unit: "개" },
@@ -424,6 +430,10 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
   "mannequin-mall": [
     { id: "mm-escapes", label: "🚪 탈출", num: "escapes", format: "count", unit: "번" },
     { id: "mm-topples", label: "🔦 쓰러뜨림", num: "topples", format: "count", unit: "번" },
+  ],
+  "possession-night": [
+    { id: "pn-wins", label: "🏆 승리", num: "wins", format: "count", unit: "번" },
+    { id: "pn-possess", label: "👻 빙의", num: "possessions", format: "count", unit: "번" },
   ],
   "hushed-ward": [
     { id: "hw-escapes", label: "🚪 탈출", num: "escapes", format: "count", unit: "번" },

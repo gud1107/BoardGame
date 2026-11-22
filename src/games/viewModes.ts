@@ -20,6 +20,8 @@ export const GAME_VIEW_MODES: Record<GameId, GameViewMode> = {
   // 3D 전용 (1인칭/실시간 3D)
   "tagger-among-us": "3d",
   "hushed-ward": "3d",
+  "mannequin-mall": "3d",
+  "possession-night": "3d",
   "hide-and-seek": "3d",
   "morph-hide": "3d",
   "play-dead": "3d",

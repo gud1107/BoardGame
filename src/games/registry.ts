@@ -190,6 +190,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "possession-night",
+    name: "빙의의 밤",
+    nameEn: "Night of Possession",
+    description:
+      "산골 고택에 원귀가 깨어났다! 한 명은 몸이 보이지 않는 👻 원귀, 나머지 2~5명은 🧿 퇴마사가 되는 1인칭 3D 비대칭 공포 게임. 퇴마사는 방마다 숨은 🪆 저주받은 물건을 찾아 마당 화로에 태우고, 다 태우면 화로 곁에서 🔥 퇴마 의식을 마쳐야 해요. 원귀는 직접 때리지 못해요 — 🗣️ 속삭이고, 💥 장롱을 덜컹거리고, 🕯️ 불을 끄고, 👁️ 모습을 드러내 공포를 키운 뒤, 겁에 질려 혼자 남은 사람에게 👻 빙의해요. 혼을 다 빼앗거나 첫닭이 울 때까지 버티면 원귀 승리. 🔮 영기 탐지기·💧 성수·🏮 등잔·🍵 청심환으로 맞서고 서로 곁을 지키세요. 원귀의 위치는 원귀 기기만 알아요. 혼자 하기(봇 Lv.1~10, 퇴마사·원귀 골라서)·난이도 3단계.",
+    players: { min: 3, max: 6 },
+    playTime: { minMinutes: 3, maxMinutes: 9 },
+    category: "party",
+    thumbnail: { emoji: "👻", gradient: ["#1e3a4a", "#050608"] },
+    tags: ["공포", "비대칭", "1대다", "1인칭", "원귀", "퇴마", "한옥", "실시간", "3D", "AI봇"],
+    genres: ["party", "bluffing"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "hushed-ward",
     name: "숨죽인 병동",
     nameEn: "Hushed Ward",
