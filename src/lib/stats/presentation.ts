@@ -196,6 +196,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "스침", key: "grazes", unit: "번" },
     { label: "최고 점수", key: "maxScore", unit: "점" },
   ],
+  "crumble-climb": [
+    { label: "등정", key: "finishes", unit: "번" },
+    { label: "라운드 1등", key: "roundWins", unit: "번" },
+    { label: "가장 높이", key: "maxHeight", unit: "m" },
+    { label: "최고 점수", key: "maxScore", unit: "점" },
+  ],
   "thin-ice-party": [
     { label: "KO", key: "kos", unit: "번" },
     { label: "라운드 1등", key: "roundWins", unit: "번" },
@@ -484,6 +490,10 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
   "cloud-squadron": [
     { id: "cs-clears", label: "🏁 원정 성공", num: "clears", format: "count", unit: "번" },
     { id: "cs-kills", label: "💥 격추", num: "kills", format: "count", unit: "대" },
+  ],
+  "crumble-climb": [
+    { id: "cc-finishes", label: "👑 등정", num: "finishes", format: "count", unit: "번" },
+    { id: "cc-wins", label: "🥇 라운드 1등", num: "roundWins", format: "count", unit: "번" },
   ],
   "thin-ice-party": [
     { id: "ti-kos", label: "💥 KO", num: "kos", format: "count", unit: "번" },

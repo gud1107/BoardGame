@@ -196,6 +196,13 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "✨ 스침 · ★ 궁극기 (합동) · ⚡ 스킬", value: (d) => `${n(d.grazes)} · ${n(d.ults)} (${n(d.combos)}) · ${n(d.skills)}` },
     { label: "🛡 무피격 원정 성공 · 🎁 아이템", value: (d) => `${n(d.noHitClears)} · ${n(d.items)}` },
   ],
+  "crumble-climb": [
+    { label: "👑 등정 / 🥇 라운드 1등 / 💨 휩쓸림", value: (d) => `${n(d.finishes)} / ${n(d.roundWins)} / ${n(d.caught)}` },
+    { label: "⚡ 가장 빠른 등정 · ⛰ 가장 높이", value: (d) => `${d.minClimbSec !== undefined ? `${n(d.minClimbSec)}초` : "-"} · ${n(d.maxHeight)}m` },
+    { label: "⤴ 점프 (🪶 공중) · 🟩 트램펄린 · 🪂 큰 낙하", value: (d) => `${n(d.jumps)} (${n(d.airJumps)}) · ${n(d.bounces)} · ${n(d.drops)}` },
+    { label: "👊 밀치기 (맞힘) · 🛡 막음", value: (d) => `${n(d.shoves)} (${n(d.shoveHits)}) · ${n(d.blocks)}` },
+    { label: "🧱 방해 카드 · 🪨 낙석에 맞은 사람 · 🎁 아이템", value: (d) => `${n(d.cards)} · ${n(d.sabHits)} · ${n(d.items)}` },
+  ],
   "thin-ice-party": [
     { label: "💥 KO / 🌊 빠짐 (혼자)", value: (d) => `${n(d.kos)} / ${n(d.falls)} (${n(d.selfFalls)})` },
     { label: "🏆 라운드 1등 / 3등 안", value: (d) => `${n(d.roundWins)} / ${n(d.podiums)}` },

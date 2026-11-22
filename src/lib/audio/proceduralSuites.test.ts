@@ -73,9 +73,10 @@ describe("game sound suites", () => {
     // + toy room race (장난감 방 레이스).
     // + parcel panic (택배 대란).
     // + mannequin mall (마네킹 백화점).
+    // + crumble climb (무너지는 탑 오르기).
     // + possession night (빙의의 밤).
     // + cloud squadron (구름 편대).
-    expect(suites.length).toBe(65);
+    expect(suites.length).toBe(66);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

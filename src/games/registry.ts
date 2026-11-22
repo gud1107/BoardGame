@@ -394,6 +394,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "crumble-climb",
+    name: "무너지는 탑 오르기",
+    nameEn: "Crumbling Tower Climb",
+    description:
+      "아래부터 무너져 올라오는 나선 탑, 누가 먼저 꼭대기 👑 왕관 발판에 오르나! 2~6인 실시간 3D 레이스. ⤴ 점프로 발판을 건너고, 👊 밀치기로 경쟁자를 떨어뜨려요. 🟫 금 간 발판은 밟으면 무너지고, 🟩 트램펄린은 지름길, 🟦 움직이는 발판은 좌우로 오가요. 첫 등정자가 나오면 🏁 붕괴가 빨라져요. 뒤처지거나 휩쓸린 사람은 🧱 방해 카드(🪨 낙석·🧊 얼음판·💨 돌풍·🧱 흔들기)로 선두를 괴롭혀요. 🪶 깃털·⚡ 번개 신발·🛡 방패 아이템, 라운드마다 새 탑, 1/3/5라운드, 혼자 연습·AI 봇 Lv.1~10.",
+    players: { min: 2, max: 6 },
+    playTime: { minMinutes: 2, maxMinutes: 9 },
+    category: "party",
+    thumbnail: { emoji: "🧱", gradient: ["#f59e0b", "#3b2a6b"] },
+    tags: ["레이스", "등반", "플랫포머", "붕괴", "실시간", "액션", "파티", "3D", "AI봇"],
+    genres: ["party", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "cloud-squadron",
     name: "구름 편대",
     nameEn: "Cloud Squadron",

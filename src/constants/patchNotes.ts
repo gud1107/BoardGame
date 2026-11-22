@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.191.0",
+    releaseDate: "2026-11-22",
+    title: "🧱 새 게임 무너지는 탑 오르기",
+    changes: [
+      { game: "crumble-climb", type: "FEAT", desc: "🧱 새 게임 — 아래부터 무너지는 나선 탑을 먼저 오르는 2~6인 실시간 3D 레이스 · 혼자 연습·AI 봇 Lv.1~10 · 라운드마다 새 탑" },
+      { game: "crumble-climb", type: "FEAT", desc: "🟫 금 간 발판·🟩 트램펄린·🟦 움직이는 발판 · 👊 밀치기 · 🏁 첫 등정 뒤 붕괴 가속 · 🪶 깃털·⚡ 번개 신발·🛡 방패" },
+      { game: "crumble-climb", type: "FEAT", desc: "🧱 뒤처지거나 휩쓸린 사람은 방해 카드(🪨 낙석·🧊 얼음판·💨 돌풍·🧱 흔들기)로 선두를 노려요 · 방장 승계" },
+    ],
+  },
+  {
     version: "v1.190.0",
     releaseDate: "2026-11-22",
     title: "✈️ 새 게임 구름 편대",
