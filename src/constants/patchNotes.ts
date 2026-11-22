@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.200.0",
+    releaseDate: "2026-11-23",
+    title: "🏁 변신 숨바꼭질 꼼꼬미 알림 · 렉 줄이기",
+    changes: [
+      { game: "morph-hide", type: "FEAT", desc: "🏁 꼼꼬미 — 누가 전봇대를 찍고 들어오면 모든 사람 화면 가운데에 \"꼼꼬미!\" 큰 알림과 이름이 떠요" },
+      { game: "morph-hide", type: "IMPROVE", desc: "⚡ 렉 줄이기 — 화면 선명도 상한 조정(PC 1.5배·폰 1.25배), 겹친 안티에일리어싱 제거, HUD 흐림 효과 제거, 시계가 돌 때 3D 장면을 다시 그리지 않아요" },
+    ],
+  },
+  {
     version: "v1.199.0",
     releaseDate: "2026-11-23",
     title: "🥋 새 게임 묘수 도장",

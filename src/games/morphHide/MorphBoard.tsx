@@ -604,6 +604,7 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct,
 
         {/* 킬피드 */}
         <KillFeed fx={fx} names={names} mySeat={mySeat} now={nowPerf} />
+        <KkomBanner fx={fx} names={names} mySeat={mySeat} now={nowPerf} />
 
         {freeLookUi && playing && (
           <div className={`pointer-events-none absolute left-1/2 top-[38%] -translate-x-1/2 rounded-full px-3 py-1 text-[11px] text-white/90 ${GLASS}`}>👁 둘러보는 중 — 몸·자세는 그대로</div>
@@ -833,7 +834,7 @@ export default function MorphBoard({ snap, buf, mySeat, names, fx, onPos, onAct,
   );
 }
 
-const GLASS = "border border-white/10 bg-slate-950/45 shadow-lg shadow-black/25 backdrop-blur-md";
+const GLASS = "border border-white/10 bg-slate-950/60 shadow-lg shadow-black/25";
 
 function Chip({ children, tone }: { children: ReactNode; tone?: "gold" }) {
   return <span className={`rounded-full px-2.5 py-0.5 text-[11px] ${GLASS} ${tone === "gold" ? "text-amber-200" : "text-white/85"}`}>{children}</span>;
@@ -1049,7 +1050,7 @@ function AugPicker({ me, phase, left, kkom, onAct, onPicked, hider }: { me: Snap
                   onAct({ t: "aug", id });
                   onPicked?.();
                 }}
-                className={`group relative flex cursor-pointer flex-col items-center gap-1 overflow-hidden rounded-2xl border bg-white/[0.04] p-2 text-center backdrop-blur-md transition duration-200 hover:-translate-y-1.5 hover:bg-white/10 active:scale-95 sm:p-3 ${hider ? "min-h-28 sm:min-h-32" : "min-h-36 sm:min-h-44"}`}
+                className={`group relative flex cursor-pointer flex-col items-center gap-1 overflow-hidden rounded-2xl border bg-white/[0.04] p-2 text-center transition duration-200 hover:-translate-y-1.5 hover:bg-white/10 active:scale-95 sm:p-3 ${hider ? "min-h-28 sm:min-h-32" : "min-h-36 sm:min-h-44"}`}
                 style={{ borderColor: `${st.color}66`, boxShadow: `0 0 28px -10px ${st.color}` }}
               >
                 <span className="absolute inset-x-0 top-0 h-0.5" style={{ background: st.color }} />
@@ -1264,7 +1265,7 @@ function ControlPad(props: {
   locked: boolean;
 }) {
   const { controlsRef } = props;
-  const big = "grid place-items-center rounded-full border text-white shadow-lg shadow-black/30 backdrop-blur-md transition active:scale-95";
+  const big = "grid place-items-center rounded-full border text-white shadow-lg shadow-black/30 transition active:scale-95";
   return (
     <>
       {props.touch && <Joystick controlsRef={controlsRef} activeRef={props.joyActive} />}
@@ -1355,7 +1356,7 @@ function ControlPad(props: {
         </div>
       </div>
       {!props.touch && (
-        <div className="pointer-events-none absolute bottom-4 left-4 hidden max-w-[24%] rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2 text-[10px] leading-relaxed text-white/65 backdrop-blur-md lg:block">
+        <div className="pointer-events-none absolute bottom-4 left-4 hidden max-w-[24%] rounded-2xl border border-white/10 bg-slate-950/55 px-3 py-2 text-[10px] leading-relaxed text-white/65 lg:block">
           <Key k="W" />
           <Key k="A" />
           <Key k="S" />
@@ -1396,7 +1397,7 @@ function Joystick({ controlsRef, activeRef }: { controlsRef: React.RefObject<Con
   return (
     <div
       data-hud
-      className="absolute bottom-4 left-4 grid h-32 w-32 touch-none select-none place-items-center rounded-full border border-white/10 bg-slate-950/35 shadow-lg shadow-black/30 backdrop-blur-md"
+      className="absolute bottom-4 left-4 grid h-32 w-32 touch-none select-none place-items-center rounded-full border border-white/10 bg-slate-950/50 shadow-lg shadow-black/30"
       onPointerDown={(e) => {
         e.currentTarget.setPointerCapture(e.pointerId);
         activeRef.current = true;
@@ -1431,7 +1432,7 @@ function PickCards({ snap, mySeat, left, onAct, onHiderAugPicked }: { snap: Snap
   const offer = me.offer;
   const seekerAugs = snap.players.filter((p) => p.role === "seeker").flatMap((p) => (p.aug ?? []).map((id) => ({ id, s: p.s })));
   return (
-    <div data-hud className="absolute inset-0 flex flex-col items-center justify-center gap-3 overflow-y-auto bg-gradient-to-b from-[#0b1026]/95 via-[#151b3d]/92 to-[#2a1f3d]/95 p-3 backdrop-blur-sm">
+    <div data-hud className="absolute inset-0 flex flex-col items-center justify-center gap-3 overflow-y-auto bg-gradient-to-b from-[#0b1026]/95 via-[#151b3d]/92 to-[#2a1f3d]/95 p-3">
       <div className="text-center">
         <div className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/45">Choose your disguise</div>
         <div className="mt-1 text-lg font-bold text-white sm:text-2xl">무엇으로 변신할까요?</div>
@@ -1471,7 +1472,7 @@ function PickCards({ snap, mySeat, left, onAct, onHiderAugPicked }: { snap: Snap
                   play("pick", 1);
                   onAct({ t: "pick", id });
                 }}
-                className={`group relative flex min-h-32 flex-col items-center gap-1 overflow-hidden rounded-2xl border p-2.5 text-center backdrop-blur-md transition duration-200 ${on ? `${TONE[toneOf(d.form)].on} -translate-y-1` : picked ? "border-white/5 bg-white/[0.03] opacity-40" : `${TONE[toneOf(d.form)].off} hover:-translate-y-1.5`}`}
+                className={`group relative flex min-h-32 flex-col items-center gap-1 overflow-hidden rounded-2xl border p-2.5 text-center transition duration-200 ${on ? `${TONE[toneOf(d.form)].on} -translate-y-1` : picked ? "border-white/5 bg-white/[0.03] opacity-40" : `${TONE[toneOf(d.form)].off} hover:-translate-y-1.5`}`}
               >
                 <span className={`absolute inset-x-0 top-0 h-0.5 ${TONE[toneOf(d.form)].bar}`} />
                 <span className="text-2xl drop-shadow">{d.icon}</span>
@@ -1777,12 +1778,34 @@ function KillFeed({ fx, names, mySeat, now }: { fx: FxItem[]; names: Record<numb
   );
 }
 
+/** 꼼꼬미 성공(전봇대 찍고 들어옴) — 모든 사람 화면 가운데 크게 3.5초 */
+const KKOM_BANNER_MS = 3500;
+function KkomBanner({ fx, names, mySeat, now }: { fx: FxItem[]; names: Record<number, string>; mySeat: number; now: number }) {
+  const recent = fx.filter((f) => f.ev.type === "escape" && now - f.at < KKOM_BANNER_MS);
+  if (recent.length === 0) return null;
+  const last = recent[recent.length - 1];
+  const seats = recent.map((f) => (f.ev.type === "escape" ? f.ev.seat : -1));
+  const nm = (s: number) => (s === mySeat ? "나" : (names[s] ?? `${s + 1}번`));
+  const mine = seats.includes(mySeat);
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-[22%] z-[5] flex justify-center px-3">
+      <style>{`@keyframes mhKkomIn{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.12);opacity:1}100%{transform:scale(1)}}@keyframes mhKkomOut{0%,80%{opacity:1}100%{opacity:0}}`}</style>
+      <div key={last.ev.id} style={{ animation: `mhKkomIn .45s cubic-bezier(.2,1.4,.4,1) both, mhKkomOut ${KKOM_BANNER_MS}ms linear both` }} className={`rounded-3xl border-2 px-6 py-3 text-center shadow-2xl shadow-black/50 sm:px-10 sm:py-4 ${mine ? "border-emerald-200 bg-emerald-600/90" : "border-yellow-200 bg-amber-500/90"}`}>
+        <div className="text-3xl font-black tracking-tight text-white drop-shadow sm:text-5xl">🏁 꼼꼬미!</div>
+        <div className="mt-1 text-sm font-bold text-white sm:text-lg">
+          {mine && seats.length === 1 ? "내가 전봇대를 찍고 들어왔어요! (+4)" : `${seats.map(nm).join(", ")} 전봇대 찍고 들어왔어요!`}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RoundResult({ snap, names, mySeat }: { snap: Snap; names: Record<number, string>; mySeat: number }) {
   const h = snap.history[snap.history.length - 1];
   if (!h) return null;
   return (
-    <div className="absolute inset-0 z-10 grid place-items-center overflow-y-auto bg-black/55 p-3 backdrop-blur-sm">
-      <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-slate-950/70 p-5 text-white shadow-2xl shadow-black/50 backdrop-blur-xl">
+    <div className="absolute inset-0 z-10 grid place-items-center overflow-y-auto bg-black/65 p-3">
+      <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-slate-950/70 p-5 text-white shadow-2xl shadow-black/50">
         <div className="text-center text-[10px] font-semibold uppercase tracking-[0.3em] text-white/45">Round {snap.round}</div>
         <div className="mt-1 text-center text-xl font-bold">{h.winner === "seekers" ? "👁️ 술래 승리! 모두 찾았다" : "🫣 숨는 사람 승리!"}</div>
         <div className="mt-1 text-center text-xs text-white/60">술래: {h.seekers.map((s) => names[s]).join(", ")}</div>
@@ -1883,7 +1906,7 @@ function ScoreBoard({
     <div data-hud className="absolute inset-0 z-20 flex items-center justify-center overflow-y-auto bg-black/60 p-3" onClick={onClose}>
       <div className="flex max-h-full w-full max-w-2xl flex-col gap-3 overflow-y-auto sm:flex-row">
         {/* 점수 */}
-        <div className="rounded-3xl border border-white/10 bg-slate-950/75 p-4 text-white shadow-2xl shadow-black/50 backdrop-blur-xl sm:w-60 sm:shrink-0">
+        <div className="rounded-3xl border border-white/10 bg-slate-950/75 p-4 text-white shadow-2xl shadow-black/50 sm:w-60 sm:shrink-0">
           <div className="mb-2 text-center font-bold">{snap.phase === "gameOver" ? "🏁 최종 점수" : "🏆 점수"}</div>
           {rows.map((p, i) => (
             <div key={p.s} className={`rounded-xl px-3 py-1.5 text-sm ${p.s === mySeat ? "bg-white/15" : ""}`}>
@@ -1907,7 +1930,7 @@ function ScoreBoard({
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           {/* 게임 끝: 마지막 라운드에 숨는 사람이 어떤 모습이었나 */}
           {over && (
-            <div className="rounded-3xl border border-fuchsia-400/30 bg-slate-950/80 p-4 text-white shadow-2xl shadow-black/50 backdrop-blur-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="rounded-3xl border border-fuchsia-400/30 bg-slate-950/80 p-4 text-white shadow-2xl shadow-black/50" onClick={(e) => e.stopPropagation()}>
               <div className="text-center text-base font-bold">🏁 게임 끝!</div>
               {ended ? (
                 <div className="mt-3 flex gap-2">
@@ -1928,20 +1951,20 @@ function ScoreBoard({
             </div>
           )}
           {over && snap.history.length > 0 && (
-            <div className="rounded-3xl border border-white/10 bg-slate-950/75 p-4 text-white shadow-2xl shadow-black/50 backdrop-blur-xl">
+            <div className="rounded-3xl border border-white/10 bg-slate-950/75 p-4 text-white shadow-2xl shadow-black/50">
               <div className="text-center text-sm font-bold">🎭 마지막 라운드 — 이렇게 숨어 있었어요</div>
               <HiderLineup snap={snap} names={names} mySeat={mySeat} />
             </div>
           )}
           {over && snap.history.some((h) => h.augs && Object.keys(h.augs).length > 0) && (
-            <div className="rounded-3xl border border-white/10 bg-slate-950/75 p-4 text-white shadow-2xl shadow-black/50 backdrop-blur-xl">
+            <div className="rounded-3xl border border-white/10 bg-slate-950/75 p-4 text-white shadow-2xl shadow-black/50">
               <div className="mb-2 text-center text-sm font-bold">🃏 라운드별 증강</div>
               <AugHistory rounds={snap.history} names={names} mySeat={mySeat} />
             </div>
           )}
           {/* 이번 라운드 */}
           {snap.phase !== "gameOver" && (
-            <div className="rounded-3xl border border-white/10 bg-slate-950/75 p-4 text-white shadow-2xl shadow-black/50 backdrop-blur-xl">
+            <div className="rounded-3xl border border-white/10 bg-slate-950/75 p-4 text-white shadow-2xl shadow-black/50">
               <div className="mb-2 flex items-baseline justify-between">
                 <span className="font-bold">📋 라운드 {snap.round}</span>
                 <span className="text-xs text-white/60">
@@ -1992,7 +2015,7 @@ function ScoreBoard({
 
           {/* 내 증강 설명 */}
           {!over && me && (me.aug?.length ?? 0) > 0 && (
-            <div className="rounded-3xl border border-white/10 bg-slate-950/75 p-4 text-white shadow-2xl shadow-black/50 backdrop-blur-xl">
+            <div className="rounded-3xl border border-white/10 bg-slate-950/75 p-4 text-white shadow-2xl shadow-black/50">
               <div className="mb-1 font-bold">🃏 내 증강</div>
               {(me.aug ?? []).map((id) => {
                 const a = aug(id);

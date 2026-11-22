@@ -1152,8 +1152,8 @@ function Scene(props: World3DProps) {
       {me && <LocalPlayer key={`${me.role}:${me.dg}`} {...props} gridRef={gridRef} />}
       <Effects fx={props.fx} snap={snap} buf={buf} />
       {me?.role === "seeker" && <AugMarks snap={snap} buf={buf} />}
-      {/* 선명도: 기기 화소 그대로(PC 2배·폰 1.5배)까지 — 프레임이 떨어지면 AdaptiveResolution이 낮춘다 */}
-      <AdaptiveResolution max={props.lowDetail ? 1.5 : 2} />
+      {/* 선명도: PC 1.5배·폰 1.25배까지 — 프레임이 떨어지면 AdaptiveResolution이 낮춘다 */}
+      <AdaptiveResolution max={props.lowDetail ? 1.25 : 1.5} />
       {/* 접촉 그늘(AO)로 물건이 바닥에 붙어 보이게 — 40fps 아래면 PostFx가 스스로 끈다 */}
       {!props.lowDetail && <PostFx bloom={0.42} ao />}
       </FigCtx.Provider>
@@ -1161,10 +1161,17 @@ function Scene(props: World3DProps) {
   );
 }
 
-export default function World3D(props: World3DProps) {
+/**
+ * memo: 화면 위 HUD가 남은 시간 때문에 1초에 4번 다시 그려질 때 3D 장면 전체를 다시 맞춰보지 않는다
+ * (월드는 스냅·이벤트가 올 때만 다시 그린다).
+ * 선명도 상한: PC 1.5배(넓은 무대 1800px를 2배로 그리고 AO·블룸까지 얹으면 픽셀이 4배 가까이 늘어 무겁다), 폰 1.25배.
+ * PC는 후처리 버퍼가 자체 MSAA(4)를 하므로 캔버스 안티에일리어싱은 끈다(같은 일을 두 번 했다).
+ */
+const World3D = memo(function World3D(props: World3DProps) {
   return (
-    <Canvas shadows={props.lowDetail ? false : "soft"} dpr={props.lowDetail ? [1, 1.5] : [1, 2]} gl={{ antialias: true, powerPreference: "high-performance" }} camera={{ fov: 62, position: [9, 4, 14], near: 0.08, far: 160 }} style={{ touchAction: "none" }}>
+    <Canvas shadows={props.lowDetail ? false : "soft"} dpr={props.lowDetail ? [1, 1.25] : [1, 1.5]} gl={{ antialias: !!props.lowDetail, powerPreference: "high-performance" }} camera={{ fov: 62, position: [9, 4, 14], near: 0.08, far: 160 }} style={{ touchAction: "none" }}>
       <Scene {...props} />
     </Canvas>
   );
-}
+});
+export default World3D;
