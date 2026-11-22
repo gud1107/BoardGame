@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { GAME_REGISTRY, sortByPlayability } from "@/games/registry";
-import { GENRE_META, GENRE_ORDER } from "@/games/genres";
 import type { GameGenre } from "@/games/types";
 import GameGrid, { LobbyCard } from "@/components/GameGrid";
 import LobbySections from "@/components/lobby/LobbySections";
@@ -13,10 +12,8 @@ import PublicRoomBrowser from "@/components/lobby/PublicRoomBrowser";
 import { useActiveRooms } from "@/games/shared/room/useActiveRooms";
 import { PLAYER_FILTERS } from "@/constants/playerFilters";
 import { matchesViewFilter, type ViewFilter } from "@/games/viewModes";
-import ViewFilterChips from "@/components/lobby/ViewFilterChips";
 import { DEFAULT_SORT_OPTION, isAdminSortOption, type SortOption, sortGamesBy } from "@/constants/sortOptions";
-import SortFilterChips from "@/components/lobby/SortFilterChips";
-import NewOnlyChip from "@/components/lobby/NewOnlyChip";
+import LobbyFilterBar from "@/components/lobby/LobbyFilterBar";
 import { isNewGame } from "@/constants/gameUpdateCount";
 import { useGameBgm } from "@/lib/audio/useGameBgm";
 import { fetchGamePlayStats } from "@/lib/analytics/playCounts";
@@ -359,29 +356,21 @@ export default function DashboardPage() {
             </button>
           )}
         </div>
-        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 no-scrollbar">
-          {PLAYER_FILTERS.map((f, idx) => (
-            <button
-              key={f.label}
-              onClick={() => setFilterIdx(idx)}
-              className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                filterIdx === idx
-                  ? "border-amber-400/70 bg-amber-500/20 text-white light:text-slate-900"
-                  : "border-white/10 text-white/60 hover:border-amber-400/40 light:border-slate-200 light:text-slate-600 light:hover:border-amber-500/50"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-          <NewOnlyChip value={newOnly} onChange={setNewOnly} />
-          <ViewFilterChips value={viewFilter} onChange={setViewFilter} />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="shrink-0 text-xs font-semibold text-amber-400/80 light:text-amber-700">
-            정렬
-          </span>
-          <SortFilterChips value={sortOption} onChange={setSortOption} admin={isAdmin} />
-        </div>
+        <LobbyFilterBar
+          filterIdx={filterIdx}
+          onFilterChange={setFilterIdx}
+          genre={genreFilter}
+          onGenreChange={setGenreFilter}
+          newOnly={newOnly}
+          onNewOnlyChange={setNewOnly}
+          viewFilter={viewFilter}
+          onViewFilterChange={setViewFilter}
+          sortOption={sortOption}
+          onSortChange={setSortOption}
+          admin={isAdmin}
+          resultCount={filtered.length}
+          onReset={resetFilters}
+        />
       </div>
 
       <div className="mt-6 mb-8 sm:mt-0">
@@ -446,69 +435,25 @@ export default function DashboardPage() {
             <span className="font-sans text-sm font-semibold text-white/60 light:text-slate-500">{filtered.length}</span>
           </h2>
         )}
-        {/* Mobile now gets these from the sticky bar above instead (so they
-            stay reachable mid-scroll) — hidden here below `sm` only;
-            tablet/desktop (no sticky bar there) keep this in-flow row. */}
-        <div className="mb-4 hidden -mx-1 gap-2 overflow-x-auto px-1 pb-1 sm:flex">
-          {PLAYER_FILTERS.map((f, idx) => (
-            <button
-              key={f.label}
-              onClick={() => setFilterIdx(idx)}
-              className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                filterIdx === idx
-                  ? "border-amber-400/70 bg-amber-500/20 text-white light:text-slate-900"
-                  : "border-white/10 text-white/60 hover:border-amber-400/40 light:border-slate-200 light:text-slate-600 light:hover:border-amber-500/50"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-          <NewOnlyChip value={newOnly} onChange={setNewOnly} />
-          <ViewFilterChips value={viewFilter} onChange={setViewFilter} />
-        </div>
-
-        <div className="mb-4 hidden items-center gap-2 sm:flex">
-          <span className="shrink-0 text-xs font-semibold text-amber-400/80 light:text-amber-700">
-            정렬
-          </span>
-          <SortFilterChips value={sortOption} onChange={setSortOption} admin={isAdmin} />
-        </div>
-
-        <div className="mb-8 flex flex-wrap gap-2">
-          <button
-            onClick={() => setGenreFilter("all")}
-            className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-              genreFilter === "all"
-                ? "border-amber-400/60 bg-amber-500/15 text-white light:text-slate-900"
-                : "border-white/10 text-white/60 hover:border-amber-400/40 light:border-slate-200 light:text-slate-600 light:hover:border-amber-500/50"
-            }`}
-          >
-            전체 장르
-          </button>
-          {GENRE_ORDER.map((genre) => {
-            const meta = GENRE_META[genre];
-            const active = genreFilter === genre;
-            return (
-              <button
-                key={genre}
-                onClick={() => setGenreFilter(active ? "all" : genre)}
-                // Inline `style` sets an explicit white/rgba text color per
-                // genre accent, which a plain `light:` class can't outrank —
-                // the `!` important modifier is needed here specifically to
-                // win over that inline color in light mode.
-                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                  active ? "light:text-slate-900!" : "light:text-slate-600!"
-                }`}
-                style={
-                  active
-                    ? { borderColor: meta.accent, backgroundColor: `${meta.accent}26`, color: "white" }
-                    : { borderColor: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)" }
-                }
-              >
-                {meta.emoji} {meta.label}
-              </button>
-            );
-          })}
+        {/* sm+ (tablet; desktop xl has its own dashboard): the same one-row
+            filter bar as the phone sticky bar — 2026-11-22 folded the four
+            chip rows (인원 / 신규·3D·2D / 정렬 / 장르) into ⚙ 필터 + 정렬. */}
+        <div className="mb-8 hidden sm:block">
+          <LobbyFilterBar
+            filterIdx={filterIdx}
+            onFilterChange={setFilterIdx}
+            genre={genreFilter}
+            onGenreChange={setGenreFilter}
+            newOnly={newOnly}
+            onNewOnlyChange={setNewOnly}
+            viewFilter={viewFilter}
+            onViewFilterChange={setViewFilter}
+            sortOption={sortOption}
+            onSortChange={setSortOption}
+            admin={isAdmin}
+            resultCount={filtered.length}
+            onReset={resetFilters}
+          />
         </div>
 
         {browsing ? (
@@ -531,11 +476,15 @@ export default function DashboardPage() {
                 {isSearching ? "검색 결과" : "필터 결과"}{" "}
                 <span className="font-sans text-base font-semibold text-white/60 light:text-slate-500">{filtered.length}</span>
               </h2>
-              <ResetFiltersButton onClick={resetFilters} />
+              {/* Active filters already show as removable chips (and 모두
+                  지우기) in the filter bar; only a search needs its own reset. */}
+              {isSearching && <ResetFiltersButton onClick={resetFilters} />}
             </div>
-            <div className="mb-4 sm:hidden">
-              <ResetFiltersButton onClick={resetFilters} />
-            </div>
+            {isSearching && (
+              <div className="mb-4 sm:hidden">
+                <ResetFiltersButton onClick={resetFilters} />
+              </div>
+            )}
             <GameGrid games={filtered} monthPlays={monthPlays} now={now} adminLine={adminLine} />
           </>
         ) : (

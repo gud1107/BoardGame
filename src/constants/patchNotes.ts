@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.189.1",
+    releaseDate: "2026-11-22",
+    title: "⚙ 보드게임허브 필터 한 줄 정리 + 카드 표시 2개로",
+    changes: [
+      { game: "common", type: "IMPROVE", desc: "⚙ 폰·태블릿 필터 4줄을 한 줄로 — [⚙ 필터] 버튼을 누르면 인원·장르·3D/2D·신규만을 고르는 창이 아래에서 올라와요 · 켠 필터는 ✕ 칩으로 표시" },
+      { game: "common", type: "IMPROVE", desc: "🏷️ 게임 카드 위 표시는 최대 2개만(열린 방 > NEW > 추천 > 데스게임 > 장르) — 게임 화면이 더 잘 보여요" },
+    ],
+  },
+  {
     version: "v1.189.0",
     releaseDate: "2026-11-22",
     title: "🗂️ 보드게임허브 섹션 정리 + 큰 글씨 + 검색창 위로",

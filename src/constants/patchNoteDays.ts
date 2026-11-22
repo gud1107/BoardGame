@@ -17,6 +17,9 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
  * Keep it short (≤ 80 chars), headline features only.
  */
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
+  "2026-11-22": {
+    common: "🗂️ 보드게임허브 개편 — 인기·장르별 섹션, 큰 글씨, 검색창 위로, ⚙ 필터 한 줄, 카드 표시 2개로",
+  },
   "2026-11-14": {
     "morph-hide": "👮 점검원이 진짜 순경 차림·자연스러운 몸짓, 🔍 더 선명한 화면·바닥 질감 2배·부드러운 노을 하늘",
     "thin-ice-party": "🧊 새 게임 살얼음 파티 — 금 가는 얼음·점프·내려찍기·해빙 경보·유령 투표, 🔊 모든 동작 효과음·3단계 BGM",

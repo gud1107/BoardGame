@@ -61,7 +61,53 @@ export default function GamePosterCard({
   const hoverVideo = usePosterHoverVideo(poster && game.playable ? getPosterVideo(game.id) : null);
   const difficulty = getGameDifficulty(game.id);
   const collection = game.collectionId ? GAME_COLLECTIONS[game.collectionId] : undefined;
-  const genres = (game.genres ?? []).slice(0, 2);
+  const genre = game.genres?.[0];
+  const hasCornerBadge = game.playable ? badge !== null : true;
+  const chipCandidates: { key: string; node: React.ReactNode }[] = [];
+  if (liveRoomCount > 0)
+    chipCandidates.push({
+      key: "live",
+      node: (
+        <span className="flex items-center gap-1 rounded-full bg-emerald-500/90 px-2 py-0.5 text-[11px] font-bold text-white shadow-sm">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+          {liveRoomCount}개 방
+        </span>
+      ),
+    });
+  if (isFeatured(game))
+    chipCandidates.push({
+      key: "featured",
+      node: (
+        <span className="rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 px-2 py-0.5 text-[11px] font-extrabold text-black shadow-sm">
+          ⭐ 추천
+        </span>
+      ),
+    });
+  if (collection)
+    chipCandidates.push({
+      key: "collection",
+      node: (
+        <span className="rounded-full bg-red-600/90 px-2 py-0.5 text-[11px] font-bold text-white shadow-sm">
+          {collection.emoji} 데스게임
+        </span>
+      ),
+    });
+  if (genre)
+    chipCandidates.push({
+      key: "genre",
+      node: (
+        <span
+          className="rounded-full border px-2 py-0.5 text-[11px] font-bold text-white backdrop-blur-sm"
+          style={{ borderColor: `${GENRE_META[genre].accent}88`, backgroundColor: `${GENRE_META[genre].accent}40` }}
+        >
+          {GENRE_META[genre].emoji} {GENRE_META[genre].label}
+        </span>
+      ),
+    });
+  // Live rooms always win a slot; the corner badge takes the other one.
+  const topChips = chipCandidates
+    .slice(0, hasCornerBadge ? 1 : 2)
+    .map((c) => <span key={c.key} className="contents">{c.node}</span>);
   const longName = game.name.length > 9;
 
   const content = (
@@ -122,35 +168,11 @@ export default function GamePosterCard({
       {game.playable && <div className="poster-shine pointer-events-none absolute inset-0" />}
       <GoldParticleLayer particles={particles} />
 
-      {/* Top row: genre / collection on the left, status on the right. */}
-      <div className="absolute top-2 right-14 left-2">
-        <div className="flex min-w-0 flex-wrap gap-1">
-          {collection && (
-            <span className="rounded-full bg-red-600/90 px-2 py-0.5 text-[11px] font-bold text-white shadow-sm">
-              {collection.emoji} 데스게임
-            </span>
-          )}
-          {isFeatured(game) && (
-            <span className="rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 px-2 py-0.5 text-[11px] font-extrabold text-black shadow-sm">
-              ⭐ 추천
-            </span>
-          )}
-          {genres.map((genre, i) => (
-            <span
-              key={genre}
-              className={`rounded-full border px-2 py-0.5 text-[11px] font-bold text-white backdrop-blur-sm ${i > 0 || collection ? "hidden sm:inline" : ""}`}
-              style={{ borderColor: `${GENRE_META[genre].accent}88`, backgroundColor: `${GENRE_META[genre].accent}40` }}
-            >
-              {GENRE_META[genre].emoji} {GENRE_META[genre].label}
-            </span>
-          ))}
-          {liveRoomCount > 0 && (
-            <span className="flex items-center gap-1 rounded-full bg-emerald-500/90 px-2 py-0.5 text-[11px] font-bold text-white shadow-sm">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
-              {liveRoomCount}개 방
-            </span>
-          )}
-        </div>
+      {/* Top row — at most TWO marks per card (2026-11-22) so they don't
+          bury the artwork. Priority: live rooms > NEW/UPDATED (or 준비중,
+          top-right) > 추천 > collection > first genre. */}
+      <div className="absolute top-2 right-16 left-2">
+        <div className="flex min-w-0 flex-wrap gap-1">{topChips}</div>
       </div>
       {game.playable ? (
         <FreshnessBadge badge={badge} />
