@@ -394,6 +394,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "noon-draw",
+    name: "정오의 발도",
+    nameEn: "High Noon Draw",
+    description:
+      "한낮의 모래 마당, 칼자루에 손을 얹고 마주 선 결투자들. 화면 한가운데 ❗가 뜨는 순간 먼저 누르는 사람이 이겨요 — 반응 시간은 내 기기에서 재니 핑 차이가 없어요. 🐦 새·🍂 낙엽·⚡ 마른 천둥·🥁 북소리 같은 가짜 신호에 먼저 뽑으면 부정 출발! ⚔️ 토너먼트(대진표·2선승·결승 3선승, 탈락하면 🔮 예측)와 🌪️ 난투(모두 한꺼번에, 부정 출발·꼴찌가 ❤️를 잃음). 2~8인 실시간 3D · AI 봇 Lv.1~10.",
+    players: { min: 2, max: 8 },
+    playTime: { minMinutes: 1, maxMinutes: 3 },
+    category: "party",
+    thumbnail: { emoji: "🗡️", gradient: ["#f59e0b", "#7c2d12"] },
+    tags: ["반응속도", "타이밍", "결투", "발도", "속임수", "실시간", "토너먼트", "파티", "3D", "AI봇"],
+    genres: ["party", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
+  {
     id: "crumble-climb",
     name: "무너지는 탑 오르기",
     nameEn: "Crumbling Tower Climb",

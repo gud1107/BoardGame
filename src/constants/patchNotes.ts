@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.193.0",
+    releaseDate: "2026-11-22",
+    title: "🗡️ 새 게임 정오의 발도",
+    changes: [
+      { game: "noon-draw", type: "FEAT", desc: "🗡️ 새 게임 — ❗가 뜨는 순간 먼저 뽑는 사람이 이기는 2~8인 반응속도 결투 · 실시간 3D · AI 봇 Lv.1~10" },
+      { game: "noon-draw", type: "FEAT", desc: "🐦 새·🍂 낙엽·⚡ 천둥·🥁 북소리 가짜 신호에 먼저 뽑으면 부정 출발 · 반응 시간은 내 기기에서 재서 핑 차이 없음" },
+      { game: "noon-draw", type: "FEAT", desc: "⚔️ 토너먼트(2선승·결승 3선승, 탈락하면 🔮 예측) · 🌪️ 난투(부정 출발·꼴찌가 ❤️ 잃기) · 기록·업적 7종" },
+    ],
+  },
+  {
     version: "v1.192.0",
     releaseDate: "2026-11-22",
     title: "🎯 새 게임 한 발의 묘수",

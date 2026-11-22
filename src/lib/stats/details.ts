@@ -197,6 +197,12 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "✨ 스침 · ★ 궁극기 (합동) · ⚡ 스킬", value: (d) => `${n(d.grazes)} · ${n(d.ults)} (${n(d.combos)}) · ${n(d.skills)}` },
     { label: "🛡 무피격 원정 성공 · 🎁 아이템", value: (d) => `${n(d.noHitClears)} · ${n(d.items)}` },
   ],
+  "noon-draw": [
+    { label: "⚡ 최고 반응 · 평균", value: (d) => `${d.minRt !== undefined ? `${n(d.minRt)}ms` : "-"} · ${d.valid ? `${Math.round((d.rtSum ?? 0) / d.valid)}ms` : "-"}` },
+    { label: "🗡️ 이긴 합 / 합 · ✨ 200ms 미만", value: (d) => `${n(d.boutWins)} / ${n(d.bouts)} · ${n(d.swift)}` },
+    { label: "⚠️ 부정 출발 · ⌛ 못 뽑음 · 🧘 속지 않음", value: (d) => `${n(d.early)} · ${n(d.misses)} · ${n(d.feintsResisted)}` },
+    { label: "🏆 우승 (⚔️ 토너먼트 · 🌪️ 난투) · 🔮 예측", value: (d) => `${n(d.wins)} (${n(d.tournamentWins)} · ${n(d.brawlWins)}) · ${n(d.predictHits)}/${n(d.predictions)}` },
+  ],
   "crumble-climb": [
     { label: "👑 등정 / 🥇 라운드 1등 / 💨 휩쓸림", value: (d) => `${n(d.finishes)} / ${n(d.roundWins)} / ${n(d.caught)}` },
     { label: "⚡ 가장 빠른 등정 · ⛰ 가장 높이", value: (d) => `${d.minClimbSec !== undefined ? `${n(d.minClimbSec)}초` : "-"} · ${n(d.maxHeight)}m` },

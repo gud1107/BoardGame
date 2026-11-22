@@ -76,7 +76,8 @@ describe("game sound suites", () => {
     // + crumble climb (무너지는 탑 오르기).
     // + possession night (빙의의 밤).
     // + cloud squadron (구름 편대).
-    expect(suites.length).toBe(66);
+    // + noon draw (정오의 발도).
+    expect(suites.length).toBe(67);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

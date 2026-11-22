@@ -63,6 +63,7 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   "finders-keepers": dynamic(() => import("./findersKeepers/FindersKeepersGame"), { ssr: false }),
   "thin-ice-party": dynamic(() => import("./thinIce/ThinIceGame"), { ssr: false }),
   "crumble-climb": dynamic(() => import("./crumbleClimb/CrumbleClimbGame"), { ssr: false }),
+  "noon-draw": dynamic(() => import("./noonDraw/NoonDrawGame"), { ssr: false }),
   "mannequin-mall": dynamic(() => import("./mannequinMall/MannequinMallGame"), { ssr: false }),
   "possession-night": dynamic(() => import("./possessionNight/PossessionNightGame"), { ssr: false }),
   "hushed-ward": dynamic(() => import("./hushedWard/HushedWardGame"), { ssr: false }),

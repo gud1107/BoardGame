@@ -88,6 +88,7 @@ export const GAME_VIEW_MODES: Record<GameId, GameViewMode> = {
   "snowball-fort": "both",
   "thin-ice-party": "both",
   "crumble-climb": "both",
+  "noon-draw": "both",
   "crown-thief": "both",
   "finders-keepers": "both",
   "toy-room-race": "both",
