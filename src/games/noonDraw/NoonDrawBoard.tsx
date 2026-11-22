@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import { useBoardView } from "@/games/shared/three/viewPref";
-import { FEINT_INFO, MODE_INFO, roundName, SEAT_COLOR_NAMES, SEAT_COLORS, SEAT_SYMBOLS } from "./data";
+import { DRAW_LIMIT_MS, FEINT_INFO, MIN_HUMAN_RT_MS, MODE_INFO, roundName, SEAT_COLOR_NAMES, SEAT_COLORS, SEAT_SYMBOLS } from "./data";
 import { activeParticipants, currentStage, matchIndexOf, type NoonAction, type NoonState, type PointReason } from "./engine";
 import { getNoonDrawSound } from "./noonDrawSound";
 import RulebookModal from "./RulebookModal";
@@ -101,7 +101,7 @@ export default function NoonDrawBoard({ state, mySeat, names, botSeats, onAction
     const rt = Math.round(t - shownAt.current.t);
     onAction({ type: "draw", seat: mySeat, rt });
     sound().play("draw");
-    setMyFeedback({ bout: b.id, text: `${rt}ms`, tone: rt < 100 ? "bad" : "good" });
+    setMyFeedback({ bout: b.id, text: rt > DRAW_LIMIT_MS ? `${rt}ms · 늦음` : rt < MIN_HUMAN_RT_MS ? `${rt}ms · 부정 출발` : `${rt}ms`, tone: rt < MIN_HUMAN_RT_MS || rt > DRAW_LIMIT_MS ? "bad" : "good" });
   }, [state, mySeat, onAction, sound]);
 
   useEffect(() => {
