@@ -4,6 +4,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } 
 import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { AdaptiveResolution } from "@/games/shared/three/sceneFx";
+import { resolveLook } from "@/games/shared/three/SeatedPerson";
+import VrmBody, { addWalk, setBone, BODY } from "@/games/shared/three/VrmBody";
+import { useMyCharacter } from "@/lib/character/myCharacter";
 import { emojiTexture, FONTS, paintedTexture } from "@/games/shared/three/tableKit";
 import { CORRIDOR_H, CORRIDOR_LEN, CORRIDOR_W, type ShownProp } from "../engine";
 
@@ -11,7 +14,9 @@ import { CORRIDOR_H, CORRIDOR_LEN, CORRIDOR_W, type ShownProp } from "../engine"
  * 이상한 복도 3D (rulebook §7). A long night corridor lit by four
  * fluorescent panels. The player walks it freely — WASD / arrow keys (Shift
  * to hurry) or the on-screen stick — and drags to look around; each new
- * corridor puts them back at the entrance. Every prop is tappable — a missing
+ * corridor puts them back at the entrance. The default view sits over the
+ * shoulder of the player's own profile VRM (like 변신 숨바꼭질); 👁️ switches
+ * to first-person eyes. Every prop is tappable — a missing
  * prop leaves an invisible hit box where it used to be. Lint: per-frame
  * camera / light mutation lives in plain functions outside components.
  *
@@ -29,6 +34,8 @@ export interface CorridorSceneProps {
   dread: number;
   lowDetail: boolean;
   onPick: ((id: string) => void) | null;
+  /** Viewer's seat — picks the default look when no profile character is set. */
+  seat: number;
 }
 
 const W2 = CORRIDOR_W / 2;
@@ -36,6 +43,16 @@ const START_Z = 0.6;
 const BODY_R = 0.28;
 const WALK_SPEED = 1.9;
 const RUN_SPEED = 3.4;
+/** The wall behind the entrance (a small vestibule so the 3rd-person camera fits behind you). */
+const BACK_Z = 2.8;
+/** Head-bone height of the player's VRM. */
+const HEAD_Y = 1.42;
+const CAM_DIST = 2.1;
+const CAM_SHOULDER = 0.42;
+const CAM_PAD = 0.14;
+
+export type CorridorCam = "third" | "first";
+const CAM_KEY = "strange-corridor:cam";
 
 /** Where a prop sits and which way it faces. */
 function placement(p: ShownProp): { pos: [number, number, number]; rotY: number; rotX: number } {
@@ -289,29 +306,29 @@ function PropNode({ p, selected, revealed, onPick }: { p: ShownProp; selected: b
 }
 
 function Shell() {
-  const len = CORRIDOR_LEN + 2;
+  const len = CORRIDOR_LEN + BACK_Z;
   return (
     <group>
       {/* floor, ceiling, walls */}
-      <mesh rotation-x={-Math.PI / 2} position={[0, 0, -len / 2 + 1]}>
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0, -len / 2 + BACK_Z]}>
         <planeGeometry args={[CORRIDOR_W, len]} />
         <meshStandardMaterial color="#3f3f37" roughness={0.35} metalness={0.05} />
       </mesh>
-      <mesh rotation-x={-Math.PI / 2} position={[0, 0.003, -len / 2 + 1]}>
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0.003, -len / 2 + BACK_Z]}>
         <planeGeometry args={[1.1, len]} />
         <meshStandardMaterial color="#4a2a24" roughness={0.9} />
       </mesh>
-      <mesh rotation-x={Math.PI / 2} position={[0, CORRIDOR_H, -len / 2 + 1]}>
+      <mesh rotation-x={Math.PI / 2} position={[0, CORRIDOR_H, -len / 2 + BACK_Z]}>
         <planeGeometry args={[CORRIDOR_W, len]} />
         <meshStandardMaterial color="#cbd5c0" roughness={0.9} />
       </mesh>
       {[-1, 1].map((s) => (
         <group key={s}>
-          <mesh rotation-y={(-s * Math.PI) / 2} position={[s * W2, CORRIDOR_H / 2, -len / 2 + 1]}>
+          <mesh rotation-y={(-s * Math.PI) / 2} position={[s * W2, CORRIDOR_H / 2, -len / 2 + BACK_Z]}>
             <planeGeometry args={[len, CORRIDOR_H]} />
             <meshStandardMaterial color="#9ca38f" roughness={0.85} />
           </mesh>
-          <mesh rotation-y={(-s * Math.PI) / 2} position={[s * (W2 - 0.01), 0.06, -len / 2 + 1]}>
+          <mesh rotation-y={(-s * Math.PI) / 2} position={[s * (W2 - 0.01), 0.06, -len / 2 + BACK_Z]}>
             <planeGeometry args={[len, 0.12]} />
             <meshStandardMaterial color="#3f3f46" />
           </mesh>
@@ -321,8 +338,8 @@ function Shell() {
         <planeGeometry args={[CORRIDOR_W, CORRIDOR_H]} />
         <meshStandardMaterial color="#8a917e" roughness={0.85} />
       </mesh>
-      {/* behind the camera: a closed door, so looking back isn't a void */}
-      <mesh position={[0, CORRIDOR_H / 2, 1.2]} rotation-y={Math.PI}>
+      {/* behind the entrance: a closed wall, so looking back isn't a void */}
+      <mesh position={[0, CORRIDOR_H / 2, BACK_Z]} rotation-y={Math.PI}>
         <planeGeometry args={[CORRIDOR_W, CORRIDOR_H]} />
         <meshStandardMaterial color="#57534e" roughness={0.9} />
       </mesh>
@@ -381,6 +398,13 @@ interface Walker {
   keys: Set<string>;
   run: boolean;
   bobT: number;
+  /** Body state the VRM reads: moving / hurrying, facing (rotation.y), stride phase. */
+  moving: boolean;
+  hurry: boolean;
+  face: number;
+  phase: number;
+  /** Current (wall-shortened) camera distance behind the shoulder. */
+  dist: number;
 }
 
 interface Blocker {
@@ -411,7 +435,7 @@ function blockersOf(props: ShownProp[]): Blocker[] {
 /** Push a circle of radius BODY_R out of each box (one pass is plenty for a hallway). */
 function collide(x: number, z: number, blocks: Blocker[]): [number, number] {
   x = Math.max(-W2 + BODY_R, Math.min(W2 - BODY_R, x));
-  z = Math.max(-CORRIDOR_LEN + BODY_R + 0.2, Math.min(1.2 - BODY_R, z));
+  z = Math.max(-CORRIDOR_LEN + BODY_R + 0.2, Math.min(BACK_Z - BODY_R - 0.05, z));
   for (const b of blocks) {
     const cx = Math.max(b.x0, Math.min(b.x1, x));
     const cz = Math.max(b.z0, Math.min(b.z1, z));
@@ -439,12 +463,33 @@ function axis(keys: Set<string>, plus: string[], minus: string[]) {
   return (plus.some((k) => keys.has(k)) ? 1 : 0) - (minus.some((k) => keys.has(k)) ? 1 : 0);
 }
 
-function CameraRig({ walker, blocks }: { walker: RefObject<Walker>; blocks: Blocker[] }) {
-  useFrame(({ camera }, dt) => rigFrame(camera, walker.current, blocks, Math.min(dt, 0.1)));
+function CameraRig({ walker, blocks, mode, body }: { walker: RefObject<Walker>; blocks: Blocker[]; mode: CorridorCam; body: RefObject<THREE.Group | null> }) {
+  useFrame(({ camera }, dt) => rigFrame(camera, walker.current, blocks, mode, body.current, Math.min(dt, 0.1)));
   return null;
 }
 
-function rigFrame(camera: THREE.Camera, w: Walker, blocks: Blocker[], dt: number) {
+function wrapAngle(a: number) {
+  return Math.atan2(Math.sin(a), Math.cos(a));
+}
+
+/** How far a ray from `o` along `d` can go before leaving the (padded) inside of the hall. */
+function roomExit(o: THREE.Vector3, d: THREE.Vector3, max: number) {
+  let t = max;
+  const slab = (p: number, v: number, lo: number, hi: number) => {
+    if (v > 1e-6) t = Math.min(t, (hi - p) / v);
+    else if (v < -1e-6) t = Math.min(t, (lo - p) / v);
+  };
+  slab(o.x, d.x, -W2 + CAM_PAD, W2 - CAM_PAD);
+  slab(o.y, d.y, 0.25, CORRIDOR_H - CAM_PAD);
+  slab(o.z, d.z, -CORRIDOR_LEN + CAM_PAD, BACK_Z - CAM_PAD);
+  return Math.max(0, t);
+}
+
+const vFwd = new THREE.Vector3();
+const vOrigin = new THREE.Vector3();
+const vBack = new THREE.Vector3();
+
+function rigFrame(camera: THREE.Camera, w: Walker, blocks: Blocker[], mode: CorridorCam, body: THREE.Group | null, dt: number) {
   let f = axis(w.keys, KEY_FWD, KEY_BACK) + w.sz;
   let s = axis(w.keys, KEY_RIGHT, KEY_LEFT) + w.sx;
   const l = Math.hypot(f, s);
@@ -453,24 +498,98 @@ function rigFrame(camera: THREE.Camera, w: Walker, blocks: Blocker[], dt: number
     s /= l;
   }
   const moving = l > 0.05;
+  const hurry = moving && (w.run || w.keys.has("ShiftLeft") || w.keys.has("ShiftRight"));
+  // yaw 0 looks down −z; positive yaw turns left
+  const sin = Math.sin(w.yaw);
+  const cos = Math.cos(w.yaw);
   if (moving) {
-    const hurry = w.run || w.keys.has("ShiftLeft") || w.keys.has("ShiftRight");
     const sp = (hurry ? RUN_SPEED : WALK_SPEED) * dt;
-    // yaw 0 looks down −z; positive yaw turns left
-    const sin = Math.sin(w.yaw);
-    const cos = Math.cos(w.yaw);
-    const nx = w.x + (-sin * f + cos * s) * sp;
-    const nz = w.z + (-cos * f - sin * s) * sp;
-    [w.x, w.z] = collide(nx, nz, blocks);
+    const mx = -sin * f + cos * s;
+    const mz = -cos * f - sin * s;
+    [w.x, w.z] = collide(w.x + mx * sp, w.z + mz * sp, blocks);
     w.bobT += dt * (hurry ? 11 : 8);
+    w.phase += dt * (hurry ? 13 : 7.5);
+    // the body turns toward where it walks (VRM faces +z → rotation.y = atan2(x, z))
+    w.face += wrapAngle(Math.atan2(mx, mz) - w.face) * (1 - Math.exp(-dt * 10));
   }
-  const bob = moving ? Math.sin(w.bobT) * 0.018 : 0;
-  camera.position.set(w.x, 1.6 + bob, w.z);
+  w.moving = moving;
+  w.hurry = hurry;
+
+  if (body) {
+    body.position.set(w.x, 0, w.z);
+    body.rotation.y = w.face;
+  }
+  if (mode === "first") {
+    if (body) body.visible = false;
+    const bob = moving ? Math.sin(w.bobT) * 0.018 : 0;
+    camera.position.set(w.x, 1.6 + bob, w.z);
+    camera.rotation.set(w.pitch, w.yaw, 0, "YXZ");
+    return;
+  }
+  // over the right shoulder: pull in at once when a wall / the ceiling is in the way, ease back out
+  const cp = Math.cos(w.pitch);
+  vFwd.set(-sin * cp, Math.sin(w.pitch), -cos * cp);
+  vOrigin.set(w.x + cos * CAM_SHOULDER, HEAD_Y + 0.12, w.z - sin * CAM_SHOULDER);
+  vOrigin.x = Math.max(-W2 + CAM_PAD, Math.min(W2 - CAM_PAD, vOrigin.x));
+  vBack.copy(vFwd).negate();
+  const free = Math.max(0, roomExit(vOrigin, vBack, CAM_DIST) - 0.05);
+  if (free < w.dist) w.dist = free;
+  else w.dist += (free - w.dist) * (1 - Math.exp(-dt * 3.2));
+  if (body) body.visible = w.dist > 0.55;
+  camera.position.copy(vOrigin).addScaledVector(vFwd, -w.dist);
   camera.rotation.set(w.pitch, w.yaw, 0, "YXZ");
 }
 
 function freshWalker(keys: Set<string>): Walker {
-  return { x: 0, z: START_Z, yaw: 0, pitch: -0.04, sx: 0, sz: 0, keys, run: false, bobT: 0 };
+  return { x: 0, z: START_Z, yaw: 0, pitch: -0.04, sx: 0, sz: 0, keys, run: false, bobT: 0, moving: false, hurry: false, face: Math.PI, phase: 0, dist: CAM_DIST };
+}
+
+/** The player's own profile VRM. Position / facing are written by rigFrame; this only poses the bones. */
+function Player({ walker, body, seat, lowDetail }: { walker: RefObject<Walker>; body: RefObject<THREE.Group | null>; seat: number; lowDetail: boolean }) {
+  const character = useMyCharacter((st) => st.character);
+  const look = useMemo(() => resolveLook(Math.max(0, seat), ["none"], character ?? undefined), [seat, character]);
+  const pose = (o: Float32Array, t: number) => {
+    const w = walker.current;
+    setBone(o, "rightUpperArm", 0, 0, -0.12);
+    setBone(o, "leftUpperArm", 0, 0, 0.12);
+    if (w.moving) {
+      addWalk(o, w.phase, w.hurry ? 1 : 0.8);
+      if (w.hurry) o[BODY.spine] += 0.1;
+    } else {
+      o[BODY.spine] += Math.sin(t * 1.7) * 0.025;
+    }
+    // the head turns a little toward where the camera looks
+    const turn = wrapAngle(w.yaw + Math.PI - w.face);
+    o[BODY.head + 1] += Math.max(-0.6, Math.min(0.6, turn * 0.5));
+    o[BODY.head] += Math.max(-0.3, Math.min(0.3, -w.pitch * 0.5));
+  };
+  return (
+    <group ref={body} position={[0, 0, START_Z]} rotation-y={Math.PI}>
+      <VrmBody
+        look={look}
+        seed={seat * 17 + 3}
+        headY={HEAD_Y}
+        pose={pose}
+        face={() => ({ surprised: 0.15 })}
+        lowDetail={lowDetail}
+        follow={16}
+        fallback={
+          <mesh position={[0, 0.8, 0]} scale={[0.3, 0.8, 0.25]}>
+            <sphereGeometry args={[1, 14, 10]} />
+            <meshBasicMaterial color="#0c0a09" transparent opacity={0.5} />
+          </mesh>
+        }
+      />
+    </group>
+  );
+}
+
+function readCam(): CorridorCam {
+  try {
+    return localStorage.getItem(CAM_KEY) === "first" ? "first" : "third";
+  } catch {
+    return "third";
+  }
 }
 
 const STICK_R = 44;
@@ -544,6 +663,8 @@ function isTyping(t: EventTarget | null) {
 export default function CorridorScene(p: CorridorSceneProps) {
   const walker = useRef<Walker>(freshWalker(new Set()));
   const drag = useRef<{ x: number; y: number; id: number; yaw: number; pitch: number } | null>(null);
+  const body = useRef<THREE.Group>(null);
+  const [cam, setCam] = useState<CorridorCam>(readCam);
   const lamps = p.props.filter((x) => x.kind === "lamp");
   const blocks = useMemo(() => blockersOf(p.props), [p.props]);
   const nodes: ReactNode[] = p.props.map((x) => <PropNode key={x.id} p={x} selected={x.id === p.selectedId} revealed={x.id === p.revealId} onPick={p.onPick} />);
@@ -602,13 +723,33 @@ export default function CorridorScene(p: CorridorSceneProps) {
         <color attach="background" args={["#050605"]} />
         <fog attach="fog" args={["#050605", 6, 17 - p.dread * 4]} />
         <AdaptiveResolution max={1.75} />
-        <CameraRig walker={walker} blocks={blocks} />
+        <CameraRig walker={walker} blocks={blocks} mode={cam} body={body} />
+        <Player walker={walker} body={body} seat={p.seat} lowDetail={p.lowDetail} />
         <ambientLight intensity={0.22 - p.dread * 0.08} color="#d9f99d" />
         <hemisphereLight args={["#e2e8f0", "#1c1917", 0.18]} />
         <Lights lamps={lamps} dread={p.dread} />
         <Shell />
         {nodes}
       </Canvas>
+      <button
+        type="button"
+        className="absolute top-10 left-2 z-20 rounded-full border border-white/20 bg-black/55 px-2.5 py-1 text-[11px] font-bold text-white/85 hover:bg-black/70"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          const next: CorridorCam = cam === "third" ? "first" : "third";
+          setCam(next);
+          try {
+            localStorage.setItem(CAM_KEY, next);
+          } catch {
+            /* private mode */
+          }
+          e.currentTarget.blur();
+        }}
+        aria-label="시점 바꾸기"
+      >
+        {cam === "third" ? "👤 3인칭" : "👁️ 1인칭"}
+      </button>
       <Stick
         onMove={(v) => {
           walker.current.sx = v?.x ?? 0;

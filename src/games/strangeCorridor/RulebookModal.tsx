@@ -96,7 +96,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <section>
             <h3 className={H3}>조작</h3>
             <ul className={LIST}>
-              <li>🧊 3D: 조이스틱(휴대폰)·WASD/방향키(PC, Shift 빨리 걷기)로 걷고, 드래그로 둘러보기, 눌러서 고르기 → &ldquo;🚨 여기가 이상해요&rdquo;로 확정. 🖼️ 2D 원근 그림으로도 같은 복도를 볼 수 있어요.</li>
+              <li>🧊 3D: 조이스틱(휴대폰)·WASD/방향키(PC, Shift 빨리 걷기)로 걷고, 드래그로 둘러보기(기본은 내 캐릭터 어깨 너머 3인칭, 왼쪽 위 버튼으로 👁️ 1인칭), 눌러서 고르기 → &ldquo;🚨 여기가 이상해요&rdquo;로 확정. 🖼️ 2D 원근 그림으로도 같은 복도를 볼 수 있어요.</li>
               <li>키보드: N = 이상 없음, Enter = 고른 곳으로 확정.</li>
               <li>자리는 색 + 모양(●◆▲■★✚⬟✦)으로 구분해요. 소리로 알리는 정답·오답은 화면 문구로도 나와요.</li>
             </ul>

@@ -155,6 +155,7 @@ export default function StrangeCorridorBoard({ state, viewerSeat, names, connect
             dread={dread}
             lowDetail={lowDetail}
             onPick={canAnswer ? pick : null}
+            seat={viewerSeat}
           />
         ) : (
           <Corridor2D props={shown} selectedId={sel} revealId={revealId} onPick={canAnswer ? pick : null} />

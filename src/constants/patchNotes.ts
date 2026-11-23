@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.205.0",
+    releaseDate: "2026-11-24",
+    title: "🚪 이상한 복도 — 내 캐릭터 3인칭 시점",
+    changes: [
+      { game: "strange-corridor", type: "FEAT", desc: "👤 내 프로필 캐릭터(VRM)가 복도를 걷고 뛰어요 — 기본 시점이 캐릭터 어깨 너머 3인칭으로 바뀌었어요" },
+      { game: "strange-corridor", type: "IMPROVE", desc: "👁️ 왼쪽 위 버튼으로 1인칭 ↔ 3인칭 전환(기기에 기억) · 벽·천장에 닿으면 카메라가 앞으로 당겨져요" },
+    ],
+  },
+  {
     version: "v1.204.0",
     releaseDate: "2026-11-24",
     title: "🐶 멍냥 방어선 재난 예보 · CLEAR 연출",

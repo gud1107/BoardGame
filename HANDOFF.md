@@ -1,5 +1,13 @@
 # HANDOFF — 현재 스냅샷
 
+## 🚪 이상한 복도 3인칭 VRM 시점 — 2026-11-24 (패치 v1.205.0)
+
+요청: "9번출구 게임 vrm 캐릭터가 움직이는 시선으로, 변신숨바꼭질처럼". 코드 `src/games/strangeCorridor/three/CorridorScene.tsx`, 룰북 [boardGameRule/이상한복도/이상한복도.md](./boardGameRule/이상한복도/이상한복도.md) §2.
+- **시점**: 기본 = 내 프로필 VRM(`useMyCharacter` → `resolveLook`, 없으면 자리 기본) 오른쪽 어깨 너머 3인칭(거리 2.1m, 어깨 0.42m). 벽·천장·뒷벽은 상자 안쪽 광선 슬랩(`roomExit`)으로 막히면 즉시 당기고 천천히 풀림, 0.55m 안이면 몸 숨김. 왼쪽 위 "👤 3인칭 / 👁️ 1인칭" 버튼, localStorage `strange-corridor:cam`.
+- **몸**: 공용 `VrmBody` + `addWalk`(CMU 걷기/달리기 자동 전환). 이동 방향으로 몸이 돌고, 고개는 카메라 쪽으로 조금. 위치·방향은 카메라와 같은 `rigFrame`에서 써서 떨림 없음(보폭 위상도 여기 — React Compiler가 pose 콜백 안 ref 수정을 막음).
+- **복도**: 카메라가 뒤에 들어가도록 입구 뒤 현관을 1.2→2.8m로 늘림(바닥·벽·뒷벽·충돌 같이). 다른 사람 캐릭터는 안 보임(위치를 주고받지 않는 게임).
+- **확인**: tsc·eslint 0. rolldown 하네스 + public/ 서버 + swiftshader로 760×480 캡처 — VRM 로드, 뒷모습, W 걷기·A 옆걸음 몸 회전 확인(하네스 삭제). 운영 화면 캡처·휴대폰 성능은 미확인.
+
 ## 🐶 멍냥 방어선 재난 예보 · 자동 시작 · CLEAR/FAIL 연출 — 2026-11-24 (패치 v1.204.0)
 
 요청: "모두 다 끝나면 자동시작, 투표로 스킵 / 이번 라운드에 뭐가 떨어지는지 직관적으로 / 전체 퀄리티" + "승리·클리어·실패 표기를 화려한 이펙트로". 코드 `src/games/petGuard/`, 원전 [boardGameRule/멍냥방어선/멍냥방어선.md](./boardGameRule/멍냥방어선/멍냥방어선.md) §3, §3-2.
