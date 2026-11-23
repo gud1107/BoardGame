@@ -46,6 +46,7 @@ export function findersKeepersStatDetails(state: MatchState, seat: number): Reco
     maxWasted: st.wastedValue,
     bombPasses: st.bombPasses,
     bombBooms: st.bombBooms,
+    augBonus: st.augBonus ?? 0,
     wins: win,
     teamWins: isTeam(state) && win && state.winnerTeam >= 0 ? 1 : 0,
     bombWins: isBomb(state) ? win : 0,

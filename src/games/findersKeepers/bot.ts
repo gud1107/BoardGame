@@ -1,5 +1,6 @@
+import type { AugId } from "./augments";
 import { blockedByStand } from "./arena";
-import { BASIC_KINDS, BODY_R, LOOT_REACH, MAX_CHAIN, SET_RAINBOW_BONUS, SET_TRIPLE_BONUS, TOUCH_BODY, TOY_INFO, type ToyKind } from "./data";
+import { BASIC_KINDS, BODY_R, SET_RAINBOW_BONUS, SET_TRIPLE_BONUS, TOUCH_BODY, TOY_INFO, type ToyKind } from "./data";
 import {
   allies,
   basketOf,
@@ -9,7 +10,10 @@ import {
   isBasketKeeper,
   isBomb,
   isTeam,
+  hasAug,
   limitBlock,
+  lootReachOf,
+  maxChainOf,
   press,
   rnd,
   safeCount,
@@ -228,7 +232,8 @@ export function botThink(rt: HostRuntime, seat: number) {
   }
   const etaHome = (homeD / Math.max(1.5, speed)) * 1000 + me.chain.length * 260 + 900;
   const timeUp = me.chain.length > 0 && rnd(rt.botRng) < P.clock && left < etaHome + 1500;
-  const full = me.chain.length >= MAX_CHAIN - 1;
+  const cap = maxChainOf(me);
+  const full = me.chain.length >= cap - 1;
   const rich = myVal >= mem.homeAt;
   const scared = !!threat && myVal >= 4 + (1 - P.aware) * 6;
   let goHome = me.chain.length > 0 && (rich || full || timeUp || scared || me.inBasket);
@@ -242,7 +247,7 @@ export function botThink(rt: HostRuntime, seat: number) {
   // 🤝 팀전: 집에 더 가까운 팀원이 닿아 있으면 넘겨주기
   if (isTeam(s) && me.chain.length >= 3 && s.t >= me.passCdAt) {
     const mate = teammateTouching(s, me);
-    if (mate && d2(mate, basket) + 2.5 < homeD && mate.chain.length + me.chain.length <= MAX_CHAIN) press(rt, seat, "skill");
+    if (mate && d2(mate, basket) + 2.5 < homeD && mate.chain.length + me.chain.length <= maxChainOf(mate)) press(rt, seat, "skill");
   }
 
   if (goHome) {
@@ -259,7 +264,7 @@ export function botThink(rt: HostRuntime, seat: number) {
   // ── 🔥 마감 세일: 털이범이 오면 내 바구니 지키기 ──
   if (s.sale) {
     const bi = s.baskets.indexOf(basket);
-    const lootersNear = s.players.some((o) => o !== me && !isBasketKeeper(s, o, bi) && d2(o, basket) < LOOT_REACH + 1.5);
+    const lootersNear = s.players.some((o) => o !== me && !isBasketKeeper(s, o, bi) && d2(o, basket) < lootReachOf(o) + 1.5);
     const stackV = basket.stack.reduce((a, k) => a + valueOfKind(k), 0);
     if (lootersNear && stackV >= 8 && me.chain.length === 0 && homeD < 5 && rnd(rt.botRng) < P.loot * 0.7) {
       mem.plan = "home";
@@ -300,7 +305,7 @@ export function botThink(rt: HostRuntime, seat: number) {
     const back = d2(t, basket) * 0.12 * P.route;
     consider({ x: t.x, z: t.z, sc: (v / (d + 2 + back)) * (rival ? 0.45 : 1), kind: "floor", vx: 0, vz: 0, target: t.id });
   }
-  if (P.aggro > 0 && me.chain.length < MAX_CHAIN - 1 && me.snatchCdAt - s.t < 800) {
+  if (P.aggro > 0 && me.chain.length < cap - 1 && me.snatchCdAt - s.t < 800) {
     for (const o of s.players) {
       if (o === me || allies(s, o.seat, seat) || o.chain.length === 0 || o.inBasket) continue;
       if (me.revengeOn === o.seat && s.t < me.revengeUntil) continue;
@@ -317,12 +322,12 @@ export function botThink(rt: HostRuntime, seat: number) {
       }
     }
   }
-  if (s.sale && P.loot > 0 && me.chain.length < MAX_CHAIN - 1) {
+  if (s.sale && P.loot > 0 && me.chain.length < cap - 1) {
     s.baskets.forEach((b, bi) => {
       if (isBasketKeeper(s, me, bi) || b.stack.length === 0 || b.lootCdUntil - s.t > 400 || basketSafe(s, bi)) return;
       const top = b.stack[b.stack.length - 1];
       if (limitBlock(s, me, top, byId)) return;
-      const d = Math.max(0, d2(me, b) - LOOT_REACH * 0.8);
+      const d = Math.max(0, d2(me, b) - lootReachOf(me) * 0.8);
       consider({ x: b.x, z: b.z, sc: ((valueOfKind(top) + 1.5) * P.loot) / (d + 2), kind: "loot", vx: 0, vz: 0, target: bi });
     });
   }
@@ -340,10 +345,62 @@ export function botThink(rt: HostRuntime, seat: number) {
   const tz = chosen.z + chosen.vz * lead;
   steerTo(rt, me, tx, tz, P, 1, avoid);
   // 💨 돌진: 바닥 물건 경쟁 · 줄 따라잡기 (돌진 중엔 못 가로채서 줄은 더 먼 거리에서만)
-  const lo = chosen.kind === "snatch" ? 2.6 : 1.6;
+  const lo = chosen.kind === "snatch" ? (hasAug(me, "dashSnatch") ? 1.2 : 2.6) : 1.6;
   const hi = chosen.kind === "snatch" ? P.dashRange + 0.3 : P.dashRange;
   if (d > lo && d < hi) {
     const contested = chosen.kind !== "floor" || s.players.some((o) => o !== me && d2(o, chosen) < d + 1);
     if (contested || rnd(rt.botRng) < 0.25) tryDash(rt, me, P, tx, tz);
   }
+}
+
+/**
+ * 🧬 봇 증강 고르기: 높은 레벨일수록 이 판(모드·인원·남은 회차)에 쓸모 있는 카드를 고른다.
+ * 점수는 셀프플레이 증강별 승률 측정(룰북 §15)의 대략적 순서 — 낮은 레벨은 거의 무작위.
+ */
+const AUG_PREF: Record<AugId, number> = {
+  sneakers: 5,
+  quickDash: 4,
+  bigBag: 4,
+  tightGrip: 4,
+  tape: 4,
+  quickHands: 3,
+  scissors: 2,
+  fastDeposit: 3,
+  sockLover: 4,
+  sticky: 3,
+  pickupBoost: 4,
+  steady: 2,
+  strongBack: 5,
+  magnetHand: 5,
+  ram: 4,
+  dashSnatch: 4,
+  setMaster: 4,
+  regular: 3,
+  counter: 3,
+  giftWrap: 4,
+  longArm: 4,
+  bombPro: 5,
+  teamPlayer: 4,
+  lockBasket: 5,
+  bigLoot: 4,
+  piggyBank: 5,
+  trophyHunter: 4,
+  clutch: 5,
+  vacuum: 5,
+  turbo: 6,
+};
+
+export function chooseBotAug(rt: HostRuntime, seat: number, offer: AugId[]): number {
+  const me = rt.state.players[seat];
+  const skill = Math.max(0, Math.min(1, ((me?.lv ?? 5) - 1) / 9));
+  let best = 0;
+  let bestSc = -Infinity;
+  offer.forEach((id, i) => {
+    const sc = AUG_PREF[id] * skill + rnd(rt.botRng) * (1.5 + (1 - skill) * 6);
+    if (sc > bestSc) {
+      best = i;
+      bestSc = sc;
+    }
+  });
+  return best;
 }

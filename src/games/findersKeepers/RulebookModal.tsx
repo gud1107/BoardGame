@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Overlay from "@/components/Overlay";
+import { AUGMENTS, AUG_PICK_MS, AUG_REROLLS, AUG_TIER_NAME } from "./augments";
 import {
   BOMB_BASKET_LOSS,
   BOMB_FUSE_MAX,
@@ -46,7 +47,7 @@ import {
 const H3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
 const LIST = "list-disc space-y-1.5 pl-4 text-white/70 light:text-slate-600";
 
-type Tab = "basic" | "controls" | "chain" | "basket" | "shop" | "modes" | "score";
+type Tab = "basic" | "controls" | "chain" | "basket" | "shop" | "modes" | "aug" | "score";
 const TABS: { id: Tab; label: string }[] = [
   { id: "basic", label: "🖐️ 기본" },
   { id: "controls", label: "🎮 조작" },
@@ -54,6 +55,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "basket", label: "🧺 바구니·세트" },
   { id: "shop", label: "📢 방송·목표" },
   { id: "modes", label: "🤝 모드" },
+  { id: "aug", label: "🧬 증강" },
   { id: "score", label: "🧮 점수·동점" },
 ];
 
@@ -246,11 +248,40 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           </>
         )}
 
+        {tab === "aug" && (
+          <section>
+            <h3 className={H3}>🧬 증강 (옵션, 방 만들 때 기본 켜짐)</h3>
+            <ul className={`${LIST} mb-3`}>
+              <li>
+                경기 시작 전 · 1/3 · 2/3 지점에 <b>판이 잠깐 멈추고</b> 모두 3장 중 1장을 골라요 (첫 회 {sec(AUG_PICK_MS[0])} · 그다음 {sec(AUG_PICK_MS[1])}, 다 고르면 바로 다시 시작)
+              </li>
+              <li>같은 회차엔 모두 같은 등급 — 뒤 회차일수록 골드·프리즘이 잘 나와요. 🎲 다시 뽑기는 한 판에 {AUG_REROLLS}번</li>
+              <li>고른 증강은 모두에게 보여요 (점수판 아이콘) — 상대 증강을 보고 피하세요. 시간이 지나면 첫 번째 카드</li>
+              <li>PC: 1·2·3 키로 고르기, R 다시 뽑기</li>
+            </ul>
+            {([1, 2, 3] as const).map((tier) => (
+              <div key={tier} className="mb-2">
+                <p className="mb-1 text-xs font-bold text-white/70 light:text-slate-600">{AUG_TIER_NAME[tier]}</p>
+                <ul className={LIST}>
+                  {AUGMENTS.filter((a) => a.tier === tier).map((a) => (
+                    <li key={a.id}>
+                      {a.icon} <b>{a.name}</b> — {a.desc}
+                      {a.mode && <span className="text-white/45 light:text-slate-400"> ({a.mode === "bomb" ? "💣 폭탄 세일" : "🤝 팀전"}에서만)</span>}
+                      {a.notMode && <span className="text-white/45 light:text-slate-400"> (팀전 제외)</span>}
+                      {a.events && <span className="text-white/45 light:text-slate-400"> (📢 방송 켰을 때)</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </section>
+        )}
+
         {tab === "score" && (
           <section>
             <h3 className={H3}>점수 · 순위 · 동점</h3>
             <ul className={LIST}>
-              <li>점수 = 바구니 물건 값 합 + 세트 보너스 + 타임세일 덤 + 🎖 목표</li>
+              <li>점수 = 바구니 물건 값 합 + 세트 보너스 + 타임세일 덤 + 🎖 목표 + 🧬 증강 덤</li>
               <li>줄 위 물건은 0점 (끝나기 직전 &lsquo;넣을까 말까&rsquo;가 마지막 승부!)</li>
               <li>개인전 동점: 바구니 물건 개수가 적은 사람(비싼 걸 넣은 사람) → 가로챈 값이 큰 사람 → 같은 등수</li>
               <li>팀전 동점: 트로피를 넣은 팀 → 바구니 물건이 적은 팀 → 무승부</li>

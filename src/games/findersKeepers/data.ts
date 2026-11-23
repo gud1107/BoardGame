@@ -21,9 +21,12 @@ export interface GameOptions {
   events: boolean;
   /** 🎖 보너스 목표 2개 (시작 때 공개, 끝에 +점) */
   goals: boolean;
+  /** 🧬 증강 (시작 전 · 1/3 · 2/3 지점에 3장 중 1장) — 옵션이 없는 옛 방장은 꺼짐 */
+  augments: boolean;
 }
 
-export const DEFAULT_OPTIONS: GameOptions = { mode: "classic", seconds: 150, events: true, goals: true };
+/** 방 만들기 화면 기본값 (증강 켬). 엔진(`sanitizeOptions`)은 옵션이 빠지면 증강을 끈다. */
+export const DEFAULT_OPTIONS: GameOptions = { mode: "classic", seconds: 150, events: true, goals: true, augments: true };
 
 export const TEAM_MIN_PLAYERS = 4;
 
@@ -31,7 +34,7 @@ export function sanitizeOptions(o: Partial<GameOptions> | null | undefined, seat
   let mode: GameMode = o?.mode === "team" || o?.mode === "bomb" ? o.mode : "classic";
   if (mode === "team" && seatCount < TEAM_MIN_PLAYERS) mode = "classic";
   const seconds = o?.seconds === 120 || o?.seconds === 180 ? o.seconds : 150;
-  return { mode, seconds, events: o?.events !== false, goals: o?.goals !== false };
+  return { mode, seconds, events: o?.events !== false, goals: o?.goals !== false, augments: o?.augments === true };
 }
 
 export const MODE_INFO: Record<GameMode, { emoji: string; name: string; short: string }> = {

@@ -32,6 +32,7 @@ export function makeSnap(s: MatchState, seq: number): Snap {
         chain: [...p.chain],
         run: { ...p.run, counts: [...p.run.counts] },
         stats: { ...p.stats },
+        augs: [...(p.augs ?? [])],
       }),
     ),
     toys: s.toys.map((t): Toy => ({ ...t, x: r2(t.x), z: r2(t.z) })),
@@ -45,6 +46,8 @@ export function makeSnap(s: MatchState, seq: number): Snap {
     teamMult: [s.teamMult[0], s.teamMult[1]],
     events: s.events.filter((e) => e.at >= s.t - 2500),
     options: { ...s.options },
+    aug: s.aug ? { ...s.aug, el: Math.round(s.aug.el), offers: s.aug.offers.map((o) => [...o]), done: [...s.aug.done], picks: [...s.aug.picks], botAt: [...s.aug.botAt] } : null,
+    augAtMs: [...(s.augAtMs ?? [])],
   };
 }
 

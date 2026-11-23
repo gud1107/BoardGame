@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.203.0",
+    releaseDate: "2026-11-24",
+    title: "🧬 만지면 내 꺼! 증강",
+    changes: [
+      { game: "finders-keepers", type: "FEAT", desc: "🧬 증강 — 시작 전 · 1/3 · 2/3 지점에 판이 잠깐 멈추고 3장 중 1장 고르기 (실버·골드·프리즘 30종, 다시 뽑기 1번, 방 옵션 기본 켬)" },
+      { game: "finders-keepers", type: "FEAT", desc: "🎒 큰 가방·🐂 들이받기·🥷 소매치기 돌진·🌀 진공 청소기·🔒 자물쇠 바구니·🐷 저금통 등 — 고른 증강은 점수판 아이콘으로 모두에게 공개" },
+      { game: "finders-keepers", type: "IMPROVE", desc: "⚖️ 3,000판 셀프플레이로 카드별 세기를 맞췄어요 (가진 사람 점수가 평균의 0.96~1.07배)" },
+    ],
+  },
+  {
     version: "v1.202.0",
     releaseDate: "2026-11-23",
     title: "✏️ 낙서 결투 넓은 맵 · 그림 인식 개선 · 그림 사전",

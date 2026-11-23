@@ -84,6 +84,19 @@ const SFX = {
   victory: [...fx.arp("brass", ["F4", "A4", "C5", "F5", "A5"], 0.09, 0.5), ...fx.chord("strings", ["F4", "A4", "C5", "F5"], 2, 0.7, 0.45), { inst: "triangle", note: "C7", at: 0.45, gain: 0.6 }],
   defeat: [{ inst: "brass", note: "C5", dur: 0.4, gain: 0.5 }, { inst: "brass", note: "A4", at: 0.3, dur: 0.4, gain: 0.5 }, { inst: "brass", note: "F4", at: 0.6, dur: 0.9, gain: 0.5 }],
   ui: [fx.click(1200, 0.06)],
+  /** 🧬 증강 카드 등장 (등급 1~3) */
+  augOpen: (tier: number) => [
+    ...fx.arp(tier >= 3 ? "harp" : "vibes", tier >= 3 ? ["C6", "E6", "G6", "B6", "D7"] : tier === 2 ? ["F5", "A5", "C6", "F6"] : ["C5", "E5", "G5"], 0.06, 0.5, 0.5),
+    fx.whoosh(400, 2400, 0.35, 0.06),
+  ],
+  /** 🧬 카드 고름 */
+  augPick: [fx.pop(600, 1600, 0.12), ...fx.arp("glock", ["G5", "D6", "G6"], 0.05, 0.3, 0.45)],
+  /** 🧬 다시 뽑기 */
+  augReroll: [fx.whoosh(900, 2800, 0.2, 0.08), fx.click(2200, 0.05, 0.03)],
+  /** 🐷 저금통 */
+  piggy: [...fx.coin(0, 2600, 0.12)],
+  /** 🐂 들이받아 떨어뜨림 */
+  ram: [fx.thud(120, 0.22, 0.5), { inst: "marimba", note: "C4", at: 0.06, dur: 0.2, gain: 0.4 }],
 } satisfies Record<string, SfxRecipe>;
 
 export const FINDERS_KEEPERS_SUITE: SuiteConfig = {

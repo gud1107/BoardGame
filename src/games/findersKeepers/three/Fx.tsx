@@ -138,6 +138,13 @@ export function FxLayer({ items }: { items: FxItem[] }) {
             return <Burst key={key} at={at} x={ev.x} z={ev.z} y={0.8} colors={[SEAT_COLORS[ev.a % 8]]} n={10} power={0.8} life={450} />;
           case "bump":
             return <Burst key={key} at={at} x={ev.x} z={ev.z} y={0.8} colors={["#fde68a"]} n={6} power={0.5} geo={dropGeo} life={400} />;
+          case "ram":
+            return (
+              <group key={key}>
+                <Ring at={at} x={ev.x} z={ev.z} color="#a16207" radius={1.8} life={450} />
+                <Burst at={at} x={ev.x} z={ev.z} y={0.6} colors={["#a16207", SEAT_COLORS[ev.s % 8]]} n={14} power={1} life={550} />
+              </group>
+            );
           default:
             return null;
         }

@@ -18,7 +18,7 @@ import { BOT_LEVELS, DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot
 import { selfResult } from "@/games/shared/selfResult";
 import { withUniqueNames } from "@/games/shared/room/uniqueNames";
 import { hallFor } from "./arena";
-import { botThink } from "./bot";
+import { botThink, chooseBotAug } from "./bot";
 import { DEFAULT_OPTIONS, GAME_ID, MAX_PLAYERS, MIN_PLAYERS, MODE_INFO, TEAM_MIN_PLAYERS, sanitizeOptions, type GameMode, type GameOptions } from "./data";
 import { SnapBuffer, isSnap, makeSnap, stateFromSnap, type Snap } from "./net";
 import { applyInput, createHost, createMatch, hostStep, setAway, type GameEvent, type HostRuntime, type PlayerInput } from "./sim";
@@ -134,6 +134,15 @@ function GameOptionsForm({ options, setOptions, seats }: { options: GameOptions;
           { value: false, label: "끄기" },
         ]}
         onChange={(v) => set("goals", v)}
+      />
+      <OptionRow
+        label="🧬 증강 (시작 전 · 1/3 · 2/3 지점에 3장 중 1장 — 실버/골드/프리즘)"
+        value={options.augments}
+        options={[
+          { value: true, label: "켜기 (기본)" },
+          { value: false, label: "끄기" },
+        ]}
+        onChange={(v) => set("augments", v)}
       />
     </>
   );
@@ -371,6 +380,7 @@ export default function FindersKeepersGame({ onComplete }: PlayableGameProps) {
     });
     const match = createMatch(Math.floor(Math.random() * 1e9), seats, isPractice ? options : optionsRef.current);
     hostRef.current = createHost(match, botThink);
+    hostRef.current.augChoose = chooseBotAug;
     becomeHost(true);
     seqRef.current = 0;
     bufRef.current = new SnapBuffer();
@@ -441,6 +451,7 @@ export default function FindersKeepersGame({ onComplete }: PlayableGameProps) {
       // 내가 이어받는다
       const state = stateFromSnap(last);
       const rt = createHost(state, botThink);
+      rt.augChoose = chooseBotAug;
       const here = new Set(occupantsRef.current.map((o) => o.seat));
       for (const p of state.players) if (!p.bot && !here.has(p.seat)) setAway(rt, p.seat, true);
       hostRef.current = rt;
@@ -744,7 +755,7 @@ export default function FindersKeepersGame({ onComplete }: PlayableGameProps) {
             </button>
             <p className="text-xs text-white/40 light:text-slate-400">
               {MODE_INFO[hostOpts.mode].emoji} {MODE_INFO[hostOpts.mode].name}
-              {hostOpts.mode === "team" && knownTarget < TEAM_MIN_PLAYERS ? " (4명 미만이라 개인전)" : ""} · {hostOpts.seconds}초 · 📢 방송 {hostOpts.events ? "켜짐" : "꺼짐"} · 🎖 목표 {hostOpts.goals ? "켜짐" : "꺼짐"} · 홀 반지름 {hallFor(knownTarget).radius}m
+              {hostOpts.mode === "team" && knownTarget < TEAM_MIN_PLAYERS ? " (4명 미만이라 개인전)" : ""} · {hostOpts.seconds}초 · 📢 방송 {hostOpts.events ? "켜짐" : "꺼짐"} · 🎖 목표 {hostOpts.goals ? "켜짐" : "꺼짐"} · 🧬 증강 {hostOpts.augments ? "켜짐" : "꺼짐"} · 홀 반지름 {hallFor(knownTarget).radius}m
             </p>
             <p className="text-xs text-white/50 light:text-slate-500">
               {filled} / {knownTarget}명 참여 중

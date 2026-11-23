@@ -1,3 +1,4 @@
+import { AUG_AT, AUG_N, AUG_OFFER, AUG_PICK_MS, AUG_REROLLS, AUG_RESUME_MS, rollAugOffer, rollAugTier, type AugId, type AugTier } from "./augments";
 import { basketSpots, clampSpot, hallFor, standSpots, TOY_R, walkwayPush, type Circle, type HallGeo } from "./arena";
 import {
   ACCEL,
@@ -87,7 +88,8 @@ import {
  * 📢 점장 방송 → 점수 → 🔥 마감 세일·시간 끝.
  */
 
-export type Phase = "countdown" | "fight" | "gameOver";
+/** augment = 🧬 증강 고르기 (판이 멈춘다: s.t가 안 흐른다) */
+export type Phase = "augment" | "countdown" | "fight" | "gameOver";
 export type MoveKind = "none" | "dash" | "stagger";
 
 export interface PlayerStats {
@@ -131,6 +133,8 @@ export interface PlayerStats {
   wastedValue: number;
   bombPasses: number;
   bombBooms: number;
+  /** 🧬 증강으로 더 얻은 점수 */
+  augBonus: number;
 }
 
 const zeroStats = (): PlayerStats => ({
@@ -162,6 +166,7 @@ const zeroStats = (): PlayerStats => ({
   wastedValue: 0,
   bombPasses: 0,
   bombBooms: 0,
+  augBonus: 0,
 });
 
 /** 이번에 바구니에 넣는 중인 묶음 (세트 보너스용) */
@@ -215,6 +220,10 @@ export interface PlayerState {
   lastHitBy: number;
   lastHitAt: number;
   stats: PlayerStats;
+  /** 🧬 고른 증강 (옛 스냅샷엔 없을 수 있다) */
+  augs?: AugId[];
+  /** 🧬 이번 판에 쓴 다시 뽑기 */
+  rerolls?: number;
 }
 
 export interface Toy {
@@ -287,6 +296,11 @@ export type GameEvent = { id: number; at: number } & (
   | { k: "bombOn"; s: number; from: number; x: number; z: number }
   | { k: "boom"; s: number; n: number; lost: number; x: number; z: number }
   | { k: "goal"; goal: GoalKind; seats: number[] }
+  | { k: "augOpen"; round: number; tier: AugTier }
+  | { k: "augPick"; s: number; aug: AugId; auto: boolean }
+  | { k: "augDone"; round: number }
+  | { k: "piggy"; s: number; b: number }
+  | { k: "ram"; s: number; to: number; n: number; x: number; z: number }
   | { k: "over" }
 );
 
@@ -333,6 +347,31 @@ export interface MatchState {
   eventSeq: number;
   ranks: number[] | null;
   winnerTeam: number;
+  /** 🧬 다음에 열 증강 회차 (AUG_AT 번호). 증강 꺼짐이면 AUG_AT.length */
+  augNext?: number;
+  /** 🧬 회차별로 여는 시뮬 시각 */
+  augAtMs?: number[];
+  /** 🧬 지금 고르는 중인 회차 */
+  aug?: AugPhase | null;
+  /** 🐷 저금통 다음 지급 시각 */
+  piggyAt?: number;
+}
+
+export interface AugPhase {
+  round: number;
+  tier: AugTier;
+  /** 자리별 카드 3장 */
+  offers: AugId[][];
+  done: boolean[];
+  picks: (AugId | null)[];
+  /** 고르기 시작 뒤 흐른 시간 (판은 멈춰 있다) */
+  el: number;
+  limit: number;
+  /** 모두 고른 시각 (el 기준, 아직이면 -1) */
+  doneAt: number;
+  /** 봇이 고르는 시각 (el 기준) */
+  botAt: number[];
+  resume: "countdown" | "fight";
 }
 
 export interface SeatSpec {
@@ -381,7 +420,7 @@ export function chainWeight(s: MatchState, p: PlayerState, byId?: Map<number, To
   let w = 0;
   for (const id of p.chain) {
     const t = byId ? byId.get(id) : toyOf(s, id);
-    if (t) w += TOY_INFO[t.kind].weight;
+    if (t) w += t.kind === "trophy" && hasAug(p, "trophyHunter") ? AUG_N.trophyHunterWeight : TOY_INFO[t.kind].weight;
   }
   return w;
 }
@@ -403,7 +442,8 @@ export function bombOf(s: MatchState, seat: number): Bomb | null {
 
 /** 🐢 무게 배수 */
 export function weightMult(s: MatchState, p: PlayerState, byId?: Map<number, Toy>): number {
-  return 1 - Math.min(WEIGHT_MAX, chainWeight(s, p, byId) * WEIGHT_PER);
+  const k = hasAug(p, "strongBack") ? AUG_N.strongBackWeight : 1;
+  return 1 - Math.min(WEIGHT_MAX * k, chainWeight(s, p, byId) * WEIGHT_PER * k);
 }
 
 export function isUnderdog(s: MatchState, p: PlayerState): boolean {
@@ -420,7 +460,7 @@ export function isUnderdog(s: MatchState, p: PlayerState): boolean {
 
 /** 줄 앞에서 이만큼은 못 뺏는다 (✊ 손에 쥔 것 · 🐣 꼴찌 보호) */
 export function safeCount(s: MatchState, p: PlayerState): number {
-  return isUnderdog(s, p) ? UNDERDOG_SAFE : HELD_SAFE;
+  return (isUnderdog(s, p) ? UNDERDOG_SAFE : HELD_SAFE) + (hasAug(p, "tightGrip") && p.chain.length <= AUG_N.tightGripMaxChain ? AUG_N.tightGripPlus : 0);
 }
 
 export function speedMult(s: MatchState, p: PlayerState, byId?: Map<number, Toy>): number {
@@ -428,6 +468,9 @@ export function speedMult(s: MatchState, p: PlayerState, byId?: Map<number, Toy>
   if (isUnderdog(s, p)) m += UNDERDOG_BONUS;
   if (s.t < p.boostUntil) m += CUT_BOOST;
   if (isBomb(s) && bombOf(s, p.seat)) m += BOMB_HASTE;
+  if (hasAug(p, "sneakers")) m += AUG_N.sneakersSpeed;
+  if (hasAug(p, "turbo")) m += AUG_N.turboSpeed;
+  if (s.sale && hasAug(p, "clutch")) m += AUG_N.clutchSpeed;
   return m;
 }
 
@@ -435,13 +478,39 @@ export function isWet(s: MatchState): boolean {
   return !!s.event && s.event.k === "wet" && s.t < s.event.until;
 }
 
+/* ── 🧬 증강 조회 ───────────────────────────────────────────────────── */
+
+export const hasAug = (p: PlayerState | undefined, id: AugId): boolean => !!p?.augs?.includes(id);
+
+export function maxChainOf(p: PlayerState): number {
+  return MAX_CHAIN + (hasAug(p, "bigBag") ? AUG_N.bigBagPlus : 0);
+}
+
+export function dashCdOf(p: PlayerState): number {
+  const q = hasAug(p, "quickDash");
+  const t = hasAug(p, "turbo");
+  if (q && t) return AUG_N.quickDashCdMs - 600;
+  if (q) return AUG_N.quickDashCdMs;
+  if (t) return AUG_N.turboDashCdMs;
+  return DASH_CD_MS;
+}
+
+export const cutCdOf = (p: PlayerState) => (hasAug(p, "scissors") ? AUG_N.scissorsCdMs : CUT_CD_MS);
+export const snatchCdOf = (p: PlayerState) => (hasAug(p, "quickHands") ? AUG_N.quickHandsCdMs : SNATCH_CD_MS);
+export const pickReachOf = (p: PlayerState) => TOUCH_ITEM + (hasAug(p, "magnetHand") ? AUG_N.magnetPickReach : 0);
+export const snatchReachOf = (p: PlayerState) => TOUCH_ITEM + (hasAug(p, "longArm") ? AUG_N.longArmReach : 0);
+export const lootReachOf = (p: PlayerState) => LOOT_REACH + (hasAug(p, "bigLoot") ? AUG_N.bigLootReach : 0);
+export const passReachOf = (p: PlayerState) => TOUCH_BODY + 0.1 + (hasAug(p, "teamPlayer") ? AUG_N.teamPassReach : 0);
+
 /** 이 물건을 이 사람이 지금 가질 수 없는 이유 (없으면 null) */
 export function limitBlock(s: MatchState, p: PlayerState, kind: ToyKind, byId?: Map<number, Toy>): "full" | "gift" | "trophy" | null {
-  if (p.chain.length >= MAX_CHAIN) return "full";
+  if (p.chain.length >= maxChainOf(p)) return "full";
   if (kind === "gift" || kind === "trophy") {
+    const lim = kind === "gift" && hasAug(p, "giftWrap") ? AUG_N.giftWrapMax : 1;
+    let n = 0;
     for (const id of p.chain) {
       const t = byId ? byId.get(id) : toyOf(s, id);
-      if (t && t.kind === kind) return kind;
+      if (t && t.kind === kind && ++n >= lim) return kind;
     }
   }
   return null;
@@ -490,6 +559,8 @@ function newPlayer(seat: number, spec: SeatSpec): PlayerState {
     lastHitBy: -1,
     lastHitAt: 0,
     stats: zeroStats(),
+    augs: [],
+    rerolls: 0,
   };
 }
 
@@ -546,6 +617,10 @@ export function createMatch(seed: number, seats: SeatSpec[], options: Partial<Ga
     eventSeq: 0,
     ranks: null,
     winnerTeam: -1,
+    augNext: AUG_AT.length,
+    augAtMs: [],
+    aug: null,
+    piggyAt: COUNTDOWN_MS + AUG_N.piggyEveryMs,
   };
   const rot = rnd(s) * Math.PI * 2;
   const team = opts.mode === "team";
@@ -631,6 +706,12 @@ export function createMatch(seed: number, seats: SeatSpec[], options: Partial<Ga
     const nb = bombCountFor(seatCount);
     for (let k = 0; k < nb; k++) s.bombs.push({ id: k + 1, state: "pending", holder: -1, at: 0, fuseAt: 0, shieldUntil: 0, prev: -1, prevUntil: 0, dropAt: COUNTDOWN_MS + BOMB_FIRST_MS + k * 2500 });
   }
+  if (opts.augments) {
+    const len = fightEnd - COUNTDOWN_MS;
+    s.augAtMs = AUG_AT.map((f) => (f === 0 ? 0 : Math.round(Math.min(COUNTDOWN_MS + f * len, s.saleStart - 5000) / STEP_MS) * STEP_MS));
+    s.augNext = 0;
+    openAug(s, "countdown");
+  }
   return s;
 }
 
@@ -643,6 +724,8 @@ export interface PlayerInput {
   dash: number;
   /** ✂️ 줄 끊기 / 🤝 넘겨주기 */
   skill: number;
+  /** 🧬 증강 고르기 [번호(늘어나면 새 요청), 회차, 카드 0~2 · −1 = 다시 뽑기] */
+  aug?: [number, number, number];
 }
 
 export interface BotMemory {
@@ -670,6 +753,9 @@ export interface HostRuntime {
   hist: { x: number; z: number }[][];
   /** 핑 보정: 줄 위 물건의 지난 위치 */
   toyHist: Map<number, { x: number; z: number }[]>;
+  seenAug: number[];
+  /** 🧬 봇(대신 하는 봇 포함)이 고를 카드 번호 — 없으면 무작위 */
+  augChoose: ((rt: HostRuntime, seat: number, offer: AugId[]) => number) | null;
 }
 
 const idleInput = (): PlayerInput => ({ mx: 0, mz: 0, dash: 0, skill: 0 });
@@ -690,6 +776,8 @@ export function createHost(state: MatchState, think: HostRuntime["think"] = null
     botRng: { rng: (state.seed ^ 0x5bd1e995) | 0 },
     hist: state.players.map(() => []),
     toyHist: new Map(),
+    seenAug: Array(n).fill(0),
+    augChoose: null,
   };
 }
 
@@ -722,6 +810,11 @@ export function setInput(rt: HostRuntime, seat: number, inp: Partial<PlayerInput
   }
   cur.dash = d;
   cur.skill = k;
+  const a = inp.aug;
+  if (Array.isArray(a) && a.length === 3 && Number(a[0]) > (rt.seenAug[seat] ?? 0)) {
+    rt.seenAug[seat] = Number(a[0]);
+    augAction(rt.state, seat, Number(a[1]), Number(a[2]));
+  }
 }
 
 export function press(rt: HostRuntime, seat: number, what: "dash" | "skill") {
@@ -742,6 +835,7 @@ export function setAway(rt: HostRuntime, seat: number, away: boolean) {
     rt.inputs[seat] = idleInput();
     rt.seenDash[seat] = 0;
     rt.seenSkill[seat] = 0;
+    rt.seenAug[seat] = 0;
   }
 }
 
@@ -757,6 +851,15 @@ export function hostStep(rt: HostRuntime, dtMs: number) {
 
 export function step(rt: HostRuntime) {
   const s = rt.state;
+  if (s.phase === "augment") {
+    augStep(rt);
+    return;
+  }
+  const an = s.augNext ?? AUG_AT.length;
+  if (s.phase === "fight" && an < AUG_AT.length && s.t >= (s.augAtMs?.[an] ?? Infinity)) {
+    openAug(s, "fight");
+    return;
+  }
   s.t += STEP_MS;
   if (s.phase === "countdown") {
     if (s.t >= s.phaseEnd) {
@@ -799,6 +902,7 @@ function fight(rt: HostRuntime) {
   if (isBomb(s)) bombs(rt);
   drops(s);
   shopEvents(s);
+  piggy(s);
   scoring(s);
   if (!s.sale && s.t >= s.saleStart) startSale(s);
   if (s.t >= s.fightEnd) finishMatch(s);
@@ -824,7 +928,7 @@ function control(rt: HostRuntime, p: PlayerState, byId: Map<number, Toy>) {
       p.move = "dash";
       p.moveAt = s.t;
       p.moveUntil = s.t + DASH_MS;
-      p.dashCdAt = s.t + DASH_CD_MS;
+      p.dashCdAt = s.t + dashCdOf(p);
       p.stats.dashes += 1;
       emit(s, { k: "dash", s: p.seat });
     }
@@ -846,7 +950,7 @@ function control(rt: HostRuntime, p: PlayerState, byId: Map<number, Toy>) {
       for (const o of s.players) {
         if (!allies(s, p.seat, o.seat)) continue;
         const d = Math.hypot(o.x - p.x, o.z - p.z);
-        if (d <= TOUCH_BODY + 0.1 && d < md && o.chain.length < MAX_CHAIN) {
+        if (d <= passReachOf(p) && d < md && o.chain.length < maxChainOf(o)) {
           mate = o;
           md = d;
         }
@@ -882,8 +986,8 @@ function cutChain(s: MatchState, p: PlayerState, byId: Map<number, Toy>) {
     const t = byId.get(id);
     if (t) dropToFloor(s, t);
   }
-  p.cutCdAt = s.t + CUT_CD_MS;
-  p.boostUntil = s.t + CUT_BOOST_MS;
+  p.cutCdAt = s.t + cutCdOf(p);
+  p.boostUntil = s.t + (hasAug(p, "scissors") ? AUG_N.scissorsBoostMs : CUT_BOOST_MS);
   p.stats.cuts += 1;
   emit(s, { k: "cut", s: p.seat, n, x: p.x, z: p.z });
 }
@@ -905,13 +1009,15 @@ function passChain(s: MatchState, p: PlayerState, mate: PlayerState, byId: Map<n
     n++;
   }
   p.chain = keep;
-  p.passCdAt = s.t + PASS_CD_MS;
+  p.passCdAt = s.t + (hasAug(p, "teamPlayer") ? AUG_N.teamPassCdMs : PASS_CD_MS);
+  if (hasAug(p, "teamPlayer") && n > 0) p.boostUntil = Math.max(p.boostUntil, s.t + AUG_N.teamPassBoostMs);
   p.stats.passes += 1;
   mate.stats.maxChain = Math.max(mate.stats.maxChain, mate.chain.length);
   emit(s, { k: "pass", s: p.seat, to: mate.seat, n, x: p.x, z: p.z });
 }
 
 function stagger(s: MatchState, p: PlayerState, ms: number, by: number) {
+  if (hasAug(p, "steady")) ms *= AUG_N.steadyStagger;
   p.move = "stagger";
   p.moveAt = s.t;
   p.moveUntil = Math.max(p.moveUntil, s.t + ms);
@@ -932,7 +1038,7 @@ function moveBody(rt: HostRuntime, p: PlayerState, dt: number, byId: Map<number,
   const s = rt.state;
   const geo = geoOf(s);
   const inp = rt.inputs[p.seat];
-  const wet = isWet(s);
+  const wet = isWet(s) && !hasAug(p, "steady");
   if (p.move === "dash") {
     if (s.t >= p.moveUntil) {
       p.move = "none";
@@ -1023,8 +1129,10 @@ function collideBodies(s: MatchState) {
         dasher.vz *= 0.25;
         dasher.move = "none";
         if (!allies(s, a.seat, b.seat)) {
-          stagger(s, hit, DASH_HIT_STAGGER_MS, dasher.seat);
+          const ram = hasAug(dasher, "ram");
+          stagger(s, hit, DASH_HIT_STAGGER_MS * (ram ? AUG_N.ramStagger : 1), dasher.seat);
           dasher.stats.dashHits += 1;
+          if (ram) ramDrop(s, dasher, hit);
         }
         emit(s, { k: "dashHit", a: dasher.seat, b: hit.seat, x: a.x + nx * BODY_R, z: a.z + nz * BODY_R });
         continue;
@@ -1131,7 +1239,7 @@ function deposits(s: MatchState, byId: Map<number, Toy>) {
     if (!p.inBasket || p.chain.length === 0 || s.t < p.depositNextAt) continue;
     const id = p.chain.shift()!;
     const t = byId.get(id);
-    p.depositNextAt = s.t + DEPOSIT_MS;
+    p.depositNextAt = s.t + (hasAug(p, "fastDeposit") ? AUG_N.fastDepositMs : DEPOSIT_MS);
     if (!t) continue;
     t.state = "floor";
     t.owner = -2; // 표시: 지울 것
@@ -1142,27 +1250,34 @@ function deposits(s: MatchState, byId: Map<number, Toy>) {
     p.stats.depositValue += v;
     (p.stats[KIND_STAT[t.kind]] as number) += 1;
     const sale = !!s.event && s.event.k === "timeSale" && s.event.kind === t.kind && s.t < s.event.until;
+    const saleV = sale ? v * (hasAug(p, "regular") ? AUG_N.regularSaleMult : 1) : 0;
     if (sale) {
-      p.bonus += v;
-      p.stats.saleBonus += v;
+      p.bonus += saleV;
+      p.stats.saleBonus += saleV;
     }
-    p.run.sum += v + (sale ? v : 0);
+    const extra = depositAugBonus(s, p, t.kind);
+    if (extra) {
+      p.bonus += extra;
+      p.stats.augBonus += extra;
+    }
+    p.run.sum += v + saleV + extra;
     p.run.n += 1;
-    emit(s, { k: "deposit", s: p.seat, kind: t.kind, v: v + (sale ? v : 0), x: b.x, z: b.z, sale });
+    emit(s, { k: "deposit", s: p.seat, kind: t.kind, v: v + saleV + extra, x: b.x, z: b.z, sale });
     const ki = BASIC_KINDS.indexOf(t.kind);
     if (ki >= 0) {
       p.run.counts[ki] += 1;
+      const sm = hasAug(p, "setMaster") ? AUG_N.setMasterMult : 1;
       if (p.run.counts[ki] === 3 && !(p.run.tri & (1 << ki))) {
         p.run.tri |= 1 << ki;
-        p.bonus += SET_TRIPLE_BONUS;
-        p.stats.setBonus += SET_TRIPLE_BONUS;
-        emit(s, { k: "set", s: p.seat, set: "triple", kind: t.kind, b: SET_TRIPLE_BONUS, x: b.x, z: b.z });
+        p.bonus += SET_TRIPLE_BONUS * sm;
+        p.stats.setBonus += SET_TRIPLE_BONUS * sm;
+        emit(s, { k: "set", s: p.seat, set: "triple", kind: t.kind, b: SET_TRIPLE_BONUS * sm, x: b.x, z: b.z });
       }
       if (!p.run.rainbow && p.run.counts.every((c) => c > 0)) {
         p.run.rainbow = true;
-        p.bonus += SET_RAINBOW_BONUS;
-        p.stats.setBonus += SET_RAINBOW_BONUS;
-        emit(s, { k: "set", s: p.seat, set: "rainbow", kind: null, b: SET_RAINBOW_BONUS, x: b.x, z: b.z });
+        p.bonus += SET_RAINBOW_BONUS * sm;
+        p.stats.setBonus += SET_RAINBOW_BONUS * sm;
+        emit(s, { k: "set", s: p.seat, set: "rainbow", kind: null, b: SET_RAINBOW_BONUS * sm, x: b.x, z: b.z });
       }
     }
   }
@@ -1192,7 +1307,8 @@ function touches(rt: HostRuntime, byId: Map<number, Toy>) {
   // ① 가로채기: 남의 줄 k번째를 만지면 k번째부터 끝까지 내 줄 끝으로. 더 앞 칸을 만진 사람부터.
   const cands: { p: PlayerState; o: PlayerState; k: number; d: number }[] = [];
   for (const p of s.players) {
-    if (!canTouch(p) || p.move === "dash" || s.t < p.snatchCdAt) continue;
+    if (!canTouch(p) || (p.move === "dash" && !hasAug(p, "dashSnatch")) || s.t < p.snatchCdAt) continue;
+    const reach = snatchReachOf(p);
     for (const o of s.players) {
       if (o === p || allies(s, p.seat, o.seat) || o.chain.length === 0) continue;
       if (p.revengeOn === o.seat && s.t < p.revengeUntil) continue;
@@ -1204,7 +1320,7 @@ function touches(rt: HostRuntime, byId: Map<number, Toy>) {
         let d = Math.hypot(t.x - p.x, t.z - p.z);
         const old = rt.toyHist.get(t.id)?.[0];
         if (old) d = Math.min(d, Math.hypot(old.x - p.x, old.z - p.z));
-        if (d <= TOUCH_ITEM) {
+        if (d <= reach) {
           cands.push({ p, o, k, d });
           break; // 가장 앞 칸 하나만
         }
@@ -1217,7 +1333,7 @@ function touches(rt: HostRuntime, byId: Map<number, Toy>) {
     const id = c.o.chain[c.k];
     const t = id !== undefined ? byId.get(id) : undefined;
     if (!t || t.owner !== c.o.seat || s.t < t.shieldUntil) continue;
-    if (c.p.chain.length >= MAX_CHAIN) {
+    if (c.p.chain.length >= maxChainOf(c.p)) {
       blocked(s, c.p, "full");
       continue;
     }
@@ -1232,7 +1348,7 @@ function touches(rt: HostRuntime, byId: Map<number, Toy>) {
     for (const p of s.players) {
       if (acted.has(p.seat) || !canTouch(p)) continue;
       const d = Math.hypot(t.x - p.x, t.z - p.z);
-      if (d > TOUCH_ITEM) continue;
+      if (d > pickReachOf(p)) continue;
       const why = limitBlock(s, p, t.kind, byId);
       if (why) {
         blocked(s, p, why);
@@ -1245,9 +1361,11 @@ function touches(rt: HostRuntime, byId: Map<number, Toy>) {
     }
     if (!best) continue;
     acted.add(best.seat);
-    attach(s, best, t);
+    attach(s, best, t, hasAug(best, "vacuum") ? AUG_N.vacuumShieldMs : hasAug(best, "tape") ? AUG_N.tapePickShieldMs : SHIELD_MS);
     best.stats.picks += 1;
     emit(s, { k: "pick", s: best.seat, kind: t.kind, x: t.x, z: t.z });
+    if (hasAug(best, "pickupBoost")) best.boostUntil = Math.max(best.boostUntil, s.t + AUG_N.pickupBoostMs);
+    if (hasAug(best, "vacuum")) vacuum(s, best, t, byId);
   }
   // ③ 🔥 마감 세일: 남의 바구니 맨 위 1개 털기
   if (s.sale) {
@@ -1260,7 +1378,7 @@ function touches(rt: HostRuntime, byId: Map<number, Toy>) {
       for (const p of s.players) {
         if (acted.has(p.seat) || !canTouch(p) || p.move === "dash" || isBasketKeeper(s, p, bi)) continue;
         const d = Math.hypot(p.x - b.x, p.z - b.z);
-        if (d > LOOT_REACH || limitBlock(s, p, top, byId)) continue;
+        if (d > lootReachOf(p) || limitBlock(s, p, top, byId)) continue;
         if (d < bestD) {
           best = p;
           bestD = d;
@@ -1268,13 +1386,19 @@ function touches(rt: HostRuntime, byId: Map<number, Toy>) {
       }
       if (!best) return;
       acted.add(best.seat);
-      b.stack.pop();
-      b.lootCdUntil = s.t + LOOT_CD_MS;
-      const t = addToy(s, top, b.x + (best.x - b.x) * 0.5, b.z + (best.z - b.z) * 0.5, "chain");
-      attach(s, best, t);
-      best.stats.loots += 1;
-      for (const q of s.players) if (isBasketKeeper(s, q, bi)) q.stats.looted += 1;
-      emit(s, { k: "loot", s: best.seat, basket: bi, kind: top, x: b.x, z: b.z });
+      b.lootCdUntil = s.t + (s.players.some((q) => isBasketKeeper(s, q, bi) && hasAug(q, "lockBasket")) ? AUG_N.lockLootCdMs : LOOT_CD_MS);
+      const takes = hasAug(best, "bigLoot") ? AUG_N.bigLootN : 1;
+      for (let k = 0; k < takes && b.stack.length > 0; k++) {
+        const kind = b.stack[b.stack.length - 1];
+        if (k > 0 && limitBlock(s, best, kind, byId)) break;
+        b.stack.pop();
+        const t = addToy(s, kind, b.x + (best.x - b.x) * 0.5, b.z + (best.z - b.z) * 0.5, "chain");
+        attach(s, best, t);
+        byId.set(t.id, t);
+        best.stats.loots += 1;
+        for (const q of s.players) if (isBasketKeeper(s, q, bi)) q.stats.looted += 1;
+        emit(s, { k: "loot", s: best.seat, basket: bi, kind, x: b.x, z: b.z });
+      }
     });
   }
 }
@@ -1308,13 +1432,18 @@ function snatch(s: MatchState, p: PlayerState, o: PlayerState, k: number, byId: 
       dropToFloor(s, t, DROP_NOPICK_MS);
       continue;
     }
-    attach(s, p, t, SNATCH_SHIELD_MS);
+    attach(s, p, t, hasAug(p, "tape") ? AUG_N.tapeSnatchShieldMs : SNATCH_SHIELD_MS);
     n++;
     v += valueOf(t.kind);
   }
   o.revengeOn = p.seat;
   o.revengeUntil = s.t + REVENGE_MS;
-  p.snatchCdAt = s.t + SNATCH_CD_MS;
+  p.snatchCdAt = s.t + snatchCdOf(p);
+  if (hasAug(o, "counter")) {
+    o.revengeUntil = 0;
+    o.snatchCdAt = Math.min(o.snatchCdAt, s.t);
+  }
+  if (hasAug(o, "sticky")) stagger(s, p, AUG_N.stickyStaggerMs, o.seat);
   p.stats.snatches += 1;
   p.stats.snatchedToys += n;
   p.stats.snatchedValue += v;
@@ -1341,7 +1470,7 @@ function bombs(rt: HostRuntime) {
       b.holder = to.seat;
       b.at = s.t;
       b.fuseAt = s.t + BOMB_FUSE_MIN + rnd(s) * (BOMB_FUSE_MAX - BOMB_FUSE_MIN);
-      b.shieldUntil = s.t + BOMB_SHIELD_MS;
+      b.shieldUntil = s.t + (hasAug(to, "bombPro") ? AUG_N.bombProShieldMs : BOMB_SHIELD_MS);
       b.prev = -1;
       b.prevUntil = 0;
       emit(s, { k: "bombOn", s: to.seat, from: -1, x: to.x, z: to.z });
@@ -1371,7 +1500,7 @@ function bombs(rt: HostRuntime) {
     b.holder = best.seat;
     b.prev = h.seat;
     b.prevUntil = s.t + BOMB_REVENGE_MS;
-    b.shieldUntil = s.t + BOMB_SHIELD_MS;
+    b.shieldUntil = s.t + (hasAug(best, "bombPro") ? AUG_N.bombProShieldMs : BOMB_SHIELD_MS);
     h.stats.bombPasses += 1;
     emit(s, { k: "bombOn", s: best.seat, from: h.seat, x: best.x, z: best.z });
   }
@@ -1388,7 +1517,8 @@ function explode(s: MatchState, b: Bomb, h: PlayerState) {
   // 바구니 맨 위 물건이 날아가 바구니 앞에 흩어진다 (팀전엔 폭탄 모드가 없다)
   const bk = basketOf(s, h);
   let lost = 0;
-  for (let k = 0; k < BOMB_BASKET_LOSS && bk.stack.length > 0; k++) {
+  const keep = hasAug(h, "bombPro") || hasAug(h, "lockBasket");
+  for (let k = 0; k < (keep ? 0 : BOMB_BASKET_LOSS) && bk.stack.length > 0; k++) {
     const kind = bk.stack.pop()!;
     const a = bk.a + Math.PI + (rnd(s) - 0.5) * 1.4;
     const r = 2.2 + rnd(s) * 1.2;
@@ -1480,6 +1610,140 @@ function startSale(s: MatchState) {
   emit(s, { k: "sale" });
   const spot = clampSpot(s.radius, s.stands, 0, 0, TOY_R + 0.3);
   dropToy(s, "trophy", spot);
+}
+
+/* ── 🧬 증강 ─────────────────────────────────────────────────────────── */
+
+function openAug(s: MatchState, resume: AugPhase["resume"]) {
+  const round = s.augNext ?? 0;
+  s.augNext = round + 1;
+  const tier = rollAugTier(s.seed, round);
+  const n = s.seatCount;
+  const r = { rng: (s.seed ^ Math.imul(round + 7, 0x27d4eb2d)) | 0 };
+  s.aug = {
+    round,
+    tier,
+    offers: s.players.map((p) => rollAugOffer(s.seed, round, p.seat, tier, p.augs ?? [], p.rerolls ?? 0, s.options.mode, s.options.events)),
+    done: Array(n).fill(false),
+    picks: Array(n).fill(null),
+    el: 0,
+    limit: AUG_PICK_MS[Math.min(round, AUG_PICK_MS.length - 1)],
+    doneAt: -1,
+    botAt: s.players.map(() => 900 + Math.floor(rnd(r) * 2600)),
+    resume,
+  };
+  s.phase = "augment";
+  for (const p of s.players) if (p.move === "dash") p.move = "none";
+  emit(s, { k: "augOpen", round, tier });
+}
+
+/** 사람이 고름 / 다시 뽑기 (choice −1). 회차가 안 맞거나 이미 골랐으면 무시. */
+export function augAction(s: MatchState, seat: number, round: number, choice: number) {
+  const a = s.aug;
+  const p = s.players[seat];
+  if (s.phase !== "augment" || !a || !p || a.round !== round || a.done[seat] || a.doneAt >= 0) return;
+  if (choice === -1) {
+    if ((p.rerolls ?? 0) >= AUG_REROLLS) return;
+    p.rerolls = (p.rerolls ?? 0) + 1;
+    a.offers[seat] = rollAugOffer(s.seed, round, seat, a.tier, p.augs ?? [], p.rerolls, s.options.mode, s.options.events, a.offers[seat]);
+    return;
+  }
+  if (!Number.isInteger(choice) || choice < 0 || choice >= AUG_OFFER) return;
+  takeAug(s, seat, choice, false);
+}
+
+function takeAug(s: MatchState, seat: number, choice: number, auto: boolean) {
+  const a = s.aug!;
+  const p = s.players[seat];
+  const id = a.offers[seat]?.[choice] ?? a.offers[seat]?.[0];
+  a.done[seat] = true;
+  if (!id) return;
+  a.picks[seat] = id;
+  p.augs = [...(p.augs ?? []), id];
+  emit(s, { k: "augPick", s: seat, aug: id, auto });
+}
+
+function augStep(rt: HostRuntime) {
+  const s = rt.state;
+  const a = s.aug;
+  if (!a) {
+    s.phase = "fight";
+    return;
+  }
+  a.el += STEP_MS;
+  if (a.doneAt < 0) {
+    for (const p of s.players) {
+      if (a.done[p.seat] || !p.bot || a.el < a.botAt[p.seat]) continue;
+      const offer = a.offers[p.seat] ?? [];
+      const i = rt.augChoose ? rt.augChoose(rt, p.seat, offer) : Math.floor(rnd(rt.botRng) * offer.length);
+      takeAug(s, p.seat, Math.max(0, Math.min(offer.length - 1, i)), false);
+    }
+    if (a.el >= a.limit) for (const p of s.players) if (!a.done[p.seat]) takeAug(s, p.seat, 0, true);
+    if (a.done.every(Boolean)) a.doneAt = a.el;
+    return;
+  }
+  if (a.el < a.doneAt + AUG_RESUME_MS) return;
+  s.aug = null;
+  emit(s, { k: "augDone", round: a.round });
+  if (a.resume === "countdown") {
+    s.phase = "countdown";
+    s.phaseStart = s.t;
+    s.phaseEnd = s.t + COUNTDOWN_MS;
+  } else s.phase = "fight";
+}
+
+/** 넣을 때 증강으로 더 받는 점수 */
+function depositAugBonus(s: MatchState, p: PlayerState, kind: ToyKind): number {
+  if (!p.augs?.length) return 0;
+  let b = 0;
+  if (kind === "sock" && hasAug(p, "sockLover")) b += AUG_N.sockLoverBonus;
+  if (kind === "gift" && hasAug(p, "giftWrap")) b += AUG_N.giftWrapBonus;
+  if (kind === "trophy" && hasAug(p, "trophyHunter")) b += AUG_N.trophyHunterBonus;
+  if (s.sale && hasAug(p, "clutch")) b += AUG_N.clutchBonus;
+  return b;
+}
+
+/** 🐂 들이받기: 박힌 사람 줄 끝(못 뺏는 앞 칸 제외)이 바닥으로 */
+function ramDrop(s: MatchState, by: PlayerState, hit: PlayerState) {
+  const safe = safeCount(s, hit);
+  const n = Math.min(AUG_N.ramDropN, Math.max(0, hit.chain.length - safe));
+  if (n <= 0 || hit.inBasket) return;
+  const ids = hit.chain.splice(hit.chain.length - n, n);
+  for (const id of ids) {
+    const t = toyOf(s, id);
+    if (t) dropToFloor(s, t, 600);
+  }
+  emit(s, { k: "ram", s: by.seat, to: hit.seat, n, x: hit.x, z: hit.z });
+}
+
+/** 🌀 진공 청소기: 주운 물건 둘레의 바닥 물건을 같이 */
+function vacuum(s: MatchState, p: PlayerState, first: Toy, byId: Map<number, Toy>) {
+  const near = s.toys
+    .filter((t) => t !== first && t.state === "floor" && s.t >= t.noPickUntil && Math.hypot(t.x - p.x, t.z - p.z) <= AUG_N.vacuumReach)
+    .sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z));
+  let n = 0;
+  for (const t of near) {
+    if (n >= AUG_N.vacuumN) break;
+    if (limitBlock(s, p, t.kind, byId)) continue;
+    attach(s, p, t, AUG_N.vacuumShieldMs);
+    p.stats.picks += 1;
+    n++;
+    emit(s, { k: "pick", s: p.seat, kind: t.kind, x: t.x, z: t.z });
+  }
+}
+
+/** 🐷 저금통 */
+function piggy(s: MatchState) {
+  if (s.piggyAt === undefined || s.t < s.piggyAt) return;
+  s.piggyAt += AUG_N.piggyEveryMs;
+  for (const p of s.players) {
+    if (!hasAug(p, "piggyBank")) continue;
+    const b = Math.min(AUG_N.piggyMax, Math.floor(basketValue(basketOf(s, p)) / AUG_N.piggyPer));
+    if (b <= 0) continue;
+    p.bonus += b;
+    p.stats.augBonus += b;
+    emit(s, { k: "piggy", s: p.seat, b });
+  }
 }
 
 /* ── 점수 ───────────────────────────────────────────────────────────── */
@@ -1604,7 +1868,7 @@ function finishMatch(s: MatchState) {
 }
 
 export function timeLeft(s: MatchState): number {
-  if (s.phase === "countdown") return s.fightEnd - s.fightStart;
+  if (s.phase === "countdown" || (s.phase === "augment" && s.aug?.resume === "countdown")) return s.fightEnd - s.fightStart;
   if (s.phase === "gameOver") return 0;
   return Math.max(0, s.fightEnd - s.t);
 }

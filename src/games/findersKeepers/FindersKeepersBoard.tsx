@@ -3,17 +3,16 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
+import AugmentPicker, { AugChips } from "./AugmentPicker";
+import { AUG_BY_ID, AUG_TIER_NAME } from "./augments";
 import Hall2D from "./Hall2D";
 import { getFindersKeepersSound } from "./findersKeepersSound";
 import {
   BASIC_KINDS,
   BOMB_REVEAL_MS,
-  CUT_CD_MS,
-  DASH_CD_MS,
   EVENT_INFO,
   GOAL_BONUS,
   GOAL_INFO,
-  MAX_CHAIN,
   MODE_INFO,
   REVENGE_MS,
   SEAT_COLORS,
@@ -27,7 +26,7 @@ import {
   type ToyKind,
 } from "./data";
 import type { SnapBuffer, Snap } from "./net";
-import { basketValue, bombOf, chainValue, isUnderdog, weightMult, type GameEvent, type PlayerInput, type PlayerState } from "./sim";
+import { basketValue, bombOf, chainValue, cutCdOf, dashCdOf, isUnderdog, maxChainOf, weightMult, type GameEvent, type PlayerInput, type PlayerState } from "./sim";
 import RulebookModal from "./RulebookModal";
 import type { FxItem } from "./three/Fx";
 import type { SceneShared } from "./three/HallScene";
@@ -99,6 +98,7 @@ function useControls(onInput: (inp: PlayerInput) => void, enabled: boolean, onLo
   const held = useRef(new Set<string>());
   const stick = useRef<{ x: number; z: number } | null>(null);
   const counters = useRef({ dash: 0, skill: 0 });
+  const augReq = useRef<[number, number, number] | null>(null);
   const last = useRef<string>("");
   const lastSent = useRef(0);
   const cbRef = useRef(onInput);
@@ -125,7 +125,9 @@ function useControls(onInput: (inp: PlayerInput) => void, enabled: boolean, onLo
       mx /= l;
       mz /= l;
     }
-    return { mx: Math.round(mx * 100) / 100, mz: Math.round(mz * 100) / 100, dash: counters.current.dash, skill: counters.current.skill };
+    const out: PlayerInput = { mx: Math.round(mx * 100) / 100, mz: Math.round(mz * 100) / 100, dash: counters.current.dash, skill: counters.current.skill };
+    if (augReq.current) out.aug = augReq.current;
+    return out;
   }, []);
 
   const flush = useCallback(
@@ -190,6 +192,11 @@ function useControls(onInput: (inp: PlayerInput) => void, enabled: boolean, onLo
 
   return {
     press,
+    /** 🧬 고르기/다시 뽑기 (choice −1) — 같은 입력 묶음에 실려 몇 번 더 보내져도 방장은 한 번만 처리 */
+    sendAug: (round: number, choice: number) => {
+      augReq.current = [(augReq.current?.[0] ?? 0) + 1, round, choice];
+      flush(true);
+    },
     setStick: (v: { x: number; z: number } | null) => {
       stick.current = v;
       flush(true);
@@ -338,7 +345,8 @@ export default function FindersKeepersBoard({ snap, buf, fresh, mySeat, names, o
   const fighting = snap.phase === "fight";
   const team = snap.options.mode === "team";
   const sound = getFindersKeepersSound;
-  const left = fighting ? Math.max(0, snap.fightEnd - snap.t) : snap.phase === "countdown" ? snap.fightEnd - snap.fightStart : 0;
+  const augPhase = snap.phase === "augment" && snap.aug ? snap.aug : null;
+  const left = fighting || augPhase?.resume === "fight" ? Math.max(0, snap.fightEnd - snap.t) : snap.phase === "countdown" || augPhase ? snap.fightEnd - snap.fightStart : 0;
   const leftSec = Math.ceil(left / 1000);
   const bgmLevel = !fighting ? 0 : left <= 10_000 ? 2 : snap.sale ? 1 : 0;
   useSuiteBgm(sound, !ended && snap.phase !== "gameOver", bgmLevel);
@@ -488,7 +496,7 @@ export default function FindersKeepersBoard({ snap, buf, fresh, mySeat, names, o
         case "blocked":
           if (ev.s === mySeat) {
             s.play("blocked");
-            showBanner(ev.why === "full" ? `🚫 줄이 꽉 찼어요 (${MAX_CHAIN}개)` : ev.why === "gift" ? "🎁 선물 상자는 줄에 1개만" : "🏆 트로피는 줄에 1개만", "info", ev.why === "full" ? "바구니에 넣고 오세요" : undefined, 1000);
+            showBanner(ev.why === "full" ? `🚫 줄이 꽉 찼어요 (${mine ? maxChainOf(mine) : 12}개)` : ev.why === "gift" ? `🎁 선물 상자는 줄에 ${mine?.augs?.includes("giftWrap") ? 2 : 1}개만` : "🏆 트로피는 줄에 1개만", "info", ev.why === "full" ? "바구니에 넣고 오세요" : undefined, 1000);
           }
           break;
         case "dash":
@@ -576,6 +584,38 @@ export default function FindersKeepersBoard({ snap, buf, fresh, mySeat, names, o
               </>,
             );
           }
+          break;
+        case "augOpen":
+          s.play("augOpen", ev.tier);
+          break;
+        case "augPick":
+          if (ev.s === mySeat) {
+            s.play("augPick");
+            showBanner(`🧬 ${AUG_BY_ID[ev.aug].icon} ${AUG_BY_ID[ev.aug].name}`, "gold", ev.auto ? "시간이 다 돼서 첫 카드로 골랐어요" : AUG_BY_ID[ev.aug].desc, 1600);
+          } else
+            pushFeed(
+              <>
+                🧬 <SeatTag seat={ev.s} names={names} me={mySeat} team={team} /> {AUG_BY_ID[ev.aug].icon} {AUG_BY_ID[ev.aug].name}
+              </>,
+            );
+          break;
+        case "augDone":
+          if (snap.phase === "fight") {
+            s.play("go");
+            showBanner("▶ 다시 시작!", "go", undefined, 1000);
+          }
+          break;
+        case "piggy":
+          if (ev.s === mySeat) {
+            s.play("piggy");
+            showBanner(`🐷 저금통 +${ev.b}`, "gold", undefined, 900);
+          }
+          break;
+        case "ram":
+          add.push({ ev, at: now });
+          if (ev.s === mySeat || ev.to === mySeat || near(ev.x, ev.z, 6)) s.play("ram");
+          if (ev.s === mySeat) showBanner(`🐂 들이받기! ${ev.n}개 떨어뜨림`, "gold", undefined, 1000);
+          else if (ev.to === mySeat) showBanner(`🐂 들이받혀 ${ev.n}개 떨어뜨렸어요`, "bad", undefined, 1200);
           break;
         case "over":
           s.play(snap.ranks?.[mySeat] === 1 ? "victory" : "defeat");
@@ -677,7 +717,11 @@ export default function FindersKeepersBoard({ snap, buf, fresh, mySeat, names, o
           {practice && <span className="ml-1.5 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-200 light:text-emerald-700">연습</span>}
         </span>
         <span className="tabular-nums">
-          {snap.phase === "countdown" ? "준비" : snap.phase === "gameOver" ? "끝" : snap.sale ? <b className="text-orange-300 light:text-orange-600">🔥 마감 세일 · 남은 {leftSec}초</b> : <>⏱ 남은 {leftSec}초</>}
+          {augPhase ? (
+            <b className="text-fuchsia-200 light:text-fuchsia-700">
+              🧬 증강 고르는 중 ({AUG_TIER_NAME[augPhase.tier]}){augPhase.resume === "fight" && <> · 남은 {leftSec}초</>}
+            </b>
+          ) : snap.phase === "countdown" ? "준비" : snap.phase === "gameOver" ? "끝" : snap.sale ? <b className="text-orange-300 light:text-orange-600">🔥 마감 세일 · 남은 {leftSec}초</b> : <>⏱ 남은 {leftSec}초</>}
         </span>
         {fighting && ev && (
           <span className="rounded-full bg-sky-500/20 px-2 py-0.5 font-semibold text-sky-100 light:text-sky-700">
@@ -796,6 +840,7 @@ export default function FindersKeepersBoard({ snap, buf, fresh, mySeat, names, o
                 </span>
               )}
               {bomb && <span aria-label="폭탄">💣</span>}
+              <AugChips p={p} small iconOnly />
             </div>
           );
         })}
@@ -900,6 +945,11 @@ export default function FindersKeepersBoard({ snap, buf, fresh, mySeat, names, o
           </div>
         )}
 
+        {augPhase && !ended && <AugmentPicker snap={snap} mySeat={mySeat} names={names} onPick={controls.sendAug} onReroll={(r) => {
+          sound().play("augReroll");
+          controls.sendAug(r, -1);
+        }} />}
+
         {snap.phase === "gameOver" && <FinalPanel snap={snap} names={names} mySeat={mySeat} />}
 
         {notice && <div className="absolute inset-x-0 top-12 z-30 mx-auto w-fit rounded-full bg-amber-500/90 px-3 py-1 text-xs font-bold text-slate-900">{notice}</div>}
@@ -924,11 +974,11 @@ export default function FindersKeepersBoard({ snap, buf, fresh, mySeat, names, o
                 label={mateTouching ? "🤝" : "✂️"}
                 sub={mateTouching ? "넘기기" : "줄 끊기"}
                 ariaLabel={mateTouching ? "팀원에게 줄 넘겨주기" : "내 줄 뒤쪽 절반 끊고 빠르게"}
-                frac={mateTouching ? 1 : cdFrac(me.cutCdAt, CUT_CD_MS)}
+                frac={mateTouching ? 1 : cdFrac(me.cutCdAt, cutCdOf(me))}
                 disabled={me.chain.length === 0}
                 onDown={() => controls.press("skill")}
               />
-              <CdButton label="💨" sub="돌진" big ariaLabel="돌진" frac={cdFrac(me.dashCdAt, DASH_CD_MS)} onDown={() => controls.press("dash")} />
+              <CdButton label="💨" sub="돌진" big ariaLabel="돌진" frac={cdFrac(me.dashCdAt, dashCdOf(me))} onDown={() => controls.press("dash")} />
             </div>
           </>
         )}
@@ -938,7 +988,7 @@ export default function FindersKeepersBoard({ snap, buf, fresh, mySeat, names, o
       {me && snap.phase !== "gameOver" && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/70 light:border-slate-200 light:bg-white light:text-slate-600">
           <span className="font-bold text-white light:text-slate-900">
-            🚂 내 줄 {me.chain.length}/{MAX_CHAIN} · 값 {myChainVal}
+            🚂 내 줄 {me.chain.length}/{maxChainOf(me)} · 값 {myChainVal}
             {myWeight > 0 && <span className="ml-1 font-normal text-white/60 light:text-slate-500">(🐢 −{myWeight}%)</span>}
           </span>
           {me.chain.length > 0 && (
@@ -954,8 +1004,9 @@ export default function FindersKeepersBoard({ snap, buf, fresh, mySeat, names, o
               {h}
             </span>
           ))}
-          <Meter label="💨 돌진" frac={cdFrac(me.dashCdAt, DASH_CD_MS)} />
-          <Meter label={team && mateTouching ? "🤝 넘기기" : "✂️ 끊기"} frac={team && mateTouching ? 1 : cdFrac(me.cutCdAt, CUT_CD_MS)} />
+          <Meter label="💨 돌진" frac={cdFrac(me.dashCdAt, dashCdOf(me))} />
+          <Meter label={team && mateTouching ? "🤝 넘기기" : "✂️ 끊기"} frac={team && mateTouching ? 1 : cdFrac(me.cutCdAt, cutCdOf(me))} />
+          <AugChips p={me} />
           {snatchCdLeft > 0 && <span>🤲 다시 가로채기 {Math.ceil(snatchCdLeft / 1000)}초</span>}
           {underdog && <span>🐣 꼴찌 보호: 앞 3개 안전 · 바구니 안 털림 · +5% 속도</span>}
           {snap.sale && me && <span className="text-orange-300 light:text-orange-600">🔥 바구니 {basketValue(snap.baskets[me.basket])}점 — 안에 서면 지켜요</span>}
