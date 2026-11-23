@@ -9,6 +9,9 @@ import {
   BLIZZARD_AT_MS,
   CHARGE_MS,
   DASH_CD_MS,
+  GATHER_MS,
+  PILES,
+  PILE_R,
   ITEM_INFO,
   ROUND_MS,
   SEAT_SCARF,
@@ -20,7 +23,7 @@ import {
   chargeForRange,
 } from "./data";
 import type { Snap, SnapBuffer } from "./net";
-import { ammoMax, isFrozen, type GameEvent, type PlayerInput } from "./sim";
+import { ammoMax, isFrozen, nearPile, type GameEvent, type PlayerInput } from "./sim";
 import { getSnowballSound } from "./snowballSound";
 import Field2D from "./Field2D";
 import RulebookModal from "./RulebookModal";
@@ -651,6 +654,8 @@ export default function SnowballBoard({ snap, buf, fresh, mySeat, names, onInput
   const lastRound = snap.history[snap.history.length - 1];
   const uiClick = useCallback(() => sound().play("ui"), [sound]);
   const maxAmmo = ammoMax(snap);
+  // 눈더미 파란 고리에 가까이 오면(고리 + 1.5칸) 뭉치기 안내
+  const pileHint = !!me && PILES.some((pl) => Math.hypot(pl.x - me.x, pl.z - me.z) < PILE_R + 1.5);
   const dashFrac = me ? (snap.t >= me.dashCdAt ? 1 : Math.max(0, 1 - (me.dashCdAt - snap.t) / DASH_CD_MS)) : 1;
   const myTeam = me?.team ?? 0;
   const teamOrder = [myTeam, 1 - myTeam];
@@ -745,7 +750,7 @@ export default function SnowballBoard({ snap, buf, fresh, mySeat, names, onInput
       {/* 무대 */}
       <div
         ref={stageRef}
-        className={`relative w-full overflow-hidden rounded-2xl border border-white/10 bg-[#b9d3ec] select-none light:border-slate-200 ${full ? "fixed inset-0 z-[80] h-[100dvh] w-screen rounded-none border-0" : touch ? "h-[64svh] min-h-[340px]" : "aspect-[16/10] max-h-[76vh]"}`}
+        className={`relative w-full overflow-hidden rounded-2xl border border-white/10 bg-[#b9d3ec] select-none light:border-slate-200 ${full ? "fixed inset-0 z-[80] h-[100dvh] w-screen rounded-none border-0" : touch ? "h-[64svh] min-h-[340px]" : "aspect-[16/10] max-h-[82vh]"}`}
         onPointerDown={(e) => {
           // 데스크톱: 왼쪽 버튼 꾹 = 힘 모으기, 떼면 던지기 (터치는 오른쪽 막대)
           if (e.pointerType === "touch" || e.button !== 0 || ended) return;
@@ -824,6 +829,26 @@ export default function SnowballBoard({ snap, buf, fresh, mySeat, names, onInput
           <div className="pointer-events-none absolute inset-x-0 top-[32%] z-20 flex flex-col items-center gap-1 px-3">
             <div className="animate-[sf-pop_0.4s_ease-out] text-5xl font-black text-sky-200 drop-shadow-[0_3px_0_rgba(0,0,0,0.45)]">꽁꽁! {frozenLeft}</div>
             <div className="rounded-full bg-black/60 px-3 py-1 text-xs text-white">녹으면 우리 진영에서 다시 시작해요</div>
+          </div>
+        )}
+        {/* 눈더미 옆 — 뭉치기 안내 */}
+        {fighting && me && frozenLeft === 0 && !chargingUi && me.ammo < maxAmmo && pileHint && (
+          <div className={`pointer-events-none absolute inset-x-0 ${touch ? "top-[22%]" : "bottom-[3%]"} z-20 mx-auto flex w-fit flex-col items-center gap-1 rounded-2xl bg-black/65 px-3 py-1.5 text-center text-white shadow-lg`}>
+            <div className="flex items-center gap-1.5 text-sm font-bold">
+              {touch ? (
+                <span className="rounded-md bg-cyan-300 px-1.5 text-slate-900">⛄ 버튼</span>
+              ) : (
+                <kbd className="rounded-md border-b-2 border-slate-400 bg-white px-1.5 font-mono text-slate-900">E</kbd>
+              )}
+              <span>{me.gathering ? "뭉치는 중… 계속 누르고 있어요" : "꾹 눌러 눈덩이 모으기"}</span>
+            </div>
+            {me.gathering ? (
+              <div className="h-1.5 w-32 overflow-hidden rounded-full bg-white/20">
+                <div className="h-full rounded-full bg-cyan-300" style={{ width: `${Math.min(100, (me.gatherMs / GATHER_MS) * 100)}%` }} />
+              </div>
+            ) : (
+              <div className="text-[10px] text-white/70">{nearPile(me.x, me.z) ? "눈더미 안이라 빨리 모여요 · 움직이면 멈춰요" : "파란 고리 안에서 모으면 더 빨라요 · 움직이면 멈춰요"}</div>
+            )}
           </div>
         )}
         {/* 우리 눈사람 위험 */}

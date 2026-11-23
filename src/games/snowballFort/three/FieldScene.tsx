@@ -612,7 +612,7 @@ function KidSlot({ seat, names, shared, lowDetail }: { seat: number; names: Reco
 
 /* ── 카메라 + 이름표 + 마우스 조준 ──────────────────────────────────── */
 
-type RigState = { cx: number; cz: number; init: boolean };
+type RigState = { cx: number; cz: number; h: number; b: number; ahead: number; init: boolean };
 const ray = new THREE.Raycaster();
 const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const hitP = new THREE.Vector3();
@@ -627,36 +627,49 @@ function rigFrame(camera: THREE.Camera, size: { width: number; height: number },
   const sg = sideSign(team);
   let tx = 0;
   let tz = sg * 4;
+  // 싸우는 동안은 내 어깨 뒤 낮은 추적 시점(캐릭터가 크게, 상대 요새가 정면), 준비·결과 땐 높은 전경
+  const close = !!me && (snap.phase === "fight" || snap.phase === "roundEnd");
   if (me) {
     const b = sh.buf.ahead(sh.mySeat, now);
     if (b) {
-      tx = b.x * 0.75;
-      // 앞(상대 진영) 쪽을 더 보이게
-      tz = b.z - sg * 3.2;
+      tx = b.x * 0.9;
+      tz = b.z;
     }
   }
   if (snap.phase === "gameOver") {
     tx = 0;
     tz = 0;
   }
-  const k = st.init ? 1 - Math.exp(-dt * 3) : 1;
+  const aspect = size.width / Math.max(1, size.height);
+  const portrait = aspect < 0.85;
+  const wantH = close ? (portrait ? 8.5 : 5.8) : portrait ? 19 : 14;
+  const wantB = close ? (portrait ? 8.5 : 6.6) : portrait ? 15 : 12;
+  // 바라보는 곳: 내 앞쪽(상대 진영) 몇 칸
+  const wantAhead = close ? (portrait ? 5 : 6) : 4.7;
+  const k = st.init ? 1 - Math.exp(-dt * 4) : 1;
+  const kz = st.init ? 1 - Math.exp(-dt * 1.6) : 1;
   st.init = true;
   st.cx += (tx - st.cx) * k;
   st.cz += (tz - st.cz) * k;
-  const aspect = size.width / Math.max(1, size.height);
-  const portrait = aspect < 0.85;
-  const back = portrait ? 15 : 12;
-  const height = portrait ? 19 : 14;
+  st.h += (wantH - st.h) * kz;
+  st.b += (wantB - st.b) * kz;
+  st.ahead += (wantAhead - st.ahead) * kz;
   const shake = Math.max(0, sh.shake);
   sh.shake = Math.max(0, sh.shake - dt * 2.5);
   const jx = shake > 0 ? (Math.sin(now * 0.09) + Math.sin(now * 0.23)) * 0.12 * shake : 0;
   const jy = shake > 0 ? Math.cos(now * 0.11) * 0.1 * shake : 0;
-  camera.position.set(st.cx + jx, height + jy, st.cz + sg * back);
-  camera.lookAt(st.cx, 0, st.cz - sg * 1.5);
+  camera.position.set(st.cx + jx, st.h + jy, st.cz + sg * st.b);
+  camera.lookAt(st.cx * 0.85, 0.6, st.cz - sg * st.ahead);
   // 마우스 아래 눈밭 점
   if (sh.pointer) {
     ray.setFromCamera(new THREE.Vector2(sh.pointer.x, sh.pointer.y), camera);
-    sh.aimWorld = ray.ray.intersectPlane(ground, hitP) ? { x: hitP.x, z: hitP.z } : null;
+    if (ray.ray.intersectPlane(ground, hitP) && hitP.distanceTo(ray.ray.origin) < 60) sh.aimWorld = { x: hitP.x, z: hitP.z };
+    else {
+      // 낮은 시점이라 지평선 위를 가리키면 바닥과 안 만난다 — 그 방향 먼 곳을 조준점으로
+      const d = ray.ray.direction;
+      const l = Math.hypot(d.x, d.z) || 1;
+      sh.aimWorld = { x: ray.ray.origin.x + (d.x / l) * 40, z: ray.ray.origin.z + (d.z / l) * 40 };
+    }
   }
   for (let seat = 0; seat < sh.labels.length; seat++) {
     const el = sh.labels[seat];
@@ -680,7 +693,7 @@ function rigFrame(camera: THREE.Camera, size: { width: number; height: number },
 }
 
 function CameraRig({ shared }: { shared: MutableRefObject<SceneShared> }) {
-  const st = useRef<RigState>({ cx: 0, cz: 0, init: false });
+  const st = useRef<RigState>({ cx: 0, cz: 0, h: 14, b: 12, ahead: 4.7, init: false });
   useFrame(({ camera, size }, dtRaw) => rigFrame(camera, size, dtRaw, shared.current, st.current));
   return null;
 }
@@ -737,7 +750,7 @@ function fogFrame(scene: THREE.Scene, blizzard: boolean) {
 export default function FieldScene({ shared, names, seatCount, quality, fx, onFps }: FieldSceneProps) {
   const high = quality === "high";
   return (
-    <Canvas shadows={high} dpr={high ? [1, 1.75] : [1, 1.5]} gl={{ antialias: high, powerPreference: "high-performance" }} camera={{ fov: 46, position: [0, 15, 14], near: 0.1, far: 300 }} style={{ touchAction: "none" }}>
+    <Canvas shadows={high} dpr={high ? [1, 2] : [1, 1.5]} gl={{ antialias: true, powerPreference: "high-performance" }} camera={{ fov: 50, position: [0, 15, 14], near: 0.1, far: 300 }} style={{ touchAction: "none" }}>
       <color attach="background" args={["#b9d3ec"]} />
       <fog attach="fog" args={["#c9dcef", 40, 110]} />
       <hemisphereLight args={["#ffe9d6", "#9db8d6", 0.9]} />
@@ -771,7 +784,7 @@ export default function FieldScene({ shared, names, seatCount, quality, fx, onFp
       <CameraRig shared={shared} />
       <PointerTracker shared={shared} />
       <FpsProbe onFps={onFps} />
-      <AdaptiveResolution max={high ? 1.75 : 1.5} />
+      <AdaptiveResolution max={high ? 2 : 1.5} />
     </Canvas>
   );
 }

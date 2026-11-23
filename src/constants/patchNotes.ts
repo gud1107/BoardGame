@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.206.0",
+    releaseDate: "2026-11-24",
+    title: "⛄ 눈싸움 요새전 몰입 시점 · 눈 뭉치기 안내",
+    changes: [
+      { game: "snowball-fort", type: "IMPROVE", desc: "🎥 싸우는 동안 카메라가 내 캐릭터 어깨 뒤로 낮게 따라가요 — 캐릭터가 크게, 상대 요새가 정면에 보여요(준비·결과 때는 전체 전경)" },
+      { game: "snowball-fort", type: "IMPROVE", desc: "🔍 더 선명하게 — 고해상도 화면에서 최대 2배 해상도, 저사양 모드도 계단 현상 줄이기 · PC 경기장 화면을 조금 더 크게" },
+      { game: "snowball-fort", type: "FEAT", desc: "⛄ 눈더미 파란 고리 가까이 가면 \"E 꾹 눌러 눈덩이 모으기\" 안내가 뜨고, 누르는 동안 모이는 막대가 차요(휴대폰은 ⛄ 버튼 안내)" },
+    ],
+  },
+  {
     version: "v1.205.0",
     releaseDate: "2026-11-24",
     title: "🚪 이상한 복도 — 내 캐릭터 3인칭 시점",
