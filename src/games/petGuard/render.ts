@@ -51,6 +51,172 @@ function matName(m: number): string {
   }
 }
 
+const ROCK: Partial<Record<Scenario["sky"], [string, string]>> & { day: [string, string] } = {
+  day: ["#6b5240", "#5a4434"],
+  dusk: ["#6b4a3a", "#583a2e"],
+  night: ["#3f3a4a", "#332e3d"],
+  cave: ["#44403c", "#36322f"],
+  storm: ["#4b5563", "#3f4752"],
+  desert: ["#b7793f", "#9c6433"],
+  volcano: ["#2b1d1a", "#1f1513"],
+  toxic: ["#3f4a2a", "#333d22"],
+  snow: ["#64748b", "#56657a"],
+};
+const CAP: Partial<Record<Scenario["sky"], string>> = {
+  day: "#4ade80",
+  dusk: "#65a30d",
+  storm: "#4d7c0f",
+  snow: "#f8fafc",
+  toxic: "#a3e635",
+};
+
+/** Cheap animated backdrop per sky. */
+function drawScenery(ctx: CanvasRenderingContext2D, sky: Scenario["sky"], w: number, h: number, c: number, t: number) {
+  const cloud = (cx: number, cy: number, s: number, col: string) => {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(cx, cy, s, 0, Math.PI * 2);
+    ctx.arc(cx + s * 0.9, cy - s * 0.35, s * 0.8, 0, Math.PI * 2);
+    ctx.arc(cx + s * 1.7, cy, s * 0.7, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  if (sky === "day" || sky === "desert" || sky === "dusk") {
+    const sx = w * 0.82;
+    const sy = c * 1.6;
+    const sg = ctx.createRadialGradient(sx, sy, c * 0.2, sx, sy, c * 2.2);
+    sg.addColorStop(0, sky === "dusk" ? "rgba(254,215,170,0.95)" : "rgba(254,249,195,0.95)");
+    sg.addColorStop(1, "rgba(254,249,195,0)");
+    ctx.fillStyle = sg;
+    ctx.fillRect(sx - c * 2.2, sy - c * 2.2, c * 4.4, c * 4.4);
+  }
+  if (sky === "day" || sky === "storm" || sky === "snow" || sky === "dusk") {
+    const col = sky === "storm" ? "rgba(30,41,59,0.45)" : "rgba(255,255,255,0.55)";
+    const span = w + c * 6;
+    for (let k = 0; k < 3; k++) {
+      const cx = ((t / (90 + k * 40) + k * span * 0.37) % span) - c * 3;
+      cloud(cx, c * (1.2 + k * 1.3), c * (0.6 + 0.15 * k), col);
+    }
+  }
+  if (sky === "night" || sky === "cave") {
+    ctx.fillStyle = "rgba(255,255,255,0.8)";
+    for (let k = 0; k < 18; k++) {
+      const x = ((k * 7919) % 997) / 997;
+      const y = ((k * 104729) % 991) / 991;
+      const tw = 0.4 + 0.6 * Math.abs(Math.sin(t / 700 + k));
+      ctx.globalAlpha = sky === "cave" ? tw * 0.25 : tw;
+      ctx.fillRect(x * w, y * h * 0.6, Math.max(1, c * 0.06), Math.max(1, c * 0.06));
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (sky === "volcano" || sky === "toxic" || sky === "snow") {
+    ctx.fillStyle = sky === "volcano" ? "rgba(251,146,60,0.7)" : sky === "toxic" ? "rgba(217,249,157,0.45)" : "rgba(255,255,255,0.8)";
+    const down = sky === "snow";
+    for (let k = 0; k < 14; k++) {
+      const x = ((k * 7919) % 997) / 997;
+      const ph = (((t / (2600 + (k % 5) * 400) + k * 0.137) % 1) + 1) % 1;
+      const y = down ? ph : 1 - ph;
+      ctx.beginPath();
+      ctx.arc(x * w + Math.sin(t / 600 + k) * c * 0.3, y * h, c * (0.05 + (k % 3) * 0.025), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  if (sky === "storm") {
+    const flash = Math.max(0, Math.sin(t / 1700) - 0.97) * 20;
+    if (flash > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${flash * 0.25})`;
+      ctx.fillRect(0, 0, w, h);
+    }
+  }
+}
+
+function firstSolidBelow(f: Frame, x: number, y: number): number {
+  for (let yy = y + 1; yy < H; yy++) {
+    const m = f.cells[yy * W + x];
+    if (m !== M.EMPTY && m !== M.PET) return yy;
+  }
+  return H;
+}
+
+const PATH_RGB: Record<number, string> = {
+  [M.WATER]: "96,165,250",
+  [M.LAVA]: "249,115,22",
+  [M.ACID]: "163,230,53",
+  [M.SAND]: "214,180,106",
+  [M.SNOW]: "241,245,249",
+  [M.BOULDER]: "120,113,108",
+  [M.GAS]: "168,85,247",
+};
+
+/** Design phase: animate where each hazard will travel (falling streams, rain bands, flight lines). */
+function drawForecastPaths(ctx: CanvasRenderingContext2D, sc: Scenario, f: Frame, emitters: readonly Emitter[], c: number, t: number) {
+  const pet = { x: f.petX * c + c / 2, y: f.petY * c + c / 2 };
+  for (const e of emitters) {
+    if (e.k === "pour") {
+      const rgb = PATH_RGB[e.mat] ?? PATH_RGB[M.WATER];
+      const len = firstSolidBelow(f, e.x, e.y) - e.y - 0.5;
+      ctx.fillStyle = `rgba(${rgb},0.2)`;
+      ctx.fillRect(e.x * c + c * 0.3, e.y * c + c / 2, c * 0.4, len * c);
+      ctx.fillStyle = `rgba(${rgb},0.95)`;
+      for (let k = 0; k < 3; k++) {
+        const ph = ((t / 900 + k / 3) % 1) * len;
+        ctx.beginPath();
+        ctx.arc(e.x * c + c / 2, e.y * c + c / 2 + ph * c, c * 0.14, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (e.k === "rain" || e.k === "meteor" || e.k === "bolt") {
+      const rgb = e.k === "rain" ? (PATH_RGB[e.mat] ?? PATH_RGB[M.WATER]) : e.k === "meteor" ? "251,146,60" : "253,224,71";
+      const bg = ctx.createLinearGradient(0, 0, 0, c * 4);
+      bg.addColorStop(0, `rgba(${rgb},0.4)`);
+      bg.addColorStop(1, `rgba(${rgb},0)`);
+      ctx.fillStyle = bg;
+      ctx.fillRect(e.x0 * c, 0, (e.x1 - e.x0 + 1) * c, c * 4);
+      ctx.strokeStyle = `rgba(${rgb},0.85)`;
+      ctx.lineWidth = Math.max(1.5, c / 12);
+      ctx.beginPath();
+      for (let x = e.x0; x <= e.x1; x++) {
+        const depth = Math.min(firstSolidBelow(f, x, 0), 7);
+        const ph = ((t / (e.k === "rain" ? 700 : 1100) + ((x * 37) % 11) / 11) % 1) * depth;
+        const slant = e.k === "meteor" ? c * 0.3 : 0;
+        const sx = x * c + c / 2 - (e.k === "meteor" ? ph * c * 0.3 : 0);
+        ctx.moveTo(sx, ph * c);
+        ctx.lineTo(sx + slant, ph * c + c * 0.55);
+      }
+      ctx.stroke();
+      ctx.lineWidth = 1;
+    } else if (e.k === "spawn") {
+      const sx = e.x * c + c / 2;
+      const sy = e.y * c + c / 2;
+      ctx.strokeStyle = "rgba(250,204,21,0.85)";
+      ctx.lineWidth = Math.max(1.5, c / 14);
+      ctx.setLineDash([c * 0.25, c * 0.2]);
+      ctx.lineDashOffset = -t / 40;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.quadraticCurveTo((sx + pet.x) / 2, Math.min(sy, pet.y) - c * 1.5, pet.x, pet.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.lineDashOffset = 0;
+      ctx.lineWidth = 1;
+      const bx = Math.min(W * c - c * 0.3, sx + c * 0.45);
+      const by = Math.max(c * 0.3, sy - c * 0.45);
+      ctx.fillStyle = "#dc2626";
+      ctx.beginPath();
+      ctx.arc(bx, by, c * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.font = `bold ${Math.round(c * 0.3)}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(`×${e.count}`, bx, by + 1);
+    } else if (e.k === "breach") {
+      ctx.strokeStyle = `rgba(239,68,68,${0.5 + 0.4 * Math.sin(t / 150)})`;
+      ctx.lineWidth = 2;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (sc.map[y][x] === "d") ctx.strokeRect(x * c + 2, y * c + 2, c - 4, c - 4);
+      ctx.lineWidth = 1;
+    }
+  }
+}
+
 export interface EmitterMark {
   x: number;
   y: number;
@@ -103,6 +269,8 @@ export interface DrawOpts {
   hover?: { x: number; y: number; ok: boolean } | null;
   /** Animation phase (ms) for flicker. */
   time: number;
+  /** Replay finished and the pet is safe → golden halo. */
+  safe?: boolean;
 }
 
 function emoji(ctx: CanvasRenderingContext2D, ch: string, cx: number, cy: number, size: number) {
@@ -122,20 +290,21 @@ export function drawFrame(ctx: CanvasRenderingContext2D, sc: Scenario, f: Frame,
   g.addColorStop(1, bottom);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, wpx, hpx);
+  drawScenery(ctx, sc.sky, wpx, hpx, c, o.time);
 
-  // faint grid
-  ctx.strokeStyle = "rgba(255,255,255,0.08)";
-  ctx.lineWidth = 1;
-  for (let x = 1; x < W; x++) {
+  // faint grid (design only — the replay reads cleaner without it)
+  if (o.design) {
+    ctx.strokeStyle = "rgba(255,255,255,0.1)";
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(x * c + 0.5, 0);
-    ctx.lineTo(x * c + 0.5, hpx);
-    ctx.stroke();
-  }
-  for (let y = 1; y < H; y++) {
-    ctx.beginPath();
-    ctx.moveTo(0, y * c + 0.5);
-    ctx.lineTo(wpx, y * c + 0.5);
+    for (let x = 1; x < W; x++) {
+      ctx.moveTo(x * c + 0.5, 0);
+      ctx.lineTo(x * c + 0.5, hpx);
+    }
+    for (let y = 1; y < H; y++) {
+      ctx.moveTo(0, y * c + 0.5);
+      ctx.lineTo(wpx, y * c + 0.5);
+    }
     ctx.stroke();
   }
 
@@ -166,14 +335,36 @@ export function drawFrame(ctx: CanvasRenderingContext2D, sc: Scenario, f: Frame,
         case M.EMPTY:
         case M.PET:
           break;
-        case M.ROCK:
-          ctx.fillStyle = "#5b4636";
-          ctx.fillRect(px, py, c, c);
-          ctx.fillStyle = "rgba(0,0,0,0.18)";
-          ctx.fillRect(px, py + c * 0.66, c, c * 0.34);
-          ctx.fillStyle = "rgba(255,255,255,0.08)";
-          ctx.fillRect(px + c * 0.15, py + c * 0.18, c * 0.3, c * 0.14);
+        case M.ROCK: {
+          const pal = ROCK[sc.sky] ?? ROCK.day;
+          const above = y > 0 ? f.cells[i - W] : M.EMPTY;
+          const below = y < H - 1 ? f.cells[i + W] : M.ROCK;
+          ctx.fillStyle = pal[0];
+          ctx.fillRect(px, py, c + 0.5, c + 0.5);
+          // speckles (stable per cell)
+          ctx.fillStyle = pal[1];
+          const hsh = Math.imul(x + 1, 73856093) ^ Math.imul(y + 1, 19349663);
+          for (let k = 0; k < 3; k++) {
+            const sx = ((hsh >>> (k * 5)) & 31) / 31;
+            const sy = ((hsh >>> (k * 5 + 15)) & 31) / 31;
+            ctx.fillRect(px + c * (0.1 + 0.7 * sx), py + c * (0.15 + 0.7 * sy), c * 0.14, c * 0.1);
+          }
+          if (above !== M.ROCK) {
+            ctx.fillStyle = "rgba(255,255,255,0.16)";
+            ctx.fillRect(px, py, c, c * 0.12);
+            const cap = CAP[sc.sky];
+            if (cap && (above === M.EMPTY || above === M.PET)) {
+              ctx.fillStyle = cap;
+              ctx.fillRect(px, py, c + 0.5, c * 0.2);
+              for (let k = 0; k < 3; k++) ctx.fillRect(px + c * (0.12 + k * 0.33), py + c * 0.2, c * 0.12, c * 0.1);
+            }
+          }
+          if (below !== M.ROCK) {
+            ctx.fillStyle = "rgba(0,0,0,0.25)";
+            ctx.fillRect(px, py + c * 0.82, c, c * 0.18);
+          }
           break;
+        }
         case M.BUSH:
           ctx.fillStyle = "#166534";
           ctx.fillRect(px, py + c * 0.25, c, c * 0.75);
@@ -284,12 +475,20 @@ export function drawFrame(ctx: CanvasRenderingContext2D, sc: Scenario, f: Frame,
           ctx.lineTo(px + c * 0.38, py + c * 0.22);
           ctx.fill();
           break;
-        case M.WATER:
-          ctx.fillStyle = "rgba(37,99,235,0.85)";
-          ctx.fillRect(px, py, c, c);
-          ctx.fillStyle = "rgba(191,219,254,0.5)";
-          ctx.fillRect(px + c * (0.15 + 0.1 * Math.sin((t + i * 97) / 200)), py + c * 0.2, c * 0.3, c * 0.08);
+        case M.WATER: {
+          const deep = y > 0 && f.cells[i - W] === M.WATER;
+          ctx.fillStyle = deep ? "rgba(29,78,216,0.9)" : "rgba(59,130,246,0.88)";
+          ctx.fillRect(px, py, c + 0.5, c + 0.5);
+          if (!deep) {
+            const wv = Math.sin((t + x * 220) / 180) * c * 0.06;
+            ctx.fillStyle = "rgba(219,234,254,0.85)";
+            ctx.fillRect(px, py + c * 0.08 + wv, c + 0.5, c * 0.1);
+          } else {
+            ctx.fillStyle = "rgba(191,219,254,0.22)";
+            ctx.fillRect(px + c * (0.2 + 0.15 * Math.sin((t + i * 97) / 260)), py + c * 0.45, c * 0.25, c * 0.06);
+          }
           break;
+        }
         case M.LAVA: {
           const fl = 0.75 + 0.25 * Math.sin((t + i * 53) / 120);
           ctx.fillStyle = `rgb(${Math.round(234 * fl + 20)},${Math.round(88 * fl)},12)`;
@@ -352,8 +551,9 @@ export function drawFrame(ctx: CanvasRenderingContext2D, sc: Scenario, f: Frame,
     }
   }
 
-  // design overlays: emitters + hover
+  // design overlays: animated hazard paths, emitters + hover
   if (o.design && o.emitters) {
+    drawForecastPaths(ctx, sc, f, o.emitters, c, o.time);
     for (const mk of emitterMarks(o.emitters)) {
       // pulsing ring so the source shows even without colour emoji
       ctx.strokeStyle = `rgba(244,63,94,${0.55 + 0.35 * Math.sin(o.time / 180)})`;
@@ -408,20 +608,37 @@ export function drawFrame(ctx: CanvasRenderingContext2D, sc: Scenario, f: Frame,
   {
     const px = f.petX * c + c / 2;
     const py = f.petY * c + c / 2;
+    ctx.fillStyle = "rgba(0,0,0,0.28)";
+    ctx.beginPath();
+    ctx.ellipse(px, py + c * 0.42, c * 0.38, c * 0.1, 0, 0, Math.PI * 2);
+    ctx.fill();
     if (f.hit) {
-      ctx.fillStyle = "rgba(239,68,68,0.45)";
+      const pulse = 0.5 + 0.5 * Math.sin(t / 90);
+      const r = c * (0.9 + 0.25 * pulse);
+      const rg = ctx.createRadialGradient(px, py, c * 0.1, px, py, r);
+      rg.addColorStop(0, "rgba(239,68,68,0.75)");
+      rg.addColorStop(1, "rgba(239,68,68,0)");
+      ctx.fillStyle = rg;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(0.35);
+      emoji(ctx, o.petEmoji, 0, 0, c * 0.9);
+      ctx.restore();
+      emoji(ctx, "💥", px + c * 0.32, py - c * 0.38, c * (0.55 + 0.15 * pulse));
+    } else {
+      const hop = Math.abs(Math.sin(t / (o.design ? 260 : 180))) * c * 0.08;
+      const rg = ctx.createRadialGradient(px, py, c * 0.1, px, py, c * 0.75);
+      rg.addColorStop(0, o.safe ? "rgba(253,224,71,0.85)" : "rgba(255,255,255,0.6)");
+      rg.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = rg;
       ctx.beginPath();
       ctx.arc(px, py, c * 0.75, 0, Math.PI * 2);
       ctx.fill();
-      emoji(ctx, o.petEmoji, px, py, c * 0.9);
-      emoji(ctx, "💥", px + c * 0.3, py - c * 0.35, c * 0.6);
-    } else {
-      const hop = o.design ? Math.abs(Math.sin(t / 260)) * c * 0.08 : 0;
-      ctx.fillStyle = "rgba(255,255,255,0.35)";
-      ctx.beginPath();
-      ctx.arc(px, py, c * 0.55, 0, Math.PI * 2);
-      ctx.fill();
       emoji(ctx, o.petEmoji, px, py - hop, c * 0.92);
+      if (o.safe) emoji(ctx, "✨", px + c * 0.38, py - c * 0.42 - hop, c * 0.42);
     }
   }
 
@@ -450,6 +667,13 @@ export function drawFrame(ctx: CanvasRenderingContext2D, sc: Scenario, f: Frame,
     ctx.arc(b.x * c + c / 2, b.y * c + c / 2, r, 0, Math.PI * 2);
     ctx.fill();
   }
+
+  // soft vignette
+  const vg = ctx.createRadialGradient(wpx / 2, hpx / 2, Math.min(wpx, hpx) * 0.45, wpx / 2, hpx / 2, Math.max(wpx, hpx) * 0.75);
+  vg.addColorStop(0, "rgba(0,0,0,0)");
+  vg.addColorStop(1, "rgba(0,0,0,0.28)");
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, wpx, hpx);
 }
 
 /** Static board for the design phase (map + layout, no sim). */

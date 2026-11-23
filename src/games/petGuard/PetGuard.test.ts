@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyAction, autoSubmission, computeRankings, currentActor, ROUNDS, scenarioOf, startGame, type PetState } from "./engine";
 import { SCENARIOS } from "./scenarios";
+import { forecastOf } from "./forecast";
 import { canBuild, createSim, H, layoutCost, M, petOf, recordSim, runSim, sanitizeLayout, stepSim, W } from "./sim";
 
 describe("scenario data", () => {
@@ -10,6 +11,15 @@ describe("scenario data", () => {
     expect(sc.map.join("").split("P")).toHaveLength(2);
     const p = petOf(sc);
     expect(p.y === H - 1 || sc.map[p.y + 1][p.x] !== ".").toBe(true);
+  });
+
+  it.each(SCENARIOS.map((s) => [s.id, s] as const))("%s has a readable forecast for every hazard", (_id, sc) => {
+    const items = forecastOf(sc);
+    expect(items.length).toBe(sc.emitters.length);
+    for (const it of items) {
+      expect(it.what.length).toBeGreaterThan(0);
+      expect(it.to).toBeGreaterThan(it.from);
+    }
   });
 
   it("has 5+ scenarios in each tier and unique ids", () => {
@@ -125,6 +135,33 @@ describe("engine", () => {
       expect(r[0].rank).toBe(1);
     }
   }, 60_000);
+
+  it("result phase: next round starts once every seat is ready; skip votes toggle without advancing", () => {
+    let s = startGame(3, 21);
+    s = applyAction(s, { type: "force", round: 0 });
+    expect(s.phase).toBe("result");
+    expect(s.ready).toEqual([false, false, false]);
+    s = applyAction(s, { type: "skip", seat: 1, round: 0 });
+    expect(s.skip).toEqual([false, true, false]);
+    s = applyAction(s, { type: "skip", seat: 1, round: 0 });
+    expect(s.skip).toEqual([false, false, false]);
+    s = applyAction(s, { type: "ready", seat: 0, round: 0 });
+    expect(applyAction(s, { type: "ready", seat: 0, round: 0 })).toBe(s);
+    s = applyAction(s, { type: "ready", seat: 2, round: 0 });
+    expect(s.phase).toBe("result");
+    s = applyAction(s, { type: "ready", seat: 1, round: 0 });
+    expect(s.phase).toBe("design");
+    expect(s.round).toBe(1);
+    expect(s.ready).toBeUndefined();
+    // stale ready for the old round is ignored
+    expect(applyAction(s, { type: "ready", seat: 0, round: 0 })).toBe(s);
+  });
+
+  it("skip needs half or more of the people", async () => {
+    const { skipNeeded } = await import("./engine");
+    expect([1, 2, 3, 4].map(skipNeeded)).toEqual([1, 1, 2, 2]);
+    expect(skipNeeded(0)).toBe(1);
+  });
 
   it("rejects actions for the wrong round", () => {
     const s = startGame(2, 1);

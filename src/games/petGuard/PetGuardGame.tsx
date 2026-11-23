@@ -519,6 +519,24 @@ export default function PetGuardGame({ onComplete }: PlayableGameProps) {
     watchdogMs: 15000,
   });
 
+  // Result phase: bots (and seats nobody is connected to) are "done watching"
+  // right away, so the round only waits for the people actually watching.
+  const occupiedSeatKey = occupants.map((o) => o.seat).sort().join(",");
+  useEffect(() => {
+    if (!isHost || phase !== "playing" || !gameState || gameState.phase !== "result") return;
+    const occupied = new Set(occupiedSeatKey ? occupiedSeatKey.split(",").map(Number) : []);
+    const id = window.setTimeout(() => {
+      const st = gameStateRef.current;
+      if (!st || st.phase !== "result") return;
+      for (let seat = 0; seat < st.playerCount; seat++) {
+        if (st.ready?.[seat]) continue;
+        if (allBotSeatSetRef.current.has(seat) || !occupied.has(seat)) handleAction({ type: "ready", seat, round: st.round });
+      }
+    }, 1200);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHost, phase, gameState?.phase, gameState?.round, gameState?.seq, occupiedSeatKey, allBotSeatSet]);
+
   // "무응답(idle)" takeover trigger — see DalmutiGame.tsx/NoThanksGame.tsx for the full rationale.
   useEffect(() => {
     if (phase !== "playing") return;
@@ -882,6 +900,7 @@ export default function PetGuardGame({ onComplete }: PlayableGameProps) {
           viewerSeat={mySeat}
           names={names}
           connectedSeats={connectedSeats}
+          botSeats={allBotSeatSet}
           isHost={isHost}
           onAction={handleAction}
           onGameEnd={handleGameEnd}

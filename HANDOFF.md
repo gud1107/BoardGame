@@ -1,5 +1,15 @@
 # HANDOFF — 현재 스냅샷
 
+## 🐶 멍냥 방어선 재난 예보 · 자동 시작 · CLEAR/FAIL 연출 — 2026-11-24 (패치 v1.204.0)
+
+요청: "모두 다 끝나면 자동시작, 투표로 스킵 / 이번 라운드에 뭐가 떨어지는지 직관적으로 / 전체 퀄리티" + "승리·클리어·실패 표기를 화려한 이펙트로". 코드 `src/games/petGuard/`, 원전 [boardGameRule/멍냥방어선/멍냥방어선.md](./boardGameRule/멍냥방어선/멍냥방어선.md) §3, §3-2.
+- **자동 시작·스킵**: 엔진에 `ready`/`skip` 배열 + 액션. 모든 자리 ready → 바로 다음 라운드(`advance`). 결과표 6초 뒤 자동 ready, 봇·빈 자리는 방장이 대신(`PetGuardGame.tsx`), 방장 35초 `next` 안전망. 스킵은 사람 절반 이상(`skipNeeded`=ceil(n/2))이면 각 화면이 재생 끝으로 점프(화면에서 판정, 엔진은 표만).
+- **재난 예보**: `forecast.ts`(emitter → 무엇/어디/언제/얼마나 + 타임라인), `PetFx.tsx` `ForecastPanel`·`RoundIntro`(3.2초 경보 배너). `render.ts` `drawForecastPaths`: 물줄기·빗줄기 띠·비행 경로(×마리 배지)·무너질 둑.
+- **연출**: `OutcomeBurst`(CLEAR 빛살+색종이 / FAIL 금+흔들림), 다른 판 `MiniStamp`, `FinalBanner`(VICTORY/등수). CSS 키프레임만, reduced-motion이면 빛살·색종이 끔. 소리 fail/alarm/vote 추가.
+- **그림**: 하늘별 배경(해·구름·별·불씨·눈), 바위 무늬+풀/눈 덮개, 물 표면 물결, 펫 그림자·후광, 비네트. 결과표는 CLEAR/FAIL 줄 + 준비 ✅/👀.
+- **확인**: petGuard 테스트(예보 17개·ready/skip 포함) + proceduralSuites 통과, tsc·eslint 0. 실제 보드 번들 캡처 1100px 설계·결과 1장씩, 360px 가로 넘침 없음(하네스 삭제).
+- **남은 것**: 여러 기기 실제 온라인에서 ready/스킵 흐름, 소리 귀 확인, 휴대폰 실기기 성능(캔버스 4개 + 그라디언트).
+
 ## 🧬 만지면 내 꺼! 증강 — 2026-11-24 (패치 v1.203.0)
 
 요청: "만지면내꺼 게임 증강넣어주세요". 룰북 [boardGameRule/만지면내꺼/만지면내꺼.md](./boardGameRule/만지면내꺼/만지면내꺼.md) §15. 코드 `src/games/findersKeepers/`.

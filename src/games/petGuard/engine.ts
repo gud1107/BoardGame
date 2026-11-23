@@ -69,6 +69,10 @@ export interface PetState {
   subs: (Submission | null)[];
   history: RoundRecord[];
   scores: number[];
+  /** Result phase: seat finished watching (all true → next round starts). */
+  ready?: boolean[];
+  /** Result phase: seat voted to skip the replay (view-only; the board jumps to the table once a majority of humans voted). */
+  skip?: boolean[];
   seq: number;
   statTally?: StatTally;
 }
@@ -77,7 +81,11 @@ export type EngineAction =
   | { type: "submit"; seat: SeatIndex; round: number; pieces: Piece[]; twist: number }
   /** Host: fill every seat that hasn't submitted when the timer ran out (auto layout). */
   | { type: "force"; round: number }
-  | { type: "next"; round: number };
+  | { type: "next"; round: number }
+  /** Result phase: this seat is done watching. Everyone ready → next round. */
+  | { type: "ready"; seat: SeatIndex; round: number }
+  /** Result phase: toggle this seat's "skip the replay" vote. */
+  | { type: "skip"; seat: SeatIndex; round: number };
 
 export function isStateSyncStale(current: PetState | null, synced: PetState): boolean {
   if (!current) return false;
@@ -151,7 +159,20 @@ export function autoSubmission(state: PetState, seat: SeatIndex, level: number):
 }
 
 function clone(s: PetState): PetState {
-  return { ...s, hands: s.hands.map((h) => [...h]), subs: [...s.subs], history: [...s.history], scores: [...s.scores] };
+  return {
+    ...s,
+    hands: s.hands.map((h) => [...h]),
+    subs: [...s.subs],
+    history: [...s.history],
+    scores: [...s.scores],
+    ready: s.ready ? [...s.ready] : undefined,
+    skip: s.skip ? [...s.skip] : undefined,
+  };
+}
+
+/** Skip votes needed among `humans` people: half or more (1 of 1, 1 of 2, 2 of 3, 2 of 4). */
+export function skipNeeded(humans: number): number {
+  return Math.ceil(Math.max(1, humans) / 2);
 }
 
 function resolveRound(s: PetState) {
@@ -182,6 +203,26 @@ function resolveRound(s: PetState) {
   results.forEach((r) => (s.scores[r.seat] += r.score));
   s.history.push({ scenario: sc.id, seed, subs, results });
   s.phase = "result";
+  s.ready = Array(s.playerCount).fill(false);
+  s.skip = Array(s.playerCount).fill(false);
+}
+
+function advance(s: PetState): PetState {
+  s.ready = undefined;
+  s.skip = undefined;
+  if (s.round + 1 >= ROUNDS) {
+    s.phase = "gameOver";
+    for (const r of computeRankings(s)) {
+      s.statTally = tallyMax(s.statTally, r.seat, "maxScore", r.total);
+      if (finalRows(s)[r.seat].survived === ROUNDS) s.statTally = tallyAdd(s.statTally, r.seat, "flawless");
+    }
+    return s;
+  }
+  s.round++;
+  s.phase = "design";
+  s.hands = dealHands(s.seed, s.round, s.playerCount);
+  s.subs = Array(s.playerCount).fill(null);
+  return s;
 }
 
 export function applyAction(state: PetState, a: EngineAction): PetState {
@@ -214,18 +255,22 @@ export function applyAction(state: PetState, a: EngineAction): PetState {
     if (state.phase !== "result" || a.round !== state.round) return state;
     const s = clone(state);
     s.seq++;
-    if (s.round + 1 >= ROUNDS) {
-      s.phase = "gameOver";
-      for (const r of computeRankings(s)) {
-        s.statTally = tallyMax(s.statTally, r.seat, "maxScore", r.total);
-        if (finalRows(s)[r.seat].survived === ROUNDS) s.statTally = tallyAdd(s.statTally, r.seat, "flawless");
-      }
-      return s;
-    }
-    s.round++;
-    s.phase = "design";
-    s.hands = dealHands(s.seed, s.round, s.playerCount);
-    s.subs = Array(s.playerCount).fill(null);
+    return advance(s);
+  }
+  if (a.type === "ready" || a.type === "skip") {
+    if (state.phase !== "result" || a.round !== state.round) return state;
+    if (!Number.isInteger(a.seat) || a.seat < 0 || a.seat >= state.playerCount) return state;
+    const s = clone(state);
+    const ready = s.ready ?? Array(s.playerCount).fill(false);
+    const skip = s.skip ?? Array(s.playerCount).fill(false);
+    if (a.type === "ready") {
+      if (ready[a.seat]) return state;
+      ready[a.seat] = true;
+    } else skip[a.seat] = !skip[a.seat];
+    s.ready = ready;
+    s.skip = skip;
+    s.seq++;
+    if (ready.every(Boolean)) return advance(s);
     return s;
   }
   return state;

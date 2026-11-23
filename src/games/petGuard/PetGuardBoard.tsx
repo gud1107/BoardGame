@@ -11,6 +11,7 @@ import {
   roundSeed,
   scenarioOf,
   senderOf,
+  skipNeeded,
   targetOf,
   type EngineAction,
   type PetState,
@@ -19,12 +20,16 @@ import {
 import { canBuild, H, HIT_LABEL, layoutCost, PIECES, recordSim, twistedEmitters, TWISTS, W, type Frame, type Piece, type Scenario } from "./sim";
 import { designFrame, drawFrame, PET_EMOJI, type DrawOpts } from "./render";
 import { eventCues, getPetGuardSound, petSoundCues } from "./petGuardSound";
+import { forecastOf } from "./forecast";
+import { FinalBanner, ForecastPanel, MiniStamp, OutcomeBurst, PetFxStyles, RoundIntro } from "./PetFx";
 
 interface Props {
   state: PetState;
   viewerSeat: SeatIndex;
   names: Record<SeatIndex, string>;
   connectedSeats: Set<SeatIndex>;
+  /** Bot + bot-taken-over seats (they never vote / are auto-ready). */
+  botSeats: Set<SeatIndex>;
   isHost: boolean;
   onAction: (a: EngineAction) => void;
   onGameEnd: () => void;
@@ -36,7 +41,19 @@ const PREVIEWS = 3;
 const TPS = 15;
 const TIER_LABEL = ["", "⭐ 쉬움", "⭐⭐ 보통", "⭐⭐⭐ 어려움"];
 
-export default function PetGuardBoard({ state, viewerSeat, names, connectedSeats, isHost, onAction, onGameEnd, onRulebook }: Props) {
+const SKY_GRAD: Record<Scenario["sky"], string> = {
+  day: "from-sky-500/30 to-emerald-500/10",
+  dusk: "from-orange-500/35 to-rose-500/10",
+  night: "from-indigo-700/40 to-slate-800/10",
+  cave: "from-stone-600/40 to-stone-800/10",
+  storm: "from-slate-500/40 to-sky-800/10",
+  desert: "from-amber-400/35 to-yellow-600/10",
+  volcano: "from-red-700/45 to-orange-600/10",
+  toxic: "from-lime-600/35 to-green-800/10",
+  snow: "from-sky-200/35 to-slate-300/10",
+};
+
+export default function PetGuardBoard({ state, viewerSeat, names, connectedSeats, botSeats, isHost, onAction, onGameEnd, onRulebook }: Props) {
   const sound = getPetGuardSound;
   useSoundCues(state, sound, petSoundCues);
   const sc = scenarioOf(state);
@@ -45,15 +62,25 @@ export default function PetGuardBoard({ state, viewerSeat, names, connectedSeats
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-sm font-semibold text-white light:text-slate-900">
-          <span className="rounded-full bg-white/10 light:bg-slate-200 px-2.5 py-1 text-xs">
-            라운드 {Math.min(state.round + 1, ROUNDS)}/{ROUNDS}
-          </span>
-          <span>
-            {sc.emoji} {sc.name}
-          </span>
-          <span className="text-xs text-amber-300 light:text-amber-600">{TIER_LABEL[sc.tier]}</span>
+      <PetFxStyles />
+      <div className={`flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-gradient-to-r ${SKY_GRAD[sc.sky]} px-3 py-2 light:border-slate-200`}>
+        <div className="flex items-center gap-2.5 text-white light:text-slate-900">
+          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-black/30 text-3xl shadow-inner light:bg-white">{sc.emoji}</span>
+          <div className="leading-tight">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-white/70 light:text-slate-500">
+              <span>
+                라운드 {Math.min(state.round + 1, ROUNDS)}/{ROUNDS}
+              </span>
+              <span className="flex gap-0.5">
+                {Array.from({ length: ROUNDS }, (_, k) => (
+                  <span key={k} className={`h-1.5 w-3 rounded-full ${k < state.round ? "bg-amber-300" : k === state.round ? "bg-white light:bg-slate-700" : "bg-white/20 light:bg-slate-300"}`} />
+                ))}
+              </span>
+            </div>
+            <div className="text-base font-black">
+              {sc.name} <span className="text-xs font-bold text-amber-300 light:text-amber-600">{TIER_LABEL[sc.tier]}</span>
+            </div>
+          </div>
         </div>
         <div className="flex items-center gap-1.5">
           <SuiteSoundHud suite={sound} icon="🐶" label="Rescue Patrol" preview="survive" />
@@ -64,7 +91,9 @@ export default function PetGuardBoard({ state, viewerSeat, names, connectedSeats
       </div>
       <ScoreStrip state={state} nameOf={nameOf} viewerSeat={viewerSeat} connectedSeats={connectedSeats} />
       {state.phase === "design" && <DesignPanel key={`d${state.seed}-${state.round}`} state={state} sc={sc} viewerSeat={viewerSeat} nameOf={nameOf} isHost={isHost} onAction={onAction} />}
-      {state.phase === "result" && <ReplayPanel key={`r${state.seed}-${state.round}`} state={state} viewerSeat={viewerSeat} nameOf={nameOf} isHost={isHost} onAction={onAction} />}
+      {state.phase === "result" && (
+        <ReplayPanel key={`r${state.seed}-${state.round}`} state={state} viewerSeat={viewerSeat} nameOf={nameOf} isHost={isHost} onAction={onAction} connectedSeats={connectedSeats} botSeats={botSeats} />
+      )}
       {state.phase === "gameOver" && <FinalPanel state={state} nameOf={nameOf} viewerSeat={viewerSeat} onGameEnd={onGameEnd} />}
     </div>
   );
@@ -86,6 +115,7 @@ function ScoreStrip({ state, nameOf, viewerSeat, connectedSeats }: { state: PetS
           </span>
           <span className="font-bold text-white light:text-slate-900">{score}</span>
           {state.phase === "design" && <span title={pending.has(seat) ? "설계 중" : "제출 완료"}>{pending.has(seat) ? "⏳" : "✅"}</span>}
+          {state.phase === "result" && <span title={state.ready?.[seat] ? "다음 라운드 준비 완료" : "결과 보는 중"}>{state.ready?.[seat] ? "✅" : "👀"}</span>}
         </div>
       ))}
     </div>
@@ -259,6 +289,10 @@ function DesignPanel({ state, sc, viewerSeat, nameOf, isHost, onAction }: { stat
   }, [preview, sound]);
 
   const emitters = useMemo(() => twistedEmitters(sc, -1), [sc]);
+  const forecast = useMemo(() => forecastOf(sc, emitters), [sc, emitters]);
+  useEffect(() => {
+    sound().play("alarm");
+  }, [sound]);
   const staticFrame = useMemo(() => designFrame(sc, pieces, MATS), [sc, pieces]);
 
   function onCell(x: number, y: number) {
@@ -299,12 +333,15 @@ function DesignPanel({ state, sc, viewerSeat, nameOf, isHost, onAction }: { stat
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="rounded-xl border border-white/10 bg-white/[0.04] light:border-slate-200 light:bg-white p-3 text-xs">
-        <p className="text-white/85 light:text-slate-700">{sc.desc}</p>
-        <p className="mt-1 text-sky-200 light:text-sky-700">💡 {sc.hint}</p>
-        <p className="mt-1 text-white/50 light:text-slate-500">
-          ⏱ {sc.ticks}틱 버티기 · 펫 바로 옆 8칸(빨간 칸)과 맨 윗줄엔 못 지어요 · 위험이 나오는 곳은 아이콘으로 표시돼요
-        </p>
+      <div className="grid gap-2 sm:grid-cols-[1fr_1fr]">
+        <ForecastPanel items={forecast} ticks={sc.ticks} />
+        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-2.5 text-xs light:border-slate-200 light:bg-white">
+          <p className="text-white/85 light:text-slate-700">{sc.desc}</p>
+          <p className="mt-1.5 rounded-lg bg-sky-500/15 px-2 py-1 text-sky-100 light:bg-sky-50 light:text-sky-700">💡 {sc.hint}</p>
+          <p className="mt-1.5 text-[11px] text-white/50 light:text-slate-500">
+            ⏱ {sc.ticks}틱 버티기 · 판 위의 움직이는 선/물방울이 위험이 지나갈 길이에요 · 펫 옆 8칸(빨간 칸)·맨 윗줄엔 못 지어요
+          </p>
+        </div>
       </div>
 
       <div className="flex flex-col items-center gap-2 lg:flex-row lg:items-start">
@@ -315,6 +352,8 @@ function DesignPanel({ state, sc, viewerSeat, nameOf, isHost, onAction }: { stat
             </span>
             <span className={`tabular-nums ${remainMs < 10_000 ? "text-rose-300 light:text-rose-600" : "text-white/60 light:text-slate-500"}`}>⏳ {Math.ceil(remainMs / 1000)}초</span>
           </div>
+          <div className="relative">
+          {!submitted && seated && <RoundIntro sc={sc} round={state.round + 1} rounds={ROUNDS} items={forecast} />}
           <BoardCanvas
             sc={sc}
             frame={pf ?? staticFrame}
@@ -329,6 +368,7 @@ function DesignPanel({ state, sc, viewerSeat, nameOf, isHost, onAction }: { stat
             onCell={onCell}
             onHover={setHover}
           />
+          </div>
           {preview && (
             <div className="flex w-full items-center justify-between rounded-lg bg-black/30 light:bg-slate-100 px-2 py-1 text-xs text-white light:text-slate-800">
               <span>
@@ -420,30 +460,58 @@ function DesignPanel({ state, sc, viewerSeat, nameOf, isHost, onAction }: { stat
 // Replay + results
 // ---------------------------------------------------------------------------
 
-const NEXT_DELAY_MS = 9000;
+/** After the replay ends, seats auto-mark "ready" after this long (table reading time). */
+const READ_MS = 6000;
+/** Host safety net: someone's tab never reports ready (hidden / frozen). */
+const HOST_FALLBACK_MS = 35_000;
+const BURST_MS = 3200;
 
-function ReplayPanel({ state, viewerSeat, nameOf, isHost, onAction }: { state: PetState; viewerSeat: number; nameOf: (s: number) => string; isHost: boolean; onAction: (a: EngineAction) => void }) {
+function ReplayPanel({
+  state,
+  viewerSeat,
+  nameOf,
+  isHost,
+  onAction,
+  connectedSeats,
+  botSeats,
+}: {
+  state: PetState;
+  viewerSeat: number;
+  nameOf: (s: number) => string;
+  isHost: boolean;
+  onAction: (a: EngineAction) => void;
+  connectedSeats: Set<number>;
+  botSeats: Set<number>;
+}) {
   const sound = getPetGuardSound;
   const rec = state.history[state.round];
   const sc = scenarioOf(state);
   const allFrames = useMemo(() => rec.subs.map((sub, seat) => recordSim(sc, sub.pieces, rec.results[seat].twistIn, rec.seed)), [rec, sc]);
   const maxLen = Math.max(...allFrames.map((f) => f.length));
-  const [fi, setFi] = useState(0);
+  const [playFi, setFi] = useState(0);
   const [speed, setSpeed] = useState(1);
-  const done = fi >= maxLen - 1;
-  const me = viewerSeat >= 0 && viewerSeat < state.playerCount ? viewerSeat : 0;
+  const seated = viewerSeat >= 0 && viewerSeat < state.playerCount;
+  const me = seated ? viewerSeat : 0;
   const { ref, cell } = useBoardWidth(432);
   const small = Math.max(8, Math.floor(Math.min(cell * 0.55, 200 / W)));
   const [doneAt, setDoneAt] = useState<number | null>(null);
+  const [myEndAt, setMyEndAt] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const myRes = rec.results[me];
+  const myLen = allFrames[me].length;
 
-  const finish = () => {
-    setFi(maxLen - 1);
-    setDoneAt((d) => {
-      if (d === null && rec.results[me]?.survived) sound().play("survive");
-      return d ?? Date.now();
-    });
-  };
+  // skip vote: half or more of the people (not bots) → everyone jumps to the table
+  const humans = Array.from({ length: state.playerCount }, (_, s) => s).filter((s) => !botSeats.has(s) && connectedSeats.has(s));
+  const need = skipNeeded(humans.length);
+  const skipCount = humans.filter((s) => state.skip?.[s]).length;
+  const skipPassed = skipCount >= need;
+  const iVoted = seated && !!state.skip?.[viewerSeat];
+  const iReady = seated && !!state.ready?.[viewerSeat];
+
+  // skip vote passed → everyone's replay jumps to the end
+  const fi = skipPassed ? maxLen - 1 : playFi;
+  const done = fi >= maxLen - 1;
+  const myEnded = fi >= myLen - 1;
 
   useEffect(() => {
     if (done) return;
@@ -451,23 +519,54 @@ function ReplayPanel({ state, viewerSeat, nameOf, isHost, onAction }: { state: P
       const next = Math.min(maxLen - 1, fi + speed);
       const mine = allFrames[me];
       for (let k = fi + 1; k <= next; k++) if (k < mine.length) for (const c of eventCues(mine[k].events)) sound().play(c);
-      if (next >= maxLen - 1) finish();
-      else setFi(next);
+      setFi(next);
     }, 1000 / TPS);
     return () => window.clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fi, done, speed, maxLen, allFrames, me, sound]);
 
+  // clock + "when did it end" bookkeeping (CLEAR / FAIL burst, reading timer)
+  const endRef = useRef({ done, myEnded, survived: myRes.survived, doneSeen: false, mineSeen: false });
   useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 500);
+    endRef.current.done = done;
+    endRef.current.myEnded = myEnded;
+    endRef.current.survived = myRes.survived;
+  }, [done, myEnded, myRes.survived]);
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const t = Date.now();
+      const e = endRef.current;
+      setNow(t);
+      if (e.myEnded && !e.mineSeen) {
+        e.mineSeen = true;
+        setMyEndAt(t);
+        sound().play(e.survived ? "survive" : "fail");
+      }
+      if (e.done && !e.doneSeen) {
+        e.doneSeen = true;
+        setDoneAt(t);
+      }
+    }, 150);
     return () => window.clearInterval(id);
-  }, []);
-  // host advances on its own after everyone has had time to read the table
-  const sentRef = useRef(false);
+  }, [sound]);
+
+  const readySent = useRef(false);
+  const sendReady = () => {
+    if (!seated || iReady || readySent.current) return;
+    readySent.current = true;
+    sound().play("vote");
+    onAction({ type: "ready", seat: viewerSeat, round: state.round });
+  };
+  // everyone's replay done + reading time → I'm ready (all ready → next round starts)
   useEffect(() => {
-    if (!isHost || sentRef.current || doneAt === null) return;
-    if (now - doneAt >= NEXT_DELAY_MS) {
-      sentRef.current = true;
+    if (doneAt !== null && now - doneAt >= READ_MS) sendReady();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now, doneAt]);
+  // host safety net for a seat that never reports
+  const fallbackSent = useRef(false);
+  useEffect(() => {
+    if (!isHost || fallbackSent.current || doneAt === null) return;
+    if (now - doneAt >= HOST_FALLBACK_MS) {
+      fallbackSent.current = true;
       onAction({ type: "next", round: state.round });
     }
   }, [isHost, now, doneAt, onAction, state.round]);
@@ -476,9 +575,14 @@ function ReplayPanel({ state, viewerSeat, nameOf, isHost, onAction }: { state: P
     const fr = allFrames[seat];
     return fr[Math.min(fi, fr.length - 1)];
   };
-  const myRes = rec.results[me];
+  const endedOf = (seat: number) => fi >= allFrames[seat].length - 1;
   const myTwist = myRes.twistIn >= 0 ? TWISTS[myRes.twistIn] : null;
   const order = [me, ...rec.results.map((r) => r.seat).filter((s) => s !== me)];
+  const showBurst = myEndAt !== null && now - myEndAt < BURST_MS;
+  const readyCount = (state.ready ?? []).filter(Boolean).length;
+  const readLeft = doneAt ? Math.max(0, Math.ceil((READ_MS - (now - doneAt)) / 1000)) : null;
+  const sorted = [...rec.results].sort((a, b) => b.score - a.score || a.seat - b.seat);
+  const myTick = frameOf(me).tick;
 
   return (
     <div className="flex flex-col gap-3">
@@ -494,77 +598,113 @@ function ReplayPanel({ state, viewerSeat, nameOf, isHost, onAction }: { state: P
               )}{" "}
               <span className="text-white/50 light:text-slate-500">(보낸 사람 {nameOf(senderOf(state, me))})</span>
             </span>
-            <span className="tabular-nums">
-              {frameOf(me).tick}/{myRes.ticks}틱
-            </span>
           </div>
-          <BoardCanvas sc={sc} frame={frameOf(me)} cell={cell} opts={{ petEmoji: PET_EMOJI[me % PET_EMOJI.length], ...fxAt(allFrames[me], Math.min(fi, allFrames[me].length - 1)) }} />
+          <div className="relative">
+            <BoardCanvas
+              sc={sc}
+              frame={frameOf(me)}
+              cell={cell}
+              opts={{ petEmoji: PET_EMOJI[me % PET_EMOJI.length], safe: myEnded && myRes.survived, ...fxAt(allFrames[me], Math.min(fi, myLen - 1)) }}
+            />
+            {showBurst && <OutcomeBurst survived={myRes.survived} sub={myRes.survived ? "펫을 지켜냈어요!" : HIT_LABEL[myRes.cause!]} score={myRes.score} />}
+            {myEnded && !showBurst && <MiniStamp survived={myRes.survived} />}
+          </div>
+          <div className="relative h-2 w-full overflow-hidden rounded-full bg-black/35 light:bg-slate-200">
+            <div
+              className={`absolute inset-y-0 left-0 rounded-full ${myEnded ? (myRes.survived ? "bg-emerald-400" : "bg-rose-500") : "bg-amber-300"}`}
+              style={{ width: `${(myTick / Math.max(1, myRes.ticks)) * 100}%` }}
+            />
+          </div>
+          <div className="flex w-full items-center justify-between text-[11px] tabular-nums text-white/60 light:text-slate-500">
+            <span>
+              ⏱ {myTick}/{myRes.ticks}틱
+            </span>
+            <span>{myEnded ? (myRes.survived ? "🛡️ 끝까지 버팀" : `💥 ${myRes.hitTick}틱에 피해`) : "재생 중…"}</span>
+          </div>
           <div className="flex w-full gap-1.5">
             {[1, 2, 4].map((sp) => (
-              <button key={sp} onClick={() => setSpeed(sp)} className={`flex-1 rounded-lg border py-1 text-xs ${speed === sp ? "border-amber-400 bg-amber-400/20" : "border-white/10 light:border-slate-200"} text-white light:text-slate-800`}>
+              <button
+                key={sp}
+                onClick={() => setSpeed(sp)}
+                className={`flex-1 rounded-lg border py-1 text-xs ${speed === sp ? "border-amber-400 bg-amber-400/20" : "border-white/10 light:border-slate-200"} text-white light:text-slate-800`}
+              >
                 ▶ {sp}배
               </button>
             ))}
-            <button onClick={finish} className="flex-1 rounded-lg border border-white/10 light:border-slate-200 py-1 text-xs text-white light:text-slate-800">
-              ⏭ 결과
+            <button
+              disabled={!seated || done}
+              onClick={() => {
+                sound().play("vote");
+                onAction({ type: "skip", seat: viewerSeat, round: state.round });
+              }}
+              className={`flex flex-[1.6] items-center justify-center gap-1 rounded-lg border py-1 text-xs font-bold disabled:opacity-40 ${iVoted ? "border-amber-400 bg-amber-500/25 text-amber-200 light:text-amber-700" : "border-white/15 text-white light:border-slate-300 light:text-slate-800"}`}
+              title="절반 이상이 누르면 모두의 재생을 건너뛰어요"
+            >
+              ⏩ 스킵 투표
+              <span className="rounded bg-black/40 px-1 font-mono text-[10px] text-amber-300 light:bg-slate-900/10 light:text-amber-700">
+                {skipCount}/{need}
+              </span>
             </button>
           </div>
         </div>
         <div className="grid w-full max-w-[432px] grid-cols-2 gap-2 lg:max-w-sm">
-          {order.slice(1).map((seat) => (
-            <div key={seat} className="flex flex-col items-center gap-0.5 text-[11px] text-white/80 light:text-slate-700">
-              <span className="truncate">
-                {PET_EMOJI[seat % PET_EMOJI.length]} {nameOf(seat)} · {TWISTS[rec.results[seat].twistIn]?.emoji}
-              </span>
-              <BoardCanvas sc={sc} frame={frameOf(seat)} cell={small} opts={{ petEmoji: PET_EMOJI[seat % PET_EMOJI.length], ...fxAt(allFrames[seat], Math.min(fi, allFrames[seat].length - 1)) }} />
-            </div>
-          ))}
+          {order.slice(1).map((seat) => {
+            const r = rec.results[seat];
+            return (
+              <div key={seat} className="flex flex-col items-center gap-0.5 text-[11px] text-white/80 light:text-slate-700">
+                <span className="truncate">
+                  {PET_EMOJI[seat % PET_EMOJI.length]} {nameOf(seat)} · {TWISTS[r.twistIn]?.emoji}
+                </span>
+                <div className="relative">
+                  <BoardCanvas
+                    sc={sc}
+                    frame={frameOf(seat)}
+                    cell={small}
+                    opts={{ petEmoji: PET_EMOJI[seat % PET_EMOJI.length], safe: endedOf(seat) && r.survived, ...fxAt(allFrames[seat], Math.min(fi, allFrames[seat].length - 1)) }}
+                  />
+                  {endedOf(seat) && <MiniStamp survived={r.survived} />}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
       {done && (
-        <div className="rounded-xl border border-white/10 bg-white/[0.04] light:border-slate-200 light:bg-white p-3">
-          <table className="w-full text-xs text-white/85 light:text-slate-700">
-            <thead>
-              <tr className="text-white/50 light:text-slate-500">
-                <th className="text-left font-normal">플레이어</th>
-                <th className="text-left font-normal">받은 변수</th>
-                <th className="text-left font-normal">결과</th>
-                <th className="text-right font-normal">🪙</th>
-                <th className="text-right font-normal">점수</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...rec.results]
-                .sort((a, b) => b.score - a.score || a.seat - b.seat)
-                .map((r) => (
-                  <tr key={r.seat} className={r.seat === me ? "font-semibold text-amber-200 light:text-amber-700" : ""}>
-                    <td className="py-0.5">
-                      {PET_EMOJI[r.seat % PET_EMOJI.length]} {nameOf(r.seat)}
-                    </td>
-                    <td>{TWISTS[r.twistIn] ? `${TWISTS[r.twistIn].emoji} ${TWISTS[r.twistIn].name}` : "-"}</td>
-                    <td>{r.survived ? "🛡️ 무사!" : `${HIT_LABEL[r.cause!]} (${r.hitTick}틱)`}</td>
-                    <td className="text-right">{r.spent}</td>
-                    <td className="text-right">+{r.score}</td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-          <p className="mt-2 text-[11px] text-white/50 light:text-slate-500">무사하면 10점 + 남긴 🪙 · 다치면 버틴 시간만큼 0~6점</p>
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <span className="text-xs text-white/60 light:text-slate-500">
-              {state.round + 1 >= ROUNDS ? "최종 결과로" : "다음 라운드로"} {doneAt ? Math.max(0, Math.ceil((NEXT_DELAY_MS - (now - doneAt)) / 1000)) : ""}초 뒤 넘어가요
-            </span>
-            {isHost && (
-              <button
-                onClick={() => {
-                  if (sentRef.current) return;
-                  sentRef.current = true;
-                  onAction({ type: "next", round: state.round });
-                }}
-                className="rounded-xl bg-amber-400 px-4 py-2 text-xs font-bold text-black hover:bg-amber-300"
+        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3 light:border-slate-200 light:bg-white" style={{ animation: "pg-slide .35s ease-out both" }}>
+          <div className="flex flex-col gap-1.5">
+            {sorted.map((r, k) => (
+              <div
+                key={r.seat}
+                className={`flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs ${r.survived ? "bg-emerald-500/15 light:bg-emerald-50" : "bg-rose-500/15 light:bg-rose-50"} ${r.seat === me ? "ring-1 ring-amber-400" : ""}`}
+                style={{ animation: `pg-slide .3s ease-out ${k * 0.08}s both` }}
               >
-                {state.round + 1 >= ROUNDS ? "🏆 최종 결과" : "다음 라운드 ▶"}
+                <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-black text-white ${r.survived ? "bg-emerald-500" : "bg-rose-600"}`}>{r.survived ? "CLEAR" : "FAIL"}</span>
+                <span className="text-base">{PET_EMOJI[r.seat % PET_EMOJI.length]}</span>
+                <span className="min-w-0 flex-1 truncate font-semibold text-white light:text-slate-800">{nameOf(r.seat)}</span>
+                <span className="hidden text-white/60 sm:inline light:text-slate-500">{TWISTS[r.twistIn] ? `${TWISTS[r.twistIn].emoji} ${TWISTS[r.twistIn].name}` : "-"}</span>
+                <span className="truncate text-white/70 light:text-slate-600">{r.survived ? "🛡️ 무사!" : `${HIT_LABEL[r.cause!]} (${r.hitTick}틱)`}</span>
+                <span className="w-8 shrink-0 text-right text-white/60 light:text-slate-500">🪙{r.spent}</span>
+                <span className="w-9 shrink-0 text-right text-sm font-black text-amber-200 light:text-amber-600">+{r.score}</span>
+                <span className="shrink-0" title={state.ready?.[r.seat] ? "준비 완료" : "보는 중"}>
+                  {state.ready?.[r.seat] ? "✅" : "👀"}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] text-white/50 light:text-slate-500">무사하면 10점 + 남긴 🪙 · 다치면 버틴 시간만큼 0~6점</p>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs text-white/70 light:text-slate-600">
+              ✅ 준비 {readyCount}/{state.playerCount} · 모두 준비되면 {state.round + 1 >= ROUNDS ? "최종 결과로" : "다음 라운드가"} 자동으로 시작돼요
+              {!iReady && seated && readLeft !== null && <> ({readLeft}초 뒤 자동 준비)</>}
+            </span>
+            {seated && (
+              <button
+                disabled={iReady}
+                onClick={sendReady}
+                className="rounded-xl bg-amber-400 px-4 py-2 text-xs font-bold text-black hover:bg-amber-300 disabled:bg-emerald-500 disabled:text-white"
+              >
+                {iReady ? "✅ 준비 완료 · 기다리는 중" : state.round + 1 >= ROUNDS ? "🏆 최종 결과 보기" : "다음 라운드 준비 ▶"}
               </button>
             )}
           </div>
@@ -576,15 +716,26 @@ function ReplayPanel({ state, viewerSeat, nameOf, isHost, onAction }: { state: P
 
 function FinalPanel({ state, nameOf, viewerSeat, onGameEnd }: { state: PetState; nameOf: (s: number) => string; viewerSeat: number; onGameEnd: () => void }) {
   const ranks = computeRankings(state);
+  const sound = getPetGuardSound;
+  const seated = viewerSeat >= 0 && viewerSeat < state.playerCount;
+  const mine = (seated && ranks.find((r) => r.seat === viewerSeat)) || ranks[0];
+  useEffect(() => {
+    sound().play(mine.rank === 1 ? "victory" : "fail");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 light:bg-amber-50 p-4">
-      <h3 className="text-center text-lg font-bold text-white light:text-slate-900">🏆 최종 결과</h3>
+    <div className="flex flex-col gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 light:bg-amber-50">
+      <FinalBanner rank={mine.rank} name={nameOf(mine.seat)} total={mine.total} />
       <div className="flex flex-col gap-1.5">
-        {ranks.map((r) => {
+        {ranks.map((r, k) => {
           const survived = state.history.filter((h) => h.results[r.seat]?.survived).length;
           return (
-            <div key={r.seat} className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${r.seat === viewerSeat ? "bg-amber-400/25" : "bg-black/20 light:bg-white"}`}>
-              <span className="w-6 font-bold text-white light:text-slate-900">{r.rank}</span>
+            <div
+              key={r.seat}
+              className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${r.rank === 1 ? "bg-gradient-to-r from-amber-400/40 to-amber-200/10" : r.seat === viewerSeat ? "bg-amber-400/20" : "bg-black/20 light:bg-white"}`}
+              style={{ animation: `pg-slide .35s ease-out ${0.4 + k * 0.1}s both` }}
+            >
+              <span className="w-6 text-lg font-black text-white light:text-slate-900">{r.rank === 1 ? "👑" : r.rank}</span>
               <span className="text-xl">{PET_EMOJI[r.seat % PET_EMOJI.length]}</span>
               <span className="flex-1 truncate text-white light:text-slate-800">{nameOf(r.seat)}</span>
               <span className="text-xs text-white/60 light:text-slate-500">
@@ -595,15 +746,19 @@ function FinalPanel({ state, nameOf, viewerSeat, onGameEnd }: { state: PetState;
           );
         })}
       </div>
-      <div className="grid grid-cols-6 gap-1 text-center text-[11px] text-white/70 light:text-slate-600">
+      <div className="grid grid-cols-3 gap-1 text-center text-[11px] text-white/70 sm:grid-cols-6 light:text-slate-600">
         {state.history.map((h, i) => {
-          const s = state.history[i] && scenarioOf(state, i);
-          const mine = h.results[viewerSeat];
+          const s = scenarioOf(state, i);
+          const res = h.results[viewerSeat];
           return (
-            <div key={i} className="rounded-lg bg-black/20 light:bg-white p-1">
+            <div key={i} className={`rounded-lg p-1 ${res ? (res.survived ? "bg-emerald-500/15" : "bg-rose-500/15") : "bg-black/20 light:bg-white"}`}>
               <div className="text-base">{s?.emoji}</div>
               <div className="truncate">{s?.name}</div>
-              {mine && <div>{mine.survived ? "🛡️" : "💥"} +{mine.score}</div>}
+              {res && (
+                <div className={`font-bold ${res.survived ? "text-emerald-300 light:text-emerald-600" : "text-rose-300 light:text-rose-600"}`}>
+                  {res.survived ? "CLEAR" : "FAIL"} +{res.score}
+                </div>
+              )}
             </div>
           );
         })}

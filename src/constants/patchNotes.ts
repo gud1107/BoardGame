@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.204.0",
+    releaseDate: "2026-11-24",
+    title: "🐶 멍냥 방어선 재난 예보 · CLEAR 연출",
+    changes: [
+      { game: "pet-guard", type: "FEAT", desc: "🚨 재난 예보 — 무엇이·어디서·언제·얼마나 오는지 한눈에, 판 위에 물줄기·빗줄기·벌 날아오는 길이 움직이며 보여요" },
+      { game: "pet-guard", type: "FEAT", desc: "⏩ 스킵 투표(절반 이상) · 모두 결과를 보면 다음 라운드가 자동으로 시작돼요" },
+      { game: "pet-guard", type: "IMPROVE", desc: "🛡️ CLEAR! / 💥 FAIL 큰 연출, 🏆 VICTORY 화면, 하늘·지형·물 그림과 화면 전체를 새로 다듬었어요" },
+    ],
+  },
+  {
     version: "v1.203.0",
     releaseDate: "2026-11-24",
     title: "🧬 만지면 내 꺼! 증강",

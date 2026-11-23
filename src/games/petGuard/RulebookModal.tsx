@@ -23,7 +23,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <h3 className={H3}>1. 라운드 진행</h3>
           <ol className="list-decimal space-y-1 pl-5">
             <li>
-              <b>설계 ({DESIGN_MS / 1000}초, 모두 동시에)</b>: 재난 설명과 위험이 나오는 곳(아이콘)을 보고 기물을 놓아요. 펫 바로 옆 8칸과 맨 윗줄엔 못 지어요. 같은 기물을 다시 누르면 치워요.
+              <b>설계 ({DESIGN_MS / 1000}초, 모두 동시에)</b>: 🚨 재난 예보(무엇이 · 어디서 · 언제 · 얼마나)와 판 위에서 움직이는 위험의 길을 보고 기물을 놓아요. 펫 바로 옆 8칸과 맨 윗줄엔 못 지어요. 같은 기물을 다시 누르면 치워요.
             </li>
             <li>
               <b>🔍 시험 가동</b>: 라운드마다 3번, 변수 없이 내 설계를 미리 돌려 볼 수 있어요.
@@ -33,6 +33,9 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
             </li>
             <li>
               <b>재난 시작</b>: 모두 제출하면 모든 판이 동시에 돌아가요. 시간이 끝나면 지금까지 놓은 대로 자동 제출돼요.
+            </li>
+            <li>
+              <b>결과 · 다음 라운드</b>: 내 판이 끝나면 🛡️ CLEAR / 💥 FAIL이 크게 떠요. 사람 절반 이상이 <b>⏩ 스킵 투표</b>를 누르면 재생을 건너뛰고, 모두 결과를 보고 준비되면(6초 뒤 자동 준비) 다음 라운드가 바로 시작돼요.
             </li>
           </ol>
         </section>

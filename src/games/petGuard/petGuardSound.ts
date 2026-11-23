@@ -31,6 +31,9 @@ const SFX = {
   breach: [fx.whoosh(200, 900, 0.9, 0.18), fx.thud(60, 0.8, 0.5)],
   hit: [fx.buzz(500, 120, 0.5, 0.16), ...fx.arp("pluck", ["E4", "C4", "A3"], 0.1, 0.3, 0.8)],
   survive: [...fx.arp("marimba", ["C5", "E5", "G5", "C6"], 0.07, 0.45, 0.9), ...fx.chord("bell", ["C5", "G5"], 1, 0.4, 0.3)],
+  fail: [fx.thud(60, 0.7, 0.55), ...fx.arp("brass", ["G3", "F#3", "F3", "E3"], 0.24, 0.5, 0.6)],
+  alarm: [fx.buzz(700, 1000, 0.25, 0.08), fx.buzz(700, 1000, 0.25, 0.08, 0.32), fx.buzz(700, 1000, 0.25, 0.08, 0.64)],
+  vote: [fx.pop(600, 1200, 0.1)],
   tick: [fx.click(2100, 0.1)],
   victory: [...fx.arp("marimba", ["C4", "E4", "G4", "C5", "E5", "G5", "C6"], 0.08, 0.6, 0.9), ...fx.chord("brass", ["C4", "E4", "G4", "C5"], 1.8, 0.5, 0.6)],
 } satisfies Record<string, SfxRecipe>;
