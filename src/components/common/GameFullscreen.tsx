@@ -47,6 +47,36 @@ export function fullscreenColumnPx(vw: number, zoom: number): number {
   return Math.floor((vw - PAGE_PAD_X) / zoom);
 }
 
+/** The board's main three.js (R3F) canvas: the largest one, at least half the column wide. */
+function mainR3fCanvas(root: HTMLElement): HTMLCanvasElement | null {
+  const minW = root.getBoundingClientRect().width * 0.5;
+  let best: HTMLCanvasElement | null = null;
+  let bestArea = 0;
+  for (const c of root.querySelectorAll("canvas")) {
+    // R3F wraps its canvas in a `width:100%;height:100%` div — 2D canvases with fixed pixel sizes are left alone.
+    if (c.parentElement?.style.height !== "100%") continue;
+    const r = c.getBoundingClientRect();
+    if (r.width < minW || r.height < 120) continue;
+    if (r.width * r.height > bestArea) {
+      bestArea = r.width * r.height;
+      best = c;
+    }
+  }
+  return best;
+}
+
+/** The canvas's wrappers up to its frame box (the ancestors exactly as tall as the canvas, give or take a border). */
+function sameHeightChain(canvas: HTMLCanvasElement, root: HTMLElement): HTMLElement[] {
+  const h = canvas.getBoundingClientRect().height;
+  const out: HTMLElement[] = [];
+  for (let n = canvas.parentElement; n && n !== root; n = n.parentElement) {
+    const nh = n.getBoundingClientRect().height;
+    if (nh > h + 8) break;
+    out.push(n);
+  }
+  return out;
+}
+
 type FsDoc = Document & { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => Promise<void> | void };
 type FsEl = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
 
@@ -122,6 +152,46 @@ export function useGameFullscreen(basePx: number) {
       if (raf) cancelAnimationFrame(raf);
     };
   }, [full]);
+
+  // 3D boards sit in fixed-height frames (h-[440px] etc., per game). In
+  // fullscreen, grow the main R3F canvas's frame by the empty space left
+  // under the page so the 3D view fills the monitor's height too.
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!full || !hasCanvas || !el) return;
+    let grown: { node: HTMLElement; prev: string }[] = [];
+    const reset = () => {
+      for (const g of grown) g.node.style.height = g.prev;
+      grown = [];
+    };
+    const apply = () => {
+      reset();
+      const target = mainR3fCanvas(el);
+      if (!target) return;
+      const extra = Math.floor(window.innerHeight - document.documentElement.scrollHeight - 8);
+      if (extra < 24) return;
+      const chain = sameHeightChain(target, el);
+      for (const node of chain) {
+        const h = node.getBoundingClientRect().height;
+        grown.push({ node, prev: node.style.height });
+        node.style.height = `${Math.round(h + extra)}px`;
+      }
+    };
+    let raf = requestAnimationFrame(apply);
+    const schedule = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(apply);
+    };
+    const mo = new MutationObserver(schedule);
+    mo.observe(el, { childList: true, subtree: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      cancelAnimationFrame(raf);
+      mo.disconnect();
+      window.removeEventListener("resize", schedule);
+      reset();
+    };
+  }, [full, hasCanvas]);
 
   // Leaving the page while fullscreen → hand the screen back.
   useEffect(
