@@ -64,6 +64,14 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.207.0",
+    releaseDate: "2026-11-24",
+    title: "✏️ 낙서 결투 살구색(살색) 잉크",
+    changes: [
+      { game: "ink-duel", type: "FEAT", desc: "✋ 13번째 잉크 살구색(살색) 추가 — 맞은 적을 폭발 반대쪽으로 밀쳐내요(두 번째 색이면 절반) · 사람·손 그림도 이제 살색으로" },
+    ],
+  },
+  {
     version: "v1.206.0",
     releaseDate: "2026-11-24",
     title: "⛄ 눈싸움 요새전 몰입 시점 · 눈 뭉치기 안내",

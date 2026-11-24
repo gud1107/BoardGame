@@ -19,11 +19,12 @@ export const INK_COLORS = [
   "#ec4899", // 9 vampire
   "#9ca3af", // 10 chaos
   "#3730a3", // 11 dark
+  "#f2b48c", // 12 palm (살구색 / skin tone)
 ] as const;
-export type InkColor = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
-export const ELEMENTS = ["none", "fire", "ice", "poison", "shock", "slow", "stun", "curse", "crush", "vampire", "chaos", "dark"] as const;
+export type InkColor = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
+export const ELEMENTS = ["none", "fire", "ice", "poison", "shock", "slow", "stun", "curse", "crush", "vampire", "chaos", "dark", "palm"] as const;
 export type Element = (typeof ELEMENTS)[number];
-export const COLOR_NAMES = ["검정", "빨강", "파랑", "초록", "노랑", "하늘", "갈색", "보라", "주황", "분홍", "회색", "남색"];
+export const COLOR_NAMES = ["검정", "빨강", "파랑", "초록", "노랑", "하늘", "갈색", "보라", "주황", "분홍", "회색", "남색", "살구"];
 export const ELEMENT_LABEL: Record<Element, string> = {
   none: "⚫ 강철 (피해 +10%)",
   fire: "🔴 화염 (🔥 화상)",
@@ -37,6 +38,7 @@ export const ELEMENT_LABEL: Record<Element, string> = {
   vampire: "🩷 흡혈 (준 피해의 30% 회복)",
   chaos: "⚪ 혼돈 (50% 😵 혼란)",
   dark: "🔷 어둠 (🕶️ 실명)",
+  palm: "✋ 손바닥 (🫸 밀쳐내기)",
 };
 
 /** A stroke: color + flat [x0,y0,x1,y1,...] integer coordinates. */
@@ -44,6 +46,9 @@ export interface Stroke {
   c: InkColor;
   p: number[];
 }
+
+/** ✋ Palm ink knockback (px) as the main color; half as the second color. */
+export const PALM_KNOCKBACK = 36;
 
 export const PAD_SIZE = 200;
 export const INK_PER_TURN = 100;
@@ -756,6 +761,9 @@ export function analyzeWeapon(strokes: readonly Stroke[]): WeaponStats {
   if (element === "none" || element2 === "none") damage *= 1.1;
   if (element === "stun" || element2 === "stun") damage *= 0.8;
   if (element === "shock" || element2 === "shock") chains += 1;
+  // ✋ Palm (skin-tone ink): shoves hit enemies away — full as the main color, half as the second.
+  if (element === "palm") knockback += PALM_KNOCKBACK;
+  else if (element2 === "palm") knockback += PALM_KNOCKBACK / 2;
   const critChance = clamp(spikes * 0.07 + critBonus, 0, 0.45);
 
   return {

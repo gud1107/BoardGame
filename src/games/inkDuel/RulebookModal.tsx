@@ -46,7 +46,7 @@ export default function InkDuelRulebookModal({ onClose }: { onClose: () => void 
         </section>
 
         <section>
-          <h3 className={h3}>② 색 → 효과 12종 (가장 많이 쓴 색)</h3>
+          <h3 className={h3}>② 색 → 효과 13종 (가장 많이 쓴 색)</h3>
           <div className={box}>
             <ul className="grid gap-1 text-xs text-white/70 sm:grid-cols-2 light:text-slate-600">
               <li>⚫ 검정 — 강철: 피해 +10%</li>
@@ -61,6 +61,7 @@ export default function InkDuelRulebookModal({ onClose }: { onClose: () => void 
               <li>🩷 분홍 — 흡혈: 준 피해의 30% 회복</li>
               <li>⚪ 회색 — 😵 혼란(50% 확률): 스탑에선 다음 발사 각도가 4~9° 빗나감, 무빙에선 좌우 조작 반대</li>
               <li>🔷 남색 — 🕶️ 실명(50% 확률): 조준선·바람이 안 보이고 시야가 어두워지며, 발사 힘이 ±3~8 흔들림</li>
+              <li>✋ 살구색(살색) — 🫸 밀쳐내기: 맞은 적을 폭발 반대쪽으로 36px 밀어냄 (두 번째 색이면 절반, 물결과 겹치면 더 멀리)</li>
             </ul>
             <p className="mt-1.5 text-xs text-white/60 light:text-slate-500">🎨 두 번째로 많이 쓴 색이 잉크의 35% 이상이면 그 효과도 50% 확률로 붙어요(흡혈은 절반). 기절·혼란·느려짐·실명은 연속으로 걸리지 않아요.</p>
           </div>

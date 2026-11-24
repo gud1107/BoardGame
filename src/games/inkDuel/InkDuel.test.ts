@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { seededRng } from "@/lib/rng";
-import { analyzeWeapon, dcos, dsin, totalInk, type Stroke } from "./analyze";
+import { analyzeWeapon, dcos, dsin, PALM_KNOCKBACK, totalInk, type Stroke } from "./analyze";
 import {
   applyAction,
   applyMove,
@@ -85,6 +85,16 @@ describe("analyzeWeapon", () => {
     expect(analyzeWeapon([line(10, 100, 190, 100, 20, 1)]).element).toBe("fire");
     expect(analyzeWeapon([zigzag(4)]).element).toBe("shock");
     expect(analyzeWeapon([zigzag(4)]).chains).toBe(analyzeWeapon([zigzag(0)]).chains + 1);
+  });
+  it("skin-tone (palm) ink adds knockback: full as the main color, half as the second", () => {
+    const plain = analyzeWeapon([line(10, 100, 190, 100, 20, 0)]);
+    const palm = analyzeWeapon([line(10, 100, 190, 100, 20, 12)]);
+    expect(palm.element).toBe("palm");
+    expect(palm.knockback).toBe(plain.knockback + PALM_KNOCKBACK);
+    const mixed = analyzeWeapon([line(10, 100, 190, 100, 20, 1), line(10, 140, 150, 140, 20, 12)]);
+    expect(mixed.element).toBe("fire");
+    expect(mixed.element2).toBe("palm");
+    expect(mixed.knockback).toBe(PALM_KNOCKBACK / 2);
   });
 });
 

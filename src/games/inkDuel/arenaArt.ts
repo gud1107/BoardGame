@@ -51,6 +51,7 @@ export const ELEMENT_GLOW: Record<Element, string> = {
   vampire: "#f472b6",
   chaos: "#cbd5e1",
   dark: "#4338ca",
+  palm: "#fdba74",
 };
 
 const FONT = "'Gaegu', 'Jua', 'Comic Sans MS', sans-serif";

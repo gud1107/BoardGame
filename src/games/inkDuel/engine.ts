@@ -20,6 +20,7 @@ import {
   dcos,
   degToRad,
   dsin,
+  INK_COLORS,
   INK_PER_TURN,
   PAD_SIZE,
   strokesValid,
@@ -1142,7 +1143,7 @@ function botColor(state: InkDuelState, seat: SeatIndex, t: Template, rng: () => 
   if (t === "lightning" && rng() < 0.5) return 4;
   const enemies = state.players.filter((p) => p.alive && p.seat !== seat);
   const statusOfColor: Partial<Record<number, StatusId>> = { 1: "burn", 2: "freeze", 3: "poison", 5: "slow", 6: "stun", 7: "weaken", 8: "vulnerable", 10: "confuse", 11: "blind" };
-  const options = Array.from({ length: 12 }, (_, c) => c).filter((c) => {
+  const options = Array.from({ length: INK_COLORS.length }, (_, c) => c).filter((c) => {
     const st = statusOfColor[c];
     return !st || !enemies.every((e) => (e.status[st] ?? 0) > 0);
   }) as InkColor[];

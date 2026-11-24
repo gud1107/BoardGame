@@ -54,6 +54,7 @@ const ELEMENT_CARD: Record<WeaponStats["element"], { from: string; to: string; f
   vampire: { from: "#f472b6", to: "#be185d", foil: "#fce7f3" },
   chaos: { from: "#cbd5e1", to: "#64748b", foil: "#f1f5f9" },
   dark: { from: "#4338ca", to: "#1e1b4b", foil: "#e0e7ff" },
+  palm: { from: "#f2b48c", to: "#b4673d", foil: "#fff1e6" },
 };
 
 function StatBar({ label, value, max, text }: { label: string; value: number; max: number; text: string }) {

@@ -242,7 +242,7 @@ export function InkPalette({ color, onChange }: { color: InkColor; onChange: (c:
         </button>
         {open && (
           // Centered on the screen (not the swatch) so it never spills off a narrow phone.
-          <div className="fixed bottom-24 left-1/2 z-40 grid w-max -translate-x-1/2 grid-cols-6 gap-2 rounded-2xl border border-white/15 bg-slate-900/95 p-2.5 shadow-2xl light:border-slate-300 light:bg-white">
+          <div className="fixed bottom-24 left-1/2 z-40 grid w-max -translate-x-1/2 grid-cols-7 gap-2 rounded-2xl border border-white/15 bg-slate-900/95 p-2.5 shadow-2xl light:border-slate-300 light:bg-white">
             {INK_COLORS.map((c, i) => dot(c, i, "h-8 w-8"))}
           </div>
         )}
