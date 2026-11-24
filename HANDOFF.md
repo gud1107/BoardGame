@@ -13,8 +13,8 @@
 
 요청: "그림전화기 공개게임방이 안보입니다. 다른 것도 동일한지 개선". 공용 코드 `src/lib/activeRooms/`, `src/lib/supabase/client.ts` — 게임별 수정 없음.
 - **원인**: 운영 Supabase에 `active_rooms` 테이블이 아직 없음(REST PGRST205 재확인) → 공개방 목록은 Presence 채널 `lobby-active-rooms-v1` 하나에만 의존. Presence는 방장 소켓이 끊기는 순간 방을 지움 — 휴대폰 방장이 카톡으로 초대 링크를 보내러 앱을 바꾸거나, PC 방장이 다른 탭을 보면(백그라운드 타이머 1분 제한 → 하트비트 지연) 방이 목록에서 사라짐. 새 브라우저 2개로 운영 재현 시엔 그림 전화기 방이 정상 표시됨(로비·게임 화면 둘 다, 1~4초) → 게임 코드 문제 아님, 모든 게임 공통.
-- **수정**: ① `presenceGrace.ts` — 작별 인사 없이 사라진 방은 45초(`PRESENCE_GRACE_MS`) 유지. 방장이 진짜 닫을 때(시작·나가기·탭 닫기 `pagehide`)는 `room-closed` 브로드캐스트(+ 자기 탭 목록) 후 untrack → 즉시 사라짐. 알림마다 `session` 토큰이라 재대결 후 같은 코드로 다시 올린 방은 안 가려짐. ② 탭 복귀·online·pageshow에 다시 track, 채널이 `closed`면 removeChannel 후 새로 엶. ③ Supabase 클라이언트 `realtime: { worker: true }`(브라우저만) — 하트비트를 Web Worker에서 돌려 백그라운드 탭에서도 안 끊김(모든 게임 방 채널에도 적용).
-- **확인**: presenceGrace 테스트 5개, tsc·eslint 0. 배포 후 운영에서 2브라우저 재확인(아래 요약 참고).
+- **수정**: ① `presenceGrace.ts` — 작별 인사 없이 사라진 방은 45초(`PRESENCE_GRACE_MS`) 유지. 방장이 진짜 닫을 때(시작·나가기)는 `room-closed` 채널 브로드캐스트(+ 자기 탭 목록) 후 untrack → 즉시 사라짐. 탭 닫기(`pagehide`)는 소켓이 먼저 죽어 채널 메시지가 안 나가서(운영 확인: 45초 그대로 남음) REST `/realtime/v1/api/broadcast` + `fetch keepalive`로 보냄(202 확인). bfcache 복귀(`pageshow.persisted`)면 session을 새로 바꿔 다시 올림. 알림마다 `session` 토큰이라 재대결 후 같은 코드로 다시 올린 방은 안 가려짐. ② 탭 복귀·online·pageshow에 다시 track, 채널이 `closed`면 removeChannel 후 새로 엶. ③ Supabase 클라이언트 `realtime: { worker: true }`(브라우저만) — 하트비트를 Web Worker에서 돌려 백그라운드 탭에서도 안 끊김(모든 게임 방 채널에도 적용).
+- **확인**: presenceGrace 테스트 5개, tsc·eslint 0. 운영(v1.208.0) 2브라우저: 방장 오프라인 40초+ 동안 목록 유지, 복귀 후 유지. 1차 배포에선 탭 닫기 후 49초에 사라짐 → keepalive 수정(fix 커밋) 후 재측정.
 - **남은 것**: 진짜로 탭이 죽은 방(작별 없음)은 최대 45초 유령으로 보일 수 있음. 휴대폰 실기기 앱 전환은 미확인. 근본 해결은 `supabase/base_tables.sql` 실행(테이블 경로 90초 유지)인데 사용자 작업 필요.
 
 ## ✏️ 낙서 결투 살구색(살색) 잉크 — 2026-11-24 (패치 v1.207.0)

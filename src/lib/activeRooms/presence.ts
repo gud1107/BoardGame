@@ -160,11 +160,35 @@ if (typeof window !== "undefined") {
   };
   document.addEventListener("visibilitychange", onReturn);
   window.addEventListener("online", onReturn);
-  window.addEventListener("pageshow", onReturn);
-  // Closing / navigating the tab: tell watchers now instead of leaving a ghost.
-  window.addEventListener("pagehide", () => {
-    if (myRoom) sendClosed(myRoom);
+  window.addEventListener("pageshow", (e) => {
+    // Back from the bfcache after pagehide announced a close: re-list under
+    // a fresh session, since watchers now hide the old one.
+    if (e.persisted && myRoom) myRoom.session = Math.random().toString(36).slice(2, 12);
+    onReturn();
   });
+  // Closing / navigating the tab: tell watchers now instead of leaving a
+  // ghost. The socket dies with the page before a channel message gets out
+  // (prod check: the room lingered the full grace), so this goes over the
+  // REST broadcast endpoint with `keepalive`, which outlives the page.
+  window.addEventListener("pagehide", () => {
+    if (myRoom) sendClosedOnUnload(myRoom);
+  });
+}
+
+function sendClosedOnUnload(room: PresenceRoom): void {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return;
+  try {
+    void fetch(`${url}/realtime/v1/api/broadcast`, {
+      method: "POST",
+      keepalive: true,
+      headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: [{ topic: TOPIC, event: CLOSED_EVENT, payload: { id: room.id, session: room.session ?? "" } }] }),
+    }).catch(() => {});
+  } catch {
+    // best-effort
+  }
 }
 
 /** Live presence room list; returns an unsubscribe. Never throws. */
@@ -191,7 +215,7 @@ export function announcePresenceRoom(): {
   return {
     update(room) {
       if (!ok) return;
-      mine = { ...room, id: `${room.gameId}:${room.roomCode}`, session };
+      mine = { ...room, id: `${room.gameId}:${room.roomCode}`, session: mine?.session ?? session };
       myRoom = mine;
       if (subscribed) void channel?.track(mine).catch(() => {});
     },
