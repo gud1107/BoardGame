@@ -55,7 +55,8 @@ function mainR3fCanvas(root: HTMLElement): HTMLCanvasElement | null {
   for (const c of root.querySelectorAll("canvas")) {
     // R3F wraps its canvas in a `width:100%;height:100%` div — 2D canvases with fixed pixel sizes are left alone.
     if (c.parentElement?.style.height !== "100%") continue;
-    const r = c.getBoundingClientRect();
+    // Measure the wrapper: right after entering fullscreen the canvas itself still has its old, narrower size.
+    const r = c.parentElement.getBoundingClientRect();
     if (r.width < minW || r.height < 120) continue;
     if (r.width * r.height > bestArea) {
       bestArea = r.width * r.height;
@@ -75,6 +76,55 @@ function ancestorChain(canvas: HTMLCanvasElement, root: HTMLElement): HTMLElemen
   const out: HTMLElement[] = [];
   for (let n = canvas.parentElement; n && n !== root; n = n.parentElement) out.push(n);
   return out;
+}
+
+/** Keeps the main R3F frame grown into the empty space under the column; returns the cleanup. */
+export function watchFrameGrowth(el: HTMLElement): () => void {
+  const column = el.parentElement ?? el;
+  let grown: { node: HTMLElement; prev: string }[] = [];
+  const reset = () => {
+    for (const g of grown) g.node.style.height = g.prev;
+    grown = [];
+  };
+  const freeSpace = () => Math.floor(window.innerHeight - (column.getBoundingClientRect().bottom + window.scrollY) - 4);
+  const apply = () => {
+    reset();
+    const target = mainR3fCanvas(el);
+    if (!target) return;
+    // (documentElement.scrollHeight never drops below the viewport, so measure the column itself.)
+    const extra = freeSpace();
+    if (extra < 24) return;
+    const chain = ancestorChain(target, el)
+      .filter((node) => node.style.height !== "100%") // R3F's own wrappers follow their parent
+      .map((node) => ({ node, h: node.getBoundingClientRect().height }));
+    for (const { node, h } of chain) {
+      grown.push({ node, prev: node.style.height });
+      node.style.height = `${Math.round(h + extra)}px`;
+    }
+    if (freeSpace() < -8) reset(); // the layout didn't absorb it — never introduce scrolling
+  };
+  // Coalesce without cancelling: boards that mutate every frame must not starve the pending pass.
+  let raf = 0;
+  const schedule = () => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      apply();
+    });
+  };
+  schedule();
+  const mo = new MutationObserver(schedule);
+  mo.observe(el, { childList: true, subtree: true });
+  const ro = new ResizeObserver(schedule);
+  ro.observe(column);
+  window.addEventListener("resize", schedule);
+  return () => {
+    cancelAnimationFrame(raf);
+    mo.disconnect();
+    ro.disconnect();
+    window.removeEventListener("resize", schedule);
+    reset();
+  };
 }
 
 type FsDoc = Document & { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => Promise<void> | void };
@@ -159,39 +209,7 @@ export function useGameFullscreen(basePx: number) {
   useEffect(() => {
     const el = contentRef.current;
     if (!full || !hasCanvas || !el) return;
-    let grown: { node: HTMLElement; prev: string }[] = [];
-    const reset = () => {
-      for (const g of grown) g.node.style.height = g.prev;
-      grown = [];
-    };
-    const apply = () => {
-      reset();
-      const target = mainR3fCanvas(el);
-      if (!target) return;
-      // Empty space under the page column (documentElement.scrollHeight never drops below the viewport, so measure the column itself).
-      const frame = el.parentElement ?? el;
-      const extra = Math.floor(window.innerHeight - (frame.getBoundingClientRect().bottom + window.scrollY) - 4);
-      if (extra < 24) return;
-      const chain = ancestorChain(target, el).map((node) => ({ node, h: node.getBoundingClientRect().height }));
-      for (const { node, h } of chain) {
-        grown.push({ node, prev: node.style.height });
-        node.style.height = `${Math.round(h + extra)}px`;
-      }
-    };
-    let raf = requestAnimationFrame(apply);
-    const schedule = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(apply);
-    };
-    const mo = new MutationObserver(schedule);
-    mo.observe(el, { childList: true, subtree: true });
-    window.addEventListener("resize", schedule);
-    return () => {
-      cancelAnimationFrame(raf);
-      mo.disconnect();
-      window.removeEventListener("resize", schedule);
-      reset();
-    };
+    return watchFrameGrowth(el);
   }, [full, hasCanvas]);
 
   // Leaving the page while fullscreen → hand the screen back.
