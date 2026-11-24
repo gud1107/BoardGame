@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fullscreenZoom } from "./GameFullscreen";
+import { fullscreenColumnPx, fullscreenZoom } from "./GameFullscreen";
 
 describe("fullscreenZoom", () => {
   it("never shrinks below 1 (phones, small windows)", () => {
@@ -15,5 +15,17 @@ describe("fullscreenZoom", () => {
   it("is bounded by width for wide columns and capped at 2", () => {
     expect(fullscreenZoom(1920, 1080, 1536)).toBeCloseTo(1.23, 2);
     expect(fullscreenZoom(5120, 2880, 672)).toBe(2);
+  });
+});
+
+describe("fullscreenColumnPx", () => {
+  it("widens the zoomed column to span the whole monitor", () => {
+    const z = fullscreenZoom(1920, 1080, 672);
+    expect(fullscreenColumnPx(1920, z) * z).toBeLessThanOrEqual(1920 - 32);
+    expect(fullscreenColumnPx(1920, z) * z).toBeGreaterThan(1920 - 32 - 2);
+    expect(fullscreenColumnPx(1920, z)).toBeGreaterThan(672);
+  });
+  it("is safe before the viewport is measured", () => {
+    expect(fullscreenColumnPx(0, 1.38)).toBe(0);
   });
 });

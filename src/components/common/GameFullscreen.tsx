@@ -38,6 +38,15 @@ export function fullscreenZoom(vw: number, vh: number, basePx: number): number {
   return Math.max(1, Math.min(MAX_ZOOM, Math.floor(z * 100) / 100));
 }
 
+/** Horizontal padding of the immersive page wrapper (sm:px-4 on both sides). */
+const PAGE_PAD_X = 32;
+
+/** Unzoomed layout width so a `zoom`-scaled column spans the full viewport width. */
+export function fullscreenColumnPx(vw: number, zoom: number): number {
+  if (vw <= 0 || zoom <= 0) return 0;
+  return Math.floor((vw - PAGE_PAD_X) / zoom);
+}
+
 type FsDoc = Document & { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => Promise<void> | void };
 type FsEl = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
 
@@ -147,11 +156,14 @@ export function useGameFullscreen(basePx: number) {
   }, [full]);
 
   const zoom = full ? fullscreenZoom(vp.w, vp.h, basePx) : 1;
+  // Fill the whole monitor: canvas boards take the full width; DOM boards are
+  // scaled up by `zoom` AND their layout column widens to the remaining width
+  // (vw / zoom), so wide screens don't leave empty side margins.
   const contentStyle: CSSProperties | undefined = !full
     ? undefined
     : hasCanvas || zoom === 1
-      ? { maxWidth: Math.round(basePx * zoom), marginInline: "auto" }
-      : { maxWidth: basePx, marginInline: "auto", zoom };
+      ? { width: "100%", maxWidth: "none" }
+      : { width: `${fullscreenColumnPx(vp.w, zoom)}px`, maxWidth: "none", marginInline: "auto", zoom };
 
   return { full, toggle, contentRef, contentStyle, zoom: hasCanvas ? 1 : zoom };
 }
