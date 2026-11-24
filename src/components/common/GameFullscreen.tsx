@@ -65,15 +65,15 @@ function mainR3fCanvas(root: HTMLElement): HTMLCanvasElement | null {
   return best;
 }
 
-/** The canvas's wrappers up to its frame box (the ancestors exactly as tall as the canvas, give or take a border). */
-function sameHeightChain(canvas: HTMLCanvasElement, root: HTMLElement): HTMLElement[] {
-  const h = canvas.getBoundingClientRect().height;
+/**
+ * Every wrapper between the canvas and the column. Frames are fixed-height
+ * (h-[440px]…) and often hold the canvas in an absolutely positioned layer,
+ * so growing only the canvas's direct box wouldn't move the frame; growing
+ * the whole chain by the same amount keeps HUD overlays at their size.
+ */
+function ancestorChain(canvas: HTMLCanvasElement, root: HTMLElement): HTMLElement[] {
   const out: HTMLElement[] = [];
-  for (let n = canvas.parentElement; n && n !== root; n = n.parentElement) {
-    const nh = n.getBoundingClientRect().height;
-    if (nh > h + 8) break;
-    out.push(n);
-  }
+  for (let n = canvas.parentElement; n && n !== root; n = n.parentElement) out.push(n);
   return out;
 }
 
@@ -168,11 +168,12 @@ export function useGameFullscreen(basePx: number) {
       reset();
       const target = mainR3fCanvas(el);
       if (!target) return;
-      const extra = Math.floor(window.innerHeight - document.documentElement.scrollHeight - 8);
+      // Empty space under the page column (documentElement.scrollHeight never drops below the viewport, so measure the column itself).
+      const frame = el.parentElement ?? el;
+      const extra = Math.floor(window.innerHeight - (frame.getBoundingClientRect().bottom + window.scrollY) - 4);
       if (extra < 24) return;
-      const chain = sameHeightChain(target, el);
-      for (const node of chain) {
-        const h = node.getBoundingClientRect().height;
+      const chain = ancestorChain(target, el).map((node) => ({ node, h: node.getBoundingClientRect().height }));
+      for (const { node, h } of chain) {
         grown.push({ node, prev: node.style.height });
         node.style.height = `${Math.round(h + extra)}px`;
       }
