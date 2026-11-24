@@ -64,6 +64,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.208.0",
+    releaseDate: "2026-11-24",
+    title: "🌐 공개방이 목록에서 사라지던 문제 수정",
+    changes: [
+      { game: "common", type: "FIX", desc: "🌐 방장이 잠깐 다른 앱(카톡으로 초대 링크 보내기 등)이나 다른 탭으로 가도 공개방이 목록에서 바로 사라지지 않아요 — 45초까지 유지" },
+      { game: "common", type: "FIX", desc: "📡 백그라운드 탭에서도 실시간 연결이 끊기지 않게, 돌아오면 끊긴 공개방 연결을 다시 이어요 (모든 온라인 게임 공통)" },
+    ],
+  },
+  {
     version: "v1.207.0",
     releaseDate: "2026-11-24",
     title: "✏️ 낙서 결투 살구색(살색) 잉크",
