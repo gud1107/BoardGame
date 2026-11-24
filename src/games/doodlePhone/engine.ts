@@ -64,6 +64,16 @@ export interface TextPage extends PageBase {
 export interface DrawingPage extends PageBase {
   readonly kind: "drawing";
   readonly drawing: Drawing;
+  /** A bot's one-line explanation of what it added, shown once the album is revealed. */
+  readonly note?: string;
+}
+
+export const NOTE_MAX_CHARS = 60;
+
+function cleanNote(note: unknown): string | null {
+  if (typeof note !== "string") return null;
+  const text = note.trim();
+  return text.length > 0 && text.length <= NOTE_MAX_CHARS ? text : null;
 }
 export type Page = TextPage | DrawingPage;
 
@@ -95,7 +105,7 @@ export interface DoodlePhoneState {
 
 export type EngineAction =
   | { type: "SUBMIT_TEXT"; seat: SeatIndex; turn: number; text: string }
-  | { type: "SUBMIT_DRAWING"; seat: SeatIndex; turn: number; drawing: Drawing }
+  | { type: "SUBMIT_DRAWING"; seat: SeatIndex; turn: number; drawing: Drawing; note?: string }
   | { type: "TIMEOUT"; turn: number; seats: SeatIndex[] }
   | { type: "SHOWCASE_NEXT"; from: ShowcaseCursor }
   | { type: "REACT"; seat: SeatIndex; album: number; turn: number; emoji: ReactionEmoji }
@@ -378,7 +388,8 @@ export function applyAction(state: DoodlePhoneState, action: EngineAction): Dood
     case "SUBMIT_DRAWING": {
       if (!isSeat(state, action.seat) || !isTurn(state, action.turn) || turnKind(state, action.turn) !== "drawing") return state;
       if (!isValidDrawing(action.drawing)) return state;
-      return submit(state, action.seat, action.turn, { kind: "drawing", author: action.seat, auto: false, drawing: action.drawing });
+      const note = cleanNote(action.note); // a bad note is dropped, never the drawing
+      return submit(state, action.seat, action.turn, { kind: "drawing", author: action.seat, auto: false, drawing: action.drawing, ...(note ? { note } : {}) });
     }
     case "TIMEOUT": {
       if (!isTurn(state, action.turn) || state.timeouts[action.turn] || !Array.isArray(action.seats)) return state;

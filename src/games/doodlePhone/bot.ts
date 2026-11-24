@@ -880,7 +880,7 @@ const gap = (a0: number, a1: number, b0: number, b1: number) => Math.max(0, a0 -
  * above it, everything else standing on the same ground line beside it — as
  * big as the free space allows, from about the subject's size down.
  */
-function placeCompanion(space: FreeSpace, name: string, subject: Bounds, rng: () => number, ground = subject.maxY): Box | null {
+function placeCompanion(space: FreeSpace, name: string, subject: Bounds, rng: () => number, ground = subject.maxY, floor: number | null = null): Box | null {
   const sw = subject.maxX - subject.minX;
   const sh = subject.maxY - subject.minY;
   const cx = (subject.minX + subject.maxX) / 2;
@@ -892,7 +892,7 @@ function placeCompanion(space: FreeSpace, name: string, subject: Bounds, rng: ()
     // Templates stand on about y=90 of their 100 box.
     const feet = b.y + b.size * 0.9;
     // A house or a tree never floats: no spot near the ground line → try a smaller size, then give up.
-    if (Math.abs(feet - ground) > 45) return -Infinity;
+    if (Math.abs(feet - ground) > 45 || (floor !== null && feet > floor)) return -Infinity;
     // On the subject's own ground: right beside it. On a lower ground (subject up in the sky): anywhere along it.
     const beside = ground === subject.maxY ? side * 0.7 + gap(b.y, b.y + b.size, subject.minY, subject.maxY) * 0.8 : side * 0.15;
     return -Math.abs(feet - ground) * 1.4 - beside + noise;
@@ -920,7 +920,7 @@ function hatFor(space: FreeSpace, subject: Bounds, rng: () => number, level: Bot
   }
   for (const top of headTop > subject.minY ? [headTop, subject.minY] : [subject.minY]) {
     // The hat's brim is at y=70 of its box (a thick marker line): sit it right on top of the head.
-    const y = Math.round(top - size * 0.72 - 3);
+    const y = Math.round(top - size * 0.7 - 7);
     if (y + size * 0.26 < 0) continue;
     if (!space.hasNoInk(x + size * 0.08, y + size * 0.26, size * 0.84, size * 0.4)) continue;
     const pen = new Pen({ x, y, size }, rng, Math.min(1, wobbleFor(level)));
@@ -1122,11 +1122,141 @@ function inSketchStyle(ops: readonly DrawOp[], look: SketchLook): DrawOp[] {
   });
 }
 
+/** Crayon colors for a sketch the bot can't name. */
+const CRAYONS: readonly number[] = [C.amber, C.lightPink, C.cyan, C.lime, C.tan, C.orange];
+const MIN_REGION_CELLS = 10;
+const MAX_REGION_SHARE = 0.4;
+const MAX_REGIONS = 6;
+
+/**
+ * The closed parts of a line sketch, as raster cells, biggest first. People
+ * leave small gaps where an outline should meet, so when nothing is closed
+ * the ink is thickened by a cell or two and tried again.
+ */
+function closedRegions(drawing: Drawing): number[][] {
+  const ink = Uint8Array.from(rasterize(drawing, isSceneryOp), (c) => (isInk(c) ? 1 : 0));
+  const near = (i: number): number[] => {
+    const x = i % RASTER_W;
+    return [...(x > 0 ? [i - 1] : []), ...(x < RASTER_W - 1 ? [i + 1] : []), ...(i >= RASTER_W ? [i - RASTER_W] : []), ...(i < ink.length - RASTER_W ? [i + RASTER_W] : [])];
+  };
+  let wall = ink;
+  for (let pad = 0; pad <= 2; pad++) {
+    if (pad > 0) {
+      const thinner = wall;
+      wall = Uint8Array.from(thinner, (v, i) => (v || near(i).some((n) => thinner[n]) ? 1 : 0));
+    }
+    const seen = Uint8Array.from(wall);
+    const regions: number[][] = [];
+    for (let start = 0; start < seen.length; start++) {
+      if (seen[start]) continue;
+      const cells = [start];
+      let open = false;
+      seen[start] = 1;
+      for (let k = 0; k < cells.length; k++) {
+        const x = cells[k] % RASTER_W;
+        const y = Math.floor(cells[k] / RASTER_W);
+        if (x === 0 || y === 0 || x === RASTER_W - 1 || y === RASTER_H - 1) open = true;
+        for (const n of near(cells[k])) {
+          if (seen[n]) continue;
+          seen[n] = 1;
+          cells.push(n);
+        }
+      }
+      if (open) continue;
+      // Grow back to the real lines (through a gap this reaches at most `pad` cells).
+      const own = new Set(cells);
+      for (let g = 0; g < pad; g++) for (const c of [...own]) for (const n of near(c)) if (!ink[n]) own.add(n);
+      if (own.size >= MIN_REGION_CELLS && own.size <= ink.length * MAX_REGION_SHARE) regions.push([...own]);
+    }
+    if (regions.length > 0) return regions.sort((a, b) => b.length - a.length).slice(0, MAX_REGIONS);
+  }
+  return [];
+}
+
+/**
+ * Crayon coloring of `cells`: thin horizontal strokes, one per run of cells.
+ * Never a paint-bucket op: a real flood fill works on pixels, so a hairline
+ * gap in someone's outline would paint the whole sheet.
+ */
+function crayon(cells: readonly number[], color: number): DrawOp[] {
+  const inside = new Set(cells);
+  const at = (i: number): Point => ({ x: Math.round((i % RASTER_W) * RASTER_CELL + 2), y: Math.round(Math.floor(i / RASTER_W) * RASTER_CELL + 2) });
+  return [...cells]
+    .sort((a, b) => a - b)
+    .filter((c) => c % RASTER_W === 0 || !inside.has(c - 1)) // the left end of every run
+    .map((from) => {
+      let to = from;
+      while ((to + 1) % RASTER_W !== 0 && inside.has(to + 1)) to++;
+      return strokeOp(color, 1, to === from ? [at(from)] : [at(from), at(to)]);
+    });
+}
+
+/** Colors in a line sketch: the colors its subject usually has, or friendly crayons when the bot can't name it. */
+function colorIn(drawing: Drawing, name: string | null, rng: () => number): DrawOp[] {
+  let colors: readonly number[] = shuffled(CRAYONS, Math.floor(rng() * 2 ** 31));
+  const template = name === null ? undefined : TEMPLATES.find((t) => t.name === name);
+  if (template) {
+    const pen = new Pen({ x: 120, y: 40, size: 240 }, () => 0.5, 0);
+    template.draw(pen);
+    // Black fills are eyes and noses, not a body color. A snowman stays white; other plain doodles get crayons.
+    const own = [...new Set(pen.ops.flatMap((op) => (op.k === "f" && typeof op.c === "number" && op.c !== C.black ? [op.c] : [])))];
+    if (own.length > 0) colors = own;
+    else if (name === "눈사람") return [];
+  }
+  return closedRegions(drawing).flatMap((cells, i) => crayon(cells, colors[i % colors.length]));
+}
+
 const REACT = {
-  novice: { companions: 1, backdrop: false, hat: 0, sparkles: 0 },
-  core: { companions: 1, backdrop: true, hat: 0.35, sparkles: 0 },
-  expert: { companions: 2, backdrop: true, hat: 0.6, sparkles: 3 },
+  novice: { companions: 2, backdrop: false, hat: 0, sparkles: 0, color: 0 },
+  core: { companions: 2, backdrop: true, hat: 0.5, sparkles: 2, color: 0.8 },
+  expert: { companions: 3, backdrop: true, hat: 0.75, sparkles: 4, color: 1 },
 } as const;
+
+/** Whether a bot already put this doodle on the sheet (its ops' kinds, colors and point counts, in a row) — one sun is enough. */
+function alreadyDrawn(drawing: Drawing, name: string): boolean {
+  const template = TEMPLATES.find((t) => t.name === name);
+  if (!template) return false;
+  const pen = new Pen({ x: 120, y: 40, size: 240 }, () => 0.5, 0);
+  template.draw(pen);
+  const key = (ops: readonly DrawOp[]) => `|${ops.map((op) => (op.k === "x" ? "x" : `${op.k}${op.c}${op.k === "s" ? `:${op.p.length}` : ""}`)).join("|")}|`;
+  return key(drawing.ops).includes(key(pen.ops));
+}
+
+/**
+ * What the bot dares to act on. Stricter than guessing: a guess has to name
+ * *something*, but the guessing bar calls a hand-drawn kite a flower and a
+ * painted car a pig — and then the pairing and the note look clueless.
+ * Measured: bot doodles score ≥ 0.88 painted / ≥ 0.92 as line art, hand
+ * sketches that matched the wrong thing ≤ 0.74, or tie with a runner-up.
+ */
+function readToReact(drawing: Drawing): { names: string[]; sure: boolean } {
+  const gap2 = (m: Match) => m.score - (m.runnerUp?.score ?? 0);
+  const certain = (m: Match) => (m.lineArt ? m.score >= 0.92 && gap2(m) >= 0.05 : m.score >= 0.86);
+  const { whole, sides } = readDrawing(drawing);
+  if (certain(whole)) return { names: [whole.name], sure: true };
+  if (sides && sides.every(certain)) return { names: [...new Set(sides.map((m) => m.name))], sure: true };
+  const likely = whole.lineArt ? whole.score >= 0.87 && gap2(whole) >= 0.06 : whole.score >= 0.79;
+  return { names: likely ? [whole.name] : [], sure: false };
+}
+
+/** Why the bot thinks its additions fit a picture it couldn't name. */
+function layoutReason(look: SketchLook): string {
+  if (look.big) return "그림이 커서";
+  if (look.inSky) return "하늘에 떠 있어서";
+  if (look.setting === "sea") return "파란색이라";
+  if (look.shape === "tall") return "길쭉해서";
+  if (look.shape === "wide") return "옆으로 넓어서";
+  return "동글동글해서";
+}
+
+/** One line for the results page about what the bot saw and did — only things it really drew. */
+function noteFor(reason: string, did: { colored: boolean; added: readonly string[]; hat: boolean }): string {
+  const things = [...new Set(did.added)].slice(0, 2);
+  if (did.hat) things.push("모자");
+  const drew = things.length > 0 ? `${josa(things.join("·"), "을", "를")} 그렸어요` : "";
+  if (did.colored) return drew ? `${reason} 색칠하고 ${drew}` : `${reason} 색칠해 봤어요`;
+  return drew ? `${reason} ${drew}` : `${reason} 살짝 꾸며 봤어요`;
+}
 
 /** Appends `extra` if the drawing still fits the size cap. */
 function withOps(drawing: Drawing, extra: readonly DrawOp[]): Drawing {
@@ -1145,33 +1275,51 @@ function withOps(drawing: Drawing, extra: readonly DrawOp[]): Drawing {
  * add more. Every existing op is kept, in order.
  */
 export function complementDrawing(base: Drawing, rng: () => number, level: BotLevel, hint = ""): Drawing {
+  return complementWithNote(base, rng, level, hint).drawing;
+}
+
+/** `complementDrawing` plus the bot's one-line explanation (null when there was no picture to react to). */
+export function complementWithNote(base: Drawing, rng: () => number, level: BotLevel, hint = ""): { drawing: Drawing; note: string | null } {
   const subject = subjectBounds(base);
   if (!subject) {
     const fresh = templatesIn(hint);
-    return withOps(base, drawTemplates(fresh.length > 0 ? fresh : [TEMPLATES[Math.floor(rng() * TEMPLATES.length)]], rng, level).ops);
+    return { drawing: withOps(base, drawTemplates(fresh.length > 0 ? fresh : [TEMPLATES[Math.floor(rng() * TEMPLATES.length)]], rng, level).ops), note: null };
   }
   const plan = REACT[botTier(level)];
-  const guess = explainGuess(base, rng);
-  const sure = guess.kind === "sure";
-  const seen = guess.names.filter((n) => TEMPLATE_NAMES.includes(n));
+  // Doodles bots drew are known for certain; on a sheet that has some, a reading of the whole mix
+  // ("케이크" for a car + flower + sun) only counts when it names one of them.
+  const drawn = TEMPLATE_NAMES.filter((n) => alreadyDrawn(base, n));
+  const read = readToReact(base);
+  const believable = drawn.length === 0 || read.names.every((n) => drawn.includes(n));
+  const seen = believable ? read.names : [];
+  const sure = believable && read.sure;
   const sketch = sketchOf(base, subject);
-  const space = new FreeSpace(base);
-  // A pen sketch gets its additions in the same pen: its ink color, its brush size, no paint bucket.
-  const styled = (ops: readonly DrawOp[]): DrawOp[] => (sketch.lineArt ? inSketchStyle(ops, sketch) : [...ops]);
   let out = base;
+
+  // 0. A pen sketch: the bot is the next artist, so it colors it in and adds in color too — more black lines
+  //    would just look unfinished. When it doesn't color (low level, no closed shape), it sticks to the sketch's pen.
+  if (sketch.lineArt && rng() < plan.color) out = withOps(out, colorIn(base, sure && seen.length === 1 ? seen[0] : null, rng));
+  const colored = out !== base;
+  const styled = (ops: readonly DrawOp[]): DrawOp[] => (sketch.lineArt && !colored ? inSketchStyle(ops, sketch) : [...ops]);
+  const space = new FreeSpace(out);
 
   // 1. Companions. Sure what it is → what goes with it. Only a hunch → just the harmless ones of those.
   //    No idea → go by how it looks (up in the sky, tall, wide, huge…), never a confident wrong pairing.
   const fromNames = [...new Set(seen.flatMap((n) => COMPANIONS[n] ?? []))];
-  const pool = sure ? fromNames : fromNames.filter((n) => SAFE_COMPANIONS.has(n));
-  const ideas = shuffled(pool.length > 0 ? pool : unknownCompanions(sketch), Math.floor(rng() * 2 ** 31));
+  const known = seen.length > 0 ? [] : drawn;
+  const pool = sure ? fromNames : [...new Set([...fromNames, ...known.flatMap((n) => COMPANIONS[n] ?? [])])].filter((n) => SAFE_COMPANIONS.has(n));
+  const options = pool.length > 0 ? pool : unknownCompanions(sketch);
+  const fresh = options.filter((n) => !alreadyDrawn(base, n));
+  const ideas = shuffled(fresh.length > 0 ? fresh : options, Math.floor(rng() * 2 ** 31));
   ideas.sort((a, b) => Number(seen.includes(a)) - Number(seen.includes(b)));
   // Something floating up high: ground things go along the bottom of the sheet, not beside it in mid-air.
-  const ground = sketch.inSky ? (groundLineAt(base) ?? CANVAS_H - 24) - 2 : subject.maxY;
-  let added = 0;
+  // Nothing stands below a ground line someone already drew.
+  const floor = groundLineAt(base);
+  const ground = floor !== null ? floor - 2 : sketch.inSky ? CANVAS_H - 24 : subject.maxY;
+  const added: string[] = [];
   for (const name of ideas) {
-    if (added >= plan.companions) break;
-    const box = placeCompanion(space, name, subject, rng, SKY_THINGS.has(name) ? subject.maxY : ground);
+    if (added.length >= plan.companions) break;
+    const box = placeCompanion(space, name, subject, rng, SKY_THINGS.has(name) ? subject.maxY : ground, floor);
     const template = TEMPLATES.find((t) => t.name === name);
     if (!box || !template) continue;
     const pen = new Pen(box, rng, wobbleFor(level));
@@ -1181,13 +1329,16 @@ export function complementDrawing(base: Drawing, rng: () => number, level: BotLe
     if (next === out) break;
     out = next;
     space.take(ops);
-    added++;
+    added.push(name);
   }
 
+  let hatted = false;
   // 2. A hat — only on a creature it's sure about (a hat on a "maybe car" would look silly).
   if (sure && seen.length === 1 && HAT_WEARERS.has(seen[0]) && sketch.shape !== "wide" && rng() < plan.hat) {
     const hat = styled(hatFor(space, subject, rng, level));
+    const before = out;
     out = withOps(out, hat);
+    hatted = out !== before;
     space.take(hat);
   }
 
@@ -1199,7 +1350,10 @@ export function complementDrawing(base: Drawing, rng: () => number, level: BotLe
   if (sparkles > 0) out = withOps(out, styled(sparklesAround(space, subject, rng, sparkles)));
   // Nothing fit anywhere (a packed sheet): at least a sparkle so the turn isn't a no-op.
   if (out === base) out = withOps(base, styled(sparklesAround(space, subject, rng, 2)));
-  return out;
+  if (out === base) return { drawing: base, note: null };
+  const seenAs = seen.join("·");
+  const reason = known.length > 0 ? `${known.slice(0, 2).join("·")} 곁에` : pool.length === 0 ? layoutReason(sketch) : sure ? josa(seenAs, "이라서", "라서") : `${seenAs} 같아서`;
+  return { drawing: out, note: noteFor(reason, { colored, added, hat: hatted }) };
 }
 
 /**
@@ -2023,7 +2177,9 @@ function candidates(state: DoodlePhoneState, seat: SeatIndex, level: BotLevel, r
     case "base": {
       // Even the careless version keeps the picture — dropping it would wipe the album's shared drawing.
       const base = prompt?.kind === "drawing" ? prompt.drawing : EMPTY_DRAWING;
-      return [drawing(addToDrawing(base, rng, level), 0), drawing(complementDrawing(base, rng, level, inspirationWord(state.seed, album)), 1)];
+      const { drawing: thoughtful, note } = complementWithNote(base, rng, level, inspirationWord(state.seed, album));
+      const action: EngineAction = { type: "SUBMIT_DRAWING", seat, turn, drawing: thoughtful, ...(note ? { note } : {}) };
+      return [drawing(addToDrawing(base, rng, level), 0), { action, score: 1 }];
     }
   }
 }

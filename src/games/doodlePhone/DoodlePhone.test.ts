@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { seededRng, shuffle } from "@/lib/rng";
-import { REACTIVE_NAMES, SCENERY_ALPHA, SCENE_PIECE_COUNT, addToDrawing, complementDrawing, dressForPrompt, chooseBotAction, isSceneryOp, nextAnimationFrame, sceneChoicesFor, scenePieceFor, getValidMoves, guessFromDrawing, botDrawingFor, inkByColor, nextBotActor, explainGuess, recognizeDrawing, redrawDrawing, templateNamesIn, TEMPLATE_NAMES } from "./bot";
+import { REACTIVE_NAMES, SCENERY_ALPHA, SCENE_PIECE_COUNT, addToDrawing, complementDrawing, complementWithNote, dressForPrompt, chooseBotAction, isSceneryOp, nextAnimationFrame, sceneChoicesFor, scenePieceFor, getValidMoves, guessFromDrawing, botDrawingFor, inkByColor, nextBotActor, explainGuess, recognizeDrawing, redrawDrawing, templateNamesIn, TEMPLATE_NAMES } from "./bot";
 import { RASTER_CELL, RASTER_W, rasterize } from "./raster";
 import { PROMPT_PATTERN_COUNT, generatePrompt, josa } from "./promptGen";
 import {
@@ -549,8 +549,10 @@ describe("game modes (modes.ts, rulebook §9)", () => {
     // A cat gets something that goes with a cat, not a random doodle.
     const cat = botDrawingFor("고양이", seededRng(3), 10).understood;
     for (let seed = 1; seed <= 6; seed++) {
-      const extra: Drawing = { v: 1, ops: complementDrawing(cat, seededRng(seed), 2).ops.slice(cat.ops.length) }; // novice: exactly one companion
-      expect(recognizeDrawing(extra), `seed ${seed}`).toSatisfy((seen: string[] | null) => seen !== null && seen.every((n) => ["물고기", "쥐", "공", "하트"].includes(n)));
+      const extra: Drawing = { v: 1, ops: complementDrawing(cat, seededRng(seed), 2).ops.slice(cat.ops.length) }; // novice: companions only
+      const { note } = complementWithNote(cat, seededRng(seed), 2);
+      expect(extra.ops.length).toBeGreaterThan(0);
+      expect(note, `seed ${seed}`).toMatch(/^고양이라서 (물고기|쥐|공|하트)(·(물고기|쥐|공|하트))?[을를] 그렸어요$/);
     }
     // A packed sheet still gets something, and a blank one gets a fresh doodle.
     expect(complementDrawing(EMPTY_DRAWING, seededRng(1), 6, "고양이").ops.length).toBeGreaterThan(0);
@@ -564,12 +566,16 @@ describe("game modes (modes.ts, rulebook §9)", () => {
     for (const [name, sketch] of Object.entries({ kite, giraffe, smiley })) {
       for (const level of [2, 6, 10] as const) {
         for (const seed of [1, 2, 3]) {
-          const out = complementDrawing(sketch, seededRng(seed), level);
+          const { drawing: out, note } = complementWithNote(sketch, seededRng(seed), level);
           const added = out.ops.slice(sketch.ops.length);
           expect(added.length, `${name} Lv.${level}`).toBeGreaterThan(0);
           expect(isValidDrawing(out)).toBe(true);
-          // Drawn in the sketch's own pen: black, thin, no paint bucket, no solid shapes.
-          for (const op of added) {
+          expect(note !== null && note.length <= 60, `${name}: ${note}`).toBe(true);
+          // It must not claim to know what these are ("꽃이라서" for a kite) — only what they look like.
+          expect(note, name).toMatch(name === "kite" ? /^하늘에 떠 있어서/ : name === "giraffe" ? /^길쭉해서/ : /^동글동글해서/);
+          if (level === 10 && name !== "giraffe") expect(note, name).toContain("색칠");
+          // Novices stay in the sketch's own pen: black, thin, no paint bucket, no solid shapes.
+          for (const op of level === 2 ? added : []) {
             expect(op.k, name).not.toBe("f");
             if (op.k !== "x" && op.k !== "f") expect([op.c, op.w <= 1, isShapeOp(op) && op.f === 1], `${name} Lv.${level}`).toEqual([1, true, false]);
           }
@@ -583,6 +589,23 @@ describe("game modes (modes.ts, rulebook §9)", () => {
     const grounded = complementDrawing(kite, seededRng(4), 10).ops.slice(kite.ops.length).filter((op) => !isSceneryOp(op));
     const low = unionBounds(grounded.filter((op) => (unionBounds([op])?.maxY ?? 0) > CANVAS_H / 2));
     if (low) expect(low.maxY).toBeGreaterThan(CANVAS_H * 0.7);
+  });
+
+  it("coloring a sketch with a gap in its outline stays inside, and the explanation travels with the page", () => {
+    const ring = strokeOp(1, 1, Array.from({ length: 41 }, (_, i) => ({ x: 240 + Math.cos(i * 0.153) * 70, y: 190 + Math.sin(i * 0.153) * 70 })));
+    const gappy: Drawing = { v: 1, ops: [ring] };
+    const { drawing: out, note } = complementWithNote(gappy, seededRng(3), 10);
+    expect(note).toContain("색칠");
+    const before = rasterize(gappy);
+    const after = rasterize(out);
+    expect(after[38 * RASTER_W + 48]).not.toBe(0); // the middle is colored
+    expect(before.every((c, i) => c === 0 || after[i] === c)).toBe(true);
+    expect(after.filter((c) => c === 0).length / after.length).toBeGreaterThan(0.5); // the sheet wasn't flooded
+
+    const s = startGame(4, 7, { mode: "COMPLEMENT" });
+    const submit = (n: unknown) => applyAction(s, { type: "SUBMIT_DRAWING", seat: 0, turn: 1, drawing: gappy, note: n as string }).albums[0][0];
+    expect(submit("하늘에 떠 있어서 구름을 그렸어요")).toMatchObject({ note: "하늘에 떠 있어서 구름을 그렸어요" });
+    for (const bad of ["x".repeat(61), "  ", 5, { a: 1 }]) expect(submit(bad)).toEqual({ kind: "drawing", author: 0, auto: false, drawing: gappy });
   });
 
   it("prompt drawings get the scene the sentence implies (faint scenery), novices stay bare", () => {

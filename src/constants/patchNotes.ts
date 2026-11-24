@@ -64,6 +64,17 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.211.0",
+    releaseDate: "2026-11-25",
+    title: "🖍️ 그림 전화기 봇이 밑그림을 색칠하고 이유를 말해요",
+    changes: [
+      { game: "doodle-phone", type: "FEAT", desc: "🖍️ 보완 모드 봇(Lv.4부터)이 검은 펜 밑그림의 닫힌 부분을 크레용으로 색칠하고 컬러로 덧그려요 — 선이 조금 벌어져 있어도 밖으로 안 번져요" },
+      { game: "doodle-phone", type: "FEAT", desc: "🤖 결과 화면에 봇의 한 줄 해설 — \"하늘에 떠 있어서 색칠하고 새·구름을 그렸어요\"" },
+      { game: "doodle-phone", type: "IMPROVE", desc: "🎨 봇이 더 많이 그려요(1~2개 → 2~3개, 모자·반짝이도) · 같은 해를 또 그리거나 땅선 아래에 그리지 않아요" },
+      { game: "doodle-phone", type: "FIX", desc: "👀 손그림을 엉뚱하게 확신하던 문제 수정 — 연을 꽃, 차를 돼지로 여기지 않고 생김새를 보고 반응해요" },
+    ],
+  },
+  {
     version: "v1.210.0",
     releaseDate: "2026-11-24",
     title: "✏️ 그림 전화기 봇이 손그림에도 자연스럽게 덧그려요",

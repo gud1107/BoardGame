@@ -51,7 +51,10 @@ export default function PageCard({
       ) : page.kind === "text" ? (
         <p className="rounded-xl bg-white/5 px-4 py-3 text-center text-lg font-bold break-keep text-white light:bg-slate-50 light:text-slate-900">“{page.text}”</p>
       ) : (
-        <DrawingView drawing={page.drawing} animateMs={animateMs} label={`${authorName}의 그림`} />
+        <>
+          <DrawingView drawing={page.drawing} animateMs={animateMs} label={`${authorName}의 그림`} />
+          {page.note && !repeated && <p className="text-center text-xs break-keep text-cyan-100/90 light:text-cyan-800">🤖 {page.note}</p>}
+        </>
       )}
       {footer}
     </article>
