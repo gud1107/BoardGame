@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.209.0",
+    releaseDate: "2026-11-24",
+    title: "🖍️ 그림 전화기 봇이 그림을 보고 덧그려요",
+    changes: [
+      { game: "doodle-phone", type: "IMPROVE", desc: "🖍️ 보완(덧그리기) 봇이 앞 그림을 알아보고 어울리는 걸 빈자리에 그려요 — 고양이 옆엔 물고기·공, 집 옆엔 나무·꽃, 로켓 주위엔 별·달" },
+      { game: "doodle-phone", type: "IMPROVE", desc: "🎩 머리에 모자 씌우기, 땅·바다·별·눈 배경, ✨ 반짝이까지 — 레벨이 높을수록 더 많이, 남의 그림 위엔 절대 덧칠 안 해요" },
+      { game: "doodle-phone", type: "IMPROVE", desc: "🌊 문장 그림도 장면을 살려요 — \"바다에서…\"면 물결, \"우주…\"면 별, 겨울엔 눈, 비 오면 빗방울 (Lv.4부터, 흐린 배경)" },
+    ],
+  },
+  {
     version: "v1.208.0",
     releaseDate: "2026-11-24",
     title: "🌐 공개방이 목록에서 사라지던 문제 수정",

@@ -21,7 +21,11 @@
  *   memory → redraw the previous picture by hand (wobblier at low levels);
  *   onion → `nextAnimationFrame`: the subject walks/hops
  *   on from where the last frame left it and one piece of background is added per frame;
- *   base → keep the picture and add a small doodle of its own.
+ *   base → `complementDrawing`: recognize the picture, then add what goes
+ *   with it (cat → fish beside it on the same ground, a hat on its head,
+ *   ground/sea/stars behind) only in the empty parts of the sheet.
+ * - Prompt drawings are dressed with the scene the sentence implies
+ *   (`dressForPrompt`: "바다에서…" → waves, "우주…" → stars) from core up.
  * - Opening prompts: usually invented on the spot (promptGen.ts — "케이크를
  *   훔친 원숭이"), sometimes a stock line; the nouns are always drawable.
  * - Icebreaker: a canned answer per question.
@@ -51,7 +55,7 @@ import { translateOp, unionBounds, type Bounds } from "./editing";
 import { ICEBREAKER_QUESTIONS, drawingReferenceFor, icebreakerQuestion, inspirationWord, openingChoices } from "./modes";
 import { generatePrompt, josa } from "./promptGen";
 import { BOT_OPENING_PROMPTS, FALLBACK_PROMPTS } from "./prompts";
-import { RASTER_W, rasterize, type Raster } from "./raster";
+import { RASTER_CELL, RASTER_H, RASTER_W, isInk, rasterize, type Raster } from "./raster";
 
 // ---------------------------------------------------------------------------
 // Doodle templates — authored in a 100×100 box
@@ -716,13 +720,405 @@ export function redrawDrawing(source: Drawing, rng: () => number, level: BotLeve
   return serializedLength(drawing) <= MAX_DRAWING_CHARS ? drawing : source;
 }
 
-/** Complement mode: keep every existing op and add one small doodle somewhere on the sheet. */
+/**
+ * The careless complement: keep every existing op and drop one random doodle
+ * anywhere on the sheet (it may land on top of the picture). This is the
+ * bot's "mistake" candidate — `complementDrawing` is the one that looks first.
+ */
 export function addToDrawing(base: Drawing, rng: () => number, level: BotLevel): Drawing {
   const size = 90 + rng() * 50;
   const box: Box = { x: rng() * (CANVAS_W - size), y: rng() * (CANVAS_H - size), size };
   const extra = drawTemplates([TEMPLATES[Math.floor(rng() * TEMPLATES.length)]], rng, level, [box]);
   const drawing: Drawing = { v: 1, ops: [...base.ops, ...extra.ops] };
   return serializedLength(drawing) <= MAX_DRAWING_CHARS ? drawing : base;
+}
+
+// ---------------------------------------------------------------------------
+// Reactive drawing — look at the picture, then add what belongs with it
+// ---------------------------------------------------------------------------
+
+/**
+ * What goes well next to each doodle: a cat gets a fish or a mouse, a house a
+ * tree or the sun, a rocket stars and the moon. Every name is a template.
+ */
+const COMPANIONS: Readonly<Record<string, readonly string[]>> = {
+  고양이: ["물고기", "쥐", "공", "하트"],
+  강아지: ["공", "집", "하트", "나무"],
+  집: ["나무", "해", "꽃", "구름"],
+  나무: ["새", "집", "꽃", "해"],
+  해: ["구름", "꽃", "무지개", "산"],
+  달: ["별", "구름", "집"],
+  별: ["달", "로켓", "별"],
+  하트: ["꽃", "하트", "사람"],
+  꽃: ["해", "꽃", "하트", "새"],
+  자동차: ["집", "나무", "산", "구름"],
+  물고기: ["물고기", "문어", "배"],
+  사람: ["강아지", "하트", "공", "꽃"],
+  피자: ["커피", "케이크", "사람"],
+  구름: ["번개", "해", "우산", "무지개"],
+  산: ["해", "구름", "나무", "새"],
+  로봇: ["번개", "휴대폰", "로켓"],
+  눈사람: ["나무", "집", "별"],
+  케이크: ["하트", "커피", "사람", "모자"],
+  우산: ["구름", "사람"],
+  문어: ["물고기", "배"],
+  모자: ["사람", "고양이", "토끼"],
+  번개: ["구름", "로봇"],
+  가게: ["사람", "자동차", "나무"],
+  비행기: ["구름", "해", "새", "산"],
+  새: ["나무", "구름", "해"],
+  토끼: ["꽃", "나무", "하트"],
+  곰: ["나무", "산", "하트"],
+  돼지: ["집", "꽃", "하트"],
+  원숭이: ["나무", "해"],
+  공룡: ["산", "나무", "번개"],
+  배: ["물고기", "구름", "해", "문어"],
+  책: ["커피", "사람", "휴대폰"],
+  공: ["강아지", "사람"],
+  기차: ["산", "구름", "나무"],
+  커피: ["케이크", "책", "휴대폰"],
+  휴대폰: ["하트", "번개", "사람"],
+  아이스크림: ["해", "사람", "하트"],
+  수박: ["해", "아이스크림"],
+  펭귄: ["눈사람", "물고기"],
+  개구리: ["꽃", "구름", "해"],
+  쥐: ["고양이", "피자"],
+  성: ["구름", "무지개", "해", "사람"],
+  무지개: ["구름", "해"],
+  로켓: ["별", "달"],
+  소: ["집", "나무", "꽃"],
+};
+/** When the bot can't tell what the picture is, it still adds something cheerful. */
+const GENERIC_COMPANIONS = ["하트", "꽃", "해", "구름", "새", "나무"];
+/** Things that live in the sky — placed near the top, and they don't need ground under them. */
+const SKY_THINGS = new Set(["해", "달", "별", "구름", "비행기", "새", "무지개", "번개", "로켓"]);
+/** Doodles that can wear a hat (the 모자 template sits on their head). */
+const HAT_WEARERS = new Set(["고양이", "강아지", "사람", "눈사람", "곰", "토끼", "돼지", "원숭이", "펭귄", "개구리", "로봇", "쥐", "소"]);
+
+/** Names used by the reactive tables, for tests. */
+export const REACTIVE_NAMES: readonly string[] = [...new Set([...Object.keys(COMPANIONS), ...Object.values(COMPANIONS).flat(), ...GENERIC_COMPANIONS, ...SKY_THINGS, ...HAT_WEARERS])];
+
+/**
+ * Where on the sheet there's still room, on the recognizer's 5px grid. A
+ * doodle placed in a free box never touches the existing lines, so its own
+ * fills can't leak into the picture and nothing gets covered up.
+ */
+class FreeSpace {
+  /** 1 = ink (or kept clear around ink). */
+  private readonly blocked: Uint8Array;
+  /** Exact ink, no padding — for "does this line cross anything". */
+  private readonly ink: Uint8Array;
+
+  constructor(drawing: Drawing, private readonly pad = 2) {
+    const raster = rasterize(drawing);
+    this.ink = Uint8Array.from(raster, (c) => (isInk(c) ? 1 : 0));
+    this.blocked = new Uint8Array(this.ink.length);
+    this.ink.forEach((v, i) => v && this.markCell(i % RASTER_W, Math.floor(i / RASTER_W)));
+  }
+
+  private markCell(cx: number, cy: number): void {
+    for (let y = Math.max(0, cy - this.pad); y <= Math.min(RASTER_H - 1, cy + this.pad); y++) {
+      for (let x = Math.max(0, cx - this.pad); x <= Math.min(RASTER_W - 1, cx + this.pad); x++) this.blocked[y * RASTER_W + x] = 1;
+    }
+  }
+
+  private static cells(x: number, y: number, w: number, h: number) {
+    return {
+      x0: Math.max(0, Math.floor(x / RASTER_CELL)),
+      y0: Math.max(0, Math.floor(y / RASTER_CELL)),
+      x1: Math.min(RASTER_W, Math.ceil((x + w) / RASTER_CELL)),
+      y1: Math.min(RASTER_H, Math.ceil((y + h) / RASTER_CELL)),
+    };
+  }
+
+  private anyIn(grid: Uint8Array, x: number, y: number, w: number, h: number): boolean {
+    const c = FreeSpace.cells(x, y, w, h);
+    for (let cy = c.y0; cy < c.y1; cy++) for (let cx = c.x0; cx < c.x1; cx++) if (grid[cy * RASTER_W + cx]) return true;
+    return false;
+  }
+
+  /** The rectangle is clear of ink and its padding. */
+  isFree(x: number, y: number, w: number, h: number): boolean {
+    return x >= 0 && y >= 0 && x + w <= CANVAS_W && y + h <= CANVAS_H && !this.anyIn(this.blocked, x, y, w, h);
+  }
+
+  /** The rectangle has no actual ink (padding ignored). */
+  hasNoInk(x: number, y: number, w: number, h: number): boolean {
+    return !this.anyIn(this.ink, x, y, w, h);
+  }
+
+  /** Reserve what was just drawn so the next addition goes elsewhere. */
+  take(ops: readonly DrawOp[]): void {
+    const raster = rasterize({ v: 1, ops: ops.filter((op) => op.k !== "f") });
+    raster.forEach((c, i) => {
+      if (!isInk(c)) return;
+      this.ink[i] = 1;
+      this.markCell(i % RASTER_W, Math.floor(i / RASTER_W));
+    });
+  }
+
+  /** The best-scoring free square of side `size` (scanned on an 8px grid), or null when none fits. */
+  find(size: number, score: (box: Box) => number): Box | null {
+    let best: Box | null = null;
+    let bestScore = -Infinity;
+    for (let y = 0; y + size <= CANVAS_H; y += 8) {
+      for (let x = 0; x + size <= CANVAS_W; x += 8) {
+        if (!this.isFree(x, y, size, size)) continue;
+        const s = score({ x, y, size });
+        if (s > bestScore) [best, bestScore] = [{ x, y, size }, s];
+      }
+    }
+    return best;
+  }
+}
+
+/** Gap between two ranges (0 when they overlap). */
+const gap = (a0: number, a1: number, b0: number, b1: number) => Math.max(0, a0 - b1, b0 - a1);
+
+/**
+ * Finds a spot for companion `name` next to `subject`: sky things high up
+ * above it, everything else standing on the same ground line beside it — as
+ * big as the free space allows, from about the subject's size down.
+ */
+function placeCompanion(space: FreeSpace, name: string, subject: Bounds, rng: () => number): Box | null {
+  const sw = subject.maxX - subject.minX;
+  const sh = subject.maxY - subject.minY;
+  const cx = (subject.minX + subject.maxX) / 2;
+  const sky = SKY_THINGS.has(name);
+  const noise = rng() * 24;
+  const score = (b: Box) => {
+    const side = gap(b.x, b.x + b.size, subject.minX, subject.maxX);
+    if (sky) return -b.y * 1.2 - Math.abs(b.x + b.size / 2 - cx) * 0.25 + noise;
+    // Templates stand on about y=90 of their 100 box.
+    const feet = b.y + b.size * 0.9;
+    return -Math.abs(feet - subject.maxY) * 1.4 - side * 0.7 - gap(b.y, b.y + b.size, subject.minY, subject.maxY) * 0.8 + noise;
+  };
+  for (let size = Math.min(170, Math.max(80, Math.min(sw, sh) * 0.8)); size >= 52; size *= 0.86) {
+    const box = space.find(Math.round(size), score);
+    if (box) return box;
+  }
+  return null;
+}
+
+/** A hat on `subject`'s head, if there's room right above it. */
+function hatFor(space: FreeSpace, subject: Bounds, rng: () => number, level: BotLevel): DrawOp[] {
+  const sw = subject.maxX - subject.minX;
+  const size = Math.round(Math.min(130, Math.max(44, sw * 0.62)));
+  const cx = (subject.minX + subject.maxX) / 2;
+  const x = Math.round(Math.min(CANVAS_W - size, Math.max(0, cx - size / 2)));
+  // Find the top of the head straight under the hat (between a cat's ears, not on their tips).
+  let headTop = subject.minY;
+  for (let y = subject.minY; y < subject.maxY; y += RASTER_CELL) {
+    if (!space.hasNoInk(x + size * 0.3, y, size * 0.4, RASTER_CELL)) {
+      headTop = y;
+      break;
+    }
+  }
+  for (const top of headTop > subject.minY ? [headTop, subject.minY] : [subject.minY]) {
+    // The hat's brim is at y=70 of its box (a thick marker line): sit it right on top of the head.
+    const y = Math.round(top - size * 0.72 - 3);
+    if (y + size * 0.26 < 0) continue;
+    if (!space.hasNoInk(x + size * 0.08, y + size * 0.26, size * 0.84, size * 0.4)) continue;
+    const pen = new Pen({ x, y, size }, rng, Math.min(1, wobbleFor(level)));
+    TEMPLATES.find((t) => t.name === "모자")?.draw(pen);
+    return pen.ops;
+  }
+  return [];
+}
+
+/** Little ✦ sparkles in the free space around `subject` — the bot "reacting" to a picture it likes. */
+function sparklesAround(space: FreeSpace, subject: Bounds, rng: () => number, count: number): DrawOp[] {
+  const ops: DrawOp[] = [];
+  const cx = (subject.minX + subject.maxX) / 2;
+  const cy = (subject.minY + subject.maxY) / 2;
+  for (let i = 0; i < count; i++) {
+    const want = rng() * Math.PI * 2;
+    const box = space.find(22, (b) => {
+      const bx = b.x + 11 - cx;
+      const by = b.y + 11 - cy;
+      const d = gap(b.x, b.x + 22, subject.minX, subject.maxX) + gap(b.y, b.y + 22, subject.minY, subject.maxY);
+      if (d > 50) return -Infinity;
+      const off = Math.abs(((Math.atan2(by, bx) - want + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+      return -d * 0.6 - off * 20;
+    });
+    if (!box) break;
+    const [x, y] = [box.x + 11, box.y + 11];
+    const r = 6 + rng() * 3;
+    const star = [strokeOp(C.amber, 1, [{ x, y: y - r }, { x, y: y + r }]), strokeOp(C.amber, 1, [{ x: x - r, y }, { x: x + r, y }])];
+    space.take(star);
+    ops.push(...star);
+  }
+  return ops;
+}
+
+/** A free horizontal band below `below` for a ground line (or the sea surface): its y, or null. */
+function groundLineY(space: FreeSpace, below: number): number | null {
+  for (let y = Math.round(below + 10); y <= CANVAS_H - 8; y += RASTER_CELL) {
+    if (space.hasNoInk(0, y - 8, CANVAS_W, 16)) return y;
+  }
+  return null;
+}
+
+/** Whether a background ground/sea line is already on the sheet (a previous artist added one). */
+function hasGroundLine(drawing: Drawing): boolean {
+  return visibleOps(drawing).some((op) => {
+    const b = isSceneryOp(op) ? unionBounds([op]) : null;
+    return b !== null && b.maxX - b.minX >= CANVAS_W * 0.8 && b.minY > CANVAS_H * 0.4;
+  });
+}
+
+/** Small marks (stars, snowflakes, raindrops) scattered over free sky. */
+function scatter(space: FreeSpace, rng: () => number, count: number, mark: (x: number, y: number) => DrawOp[]): DrawOp[] {
+  const ops: DrawOp[] = [];
+  for (let i = 0; i < count; i++) {
+    const tx = rng() * CANVAS_W;
+    const ty = rng() * CANVAS_H * 0.55;
+    const box = space.find(24, (b) => -Math.hypot(b.x + 12 - tx, b.y + 12 - ty));
+    if (!box) break;
+    const m = mark(box.x + 12, box.y + 12);
+    space.take(m);
+    ops.push(...m);
+  }
+  return ops;
+}
+
+const starMark = (x: number, y: number): DrawOp[] => [strokeOp(C.amber, 1, starPoints(x, y, 8))];
+const snowMark = (x: number, y: number): DrawOp[] =>
+  [0, 1, 2].map((i) => {
+    const a = (i * Math.PI) / 3;
+    return strokeOp(C.cyan, 0, [{ x: x - Math.cos(a) * 7, y: y - Math.sin(a) * 7 }, { x: x + Math.cos(a) * 7, y: y + Math.sin(a) * 7 }]);
+  });
+const bubbleMark = (x: number, y: number): DrawOp[] => [shapeOp("e", C.cyan, 1, { x: x - 5, y: y - 5 }, { x: x + 5, y: y + 5 })];
+const rainMark = (x: number, y: number): DrawOp[] => [strokeOp(C.blue, 1, [{ x: x + 3, y: y - 8 }, { x: x - 3, y: y + 8 }])];
+
+type Setting = "sea" | "space" | "snow" | "rain" | "land" | "sky";
+
+/** Words in a prompt that set the scene, checked word-aware like the templates ("비" only as its own word). */
+const SETTING_WORDS: readonly [Setting, readonly string[]][] = [
+  ["sea", ["바다", "수영", "해변", "바닷가", "호수", "파도", "낚시", "해적", "항해", "수족관", "섬"]],
+  ["space", ["우주", "밤하늘", "은하", "외계", "별빛", "행성"]],
+  ["snow", ["겨울", "눈사람", "크리스마스", "눈싸움", "썰매", "눈"]],
+  ["rain", ["장마", "소나기", "빗속", "비"]],
+];
+
+function hasWord(text: string, key: string): boolean {
+  for (const m of text.matchAll(/[^\s.,!?~"'()[\]·]+/g)) {
+    const stems = stemsOf(m[0]);
+    if (key.length === 1 ? stems.includes(key) : m[0].includes(key)) return true;
+  }
+  return false;
+}
+
+/** The scene the bot paints behind a picture: from the prompt's words if any, else from what the picture is. */
+function settingFor(names: readonly string[], text: string): Setting {
+  for (const [setting, words] of SETTING_WORDS) if (words.some((w) => hasWord(text, w))) return setting;
+  if (names.some((n) => n === "물고기" || n === "문어" || n === "배")) return "sea";
+  if (names.some((n) => n === "로켓" || n === "별" || n === "달")) return "space";
+  if (names.includes("눈사람") || names.includes("펭귄")) return "snow";
+  if (names.includes("우산")) return "rain";
+  if (names.length > 0 && names.every((n) => SKY_THINGS.has(n))) return "sky";
+  return "land";
+}
+
+/** Faint background for `setting` in the free space (tagged as scenery so guessers look past it). */
+function backdrop(space: FreeSpace, drawing: Drawing, setting: Setting, rng: () => number, level: BotLevel): DrawOp[] {
+  const all = unionBounds(visibleOps(drawing).filter((op) => !isSceneryOp(op)));
+  const ops: DrawOp[] = [];
+  const w = wobbleFor(level);
+  if ((setting === "land" || setting === "sea" || setting === "snow") && all && !hasGroundLine(drawing)) {
+    const y = groundLineY(space, all.maxY);
+    if (y !== null) {
+      ops.push(wavyLine(y, setting === "sea" ? C.blue : setting === "snow" ? C.cyan : C.green, 2, rng, w));
+      if (setting === "sea" && y + 18 <= CANVAS_H - 4 && space.hasNoInk(0, y + 10, CANVAS_W, 14)) ops.push(wavyLine(y + 18, C.cyan, 1, rng, w));
+      space.take(ops);
+    }
+  }
+  if (setting === "sea") ops.push(...scatter(space, rng, 3, bubbleMark));
+  if (setting === "space") ops.push(...scatter(space, rng, 5, starMark));
+  if (setting === "snow") ops.push(...scatter(space, rng, 6, snowMark));
+  if (setting === "rain") ops.push(...scatter(space, rng, 7, rainMark));
+  if (setting === "sky") ops.push(...scatter(space, rng, 2, (x, y) => new Pen({ x: x - 20, y: y - 12, size: 40 }, rng, w).ellipse(35, 40, 18, 12, C.blue, 2).ellipse(62, 36, 20, 15, C.blue, 2).ops));
+  return ops.map((op) => ({ ...op, a: SCENERY_ALPHA }) as DrawOp);
+}
+
+const REACT = {
+  novice: { companions: 1, backdrop: false, hat: 0, sparkles: 0 },
+  core: { companions: 1, backdrop: true, hat: 0.35, sparkles: 0 },
+  expert: { companions: 2, backdrop: true, hat: 0.6, sparkles: 3 },
+} as const;
+
+/** Appends `extra` if the drawing still fits the size cap. */
+function withOps(drawing: Drawing, extra: readonly DrawOp[]): Drawing {
+  if (extra.length === 0) return drawing;
+  const next: Drawing = { v: 1, ops: [...drawing.ops, ...extra] };
+  return serializedLength(next) <= MAX_DRAWING_CHARS ? next : drawing;
+}
+
+/**
+ * Complement mode, the thoughtful way: the bot looks at the picture first
+ * (same eyes as its guessing), then builds on it — a fish next to the cat on
+ * the same ground line, the sun and a cloud up in the empty sky, a hat on the
+ * cat's head, a ground line or the sea under everything, sparkles around it.
+ * Additions only go where the sheet is empty, so nobody's drawing gets
+ * scribbled over and every fill stays inside its own outline. Higher levels
+ * add more. Every existing op is kept, in order.
+ */
+export function complementDrawing(base: Drawing, rng: () => number, level: BotLevel, hint = ""): Drawing {
+  const subject = subjectBounds(base);
+  if (!subject) {
+    const fresh = templatesIn(hint);
+    return withOps(base, drawTemplates(fresh.length > 0 ? fresh : [TEMPLATES[Math.floor(rng() * TEMPLATES.length)]], rng, level).ops);
+  }
+  const plan = REACT[botTier(level)];
+  const seen = explainGuess(base, rng).names.filter((n) => TEMPLATE_NAMES.includes(n));
+  const space = new FreeSpace(base);
+  let out = base;
+
+  // 1. Companions that go with what's there, ones not on the sheet yet first.
+  const pool = [...new Set(seen.flatMap((n) => COMPANIONS[n] ?? []))];
+  const ideas = shuffled(pool.length > 0 ? pool : GENERIC_COMPANIONS, Math.floor(rng() * 2 ** 31));
+  ideas.sort((a, b) => Number(seen.includes(a)) - Number(seen.includes(b)));
+  let added = 0;
+  for (const name of ideas) {
+    if (added >= plan.companions) break;
+    const box = placeCompanion(space, name, subject, rng);
+    const template = TEMPLATES.find((t) => t.name === name);
+    if (!box || !template) continue;
+    const pen = new Pen(box, rng, wobbleFor(level));
+    template.draw(pen);
+    const next = withOps(out, pen.ops);
+    if (next === out) break;
+    out = next;
+    space.take(pen.ops);
+    added++;
+  }
+
+  // 2. A hat on a lone creature's head.
+  if (seen.length === 1 && HAT_WEARERS.has(seen[0]) && rng() < plan.hat) {
+    const hat = hatFor(space, subject, rng, level);
+    out = withOps(out, hat);
+    space.take(hat);
+  }
+
+  // 3. The scene around it, then a little sparkle.
+  if (plan.backdrop) out = withOps(out, backdrop(space, out, settingFor(seen, hint), rng, level));
+  if (plan.sparkles > 0) out = withOps(out, sparklesAround(space, subject, rng, plan.sparkles));
+  // Nothing fit anywhere (a packed sheet): at least a sparkle so the turn isn't a no-op.
+  if (out === base) out = withOps(base, sparklesAround(space, subject, rng, 2));
+  return out;
+}
+
+/**
+ * A drawing turn from a sentence, dressed up: the doodles the prompt names
+ * plus the scene it implies — waves for "바다에서…", stars for "우주…",
+ * snow, rain, or just the ground under their feet. Novices draw the bare
+ * doodle. The scene is faint and tagged as scenery, so the next guesser (bot
+ * or person) still reads the subject first.
+ */
+export function dressForPrompt(drawing: Drawing, prompt: string, rng: () => number, level: BotLevel): Drawing {
+  if (botTier(level) === "novice" || isBlankDrawing(drawing)) return drawing;
+  const names = templatesIn(prompt).map((t) => t.name);
+  return withOps(drawing, backdrop(new FreeSpace(drawing), drawing, settingFor(names, prompt), rng, level));
 }
 
 // ---------------------------------------------------------------------------
@@ -1512,11 +1908,12 @@ function candidates(state: DoodlePhoneState, seat: SeatIndex, level: BotLevel, r
     case "free": {
       const ideas = openingChoices(state.options, state.seed, album);
       const idea = ideas.length > 0 ? ideas[Math.floor(rng() * ideas.length)] : inspirationWord(state.seed, album);
-      return [scribble, drawing(drawTemplates(templateNamed(idea, rng), rng, level), 1)];
+      return [scribble, drawing(dressForPrompt(drawTemplates(templateNamed(idea, rng), rng, level), idea, rng, level), 1)];
     }
     case "prompt": {
-      const { understood, misread } = botDrawingFor(prompt?.kind === "text" ? prompt.text : "", rng, level);
-      return [drawing(misread, 0), drawing(understood, 1)];
+      const text = prompt?.kind === "text" ? prompt.text : "";
+      const { understood, misread } = botDrawingFor(text, rng, level);
+      return [drawing(misread, 0), drawing(dressForPrompt(understood, text, rng, level), 1)];
     }
     case "copy":
     case "memory":
@@ -1529,8 +1926,11 @@ function candidates(state: DoodlePhoneState, seat: SeatIndex, level: BotLevel, r
       const frameOpts = { seed: state.seed, album, frame: turn, prev: previous, prev2: before?.kind === "drawing" ? before.drawing : null };
       return [drawing(nextAnimationFrame(previous, { ...frameOpts, addScenery: false }, rng, level), 0), drawing(nextAnimationFrame(previous, { ...frameOpts, addScenery: true }, rng, level), 1)];
     }
-    case "base":
-      return [scribble, drawing(addToDrawing(prompt?.kind === "drawing" ? prompt.drawing : EMPTY_DRAWING, rng, level), 1)];
+    case "base": {
+      // Even the careless version keeps the picture — dropping it would wipe the album's shared drawing.
+      const base = prompt?.kind === "drawing" ? prompt.drawing : EMPTY_DRAWING;
+      return [drawing(addToDrawing(base, rng, level), 0), drawing(complementDrawing(base, rng, level, inspirationWord(state.seed, album)), 1)];
+    }
   }
 }
 

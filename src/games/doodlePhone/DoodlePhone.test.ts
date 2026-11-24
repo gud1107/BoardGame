@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { seededRng, shuffle } from "@/lib/rng";
-import { SCENERY_ALPHA, SCENE_PIECE_COUNT, addToDrawing, chooseBotAction, isSceneryOp, nextAnimationFrame, sceneChoicesFor, scenePieceFor, getValidMoves, guessFromDrawing, botDrawingFor, inkByColor, nextBotActor, explainGuess, recognizeDrawing, redrawDrawing, templateNamesIn, TEMPLATE_NAMES } from "./bot";
+import { REACTIVE_NAMES, SCENERY_ALPHA, SCENE_PIECE_COUNT, addToDrawing, complementDrawing, dressForPrompt, chooseBotAction, isSceneryOp, nextAnimationFrame, sceneChoicesFor, scenePieceFor, getValidMoves, guessFromDrawing, botDrawingFor, inkByColor, nextBotActor, explainGuess, recognizeDrawing, redrawDrawing, templateNamesIn, TEMPLATE_NAMES } from "./bot";
 import { RASTER_CELL, RASTER_W, rasterize } from "./raster";
 import { PROMPT_PATTERN_COUNT, generatePrompt, josa } from "./promptGen";
 import {
@@ -524,6 +524,46 @@ describe("game modes (modes.ts, rulebook §9)", () => {
     expect(added.ops.slice(0, base.ops.length)).toEqual(base.ops);
     expect(added.ops.length).toBeGreaterThan(base.ops.length);
     expect(isValidDrawing(added)).toBe(true);
+  });
+
+  it("complement bots look first: they add matching doodles in empty space without covering the picture", () => {
+    expect(REACTIVE_NAMES.filter((n) => !TEMPLATE_NAMES.includes(n))).toEqual([]);
+    const inkCells = (d: Drawing) => rasterize(d).reduce<number[]>((acc, c, i) => (c !== 0 ? [...acc, i] : acc), []);
+    for (const name of ["고양이", "집", "로켓", "물고기", "사람"]) {
+      for (const level of [2, 6, 10] as const) {
+        const base = botDrawingFor(name, seededRng(3), 10).understood;
+        const added = complementDrawing(base, seededRng(level), level);
+        expect(added.ops.slice(0, base.ops.length), name).toEqual(base.ops);
+        expect(added.ops.length, `${name} Lv.${level}`).toBeGreaterThan(base.ops.length);
+        expect(isValidDrawing(added)).toBe(true);
+        // The original keeps its colors — additions go in the empty space (only a hat's brim may rest on a head).
+        const before = rasterize(base);
+        const after = rasterize(added);
+        const cells = inkCells(base);
+        const changed = cells.filter((i) => after[i] !== before[i]).length;
+        expect(changed, `${name} Lv.${level}`).toBeLessThanOrEqual(cells.length * 0.04);
+      }
+    }
+    // A cat gets something that goes with a cat, not a random doodle.
+    const cat = botDrawingFor("고양이", seededRng(3), 10).understood;
+    for (let seed = 1; seed <= 6; seed++) {
+      const extra: Drawing = { v: 1, ops: complementDrawing(cat, seededRng(seed), 2).ops.slice(cat.ops.length) }; // novice: exactly one companion
+      expect(recognizeDrawing(extra), `seed ${seed}`).toSatisfy((seen: string[] | null) => seen !== null && seen.every((n) => ["물고기", "쥐", "공", "하트"].includes(n)));
+    }
+    // A packed sheet still gets something, and a blank one gets a fresh doodle.
+    expect(complementDrawing(EMPTY_DRAWING, seededRng(1), 6, "고양이").ops.length).toBeGreaterThan(0);
+  });
+
+  it("prompt drawings get the scene the sentence implies (faint scenery), novices stay bare", () => {
+    const sea = botDrawingFor("바다에서 헤엄치는 물고기", seededRng(2), 8).understood;
+    const dressed = dressForPrompt(sea, "바다에서 헤엄치는 물고기", seededRng(3), 8);
+    const scenery = dressed.ops.slice(sea.ops.length);
+    expect(scenery.length).toBeGreaterThan(0);
+    expect(scenery.every(isSceneryOp)).toBe(true);
+    expect(recognizeDrawing(dressed)).toEqual(recognizeDrawing(sea));
+    expect(dressForPrompt(sea, "바다", seededRng(3), 2)).toBe(sea);
+    const space = dressForPrompt(botDrawingFor("우주 로켓", seededRng(2), 8).understood, "우주 로켓", seededRng(4), 8);
+    expect(space.ops.filter(isSceneryOp).length).toBeGreaterThanOrEqual(3);
   });
 
   it("animation bots redraw the previous frame shifted, so the flipbook moves", () => {
