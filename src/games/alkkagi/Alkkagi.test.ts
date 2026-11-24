@@ -81,7 +81,7 @@ describe("physics", () => {
 
   it("power curve round-trips and stays in range", () => {
     expect(speedForPower(0)).toBeCloseTo(1.2);
-    expect(speedForPower(1)).toBeCloseTo(16);
+    expect(speedForPower(1)).toBeCloseTo(22);
     expect(powerForSpeed(speedForPower(0.4))).toBeCloseTo(0.4, 5);
   });
 
@@ -221,7 +221,7 @@ describe("turns", () => {
         { owner: 0, x: 0, y: 6.5, king: true },
         { owner: 1, x: 0, y: 8.2, king: false },
       ]),
-      { type: "flick", seat: 0, stone: 0, vx: 0, vy: 16000 },
+      { type: "flick", seat: 0, stone: 0, vx: 0, vy: 22000 },
     );
     expect(s.phase).toBe("roundOver");
     expect(s.stones).toHaveLength(0);

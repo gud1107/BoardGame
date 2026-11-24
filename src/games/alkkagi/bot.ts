@@ -32,7 +32,7 @@ export function botParams(level: BotLevel): Params {
     ownStones: l <= 2 ? 2 : l <= 4 ? 3 : l <= 6 ? 5 : 99,
     targetsPerStone: l <= 2 ? 1 : l <= 4 ? 2 : l <= 6 ? 3 : l <= 8 ? 4 : 5,
     cuts: l <= 3 ? [0] : l <= 6 ? [-0.35, 0, 0.35] : [-0.6, -0.3, 0, 0.3, 0.6],
-    speeds: l <= 2 ? [9, 14] : l <= 5 ? [6, 9, 12.5, 16] : [5, 7.5, 10, 13, 16],
+    speeds: l <= 2 ? [9, 17] : l <= 5 ? [6, 9.5, 14, 19] : [5, 7.5, 11, 15, 19, 22],
     angleSd: ANGLE_SD[l - 1],
     speedSd: SPEED_SD[l - 1],
     robust: l >= 7,

@@ -16,10 +16,10 @@ export const KING_R = 0.62;
 export const STONE_MASS = 1;
 export const KING_MASS = 3;
 /** Kings grip the board: their sliding friction is multiplied by this (§9). */
-export const KING_GRIP = 2.2;
+export const KING_GRIP = 2.8;
 
 export const V_MIN = 1.2;
-export const V_MAX = 16;
+export const V_MAX = 22;
 
 export const DT = 1 / 120;
 const MAX_STEPS = 120 * 12;
@@ -28,7 +28,7 @@ const FRICTION = 4.2;
 /** Extra speed-proportional drag (1/s). */
 const DRAG = 0.35;
 const STOP_SPEED = 0.04;
-const RESTITUTION = 0.9;
+const RESTITUTION = 0.92;
 /** Recorded frames keep every Nth step (120 Hz / 2 = 60 Hz). */
 export const FRAME_EVERY = 2;
 
@@ -187,16 +187,16 @@ export function simulate(stones: readonly SimStone[], shooter: number, vx: numbe
   return { rest, falls, steps: step, frames, collisions };
 }
 
-/** Rulebook §4 — power (0..1 drag) to launch speed: 1.3 power curve so soft shots are fine-grained. */
+/** Rulebook §4 — power (0..1 drag) to launch speed: 1.5 power curve so soft shots are fine-grained. */
 export function speedForPower(power: number): number {
   const p = Math.max(0, Math.min(1, power));
-  return V_MIN + (V_MAX - V_MIN) * Math.pow(p, 1.3);
+  return V_MIN + (V_MAX - V_MIN) * Math.pow(p, 1.5);
 }
 
 /** Inverse of `speedForPower` (for showing a received shot's power). */
 export function powerForSpeed(speed: number): number {
   const k = (Math.max(V_MIN, Math.min(V_MAX, speed)) - V_MIN) / (V_MAX - V_MIN);
-  return Math.pow(k, 1 / 1.3);
+  return Math.pow(k, 1 / 1.5);
 }
 
 /** Distance a lone stone slides from speed `s` before stopping (approx., for aim guides and bots). */
