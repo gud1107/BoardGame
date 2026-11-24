@@ -880,7 +880,7 @@ const gap = (a0: number, a1: number, b0: number, b1: number) => Math.max(0, a0 -
  * above it, everything else standing on the same ground line beside it — as
  * big as the free space allows, from about the subject's size down.
  */
-function placeCompanion(space: FreeSpace, name: string, subject: Bounds, rng: () => number): Box | null {
+function placeCompanion(space: FreeSpace, name: string, subject: Bounds, rng: () => number, ground = subject.maxY): Box | null {
   const sw = subject.maxX - subject.minX;
   const sh = subject.maxY - subject.minY;
   const cx = (subject.minX + subject.maxX) / 2;
@@ -891,7 +891,11 @@ function placeCompanion(space: FreeSpace, name: string, subject: Bounds, rng: ()
     if (sky) return -b.y * 1.2 - Math.abs(b.x + b.size / 2 - cx) * 0.25 + noise;
     // Templates stand on about y=90 of their 100 box.
     const feet = b.y + b.size * 0.9;
-    return -Math.abs(feet - subject.maxY) * 1.4 - side * 0.7 - gap(b.y, b.y + b.size, subject.minY, subject.maxY) * 0.8 + noise;
+    // A house or a tree never floats: no spot near the ground line → try a smaller size, then give up.
+    if (Math.abs(feet - ground) > 45) return -Infinity;
+    // On the subject's own ground: right beside it. On a lower ground (subject up in the sky): anywhere along it.
+    const beside = ground === subject.maxY ? side * 0.7 + gap(b.y, b.y + b.size, subject.minY, subject.maxY) * 0.8 : side * 0.15;
+    return -Math.abs(feet - ground) * 1.4 - beside + noise;
   };
   for (let size = Math.min(170, Math.max(80, Math.min(sw, sh) * 0.8)); size >= 52; size *= 0.86) {
     const box = space.find(Math.round(size), score);
@@ -937,7 +941,7 @@ function sparklesAround(space: FreeSpace, subject: Bounds, rng: () => number, co
       const bx = b.x + 11 - cx;
       const by = b.y + 11 - cy;
       const d = gap(b.x, b.x + 22, subject.minX, subject.maxX) + gap(b.y, b.y + 22, subject.minY, subject.maxY);
-      if (d > 50) return -Infinity;
+      if (d === 0 || d > 50) return -Infinity; // around the picture, never inside it (a "+" in a face reads as a nose)
       const off = Math.abs(((Math.atan2(by, bx) - want + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
       return -d * 0.6 - off * 20;
     });
@@ -961,10 +965,16 @@ function groundLineY(space: FreeSpace, below: number): number | null {
 
 /** Whether a background ground/sea line is already on the sheet (a previous artist added one). */
 function hasGroundLine(drawing: Drawing): boolean {
-  return visibleOps(drawing).some((op) => {
+  return groundLineAt(drawing) !== null;
+}
+
+/** Where that ground/sea line runs (its top), or null. */
+function groundLineAt(drawing: Drawing): number | null {
+  for (const op of visibleOps(drawing)) {
     const b = isSceneryOp(op) ? unionBounds([op]) : null;
-    return b !== null && b.maxX - b.minX >= CANVAS_W * 0.8 && b.minY > CANVAS_H * 0.4;
-  });
+    if (b !== null && b.maxX - b.minX >= CANVAS_W * 0.8 && b.minY > CANVAS_H * 0.4) return b.minY;
+  }
+  return null;
 }
 
 /** Small marks (stars, snowflakes, raindrops) scattered over free sky. */
@@ -1021,12 +1031,12 @@ function settingFor(names: readonly string[], text: string): Setting {
 }
 
 /** Faint background for `setting` in the free space (tagged as scenery so guessers look past it). */
-function backdrop(space: FreeSpace, drawing: Drawing, setting: Setting, rng: () => number, level: BotLevel): DrawOp[] {
+function backdrop(space: FreeSpace, drawing: Drawing, setting: Setting, rng: () => number, level: BotLevel, groundFrom = 0): DrawOp[] {
   const all = unionBounds(visibleOps(drawing).filter((op) => !isSceneryOp(op)));
   const ops: DrawOp[] = [];
   const w = wobbleFor(level);
   if ((setting === "land" || setting === "sea" || setting === "snow") && all && !hasGroundLine(drawing)) {
-    const y = groundLineY(space, all.maxY);
+    const y = groundLineY(space, Math.max(all.maxY, groundFrom));
     if (y !== null) {
       ops.push(wavyLine(y, setting === "sea" ? C.blue : setting === "snow" ? C.cyan : C.green, 2, rng, w));
       if (setting === "sea" && y + 18 <= CANVAS_H - 4 && space.hasNoInk(0, y + 10, CANVAS_W, 14)) ops.push(wavyLine(y + 18, C.cyan, 1, rng, w));
@@ -1039,6 +1049,77 @@ function backdrop(space: FreeSpace, drawing: Drawing, setting: Setting, rng: () 
   if (setting === "rain") ops.push(...scatter(space, rng, 7, rainMark));
   if (setting === "sky") ops.push(...scatter(space, rng, 2, (x, y) => new Pen({ x: x - 20, y: y - 12, size: 40 }, rng, w).ellipse(35, 40, 18, 12, C.blue, 2).ellipse(62, 36, 20, 15, C.blue, 2).ops));
   return ops.map((op) => ({ ...op, a: SCENERY_ALPHA }) as DrawOp);
+}
+
+/** Companions that suit almost anything — all a mere hunch is allowed to add. */
+const SAFE_COMPANIONS = new Set(["하트", "꽃", "해", "구름", "새", "나무", "별", "공"]);
+
+/** What the bot can still tell about a picture it can't name: where it sits, its shape, its colors, its pen. */
+interface SketchLook {
+  /** Smallish and up high — a sun, a balloon, a bird… */
+  readonly inSky: boolean;
+  /** Fills most of the sheet — only the corners are left. */
+  readonly big: boolean;
+  readonly shape: "tall" | "wide" | "round";
+  /** Mostly black/gray lines (a pen sketch) rather than a painted picture. */
+  readonly lineArt: boolean;
+  /** Palette index of the ink most of it is drawn in, and its usual brush size. */
+  readonly ink: number;
+  readonly weight: number;
+  /** The scene its colors suggest (mostly blue and low → sea). */
+  readonly setting: Setting;
+}
+
+const NEUTRAL_INK = new Set<number>([C.black, C.gray, C.lightGray]);
+const BLUE_INK = new Set<number>([C.cyan, C.blue, C.navy]);
+
+function sketchOf(drawing: Drawing, subject: Bounds): SketchLook {
+  const counts = new Map<number, number>();
+  for (const c of rasterize(drawing, isSceneryOp)) if (isInk(c)) counts.set(c, (counts.get(c) ?? 0) + 1);
+  const total = [...counts.values()].reduce((a, b) => a + b, 0) || 1;
+  const share = (set: Set<number>) => [...counts].reduce((n, [c, k]) => n + (set.has(c) ? k : 0), 0) / total;
+  const ink = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? C.black;
+  const weights = new Map<number, number>();
+  for (const op of visibleOps(drawing)) if ((op.k === "s" || isShapeOp(op)) && !isSceneryOp(op)) weights.set(op.w, (weights.get(op.w) ?? 0) + 1);
+  const weight = [...weights].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 1;
+  const w = subject.maxX - subject.minX;
+  const h = subject.maxY - subject.minY;
+  const big = w > CANVAS_W * 0.62 || h > CANVAS_H * 0.66;
+  const inSky = !big && (subject.minY + subject.maxY) / 2 < CANVAS_H * 0.42 && subject.maxY < CANVAS_H * 0.6;
+  return {
+    inSky,
+    big,
+    shape: h > w * 1.3 ? "tall" : w > h * 1.4 ? "wide" : "round",
+    lineArt: 1 - share(NEUTRAL_INK) < LINE_ART_MAX_COLOR,
+    ink,
+    weight: Math.min(3, weight),
+    setting: share(BLUE_INK) > 0.45 && subject.maxY > CANVAS_H * 0.6 ? "sea" : "land",
+  };
+}
+
+/** Friendly additions for a picture the bot can't name, picked by how it looks rather than what it is. */
+function unknownCompanions(look: SketchLook): string[] {
+  if (look.big) return ["해", "구름", "새", "별"]; // only the sky corners are free
+  if (look.inSky) return ["구름", "새", "나무", "집", "꽃"]; // keep it company up there, or give it a world below
+  if (look.setting === "sea") return ["물고기", "구름", "해"];
+  if (look.shape === "tall") return ["꽃", "하트", "공", "나무"]; // a person, a tree, a tower…
+  if (look.shape === "wide") return ["나무", "꽃", "구름", "해"]; // a car, an animal, a boat…
+  return ["하트", "꽃", "해", "구름", "새"];
+}
+
+/** Redraws added ops the way the sketch was drawn: its ink color, no thicker than its brush, outlines instead of fills. */
+function inSketchStyle(ops: readonly DrawOp[], look: SketchLook): DrawOp[] {
+  return ops.flatMap((op): DrawOp[] => {
+    if (op.k === "f") return [];
+    if (op.k === "x") return [op];
+    const restyled = { ...op, c: look.ink, w: Math.min(op.w, Math.max(1, look.weight)) } as DrawOp;
+    if (isShapeOp(restyled) && restyled.f === 1) {
+      const outline = { ...restyled } as DrawOp & { f?: number };
+      delete outline.f;
+      return [outline];
+    }
+    return [restyled];
+  });
 }
 
 const REACT = {
@@ -1070,41 +1151,54 @@ export function complementDrawing(base: Drawing, rng: () => number, level: BotLe
     return withOps(base, drawTemplates(fresh.length > 0 ? fresh : [TEMPLATES[Math.floor(rng() * TEMPLATES.length)]], rng, level).ops);
   }
   const plan = REACT[botTier(level)];
-  const seen = explainGuess(base, rng).names.filter((n) => TEMPLATE_NAMES.includes(n));
+  const guess = explainGuess(base, rng);
+  const sure = guess.kind === "sure";
+  const seen = guess.names.filter((n) => TEMPLATE_NAMES.includes(n));
+  const sketch = sketchOf(base, subject);
   const space = new FreeSpace(base);
+  // A pen sketch gets its additions in the same pen: its ink color, its brush size, no paint bucket.
+  const styled = (ops: readonly DrawOp[]): DrawOp[] => (sketch.lineArt ? inSketchStyle(ops, sketch) : [...ops]);
   let out = base;
 
-  // 1. Companions that go with what's there, ones not on the sheet yet first.
-  const pool = [...new Set(seen.flatMap((n) => COMPANIONS[n] ?? []))];
-  const ideas = shuffled(pool.length > 0 ? pool : GENERIC_COMPANIONS, Math.floor(rng() * 2 ** 31));
+  // 1. Companions. Sure what it is → what goes with it. Only a hunch → just the harmless ones of those.
+  //    No idea → go by how it looks (up in the sky, tall, wide, huge…), never a confident wrong pairing.
+  const fromNames = [...new Set(seen.flatMap((n) => COMPANIONS[n] ?? []))];
+  const pool = sure ? fromNames : fromNames.filter((n) => SAFE_COMPANIONS.has(n));
+  const ideas = shuffled(pool.length > 0 ? pool : unknownCompanions(sketch), Math.floor(rng() * 2 ** 31));
   ideas.sort((a, b) => Number(seen.includes(a)) - Number(seen.includes(b)));
+  // Something floating up high: ground things go along the bottom of the sheet, not beside it in mid-air.
+  const ground = sketch.inSky ? (groundLineAt(base) ?? CANVAS_H - 24) - 2 : subject.maxY;
   let added = 0;
   for (const name of ideas) {
     if (added >= plan.companions) break;
-    const box = placeCompanion(space, name, subject, rng);
+    const box = placeCompanion(space, name, subject, rng, SKY_THINGS.has(name) ? subject.maxY : ground);
     const template = TEMPLATES.find((t) => t.name === name);
     if (!box || !template) continue;
     const pen = new Pen(box, rng, wobbleFor(level));
     template.draw(pen);
-    const next = withOps(out, pen.ops);
+    const ops = styled(pen.ops);
+    const next = withOps(out, ops);
     if (next === out) break;
     out = next;
-    space.take(pen.ops);
+    space.take(ops);
     added++;
   }
 
-  // 2. A hat on a lone creature's head.
-  if (seen.length === 1 && HAT_WEARERS.has(seen[0]) && rng() < plan.hat) {
-    const hat = hatFor(space, subject, rng, level);
+  // 2. A hat — only on a creature it's sure about (a hat on a "maybe car" would look silly).
+  if (sure && seen.length === 1 && HAT_WEARERS.has(seen[0]) && sketch.shape !== "wide" && rng() < plan.hat) {
+    const hat = styled(hatFor(space, subject, rng, level));
     out = withOps(out, hat);
     space.take(hat);
   }
 
-  // 3. The scene around it, then a little sparkle.
-  if (plan.backdrop) out = withOps(out, backdrop(space, out, settingFor(seen, hint), rng, level));
-  if (plan.sparkles > 0) out = withOps(out, sparklesAround(space, subject, rng, plan.sparkles));
+  // 3. The scene around it, then sparkles — a couple more when it can't name the picture ("I like it" fits anything).
+  // (`hint` is only for a blank sheet — the room's inspiration word says nothing about a picture already there.)
+  const setting = sure ? settingFor(seen, "") : sketch.setting;
+  if (plan.backdrop) out = withOps(out, styled(backdrop(space, out, setting, rng, level, sketch.inSky ? CANVAS_H * 0.72 : 0)));
+  const sparkles = sure || !plan.backdrop ? plan.sparkles : Math.max(2, plan.sparkles);
+  if (sparkles > 0) out = withOps(out, styled(sparklesAround(space, subject, rng, sparkles)));
   // Nothing fit anywhere (a packed sheet): at least a sparkle so the turn isn't a no-op.
-  if (out === base) out = withOps(base, sparklesAround(space, subject, rng, 2));
+  if (out === base) out = withOps(base, styled(sparklesAround(space, subject, rng, 2)));
   return out;
 }
 

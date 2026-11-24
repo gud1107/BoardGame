@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.210.0",
+    releaseDate: "2026-11-24",
+    title: "✏️ 그림 전화기 봇이 손그림에도 자연스럽게 덧그려요",
+    changes: [
+      { game: "doodle-phone", type: "IMPROVE", desc: "✏️ 봇이 못 알아본 손그림도 위치·모양·색을 보고 덧그려요 — 하늘에 뜬 그림엔 구름·새와 땅, 길쭉하면 꽃·공, 넓적하면 나무·해" },
+      { game: "doodle-phone", type: "IMPROVE", desc: "🖊️ 검은 펜 스케치엔 같은 펜(같은 색·굵기, 색칠 없이)으로 덧그려 그림체가 어울려요 · 집·나무가 허공에 뜨지 않아요" },
+      { game: "doodle-phone", type: "FIX", desc: "🎩 확실히 알아본 동물·사람에게만 모자를 씌워요 · 반짝이가 그림 안(얼굴 한가운데 등)에 찍히지 않아요" },
+    ],
+  },
+  {
     version: "v1.209.0",
     releaseDate: "2026-11-24",
     title: "🖍️ 그림 전화기 봇이 그림을 보고 덧그려요",

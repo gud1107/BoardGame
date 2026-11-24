@@ -4,6 +4,7 @@ import { REACTIVE_NAMES, SCENERY_ALPHA, SCENE_PIECE_COUNT, addToDrawing, complem
 import { RASTER_CELL, RASTER_W, rasterize } from "./raster";
 import { PROMPT_PATTERN_COUNT, generatePrompt, josa } from "./promptGen";
 import {
+  CANVAS_H,
   EMPTY_DRAWING,
   MAX_DRAWING_CHARS,
   PALETTE,
@@ -12,6 +13,7 @@ import {
   encodePoints,
   fillOp,
   isBlankDrawing,
+  isShapeOp,
   isValidDrawing,
   nearestPaletteIndex,
   normalizeColor,
@@ -552,6 +554,35 @@ describe("game modes (modes.ts, rulebook §9)", () => {
     }
     // A packed sheet still gets something, and a blank one gets a fresh doodle.
     expect(complementDrawing(EMPTY_DRAWING, seededRng(1), 6, "고양이").ops.length).toBeGreaterThan(0);
+  });
+
+  it("complement bots react naturally to hand sketches they can't name: same pen, nothing floating, nothing covered", () => {
+    const P = (...xy: number[]) => Array.from({ length: xy.length / 2 }, (_, i) => ({ x: xy[i * 2], y: xy[i * 2 + 1] }));
+    const kite: Drawing = { v: 1, ops: [strokeOp(1, 1, P(200, 30, 240, 80, 200, 130, 160, 80, 200, 30)), strokeOp(1, 1, P(200, 30, 200, 130)), strokeOp(1, 1, P(160, 80, 240, 80)), strokeOp(1, 1, P(200, 130, 190, 150, 210, 165, 195, 180))] };
+    const giraffe: Drawing = { v: 1, ops: [strokeOp(1, 1, P(220, 320, 222, 250, 260, 250, 262, 320)), strokeOp(1, 1, P(225, 250, 215, 200, 250, 195, 262, 250)), strokeOp(1, 1, P(235, 198, 245, 110, 255, 100, 262, 112, 252, 198))] };
+    const smiley: Drawing = { v: 1, ops: [shapeOp("e", 1, 1, { x: 180, y: 130 }, { x: 300, y: 250 }), strokeOp(1, 1, P(215, 175, 215, 180)), strokeOp(1, 1, P(265, 175, 265, 180)), strokeOp(1, 1, P(210, 210, 240, 228, 270, 210))] };
+    for (const [name, sketch] of Object.entries({ kite, giraffe, smiley })) {
+      for (const level of [2, 6, 10] as const) {
+        for (const seed of [1, 2, 3]) {
+          const out = complementDrawing(sketch, seededRng(seed), level);
+          const added = out.ops.slice(sketch.ops.length);
+          expect(added.length, `${name} Lv.${level}`).toBeGreaterThan(0);
+          expect(isValidDrawing(out)).toBe(true);
+          // Drawn in the sketch's own pen: black, thin, no paint bucket, no solid shapes.
+          for (const op of added) {
+            expect(op.k, name).not.toBe("f");
+            if (op.k !== "x" && op.k !== "f") expect([op.c, op.w <= 1, isShapeOp(op) && op.f === 1], `${name} Lv.${level}`).toEqual([1, true, false]);
+          }
+          const before = rasterize(sketch);
+          const after = rasterize(out);
+          expect(before.every((c, i) => c === 0 || after[i] === c), `${name} Lv.${level} seed ${seed}`).toBe(true);
+        }
+      }
+    }
+    // The kite flies high: whatever the bot stands on the ground goes along the bottom, not next to the kite in mid-air.
+    const grounded = complementDrawing(kite, seededRng(4), 10).ops.slice(kite.ops.length).filter((op) => !isSceneryOp(op));
+    const low = unionBounds(grounded.filter((op) => (unionBounds([op])?.maxY ?? 0) > CANVAS_H / 2));
+    if (low) expect(low.maxY).toBeGreaterThan(CANVAS_H * 0.7);
   });
 
   it("prompt drawings get the scene the sentence implies (faint scenery), novices stay bare", () => {
