@@ -93,6 +93,17 @@ describe("VRM model choice", () => {
   });
 });
 
+describe("photo-real models", () => {
+  it("can be picked, wear only their own clothes and have one preset each", async () => {
+    const { CHARACTER_PRESETS, REALISTIC_MODELS, wardrobeFor } = await import("./avatar");
+    for (const m of REALISTIC_MODELS) {
+      expect(sanitizeAvatar({ model: m })).toEqual({ model: m });
+      expect(wardrobeFor(m)).toEqual({ hair: [], outfit: [], shoes: [] });
+      expect(CHARACTER_PRESETS.filter((c) => c.look.model === m)).toHaveLength(1);
+    }
+  });
+});
+
 describe("VRoid wardrobe", () => {
   it("sanitize keeps wardrobe picks from the classic family only", async () => {
     expect(sanitizeAvatar({ hairFrom: "vroid-g", outfitFrom: "pixiv-sample", shoesFrom: "nope", hairDye: true })).toEqual({ hairFrom: "vroid-g", hairDye: true });

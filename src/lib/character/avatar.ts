@@ -55,7 +55,18 @@ export type VrmModel =
   | "vroid-fumiriya"
   | "ps-female"
   | "ps-male"
-  | "tanis-male";
+  | "tanis-male"
+  | "rb-track"
+  | "rb-stripe"
+  | "rb-suit-m"
+  | "rb-denim"
+  | "rb-suit-f"
+  | "rb-leather";
+/**
+ * Photo-real bodies (Microsoft Rocketbox → VRM 1.0). Everything is baked into their textures, so hair / outfit /
+ * skin colours, make-up, 눈매 and face shape don't apply; never in the default cast (mixing the two art styles is the player's choice).
+ */
+export const REALISTIC_MODELS: ReadonlySet<VrmModel> = new Set<VrmModel>(["rb-track", "rb-stripe", "rb-suit-m", "rb-denim", "rb-suit-f", "rb-leather"]);
 /** The gender each model reads as (voice pitch, hair-colour list). */
 export const VRM_MODEL_GENDER: Record<VrmModel, PersonGender> = {
   "pixiv-sample": "f",
@@ -73,6 +84,12 @@ export const VRM_MODEL_GENDER: Record<VrmModel, PersonGender> = {
   "ps-female": "f",
   "ps-male": "m",
   "tanis-male": "m",
+  "rb-track": "m",
+  "rb-stripe": "m",
+  "rb-suit-m": "m",
+  "rb-denim": "f",
+  "rb-suit-f": "f",
+  "rb-leather": "f",
 };
 /**
  * The classic VRoid family (VRM 0.x exports sharing one `J_Bip_*` skeleton): their
@@ -190,6 +207,12 @@ export const AVATAR_OPTIONS = {
     opt<VrmModel>("ps-female", "단발 보브 (염색 자유)"),
     opt<VrmModel>("ps-male", "기본 숏컷 (염색 자유)"),
     opt<VrmModel>("tanis-male", "갈색 머리 빨간 후드"),
+    opt<VrmModel>("rb-track", "트랙재킷 (실사)"),
+    opt<VrmModel>("rb-stripe", "줄무늬 티 (실사)"),
+    opt<VrmModel>("rb-suit-m", "남성 정장 (실사)"),
+    opt<VrmModel>("rb-denim", "티셔츠·청바지 (실사)"),
+    opt<VrmModel>("rb-suit-f", "여성 정장 (실사)"),
+    opt<VrmModel>("rb-leather", "가죽재킷 (실사)"),
   ],
   // K-pop idol cast: fair-to-warm East Asian skin
   skin: [opt("#fbe4d5", "밝은 톤"), opt("#f6d9c4", "핑크 톤"), opt("#f2cfb5", "웜 톤"), opt("#f9ddca", "아이보리"), opt("#ecc6a8", "건강한 톤"), opt("#f4d6c0", "내추럴")],
@@ -271,6 +294,14 @@ export const CHARACTER_PRESETS: readonly CharacterPreset[] = [
   preset("rin", "린", "남색 생머리 교복 · 퍼플 스모키 · 강아지 라인 · 플럼 립", { gender: "f", skin: "#fbe4d5", hair: "#16110f", hairStyle: "straight", coat: "#2b3a5c", shirt: "#ffffff", glasses: false, lip: "#8e3a5a", build: "slim", face: "oval", eyes: "sharp", mark: "lipMole", model: "vroid-shino", iris: "#8a929e", shadow: "#9474c4", shadowStyle: "smoky", liner: "puppy", blush: "#c69ad8", blushStyle: "side", lipStyle: "full" }),
   preset("siwoo", "시우", "플래티넘 숏컷 · 무쌍 · 콧등 밴드", { gender: "m", skin: "#f6d9c4", hair: "#d9d6de", hairStyle: "comma", coat: "#1c1c22", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "slim", face: "vline", eyes: "sharp", mark: "bandage", model: "ps-male", hairDye: true, outfitDye: true, iris: "#4f86d0" }),
   preset("kangmin", "강민", "갈색 머리 빨간 후드 · 골드 렌즈 · 하이라이터", { gender: "m", skin: "#f2cfb5", hair: "#3a2a22", hairStyle: "dandy", coat: "#7a2238", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "standard", face: "oval", eyes: "round", mark: "none", model: "tanis-male", iris: "#d0a040", glow: true }),
+  // photo-real cast (Microsoft Rocketbox, `REALISTIC_MODELS`): the model is the whole look — colours and
+  // make-up don't apply, so the fields below only feed the card tint and the per-preset signature tests
+  preset("jaehoon", "재훈", "실사풍 · 빨간 트랙재킷", { gender: "m", skin: "#ecc6a8", hair: "#121010", hairStyle: "comma", coat: "#7a2238", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "broad", face: "oval", eyes: "sharp", mark: "none", model: "rb-track" }),
+  preset("minseok", "민석", "실사풍 · 줄무늬 티·반바지", { gender: "m", skin: "#f2cfb5", hair: "#3a2a22", hairStyle: "comma", coat: "#c9b28f", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "standard", face: "round", eyes: "sharp", mark: "none", model: "rb-stripe" }),
+  preset("taejun", "태준", "실사풍 · 검은 정장·빨간 넥타이", { gender: "m", skin: "#f2cfb5", hair: "#121010", hairStyle: "comma", coat: "#1c1c22", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "broad", face: "vline", eyes: "round", mark: "none", model: "rb-suit-m" }),
+  preset("seoyeon", "서연", "실사풍 · 회색 티·청바지", { gender: "f", skin: "#f2cfb5", hair: "#2a1c16", hairStyle: "straight", coat: "#8fb6d9", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "broad", face: "oval", eyes: "fox", mark: "none", model: "rb-denim" }),
+  preset("naomi", "나오미", "실사풍 · 올림머리 정장", { gender: "f", skin: "#ecc6a8", hair: "#16110f", hairStyle: "straight", coat: "#2b3a5c", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "standard", face: "oval", eyes: "puppy", mark: "none", model: "rb-suit-f" }),
+  preset("claire", "클레어", "실사풍 · 금발 번헤어·가죽재킷", { gender: "f", skin: "#fbe4d5", hair: "#d7b48c", hairStyle: "straight", coat: "#7a5640", shirt: "#ffffff", glasses: false, lip: "#c27a6e", build: "broad", face: "round", eyes: "fox", mark: "none", model: "rb-leather" }),
 ];
 
 const STYLES_F: HairStyle[] = ["straight", "hush", "pony"];

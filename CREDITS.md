@@ -139,6 +139,12 @@ VRoid Hub 라이선스(`corporate_commercial_use=allow`, `modification=allow`, `
 | `ps-male.vrm` | VRoid_V110_Male (PerfectSync 52 blendshapes) | hinzka (VRoid 기본 모델 기반) | 위와 같음 | 위와 같음 |
 | `tanis-male.vrm` | TanisJr男性アバター | TanisJr (VRoid Studio 제작) | VRM 1.0 메타: 누구나 · 법인 상업 이용 허용 · 출처 표기 불필요 · 수정·재배포 허용 | https://github.com/kdt26aie40008-ux/TanisJR (assets/avatars, PR #5) |
 
+### 실사풍 캐릭터 (Microsoft Rocketbox)
+
+`rb-track`·`rb-stripe`·`rb-suit-m`·`rb-denim`·`rb-suit-f`·`rb-leather`(.vrm)는 [Microsoft Rocketbox](https://github.com/microsoft/Microsoft-Rocketbox)의
+Male_Adult_10 · Male_Adult_01 · Business_Male_01 · Female_Adult_08 · Business_Female_01 · Female_Adult_04를 VRM 1.0으로 변환한 것입니다(T포즈 변환, 표정 병합, 텍스처 1024px).
+Copyright (c) 2020 Microsoft, MIT License — 전문: [public/models/vrm/ROCKETBOX-LICENSE.txt](public/models/vrm/ROCKETBOX-LICENSE.txt). 저작권·라이선스 문구를 함께 배포해야 합니다.
+
 - hinzka 두 파일의 VRM 메타 `licenseName`에는 원본 VRoid 내보내기 기본값(`Redistribution_Prohibited`)이 남아 있지만, 저작자 README가 재배포·판매를 명시적으로 허용해서 README를 따랐습니다.
 - 다른 모델처럼 텍스처 해상도만 줄이고(1024, 노멀 512) 표정 데이터를 손실 없는 희소(sparse) 형식으로 바꿔 23MB → 5.5MB로 줄였습니다. 형태·표정·뼈대는 그대로입니다.
 - ps-female/ps-male은 클래식 캐스트와 같은 `J_Bip_*` 뼈대·비율이라 헤어·옷·신발 바꿔 입기에 들어갑니다. tanis-male은 VRM 1.0 축이라 자기 것만 입습니다.

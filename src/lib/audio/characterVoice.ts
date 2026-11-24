@@ -162,6 +162,18 @@ export const PRESET_VOICES: Record<string, { persona: Persona; pitch: number }> 
   ria: { persona: "dreamer", pitch: 1.2 },
   geonu: { persona: "focused", pitch: 0.73 },
   haechan: { persona: "scanner", pitch: 0.9 },
+  dahye: { persona: "starer", pitch: 1.22 },
+  yeseul: { persona: "fidget", pitch: 1.58 },
+  rin: { persona: "shy", pitch: 1.33 },
+  siwoo: { persona: "dreamer", pitch: 0.86 },
+  kangmin: { persona: "fidget", pitch: 0.93 },
+  // photo-real cast
+  jaehoon: { persona: "scanner", pitch: 0.81 },
+  minseok: { persona: "dreamer", pitch: 0.97 },
+  taejun: { persona: "starer", pitch: 0.7 },
+  seoyeon: { persona: "focused", pitch: 1.27 },
+  naomi: { persona: "starer", pitch: 1.12 },
+  claire: { persona: "scanner", pitch: 1.39 },
 };
 
 /** Everything that makes one character sound like themself. `slot` picks among installed Korean voices. */

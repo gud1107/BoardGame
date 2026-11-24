@@ -64,6 +64,16 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.212.0",
+    releaseDate: "2026-11-25",
+    title: "🧑 실사풍 캐릭터 6명을 프로필에서 고를 수 있어요",
+    changes: [
+      { game: "common", type: "FEAT", desc: "🧑 프로필 → 캐릭터 선택에 실사풍 6명 추가 — 재훈·민석·태준·서연·나오미·클레어, 3D 게임에서 이 모습으로 보여요" },
+      { game: "common", type: "FEAT", desc: "😀 실사풍도 눈 깜빡임·말하는 입·웃음·놀람·슬픔 표정이 움직이고 저마다 목소리가 있어요 (색·메이크업은 못 바꿔요)" },
+      { game: "common", type: "FIX", desc: "🗣️ 다혜·예슬·린·시우·강민에게도 자기 목소리가 생겼어요" },
+    ],
+  },
+  {
     version: "v1.211.0",
     releaseDate: "2026-11-25",
     title: "🖍️ 그림 전화기 봇이 밑그림을 색칠하고 이유를 말해요",

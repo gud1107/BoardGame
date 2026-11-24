@@ -5,7 +5,7 @@ import { createPortal, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils, type VRM, type VRMHumanBoneName } from "@pixiv/three-vrm";
-import { DYED_BY_DEFAULT, VRM_WARDROBE, type VrmModel, type WardrobeSlot } from "@/lib/character/avatar";
+import { DYED_BY_DEFAULT, REALISTIC_MODELS, VRM_WARDROBE, type VrmModel, type WardrobeSlot } from "@/lib/character/avatar";
 import { FACES, Hat, holdPose, holdsInMood, STRONG_MOODS, TABLE_POSES, type PersonLook, type PersonMood, type SeatedPersonProps } from "./SeatedPerson";
 import { createMotion, HANDS, stepMotion, type MotionState } from "./motion";
 import { PERSONA_STYLE, personaGaze } from "./persona";
@@ -39,6 +39,8 @@ type ModelKey = VrmModel;
 type ModelSpec = { hide: string[]; skin: string[]; tops: string[] };
 /** The classic VRoid exports name materials like "F00_001_01_Tops_01_CLOTH" / "…_Body_00_SKIN". */
 const CLASSIC: ModelSpec = { hide: [], skin: ["_skin"], tops: ["tops", "onepice"] };
+/** Photo-real models carry their colours in the textures: no skin / top tint. */
+const PHOTOREAL: ModelSpec = { hide: [], skin: [], tops: [] };
 const MODELS: Record<ModelKey, ModelSpec> = {
   "pixiv-sample": { hide: [], skin: ["skin"], tops: ["tops"] },
   "three-vrm-girl": { hide: [], skin: ["body", "face"], tops: ["tops"] },
@@ -56,6 +58,12 @@ const MODELS: Record<ModelKey, ModelSpec> = {
   "ps-female": CLASSIC,
   "ps-male": CLASSIC,
   "tanis-male": CLASSIC,
+  "rb-track": PHOTOREAL,
+  "rb-stripe": PHOTOREAL,
+  "rb-suit-m": PHOTOREAL,
+  "rb-denim": PHOTOREAL,
+  "rb-suit-f": PHOTOREAL,
+  "rb-leather": PHOTOREAL,
 };
 
 /** Seats nobody styled: a varied cast per gender, stable per seat. */
@@ -602,7 +610,7 @@ export function useVrmAvatar(look: PersonLook, seed: number, opts: { out?: boole
   const morphs = useRef<FaceMorph[]>([]);
   const { eyes, face } = look;
   useEffect(() => {
-    if (!vrm) return;
+    if (!vrm || REALISTIC_MODELS.has(key)) return;
     liftMorphs(morphs.current);
     morphs.current = faceMorphs(vrm, key, { eyes });
     shapeFace(vrm, { eyes, face });

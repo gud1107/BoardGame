@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { speakIntro } from "@/lib/audio/characterVoice";
-import { AVATAR_OPTIONS, CHARACTER_PRESETS, DYED_BY_DEFAULT, resolveLook, VRM_MODEL_GENDER, VRM_WARDROBE, wardrobeFor, type AvatarProfile, type PersonLook, type VrmModel, type WardrobeSlot } from "@/lib/character/avatar";
+import { AVATAR_OPTIONS, CHARACTER_PRESETS, DYED_BY_DEFAULT, REALISTIC_MODELS, resolveLook, VRM_MODEL_GENDER, VRM_WARDROBE, wardrobeFor, type AvatarProfile, type PersonLook, type VrmModel, type WardrobeSlot } from "@/lib/character/avatar";
 import { MAX_SAVED, portraitKey, PREVIOUS_ACCOUNT_LOOK, useMyCharacter } from "@/lib/character/myCharacter";
 
 const CharacterPreview3D = dynamic(() => import("./CharacterPreview3D"), {
@@ -275,6 +275,7 @@ export function CharacterCustomizer({ onDone, doneLabel }: { onDone: () => void;
   const hairDye = look.hairDye ?? DYED_BY_DEFAULT.has(model);
   const outfitDye = look.outfitDye ?? DYED_BY_DEFAULT.has(model);
   const hairs = look.gender === "f" ? AVATAR_OPTIONS.hairF : AVATAR_OPTIONS.hairM;
+  const realistic = REALISTIC_MODELS.has(model);
 
   return (
     <div className="flex w-full flex-col gap-3">
@@ -300,6 +301,11 @@ export function CharacterCustomizer({ onDone, doneLabel }: { onDone: () => void;
           </Chip>
         ))}
       </Row>
+      {realistic && (
+        <p className="text-[11px] text-white/45 light:text-slate-500">실사풍 캐릭터는 얼굴·헤어·옷이 한 벌이라 색과 메이크업을 바꿀 수 없어요. 꾸미고 싶다면 위에서 다른 캐릭터를 골라 주세요.</p>
+      )}
+      {!realistic && (
+        <>
       {wardrobe.hair.length > 0 ? (
         SLOT_ROWS.map(([slot, label, field]) => (
           <Row key={slot} label={label}>
@@ -411,6 +417,8 @@ export function CharacterCustomizer({ onDone, doneLabel }: { onDone: () => void;
               </Chip>
             ))}
           </Row>
+        </>
+      )}
         </>
       )}
     </div>
