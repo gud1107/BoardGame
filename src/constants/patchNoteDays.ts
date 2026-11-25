@@ -17,6 +17,9 @@ export const DAY_GROUP_COLLAPSE_AT = 4;
  * Keep it short (≤ 80 chars), headline features only.
  */
 export const PATCH_NOTE_DAY_SUMMARIES: Record<string, Partial<Record<PatchNoteGameTag, string>>> = {
+  "2026-11-25": {
+    common: "🧑 실사풍 캐릭터 6명과 표정·목소리, 🗣️ 빠진 목소리 추가, 💇 3D 캐릭터 가볍게",
+  },
   "2026-11-23": {
     "hundred-tales": "🧭 판단 채점 코치·추천·리포트, ✨ 모든 행동 연출, 🔊 효과음 추가, ⚡ 렉 줄이기",
   },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { memo, useRef } from "react";
 import * as THREE from "three";
 import type { PersonLook } from "@/games/shared/three/SeatedPerson";
 import VrmBody, { addCrouch, addWalk, setBone, BODY, BODY_DROP } from "@/games/shared/three/VrmBody";
@@ -28,6 +28,24 @@ export interface KidFrame {
   cocoa: boolean;
   /** 🧊 왕눈덩이를 들고 있음 */
   giant: boolean;
+  /** 앞구르기 진행 0..1 (아니면 −1) */
+  roll: number;
+  /** 구르는 방향 (시뮬 각) */
+  rollDir: number;
+}
+
+/** 웅크린 몸의 굴림 중심 높이 */
+const ROLL_C = 0.38;
+/** 구르기 진행(0..1) → 몸이 돈 각도 (웅크린 뒤 돌기 시작, 일어서기 전에 한 바퀴 끝) */
+function rollAngle(k: number): number {
+  const u = Math.max(0, Math.min(1, (k - 0.08) / 0.76));
+  return Math.PI * 2 * (u * 0.65 + u * u * (3 - 2 * u) * 0.35);
+}
+function rollTumble(g: THREE.Group, k: number) {
+  const a = k < 0 ? 0 : rollAngle(k);
+  // 발밑이 아니라 웅크린 몸 가운데를 축으로 돈다
+  g.rotation.x = a;
+  g.position.set(0, ROLL_C * (1 - Math.cos(a)), -ROLL_C * Math.sin(a));
 }
 
 export const HEAD_Y = 1.36;
@@ -35,8 +53,9 @@ export const HEAD_Y = 1.36;
 const shadowGeo = new THREE.CircleGeometry(0.42, 24);
 const ringGeo = new THREE.RingGeometry(0.42, 0.52, 32);
 
-export default function Kid({ look, seed, teamColor, scarf, lowDetail, read }: { look: PersonLook; seed: number; teamColor: string; scarf: string; lowDetail: boolean; read: () => KidFrame }) {
+export default memo(function Kid({ look, seed, teamColor, scarf, lowDetail, read }: { look: PersonLook; seed: number; teamColor: string; scarf: string; lowDetail: boolean; read: () => KidFrame }) {
   const root = useRef<THREE.Group>(null);
+  const tumble = useRef<THREE.Group>(null);
   const foot = useRef<THREE.Group>(null);
   const ice = useRef<THREE.Mesh>(null);
   const ball = useRef<THREE.Mesh>(null);
@@ -55,8 +74,16 @@ export default function Kid({ look, seed, teamColor, scarf, lowDetail, read }: {
     if (r) {
       r.visible = f.visible;
       r.position.set(f.x, 0, f.z);
-      r.rotation.y = Math.PI / 2 - f.face;
+      // 구를 때는 구르는 쪽을 보고, 끝날 무렵 조준 방향으로 돌아온다
+      let face = f.face;
+      if (f.roll >= 0) {
+        const back = Math.max(0, (f.roll - 0.82) / 0.18);
+        const d = Math.atan2(Math.sin(f.face - f.rollDir), Math.cos(f.face - f.rollDir));
+        face = f.rollDir + d * back;
+      }
+      r.rotation.y = Math.PI / 2 - face;
     }
+    if (tumble.current) rollTumble(tumble.current, f.roll);
     const g = foot.current;
     if (g) {
       g.visible = f.visible;
@@ -64,10 +91,10 @@ export default function Kid({ look, seed, teamColor, scarf, lowDetail, read }: {
     }
     if (ice.current) ice.current.visible = f.visible && f.mode === "frozen";
     if (glow.current) glow.current.visible = f.visible && f.cocoa;
-    const holding = f.mode === "charge" || f.giant;
+    const holding = f.mode === "charge" || (f.giant && f.roll < 0);
     if (ball.current) {
       ball.current.visible = f.visible && holding;
-      ball.current.scale.setScalar(f.giant ? 2.4 : 1);
+      ball.current.scale.setScalar(f.giant ? 1.9 : 1);
     }
     switch (f.mode) {
       case "run":
@@ -118,12 +145,23 @@ export default function Kid({ look, seed, teamColor, scarf, lowDetail, read }: {
         setBone(o, "rightUpperArm", -1.6, 0, -0.2);
         setBone(o, "leftUpperArm", -1.6, 0, 0.2);
         break;
-      case "dash":
-        addCrouch(o, 0.35);
-        o[BODY.spine] += 0.5;
-        setBone(o, "rightUpperArm", 0.6, 0, -0.6);
-        setBone(o, "leftUpperArm", 0.6, 0, 0.6);
+      case "dash": {
+        // 앞구르기: 무릎을 가슴에 끌어안고 턱을 당겨 공처럼 말았다가 끝에 펴며 일어선다
+        const k = f.roll < 0 ? 0 : f.roll > 0.78 ? Math.max(0.25, 1 - ((f.roll - 0.78) / 0.22) * 0.75) : 1;
+        for (const side of ["right", "left"] as const) {
+          const out = side === "right" ? -1 : 1;
+          setBone(o, `${side}UpperLeg`, -2.15 * k, 0, 0.12 * out * k);
+          setBone(o, `${side}LowerLeg`, 2.45 * k);
+          setBone(o, `${side}UpperArm`, -1.15 * k, 0, 0.25 * out * k);
+          setBone(o, `${side}LowerArm`, -1.6 * k);
+        }
+        setBone(o, "spine", 0.6 * k);
+        setBone(o, "chest", 0.45 * k);
+        setBone(o, "neck", 0.4 * k);
+        setBone(o, "head", 0.45 * k);
+        o[BODY_DROP] += 0.4 * k;
         break;
+      }
       case "hit": {
         const w = Math.sin(since * 30) * Math.max(0, 1 - since * 3);
         o[BODY.spine] -= 0.35;
@@ -182,6 +220,7 @@ export default function Kid({ look, seed, teamColor, scarf, lowDetail, read }: {
         </mesh>
       </group>
       <group ref={root} visible={false}>
+        <group ref={tumble}>
         <VrmBody
           look={look}
           seed={seed}
@@ -189,7 +228,7 @@ export default function Kid({ look, seed, teamColor, scarf, lowDetail, read }: {
           pose={pose}
           face={face}
           lowDetail={lowDetail}
-          follow={18}
+          follow={24}
           head={
             <group position={[0, -0.02, -0.01]}>
               {/* 팀 색 털모자 + 방울 */}
@@ -212,8 +251,8 @@ export default function Kid({ look, seed, teamColor, scarf, lowDetail, read }: {
           }
           handR={
             <mesh ref={ball} position={[0, -0.08, 0.02]} visible={false}>
-              <sphereGeometry args={[0.06, 12, 8]} />
-              <meshStandardMaterial color="#f8fafc" roughness={0.8} />
+              <sphereGeometry args={[0.1, 14, 10]} />
+              <meshStandardMaterial color="#f8fafc" roughness={0.8} emissive="#7dd3fc" emissiveIntensity={0.25} />
             </mesh>
           }
           fallback={
@@ -223,12 +262,14 @@ export default function Kid({ look, seed, teamColor, scarf, lowDetail, read }: {
             </mesh>
           }
         />
+        </group>
         {/* 얼었을 때: 반투명 얼음 껍질 */}
         <mesh ref={ice} position={[0, 0.85, 0]} visible={false}>
           <capsuleGeometry args={[0.42, 0.9, 6, 14]} />
-          <meshPhysicalMaterial color="#bfe9ff" transparent opacity={0.45} roughness={0.08} transmission={0.4} thickness={0.3} depthWrite={false} />
+          {/* 투과(transmission) 재질은 얼 때마다 장면 전체를 한 번 더 그려 렉이 걸린다 — 일반 반투명으로 */}
+          <meshStandardMaterial color="#bfe9ff" transparent opacity={0.5} roughness={0.08} metalness={0.15} emissive="#7dd3fc" emissiveIntensity={0.15} depthWrite={false} />
         </mesh>
       </group>
     </>
   );
-}
+});

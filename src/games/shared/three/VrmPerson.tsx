@@ -9,6 +9,7 @@ import { DYED_BY_DEFAULT, REALISTIC_MODELS, VRM_WARDROBE, type VrmModel, type Wa
 import { FACES, Hat, holdPose, holdsInMood, STRONG_MOODS, TABLE_POSES, type PersonLook, type PersonMood, type SeatedPersonProps } from "./SeatedPerson";
 import { createMotion, HANDS, stepMotion, type MotionState } from "./motion";
 import { PERSONA_STYLE, personaGaze } from "./persona";
+import { mergeHair } from "./vrmMerge";
 import { armJointQuat, toVrm0, upperArmQuat } from "./vrmPose";
 import { fingerAngles, GRIP_CURL, handRigs, reach, thumbAngles, type Grip } from "./vrmHands";
 import { blinkAmount, breath, GazeSpring, mouthShape, saccade } from "./vrmLife";
@@ -217,6 +218,7 @@ async function parseVrm(key: ModelKey): Promise<VRM> {
     o.frustumCulled = false;
     if (MODELS[key].hide.includes(o.name)) o.visible = false;
   });
+  mergeHair(vrm.scene);
   shareTextures(key, vrm);
   for (const m of materialsOf(vrm.scene)) memoProgramKey(m);
   return vrm;

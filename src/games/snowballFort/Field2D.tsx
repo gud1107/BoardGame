@@ -86,9 +86,10 @@ export default function Field2D({ shared }: { shared: MutableRefObject<SceneShar
         ctx.arc(X(p.x), Y(p.z), (b.big ? 0.34 : 0.14) * scale, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = "#ffffff";
-        ctx.strokeStyle = "#64748b";
+        ctx.strokeStyle = TEAM_COLORS[b.team];
+        ctx.lineWidth = 2.5;
         ctx.beginPath();
-        ctx.arc(X(p.x), Y(p.z) - p.y * scale * 0.35, (b.big ? 0.34 : 0.16) * scale, 0, Math.PI * 2);
+        ctx.arc(X(p.x), Y(p.z) - p.y * scale * 0.35, Math.max(b.big ? 8 : 4.5, (b.big ? 0.42 : 0.24) * scale), 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
       }
@@ -106,6 +107,16 @@ export default function Field2D({ shared }: { shared: MutableRefObject<SceneShar
         ctx.fillStyle = "#fff";
         ctx.font = `bold ${Math.max(10, scale * 0.55)}px system-ui`;
         ctx.fillText(TEAM_SYMBOLS[p.team], X(pose.x), Y(pose.z) + 4);
+        // 체력
+        if (!frozen) {
+          const hearts = "♥".repeat(Math.max(0, p.hp)) + "♡".repeat(Math.max(0, p.hpMax - Math.max(0, p.hp)));
+          ctx.font = `bold ${Math.max(12, scale * 0.6)}px system-ui`;
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = "#ffffff";
+          ctx.strokeText(hearts, X(pose.x), Y(pose.z) - 0.6 * scale);
+          ctx.fillStyle = "#e11d48";
+          ctx.fillText(hearts, X(pose.x), Y(pose.z) - 0.6 * scale);
+        }
         // 조준 방향
         ctx.strokeStyle = "rgba(15,23,42,0.6)";
         ctx.beginPath();

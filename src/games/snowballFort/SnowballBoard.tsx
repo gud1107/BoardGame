@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useSuiteBgm } from "@/lib/audio/useProceduralSuite";
 import SuiteSoundHud from "@/components/audio/SuiteSoundHud";
 import {
@@ -403,6 +403,67 @@ function HoldButton({ label, sub, onDown, onUp, active, frac = 1, ariaLabel }: {
   );
 }
 
+/* ── 화면 위 상태판 (전체화면에서도 보이게 무대 안) ─────────────────── */
+
+function SnowmanBar({ team, mine, hp, hpMax }: { team: number; mine: boolean; hp: number; hpMax: number }) {
+  const frac = hpMax > 0 ? hp / hpMax : 0;
+  const low = hp > 0 && frac <= 0.34;
+  return (
+    <div className={`min-w-0 flex-1 rounded-xl border-2 bg-slate-950/75 px-2 py-1 text-white shadow-lg ${low ? "animate-pulse" : ""}`} style={{ borderColor: TEAM_COLORS[team] }} aria-label={`${mine ? "우리" : "상대"} 눈사람 체력 ${hp}/${hpMax}`}>
+      <div className="flex items-center justify-between gap-1 text-[11px] leading-tight font-bold sm:text-sm">
+        <span className="truncate">
+          ☃️ {TEAM_SYMBOLS[team]} {mine ? "우리" : "상대"}
+        </span>
+        <span key={hp} className="shrink-0 animate-[sf-pop_0.35s_ease-out] tabular-nums">
+          {hp}/{hpMax}
+        </span>
+      </div>
+      <div className="mt-0.5 h-2 overflow-hidden rounded-full bg-white/20 sm:h-3">
+        <div className="h-full rounded-full transition-[width]" style={{ width: `${Math.round(frac * 100)}%`, background: TEAM_COLORS[team] }} />
+      </div>
+    </div>
+  );
+}
+
+function MyStatus({ hp, hpMax, ammo, maxAmmo, giant, touch }: { hp: number; hpMax: number; ammo: number; maxAmmo: number; giant: boolean; touch: boolean }) {
+  const size = touch ? "text-xl" : "text-4xl";
+  const ball = touch ? "h-4 w-4" : "h-7 w-7";
+  return (
+    <div className={`pointer-events-none absolute left-2 z-20 flex rounded-2xl bg-slate-950/75 text-white shadow-lg ${touch ? "top-16 items-center gap-2.5 px-2.5 py-1" : "bottom-2 flex-col gap-1.5 px-4 py-2.5"}`}>
+      <div className={`flex items-center leading-none ${hp === 1 ? "animate-pulse" : ""}`} aria-label={`체력 ${hp}/${hpMax}`}>
+        {!touch && <span className="mr-2 w-12 text-xs font-bold text-white/80">체력</span>}
+        <span key={hp} className={`flex animate-[sf-pop_0.35s_ease-out] gap-0.5 ${size}`}>
+          {Array.from({ length: hpMax }, (_, k) => (
+            <span key={k} aria-hidden className={k < hp ? "text-rose-500" : "text-white/25"}>
+              {k < hp ? "♥" : "♡"}
+            </span>
+          ))}
+        </span>
+      </div>
+      <div className="flex items-center" aria-label={`눈덩이 ${ammo}/${maxAmmo}`}>
+        {!touch && <span className="mr-2 w-12 text-xs font-bold text-white/80">눈덩이</span>}
+        <span className="flex gap-1">
+          {Array.from({ length: maxAmmo }, (_, k) => (
+            <span
+              key={k}
+              aria-hidden
+              className={`${ball} rounded-full border-2 ${k < ammo ? "animate-[sf-pop_0.3s_ease-out] border-sky-300" : "border-dashed border-white/35"}`}
+              style={k < ammo ? { background: "radial-gradient(circle at 35% 30%, #ffffff 45%, #bae0fd 100%)" } : undefined}
+            />
+          ))}
+        </span>
+        <b className={`ml-2 tabular-nums ${touch ? "text-sm" : "text-xl"} ${ammo === 0 ? "text-amber-300" : ""}`}>{ammo}</b>
+        {giant && (
+          <span className={`ml-1 ${touch ? "text-sm" : "text-xl"}`} aria-label="다음 한 방은 왕눈덩이">
+            🧊
+          </span>
+        )}
+      </div>
+      {ammo === 0 && !touch && <div className="animate-pulse text-xs font-bold text-amber-300">눈덩이 없음! E를 꾹 눌러 뭉치세요</div>}
+    </div>
+  );
+}
+
 /* ── 보드 ───────────────────────────────────────────────────────────── */
 
 interface Banner {
@@ -582,9 +643,12 @@ export default function SnowballBoard({ snap, buf, fresh, mySeat, names, onInput
         case "gather":
           if (ev.s === mySeat) s.play("gather");
           break;
-        case "dash":
+        case "dash": {
+          const o = snap.players[ev.s];
+          if (o) add.push({ ev, at: now, x: o.x, z: o.z });
           if (ev.s === mySeat) s.play("dash");
           break;
+        }
         case "denied":
           if (ev.s === mySeat) s.play("denied");
           break;
@@ -652,6 +716,12 @@ export default function SnowballBoard({ snap, buf, fresh, mySeat, names, onInput
   const use3d = view.mode === "3d" && canGl;
   const frozenLeft = me && isFrozen(me, snap.t) ? Math.ceil((me.frozenUntil - snap.t) / 1000) : 0;
   const lastRound = snap.history[snap.history.length - 1];
+  // 3D가 계속(약 6초) 40fps 밑이면 자동 화질을 낮춘다
+  const slow = useRef(0);
+  const onFps = useCallback((f: number) => {
+    slow.current = f < 40 ? slow.current + 1 : 0;
+    if (slow.current >= 3) setLowFps(true);
+  }, []);
   const uiClick = useCallback(() => sound().play("ui"), [sound]);
   const maxAmmo = ammoMax(snap);
   // 눈더미 파란 고리에 가까이 오면(고리 + 1.5칸) 뭉치기 안내
@@ -726,27 +796,6 @@ export default function SnowballBoard({ snap, buf, fresh, mySeat, names, onInput
         </div>
       )}
 
-      {/* 눈사람 체력 */}
-      <div className="grid grid-cols-2 gap-2">
-        {teamOrder.map((t) => {
-          const m = snap.snowmen[t];
-          const frac = m ? m.hp / m.hpMax : 0;
-          return (
-            <div key={t} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-xs light:border-slate-200 light:bg-white">
-              <span className="shrink-0 font-bold" style={{ color: TEAM_COLORS[t] }}>
-                ☃️ {TEAM_SYMBOLS[t]} {t === myTeam ? "우리" : "상대"} {TEAM_NAMES[t]}
-              </span>
-              <span className="h-2 flex-1 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
-                <span className="block h-full rounded-full transition-[width]" style={{ width: `${Math.round(frac * 100)}%`, background: TEAM_COLORS[t] }} />
-              </span>
-              <b className="shrink-0 tabular-nums text-white light:text-slate-900">
-                {m?.hp ?? 0}/{m?.hpMax ?? 0}
-              </b>
-            </div>
-          );
-        })}
-      </div>
-
       {/* 무대 */}
       <div
         ref={stageRef}
@@ -763,7 +812,7 @@ export default function SnowballBoard({ snap, buf, fresh, mySeat, names, onInput
         }}
         onContextMenu={(e) => e.preventDefault()}
       >
-        {use3d ? <FieldScene shared={shared} names={names} seatCount={snap.seatCount} quality={quality} fx={fx} onFps={(f) => f < 28 && !lowFps && setLowFps(true)} /> : <Field2D shared={shared} />}
+        {use3d ? <FieldScene mySeat={mySeat} shared={shared} names={names} seatCount={snap.seatCount} quality={quality} fx={fx} onFps={onFps} /> : <Field2D shared={shared} />}
 
         {/* 이름표 */}
         <div className="pointer-events-none absolute inset-0 z-10">
@@ -774,21 +823,46 @@ export default function SnowballBoard({ snap, buf, fresh, mySeat, names, onInput
               className="absolute top-0 left-0 flex flex-col items-center gap-0.5 whitespace-nowrap"
               style={{ display: "none" }}
             >
-              <div className="flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-bold text-white shadow">
+              <div className={`flex items-center gap-1 rounded-full bg-black/70 px-2 py-0.5 font-bold text-white shadow ${touch ? "text-[11px]" : "text-xs"}`}>
                 <span style={{ color: TEAM_COLORS[p.team] }} aria-hidden>
                   {TEAM_SYMBOLS[p.team]}
                 </span>
                 <span className="h-2 w-2 rounded-full" style={{ background: SEAT_SCARF[p.seat % SEAT_SCARF.length] }} aria-hidden />
                 <span className="max-w-[5.5rem] truncate">{p.seat === mySeat ? "나" : (names[p.seat] ?? `${p.seat + 1}번`)}</span>
-                {isFrozen(p, snap.t) ? <span>❄️</span> : <span className="tracking-tighter text-rose-300">{"♥".repeat(Math.max(0, p.hp))}</span>}
+                {isFrozen(p, snap.t) ? (
+                  <span>❄️</span>
+                ) : (
+                  <span className={`leading-none ${touch ? "text-sm" : "text-base"}`} aria-label={`체력 ${p.hp}/${p.hpMax}`}>
+                    <span className="text-rose-400">{"♥".repeat(Math.max(0, p.hp))}</span>
+                    <span className="text-white/35">{"♡".repeat(Math.max(0, p.hpMax - Math.max(0, p.hp)))}</span>
+                  </span>
+                )}
                 {p.giant && <span aria-label="왕눈덩이">🧊</span>}
               </div>
             </div>
           ))}
         </div>
 
+        {/* 눈사람 체력 + 남은 시간 */}
+        {snap.phase !== "gameOver" && (
+          <div className="pointer-events-none absolute top-2 right-2 left-[4.75rem] z-20 mx-auto flex max-w-2xl items-center gap-1.5 sm:right-[4.75rem]">
+            {teamOrder.map((t, k) => (
+              <Fragment key={t}>
+                {k === 1 && timeLeft !== null && (
+                  <span className={`shrink-0 rounded-lg px-1.5 py-1 text-xs font-black text-white tabular-nums sm:text-base ${timeLeft <= 30 ? "bg-rose-600" : "bg-slate-950/75"}`}>
+                    {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, "0")}
+                  </span>
+                )}
+                <SnowmanBar team={t} mine={t === myTeam} hp={snap.snowmen[t]?.hp ?? 0} hpMax={snap.snowmen[t]?.hpMax ?? 0} />
+              </Fragment>
+            ))}
+          </div>
+        )}
+        {/* 내 체력 · 눈덩이 */}
+        {fighting && me && <MyStatus hp={Math.max(0, me.hp)} hpMax={me.hpMax} ammo={me.ammo} maxAmmo={Math.max(maxAmmo, me.ammo)} giant={me.giant} touch={touch} />}
+
         {/* 알림판 */}
-        <div className="pointer-events-none absolute top-2 right-2 z-20 flex max-w-[60%] flex-col items-end gap-1">
+        <div className="pointer-events-none absolute top-16 right-2 z-20 flex max-w-[45%] flex-col items-end gap-1">
           {feed.map((f) => (
             <div key={f.id} className="rounded-lg bg-black/55 px-2 py-1 text-[11px] text-white shadow">
               {f.text}
@@ -797,7 +871,7 @@ export default function SnowballBoard({ snap, buf, fresh, mySeat, names, onInput
         </div>
 
         {/* 배너 */}
-        <div className="pointer-events-none absolute inset-x-0 top-[14%] z-20 flex flex-col items-center gap-2 px-3">
+        <div className={`pointer-events-none absolute inset-x-0 ${touch ? "top-[25%]" : "top-[16%]"} z-20 flex flex-col items-center gap-2 px-3`}>
           {snap.phase === "countdown" && (
             <div className="flex flex-col items-center">
               <span className="rounded-full bg-black/40 px-3 py-0.5 text-sm font-bold text-white">
@@ -833,7 +907,7 @@ export default function SnowballBoard({ snap, buf, fresh, mySeat, names, onInput
         )}
         {/* 눈더미 옆 — 뭉치기 안내 */}
         {fighting && me && frozenLeft === 0 && !chargingUi && me.ammo < maxAmmo && pileHint && (
-          <div className={`pointer-events-none absolute inset-x-0 ${touch ? "top-[22%]" : "bottom-[3%]"} z-20 mx-auto flex w-fit flex-col items-center gap-1 rounded-2xl bg-black/65 px-3 py-1.5 text-center text-white shadow-lg`}>
+          <div className={`pointer-events-none absolute inset-x-0 ${touch ? "top-[34%]" : "bottom-[3%]"} z-20 mx-auto flex w-fit flex-col items-center gap-1 rounded-2xl bg-black/65 px-3 py-1.5 text-center text-white shadow-lg`}>
             <div className="flex items-center gap-1.5 text-sm font-bold">
               {touch ? (
                 <span className="rounded-md bg-cyan-300 px-1.5 text-slate-900">⛄ 버튼</span>
@@ -858,7 +932,7 @@ export default function SnowballBoard({ snap, buf, fresh, mySeat, names, onInput
 
         {/* 라운드 결과 */}
         {snap.phase === "roundEnd" && lastRound && (
-          <div className="absolute inset-x-3 top-[10%] z-30 mx-auto max-w-sm animate-[sf-pop_0.4s_ease-out] rounded-2xl border border-white/15 bg-slate-950/85 p-4 text-center text-white shadow-2xl">
+          <div className="absolute inset-x-3 top-[18%] z-30 mx-auto max-w-sm animate-[sf-pop_0.4s_ease-out] rounded-2xl border border-white/15 bg-slate-950/85 p-4 text-center text-white shadow-2xl">
             <p className="text-xs text-white/60">
               라운드 {lastRound.round} · {Math.round(lastRound.ms / 1000)}초 · {lastRound.reason === "snowman" ? "눈사람 쓰러뜨림" : lastRound.reason === "time" ? "시간 종료 — 눈사람 체력 비교" : "무승부"}
             </p>
@@ -880,7 +954,7 @@ export default function SnowballBoard({ snap, buf, fresh, mySeat, names, onInput
         )}
 
         {snap.phase === "gameOver" && <FinalPanel snap={snap} names={names} mySeat={mySeat} />}
-        {notice && <div className="absolute inset-x-0 top-12 z-30 mx-auto w-fit rounded-full bg-amber-500/90 px-3 py-1 text-xs font-bold text-slate-900">{notice}</div>}
+        {notice && <div className="absolute inset-x-0 top-16 z-30 mx-auto w-fit rounded-full bg-amber-500/90 px-3 py-1 text-xs font-bold text-slate-900">{notice}</div>}
 
         <button type="button" onClick={() => { uiClick(); toggleFull(); }} className="absolute top-2 left-2 z-30 rounded-full bg-black/45 px-2.5 py-1 text-xs text-white" aria-label={full ? "전체화면 끄기" : "전체화면"}>
           {full ? "↙ 작게" : "⛶ 크게"}
@@ -929,15 +1003,6 @@ export default function SnowballBoard({ snap, buf, fresh, mySeat, names, onInput
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/70 light:border-slate-200 light:bg-white light:text-slate-600">
           <span>
             나: <b style={{ color: TEAM_COLORS[me.team] }}>{TEAM_EMOJI[me.team]} {TEAM_SYMBOLS[me.team]} {TEAM_NAMES[me.team]}</b>
-          </span>
-          <span aria-label={`체력 ${me.hp}/${me.hpMax}`}>
-            체력 <span className="text-rose-400">{"♥".repeat(Math.max(0, me.hp))}</span>
-            <span className="text-white/25">{"♥".repeat(Math.max(0, me.hpMax - me.hp))}</span>
-          </span>
-          <span aria-label={`눈덩이 ${me.ammo}/${maxAmmo}`}>
-            ⛄ 눈덩이 <b className="text-white light:text-slate-900">{"●".repeat(me.ammo)}</b>
-            <span className="text-white/25">{"○".repeat(Math.max(0, maxAmmo - me.ammo))}</span>
-            {me.gathering && <span className="ml-1 text-cyan-300">뭉치는 중…</span>}
           </span>
           <span>💨 {dashFrac >= 1 ? "✓" : `${Math.ceil((me.dashCdAt - snap.t) / 1000)}초`}</span>
           {snap.t < me.cocoaUntil && <span className="text-amber-300">🍫 {Math.ceil((me.cocoaUntil - snap.t) / 1000)}초</span>}

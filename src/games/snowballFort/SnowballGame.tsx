@@ -396,7 +396,7 @@ export default function SnowballGame({ onComplete }: PlayableGameProps) {
         if (Date.now() - at > LEAVE_GRACE_MS && rt.state.players[seat] && !rt.state.players[seat].bot) setAway(rt, seat, true);
       }
       const s = makeSnap(rt.state, ++seqRef.current);
-      const render = now - lastRender >= 66;
+      const render = now - lastRender >= 100;
       if (render) lastRender = now;
       ingest(s, render);
       if (channelRef.current && now - lastSnap >= SNAP_MS) {
@@ -490,6 +490,8 @@ export default function SnowballGame({ onComplete }: PlayableGameProps) {
     [mySeat],
   );
 
+  // 이름표는 봇 여부가 바뀔 때만 다시 만든다 (스냅샷마다 새로 만들면 3D 전체가 다시 그려짐)
+  const botMask = snap ? snap.players.map((p) => (p.bot ? "1" : "0")).join("") : "";
   // --- 이름 ----------------------------------------------------------------
   const names = useMemo(() => {
     const map: Record<number, string> = {};
@@ -501,10 +503,10 @@ export default function SnowballGame({ onComplete }: PlayableGameProps) {
       }
       const occ = occupants.find((o) => o.seat === s);
       const bi = botSeats.indexOf(s);
-      map[s] = s === mySeat ? myName : (occ?.name ?? (bi >= 0 ? botDisplayName(bi, botLevels[bi]) : snap?.players[s]?.bot ? `🤖 AI ${s + 1}` : `${s + 1}번`));
+      map[s] = s === mySeat ? myName : (occ?.name ?? (bi >= 0 ? botDisplayName(bi, botLevels[bi]) : botMask[s] === "1" ? `🤖 AI ${s + 1}` : `${s + 1}번`));
     }
     return map;
-  }, [occupants, botSeats, botLevels, mySeat, myName, snap?.seatCount, snap?.players, knownTarget, practice, practiceLevel]);
+  }, [occupants, botSeats, botLevels, mySeat, myName, snap?.seatCount, botMask, knownTarget, practice, practiceLevel]);
 
   // --- 끝 -------------------------------------------------------------------
   useEffect(() => {

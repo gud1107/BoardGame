@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, type MutableRefObject, type ReactNode } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { resolveLook } from "@/games/shared/three/SeatedPerson";
 import { roomCharacterOf, useRoomCharacters } from "@/lib/character/roomCharacters";
 import { AdaptiveResolution } from "@/games/shared/three/sceneFx";
-import { FIELD_HL, FIELD_HW, ITEM_INFO, PILES, SEAT_SCARF, SNOWMAN_H, TEAM_COLORS, WALL_H, WALL_LEN, WALL_T, launchFor, sideSign, teamOf } from "../data";
+import { DASH_MS, FIELD_HL, FIELD_HW, ITEM_INFO, PILES, SEAT_SCARF, SNOWMAN_H, TEAM_COLORS, WALL_H, WALL_LEN, WALL_T, launchFor, sideSign, teamOf } from "../data";
 import type { SnapBuffer } from "../net";
 import { ballPos, isFrozen, type GameEvent, type MatchState, type PlayerState } from "../sim";
 import Kid, { type KidFrame, type KidMode } from "./Kid";
@@ -34,11 +34,15 @@ export interface SceneShared {
 export interface FxItem {
   ev: GameEvent;
   at: number;
+  /** 구르기 시작한 곳 */
+  x?: number;
+  z?: number;
 }
 
 export interface FieldSceneProps {
   shared: MutableRefObject<SceneShared>;
   names: Record<number, string>;
+  mySeat: number;
   seatCount: number;
   quality: "high" | "low";
   fx: FxItem[];
@@ -130,22 +134,44 @@ function Ground({ quality }: { quality: "high" | "low" }) {
           </mesh>
         </group>
       ))}
-      {trees.map((t, i) => (
-        <group key={i} position={[t.x, 0, t.z]} scale={t.s}>
-          <mesh position-y={0.4}>
-            <cylinderGeometry args={[0.12, 0.16, 0.8, 6]} />
-            <meshStandardMaterial color="#5b3a24" roughness={1} />
-          </mesh>
-          {[0, 1, 2].map((k) => (
-            <mesh key={k} position-y={1.1 + k * 0.75}>
-              <coneGeometry args={[1.05 - k * 0.28, 1.25, 8]} />
-              <meshStandardMaterial color={k === 2 ? "#f1f7fb" : "#1f5a45"} roughness={0.9} />
-            </mesh>
-          ))}
-        </group>
+      {/* 나무: 부분마다 인스턴스 하나 (따로 그리면 나무 40그루 = 160번 그리기) */}
+      <TreeParts trees={trees} y={0.4}>
+        <cylinderGeometry args={[0.12, 0.16, 0.8, 6]} />
+        <meshStandardMaterial color="#5b3a24" roughness={1} />
+      </TreeParts>
+      {[0, 1, 2].map((k) => (
+        <TreeParts key={k} trees={trees} y={1.1 + k * 0.75}>
+          <coneGeometry args={[1.05 - k * 0.28, 1.25, 8]} />
+          <meshStandardMaterial color={k === 2 ? "#f1f7fb" : "#1f5a45"} roughness={0.9} />
+        </TreeParts>
       ))}
     </group>
   );
+}
+
+function TreeParts({ trees, y, children }: { trees: { x: number; z: number; s: number }[]; y: number; children: ReactNode }) {
+  const ref = useRef<THREE.InstancedMesh>(null);
+  useLayoutEffect(() => {
+    const im = ref.current;
+    if (!im) return;
+    const m = new THREE.Matrix4();
+    trees.forEach((t, i) => im.setMatrixAt(i, m.makeScale(t.s, t.s, t.s).setPosition(t.x, y * t.s, t.z)));
+    im.instanceMatrix.needsUpdate = true;
+    im.computeBoundingSphere();
+  }, [trees, y]);
+  return (
+    <instancedMesh key={trees.length} ref={ref} args={[undefined, undefined, trees.length]}>
+      {children}
+    </instancedMesh>
+  );
+}
+
+/** 이번 프레임에 쓴 만큼만 GPU로 보낸다 */
+function uploadN(attr: THREE.InstancedBufferAttribute | null, n: number) {
+  if (!attr || n === 0) return;
+  attr.clearUpdateRanges();
+  attr.addUpdateRange(0, n * attr.itemSize);
+  attr.needsUpdate = true;
 }
 
 /* ── 눈사람 대장 ────────────────────────────────────────────────────── */
@@ -177,10 +203,11 @@ function Snowmen({ shared }: { shared: MutableRefObject<SceneShared> }) {
       if (head) head.visible = frac > 0.34 || down;
       const bar = c.children[c.children.length - 1] as THREE.Group;
       if (bar) {
-        bar.visible = !down;
+        // 우리 눈사람 막대는 낮은 카메라 앞을 가려서 숨김 (화면 위 상태판에 있음)
+        bar.visible = !down && team !== shared.current.mySeat % 2;
         const fill = bar.children[1] as THREE.Mesh;
         fill.scale.x = Math.max(0.001, frac);
-        fill.position.x = -(1 - frac) * 0.9;
+        fill.position.x = -(1 - frac) * 1.3 * (shared.current.mySeat % 2 === 1 ? -1 : 1);
       }
     });
   });
@@ -231,12 +258,12 @@ function Snowmen({ shared }: { shared: MutableRefObject<SceneShared> }) {
           {/* 체력 막대 */}
           <group position-y={SNOWMAN_H + 1.1}>
             <mesh>
-              <planeGeometry args={[1.9, 0.22]} />
-              <meshBasicMaterial color="#0f172a" transparent opacity={0.7} depthWrite={false} side={THREE.DoubleSide} />
+              <planeGeometry args={[2.8, 0.5]} />
+              <meshBasicMaterial color="#0f172a" transparent opacity={0.85} depthWrite={false} fog={false} side={THREE.DoubleSide} />
             </mesh>
-            <mesh position-z={0.001}>
-              <planeGeometry args={[1.8, 0.14]} />
-              <meshBasicMaterial color={TEAM_COLORS[team]} depthWrite={false} side={THREE.DoubleSide} />
+            <mesh renderOrder={1}>
+              <planeGeometry args={[2.6, 0.34]} />
+              <meshBasicMaterial color={TEAM_COLORS[team]} transparent depthWrite={false} fog={false} side={THREE.DoubleSide} />
             </mesh>
           </group>
         </group>
@@ -302,10 +329,19 @@ function Walls({ shared }: { shared: MutableRefObject<SceneShared> }) {
 /* ── 눈덩이·미리보기·아이템 ─────────────────────────────────────────── */
 
 const MAX_BALLS = 80;
+/** 보이는 크기만 키움 (판정 반지름은 data.ts 그대로) */
+const BALL_DRAW_R = 0.21;
+const GIANT_DRAW_R = 0.42;
+/** 꼬리: 지난 위치 잔상 개수·간격 */
+const TRAIL_N = 6;
+const TRAIL_MS = 26;
+const TEAM_COLOR3 = TEAM_COLORS.map((c) => new THREE.Color(c));
 
 function Balls({ shared }: { shared: MutableRefObject<SceneShared> }) {
   const inst = useRef<THREE.InstancedMesh>(null);
   const shadows = useRef<THREE.InstancedMesh>(null);
+  const shells = useRef<THREE.InstancedMesh>(null);
+  const trails = useRef<THREE.InstancedMesh>(null);
   const arc = useRef<THREE.Points>(null);
   const land = useRef<THREE.Mesh>(null);
   const m4 = useMemo(() => new THREE.Matrix4(), []);
@@ -315,16 +351,25 @@ function Balls({ shared }: { shared: MutableRefObject<SceneShared> }) {
     return g;
   }, []);
   useEffect(() => () => arcGeo.dispose(), [arcGeo]);
-  useFrame(() => ballsFrame(shared.current, inst.current, shadows.current, arc.current, land.current, arcGeo, m4));
+  useFrame(() => ballsFrame(shared.current, inst.current, shadows.current, shells.current, trails.current, arc.current, land.current, arcGeo, m4));
   return (
     <group>
       <instancedMesh ref={inst} args={[undefined, undefined, MAX_BALLS]} castShadow frustumCulled={false}>
-        <sphereGeometry args={[1, 12, 8]} />
-        <meshStandardMaterial color="#ffffff" roughness={0.7} emissive="#dbeafe" emissiveIntensity={0.25} />
+        <sphereGeometry args={[1, 14, 10]} />
+        <meshStandardMaterial color="#ffffff" roughness={0.7} emissive="#dbeafe" emissiveIntensity={0.35} />
+      </instancedMesh>
+      {/* 흰 눈밭 위에서도 보이게: 던진 팀 색 테두리 + 꼬리 */}
+      <instancedMesh ref={shells} args={[undefined, undefined, MAX_BALLS]} frustumCulled={false}>
+        <sphereGeometry args={[1, 14, 10]} />
+        <meshBasicMaterial color="#ffffff" side={THREE.BackSide} fog={false} />
+      </instancedMesh>
+      <instancedMesh ref={trails} args={[undefined, undefined, MAX_BALLS * TRAIL_N]} frustumCulled={false}>
+        <sphereGeometry args={[1, 8, 6]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={0.4} depthWrite={false} fog={false} />
       </instancedMesh>
       <instancedMesh ref={shadows} args={[undefined, undefined, MAX_BALLS]} frustumCulled={false}>
         <cylinderGeometry args={[1, 1, 0.01, 12]} />
-        <meshBasicMaterial color="#475569" transparent opacity={0.25} depthWrite={false} />
+        <meshBasicMaterial color="#1e293b" transparent opacity={0.45} depthWrite={false} />
       </instancedMesh>
       <points ref={arc} geometry={arcGeo} visible={false} frustumCulled={false}>
         <pointsMaterial color="#facc15" size={0.16} sizeAttenuation transparent opacity={0.9} depthWrite={false} />
@@ -338,28 +383,49 @@ function Balls({ shared }: { shared: MutableRefObject<SceneShared> }) {
 }
 
 /** 눈덩이 + 내 조준 포물선 (매 프레임, 컴포넌트 밖 — 공유 객체·지오메트리를 고친다) */
-function ballsFrame(sh: SceneShared, im: THREE.InstancedMesh | null, sm: THREE.InstancedMesh | null, pts: THREE.Points | null, landMesh: THREE.Mesh | null, arcGeo: THREE.BufferGeometry, m4: THREE.Matrix4) {
+function ballsFrame(sh: SceneShared, im: THREE.InstancedMesh | null, sm: THREE.InstancedMesh | null, shell: THREE.InstancedMesh | null, trail: THREE.InstancedMesh | null, pts: THREE.Points | null, landMesh: THREE.Mesh | null, arcGeo: THREE.BufferGeometry, m4: THREE.Matrix4) {
   {
     const snap = sh.buf.latest();
-    if (!snap || !im || !sm) return;
+    if (!snap || !im || !sm || !shell || !trail) return;
     const now = performance.now();
     const t = sh.buf.simNow(now);
     let n = 0;
+    let tn = 0;
     for (const b of snap.balls) {
       if (n >= MAX_BALLS) break;
       const p = ballPos(b, Math.max(b.t0, t));
       if (p.y < -0.5) continue;
-      const r = b.big ? 0.34 : 0.14;
+      const r = b.big ? GIANT_DRAW_R : BALL_DRAW_R;
       m4.makeScale(r, r, r).setPosition(p.x, Math.max(r * 0.5, p.y), p.z);
       im.setMatrixAt(n, m4);
       m4.makeScale(r * 1.1, 1, r * 1.1).setPosition(p.x, 0.02, p.z);
       sm.setMatrixAt(n, m4);
+      const color = TEAM_COLOR3[b.team];
+      m4.makeScale(r * 1.28, r * 1.28, r * 1.28).setPosition(p.x, Math.max(r * 0.5, p.y), p.z);
+      shell.setMatrixAt(n, m4);
+      shell.setColorAt(n, color);
+      for (let k = 1; k <= TRAIL_N; k++) {
+        const tt = t - k * TRAIL_MS;
+        if (tt <= b.t0) break;
+        const q = ballPos(b, tt);
+        const tr = r * (0.95 - k * 0.12);
+        m4.makeScale(tr, tr, tr).setPosition(q.x, Math.max(tr * 0.5, q.y), q.z);
+        trail.setMatrixAt(tn, m4);
+        trail.setColorAt(tn, color);
+        tn++;
+      }
       n++;
     }
     im.count = n;
     sm.count = n;
-    im.instanceMatrix.needsUpdate = true;
-    sm.instanceMatrix.needsUpdate = true;
+    shell.count = n;
+    trail.count = tn;
+    uploadN(im.instanceMatrix, n);
+    uploadN(sm.instanceMatrix, n);
+    uploadN(shell.instanceMatrix, n);
+    uploadN(shell.instanceColor, n);
+    uploadN(trail.instanceMatrix, tn);
+    uploadN(trail.instanceColor, tn);
     // 내 조준 포물선
     const pv = sh.preview;
     const me = snap.players[sh.mySeat];
@@ -472,6 +538,12 @@ function Puffs({ fx, low }: { fx: FxItem[]; low: boolean }) {
         z = e.z;
         n = 28;
         pow = 1.6;
+      } else if (e.k === "dash" && f.x !== undefined && f.z !== undefined) {
+        x = f.x;
+        y = 0.2;
+        z = f.z;
+        n = 12;
+        pow = 0.7;
       } else continue;
       if (low) n = Math.ceil(n / 2);
       for (let i = 0; i < n; i++) {
@@ -497,7 +569,7 @@ function Puffs({ fx, low }: { fx: FxItem[]; low: boolean }) {
       im.setMatrixAt(n++, m4);
     }
     im.count = n;
-    im.instanceMatrix.needsUpdate = true;
+    uploadN(im.instanceMatrix, n);
   });
   return (
     <instancedMesh ref={inst} args={[undefined, undefined, PUFF_N]} frustumCulled={false}>
@@ -552,6 +624,8 @@ function snowFrame(geo: THREE.BufferGeometry, pts: THREE.Points | null, blizzard
   }
 }
 
+const ROLL_MS = 460;
+
 /* ── 캐릭터 ─────────────────────────────────────────────────────────── */
 
 export function modeOf(snap: MatchState, p: PlayerState, now: number): KidMode {
@@ -570,11 +644,11 @@ export function modeOf(snap: MatchState, p: PlayerState, now: number): KidMode {
   return Math.hypot(p.vx, p.vz) > 0.5 ? "run" : "idle";
 }
 
-function KidSlot({ seat, names, shared, lowDetail }: { seat: number; names: Record<number, string>; shared: MutableRefObject<SceneShared>; lowDetail: boolean }) {
+const KidSlot = memo(function KidSlot({ seat, names, shared, lowDetail }: { seat: number; names: Record<number, string>; shared: MutableRefObject<SceneShared>; lowDetail: boolean }) {
   const chars = useRoomCharacters((st) => st.byName);
   const name = names[seat] ?? "";
   const look = useMemo(() => resolveLook(seat, ["none"], roomCharacterOf(chars, name)), [seat, chars, name]);
-  const frame = useRef<KidFrame>({ x: 0, z: 0, face: 0, mode: "idle", speed: 0, charge: 0, visible: false, cocoa: false, giant: false });
+  const frame = useRef<KidFrame>({ x: 0, z: 0, face: 0, mode: "idle", speed: 0, charge: 0, visible: false, cocoa: false, giant: false, roll: -1, rollDir: 0 });
   const hitUntil = useRef(0);
   const lastHp = useRef(-1);
   const read = () => {
@@ -600,6 +674,13 @@ function KidSlot({ seat, names, shared, lowDetail }: { seat: number; names: Reco
     f.face = pose.face;
     let mode = modeOf(snap, p, now);
     if (now < hitUntil.current && mode !== "frozen") mode = "hit";
+    // 구르기: 판정(0.23초 미끄러짐)보다 조금 길게, 앞구르기 한 바퀴를 끝까지 보여 준다
+    const at = (seat === sh.mySeat ? sh.buf.simLive(now) : sh.buf.simNow(now)) - (p.dashUntil - DASH_MS);
+    const rolling = p.dashUntil > 0 && at >= 0 && at < ROLL_MS && mode !== "frozen" && snap.phase === "fight";
+    f.roll = rolling ? at / ROLL_MS : -1;
+    f.rollDir = Math.atan2(p.dashZ, p.dashX);
+    if (rolling) mode = "dash";
+    else if (mode === "dash") mode = "run";
     f.mode = mode;
     f.speed = Math.min(1, Math.hypot(p.vx, p.vz) / 4.6);
     f.charge = p.chargeAt ? Math.min(1, (snap.t - p.chargeAt) / 900) : 0;
@@ -608,7 +689,7 @@ function KidSlot({ seat, names, shared, lowDetail }: { seat: number; names: Reco
     return f;
   };
   return <Kid look={look} seed={seat * 17 + 5} teamColor={TEAM_COLORS[teamOf(seat)]} scarf={SEAT_SCARF[seat % SEAT_SCARF.length]} lowDetail={lowDetail} read={read} />;
-}
+});
 
 /* ── 카메라 + 이름표 + 마우스 조준 ──────────────────────────────────── */
 
@@ -747,7 +828,34 @@ function fogFrame(scene: THREE.Scene, blizzard: boolean) {
   f.far += (far - f.far) * 0.03;
 }
 
-export default function FieldScene({ shared, names, seatCount, quality, fx, onFps }: FieldSceneProps) {
+/** 그림자 지도는 두 프레임에 한 번만 (8인이면 그림자만으로 그리기 수백 번), 처음에 안 보이는 재질까지 미리 컴파일 */
+function RenderTuning({ high }: { high: boolean }) {
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+  const camera = useThree((s) => s.camera);
+  const n = useRef(0);
+  useEffect(() => {
+    setShadowAuto(gl, false);
+    const id = window.setTimeout(() => void gl.compileAsync(scene, camera).catch(() => {}), 600);
+    return () => {
+      window.clearTimeout(id);
+      setShadowAuto(gl, true);
+    };
+  }, [gl, scene, camera]);
+  useFrame(() => {
+    if (high && n.current++ % 2 === 0) refreshShadow(gl);
+  });
+  return null;
+}
+function setShadowAuto(gl: THREE.WebGLRenderer, v: boolean) {
+  gl.shadowMap.autoUpdate = v;
+  gl.shadowMap.needsUpdate = true;
+}
+function refreshShadow(gl: THREE.WebGLRenderer) {
+  gl.shadowMap.needsUpdate = true;
+}
+
+export default memo(function FieldScene({ shared, names, mySeat, seatCount, quality, fx, onFps }: FieldSceneProps) {
   const high = quality === "high";
   return (
     <Canvas shadows={high} dpr={high ? [1, 2] : [1, 1.5]} gl={{ antialias: true, powerPreference: "high-performance" }} camera={{ fov: 50, position: [0, 15, 14], near: 0.1, far: 300 }} style={{ touchAction: "none" }}>
@@ -777,14 +885,15 @@ export default function FieldScene({ shared, names, seatCount, quality, fx, onFp
       <Balls shared={shared} />
       <Items shared={shared} />
       {Array.from({ length: seatCount }, (_, seat) => (
-        <KidSlot key={seat} seat={seat} names={names} shared={shared} lowDetail={!high} />
+        <KidSlot key={seat} seat={seat} names={names} shared={shared} lowDetail={!high || (seatCount > 4 && seat !== mySeat)} />
       ))}
       <Puffs fx={fx} low={!high} />
       <Snowfall shared={shared} heavy={high} />
       <CameraRig shared={shared} />
       <PointerTracker shared={shared} />
+      <RenderTuning high={high} />
       <FpsProbe onFps={onFps} />
       <AdaptiveResolution max={high ? 2 : 1.5} />
     </Canvas>
   );
-}
+});

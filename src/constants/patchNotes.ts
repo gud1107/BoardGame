@@ -64,6 +64,17 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.213.0",
+    releaseDate: "2026-11-25",
+    title: "⛄ 눈싸움 요새전 — 잘 보이는 상태판·진짜 앞구르기·렉 해결",
+    changes: [
+      { game: "snowball-fort", type: "IMPROVE", desc: "❤️ 내 체력·눈덩이와 양 팀 눈사람 체력이 게임 화면 안에 크게 보이고, 날아가는 눈덩이에 팀 색 테두리와 꼬리가 생겼어요" },
+      { game: "snowball-fort", type: "FEAT", desc: "🤸 구르기가 몸을 웅크려 한 바퀴 도는 진짜 앞구르기 동작이 됐어요" },
+      { game: "snowball-fort", type: "FIX", desc: "⚡ 누가 얼 때 멈추던 렉과 여럿이 할 때 끊김을 고쳤어요 (8인전 초당 화면 수 약 2배)" },
+      { game: "common", type: "IMPROVE", desc: "💇 3D 캐릭터의 머리카락을 더 가볍게 그려 여러 3D 게임이 부드러워져요" },
+    ],
+  },
+  {
     version: "v1.212.0",
     releaseDate: "2026-11-25",
     title: "🧑 실사풍 캐릭터 6명을 프로필에서 고를 수 있어요",
