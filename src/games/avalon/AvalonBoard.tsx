@@ -69,7 +69,15 @@ const ROLE_META: Record<Role, { label: string; icon: string; team: Team }> = {
  * a role is already visible to the viewer (own reveal, end-of-game roster), so
  * art never leaks hidden roles. Fill only once all 7 exist.
  */
-const ROLE_PORTRAIT: Partial<Record<Role, string>> = {};
+const ROLE_PORTRAIT: Partial<Record<Role, string>> = {
+  merlin: "/images/avalon/merlin.webp",
+  percival: "/images/avalon/percival.webp",
+  loyalist: "/images/avalon/loyalist.webp",
+  morgana: "/images/avalon/morgana.webp",
+  mordred: "/images/avalon/mordred.webp",
+  oberon: "/images/avalon/oberon.webp",
+  assassin: "/images/avalon/assassin.webp",
+};
 
 function RolePortrait({ role, size }: { role: Role; size: "sm" | "lg" }) {
   const meta = ROLE_META[role];
