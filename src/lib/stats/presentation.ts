@@ -259,6 +259,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "스페어", key: "spares", unit: "개" },
     { label: "최장 연속 스트라이크", key: "maxStreak", unit: "연속" },
   ],
+  "bumper-arena": [
+    { label: "KO", key: "kos", unit: "번" },
+    { label: "라운드 승", key: "roundWins", unit: "번" },
+    { label: "떨어짐", key: "falls", unit: "번" },
+    { label: "최고 점수", key: "maxScore", unit: "점" },
+  ],
   "cargo-stack": [
     { label: "실은 컨테이너", key: "placed", unit: "개" },
     { label: "최고 층", key: "maxTier", unit: "층" },
@@ -312,6 +318,12 @@ export const MATCH_SUMMARY_ROWS: Record<string, MatchRow[]> = {
     { label: "최고 층수", key: "maxHeight", unit: "층" },
     { label: "최고 연승", key: "bestStreak", unit: "연승" },
     { label: "쌓은 단어", key: "words", unit: "개" },
+  ],
+  "life-skit": [
+    { label: "한 판 최고", key: "maxScore", unit: "점" },
+    { label: "명장면 엔딩", key: "bestEndings", unit: "번" },
+    { label: "받은 박수", key: "claps", unit: "번" },
+    { label: "나비효과", key: "echoes", unit: "번" },
   ],
   "cctv-alibi": [
     { label: "범인 검거", key: "catches", unit: "번" },
@@ -571,6 +583,10 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "bwl-strikes", label: "스트라이크", num: "strikes", format: "count", unit: "개" },
     { id: "bwl-turkeys", label: "🦃 터키", num: "turkeys", format: "count", unit: "번" },
   ],
+  "bumper-arena": [
+    { id: "ba-kos", label: "💥 KO", num: "kos", format: "count", unit: "번" },
+    { id: "ba-wins", label: "🏆 라운드 승", num: "roundWins", format: "count", unit: "번" },
+  ],
   "cargo-stack": [
     { id: "cs-placed", label: "🏗️ 실은 컨테이너", num: "placed", format: "count", unit: "개" },
     { id: "cs-best", label: "🚢 최고 점수", num: "maxScore", format: "count", unit: "점" },
@@ -610,6 +626,11 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "wt-height", label: "한 라운드 최고 층수", num: "maxHeight", format: "count", unit: "층" },
     { id: "wt-wins", label: "라운드 1등", num: "roundWins", format: "count", unit: "번" },
     { id: "wt-streak", label: "최고 연승", num: "bestStreak", format: "count", unit: "연승" },
+  ],
+  "life-skit": [
+    { id: "ls-best", label: "🏆 최고 점수", num: "maxScore", format: "count", unit: "점" },
+    { id: "ls-clap", label: "👏 받은 박수", num: "claps", format: "count", unit: "번" },
+    { id: "ls-end", label: "🌟 명장면 엔딩", num: "bestEndings", format: "count", unit: "번" },
   ],
   "cctv-alibi": [
     { id: "ca-catch", label: "🚔 범인 검거", num: "catches", format: "count", unit: "번" },

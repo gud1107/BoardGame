@@ -58,8 +58,8 @@ describe("game sound suites", () => {
     // + word tower (단어 마천루) + wobble tower (와르르 타워) + alkkagi (알까기 대전)
     // + curling (컬링 파티) + chess (체스) + god-life planner (갓생 플래너) + qplay (큐플레이)
     // + hide-and-seek (한밤의 숨바꼭질) + bowling mayhem (볼링 난장판) + lantern keepers (등불 지기)
-    // + time loop heist (시간 루프 도둑단) + mini golf (미니골프 파티)
-    // + cargo stack (화물선 쌓기) + island pioneers (섬 개척자) + fog manor (안개 저택 살인사건)
+    // + time loop heist (시간 루프 도둑단) + mini golf (미니골프 파티) + bumper arena (범퍼 아레나)
+    // + cargo stack (화물선 쌓기) + fog manor (안개 저택) + island pioneers (섬 개척자)
     // + thin ice party (살얼음 파티).
     // + hundred tales (백 개의 괴담).
     // + strange corridor (이상한 복도).
@@ -68,6 +68,7 @@ describe("game sound suites", () => {
     // + rope climbers (한 줄 등반대) + beat mayhem (박자 난장판).
     // + billiards party (당구 파티) + domino chain (도미노 연쇄) + snowball fort (눈싸움 요새전).
     // + cctv alibi (CCTV 알리바이) + tagger among us (술래는 우리 중에).
+    // + life skit (인생 상황극).
     // + crown thief (왕관 도둑).
     // + finders keepers (만지면 내 꺼!).
     // + toy room race (장난감 방 레이스).
@@ -82,7 +83,7 @@ describe("game sound suites", () => {
     // + everyone choice (모두의 선택).
     // + pet guard (멍냥 방어선).
     // + three-day resolve (작심삼일).
-    expect(suites.length).toBe(72);
+    expect(suites.length).toBe(74);
   });
 
   it.each(suites)("%s: score compiles with known voices", (_name, cfg) => {

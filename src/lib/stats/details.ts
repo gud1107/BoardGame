@@ -271,6 +271,14 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "거터 / 던진 공", value: (d) => `${n(d.gutters)} / ${n(d.rolls)}` },
     { label: "방해 / 방해받고 X·/", value: (d) => `${n(d.sabotages)} / ${n(d.hazardBeaten)}` },
   ],
+  "bumper-arena": [
+    { label: "💥 KO / ☁️ 떨어짐 (혼자)", value: (d) => `${n(d.kos)} / ${n(d.falls)} (${n(d.selfFalls)})` },
+    { label: "🏆 라운드 승 / 무승부", value: (d) => `${n(d.roundWins)} / ${n(d.draws)}` },
+    { label: "한 라운드 최다 KO · 승리 때 최고 열기", value: (d) => `${n(d.maxKosRound)} · ${n(d.maxHeatWin)}%` },
+    { label: "💨 대시 명중 / 🌋 충격파로 밂", value: (d) => `${n(d.dashHits)} / ${n(d.pounds)}` },
+    { label: "🎁 아이템 / 🛡️ 방패로 막음", value: (d) => `${n(d.items)} / ${n(d.shieldBlocks)}` },
+    { label: "👻 입김으로 밂 / 📍 범퍼 기둥", value: (d) => `${n(d.gusts)} / ${n(d.postBounces)}` },
+  ],
   "cargo-stack": [
     { label: "🏗️ 실은 컨테이너 / 얻은 점수", value: (d) => `${n(d.placed)} / ${n(d.points)}` },
     { label: "🗼 최고 층 · 💰 한 번에 최고", value: (d) => `${n(d.maxTier)}층 · ${n(d.maxPlace)}점` },
@@ -430,6 +438,15 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "술래로 찾은 사람 (한 판 최다)", value: (d) => `${n(d.catches)} (${n(d.maxCatches)})` },
     { label: "엉뚱한 걸 친 횟수", value: (d) => n(d.wrongHits) },
     { label: "만든 분신", value: (d) => n(d.decoys) },
+  ],
+  "life-skit": [
+    { label: "🎬 살아 본 인생 / 장면", value: (d) => `${n(d.lives)} / ${n(d.scenes)}` },
+    { label: "🏆 한 판 최고 점수", value: (d) => n(d.maxScore) },
+    { label: "🌟 명장면 엔딩 / 🧭 지름길 없이 완주", value: (d) => `${n(d.bestEndings)} / ${n(d.noFast)}` },
+    { label: "⚡ 지름길 / 굳은 성격", value: (d) => `${n(d.fastPicks)} / ${n(d.traits)}` },
+    { label: "🦋 나비효과 / 성격이 바꾼 선택", value: (d) => `${n(d.echoes)} / ${n(d.swaps)}` },
+    { label: "👏 받은 박수 / 쳐 준 박수", value: (d) => `${n(d.claps)} / ${n(d.clapsGiven)}` },
+    { label: "최고 ❤️ 관계 · 최고 💰 재산", value: (d) => `${n(d.maxLove)} · ${n(d.maxMoney)}` },
   ],
   "cctv-alibi": [
     { label: "손님으로 검거 / 손님 사건", value: (d) => `${n(d.catches)} / ${n(d.guestCases)}` },

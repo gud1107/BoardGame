@@ -93,6 +93,8 @@ export const GAME_VIEW_MODES: Record<GameId, GameViewMode> = {
   "finders-keepers": "both",
   "toy-room-race": "both",
   "parcel-panic": "both",
+  "bumper-arena": "both",
+  "life-skit": "both",
 
   // 2D
   "splendor-duel": "2d",

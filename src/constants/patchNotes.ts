@@ -64,6 +64,19 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.214.0",
+    releaseDate: "2026-11-27",
+    title: "🥊 새 게임 범퍼 아레나 · 🎭 인생 상황극",
+    changes: [
+      { game: "bumper-arena", type: "FEAT", desc: "🥊 새 게임 — 구름 위 육각 섬에서 범퍼 튜브를 타고 서로 밀어 떨어뜨리는 2~6인 실시간 3D 난투 · 혼자 연습·AI 봇 Lv.1~10" },
+      { game: "bumper-arena", type: "FEAT", desc: "💨 대시·⤴ 점프 착지 충격파·🛡 버티기, 맞을수록 🔥 열기가 올라 더 멀리 · 바깥부터 무너지는 섬과 서든데스" },
+      { game: "bumper-arena", type: "FEAT", desc: "🍄⚡🛡️💥 아이템 4종 · 👻 떨어지면 유령 입김으로 방해 · 꼴찌 방패 · 방장이 나가도 다른 사람이 판을 이어받아요" },
+      { game: "life-skit", type: "FEAT", desc: "🎭 새 게임 — 배역 하나를 골라 7장면짜리 인생을 동시에 사는 1~8인 콩트 게임 · 혼자 연습·AI 봇 Lv.1~10" },
+      { game: "life-skit", type: "FEAT", desc: "⚡ 지름길의 대가와 굳은 성격이 뒤 장면 선택지를 바꾸고 🦋 나비효과로 돌아와요 · 👏 박수와 배역별 엔딩" },
+      { game: "avalon", type: "IMPROVE", desc: "🖼️ 내 역할 공개 화면과 게임 끝 명단에 7개 역할의 유화 초상화가 나와요" },
+    ],
+  },
+  {
     version: "v1.213.0",
     releaseDate: "2026-11-25",
     title: "⛄ 눈싸움 요새전 — 잘 보이는 상태판·진짜 앞구르기·렉 해결",
