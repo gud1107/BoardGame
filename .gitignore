@@ -59,3 +59,6 @@ next-env.d.ts
 
 # CMU mocap BVH downloads (scripts/mocap/bake-gait.mjs)
 /scripts/mocap/.cache/
+
+# personal Claude Code instructions
+CLAUDE.local.md

@@ -1,5 +1,18 @@
 # HANDOFF — 현재 스냅샷
 
+## 🧹 밀린 작업 정리 — 범퍼 아레나·인생 상황극 출시, 아발론 초상화, 테스트 복구 — 2026-11-27 (패치 v1.214.0)
+
+요청: "필요한 것 확인" → "정리된 문제 전부 개선".
+- **인생 상황극(`life-skit`)**: 코드·룰북·통계·포스터 문구는 11-17에 있었지만 `registry.ts`에 없어 로비에서 못 들어가던 상태 → 등록(1~8인, party/family, 🎭). 
+- **범퍼 아레나(`bumper-arena`)**: 11-08 만든 뒤 커밋 안 됨 → 같이 출시. 패치노트가 이미 쓰인 `v1.160.0`(11-08)과 번호가 겹쳐 지우고 둘을 묶은 `v1.214.0`(11-27)로 새로 씀.
+- 두 게임 모두 `viewModes.ts`에 `"both"`(3D 기본 + 2D 전환) 추가 — 빠져 있어 `viewModes.test` 2개 실패.
+- **아발론 유화 초상화**: 7장(`public/images/avalon/`)이 다 모였는데 `ROLE_PORTRAIT`가 빈 채라 연결. 내 역할 공개·게임 끝 명단에만 나옴(숨은 역할 노출 없음).
+- **`patchNoteDays` 실패 수정**: 11-25·11-24 그림 전화기, 11-16 틀린 그림 찾기 하루 요약 추가. `characterVoice`는 이미 통과 중이었음.
+- **오래된 제보 캡처 2장은 이미 해결된 것**: 달무티 `모바일짤림현상.jpg`(09-14 377e8619 가운데 모달로 수정), 마피아 `모바일채팅이상현상.jpg`(09-20 처리, 캡처 자체는 정상 화면). 룰북 폴더 정리분과 함께 커밋만 함. 임시 출력 `sim.txt`·`sim-out.txt` 삭제.
+- **⚠️ 테스트 실행 팁**: Git Bash에서 `npx vitest`를 돌리면 경로가 `c:/`(소문자)로 잡혀 vitest가 두 번 로드돼 모든 파일이 `Cannot read properties of undefined (reading 'config')`로 실패함 → PowerShell(`C:\`)에서 실행.
+- **확인**: 전체 vitest 4595 통과(전체 실행 중 `toyRace/balance.sim` 1개가 부하로 30초 초과 → 단독 재실행 통과), tsc·eslint 0.
+- **남은 것**: 눈싸움 요새전 손님 로컬 예측 없음, 신작 다수 포스터·호버 영상 없음, 실제 다기기 온라인·휴대폰 실기기·소리 귀 확인은 여전히 사람 몫. 아발론 초상화·인생 상황극 로비 카드는 화면 캡처로 따로 보지 않음.
+
 ## ⛄ 눈싸움 요새전 화면 상태판 · 눈덩이 · 앞구르기 · 렉 — 2026-11-25 (패치 v1.213.0)
 
 요청: "체력과 눈덩이가 스크린에 있거나 눈에 잘 보이게" + "구르기를 실제 구르기 모션으로" + "렉 요소 분석해서 렉 없게". 코드 `src/games/snowballFort/`, 공용 `src/games/shared/three/vrmMerge.ts`(새 파일).
@@ -379,17 +392,6 @@
 - **남은 것**: 실제 다기기 온라인(조준 방송·방장 승계·지연) 미확인. 소리는 사람이 안 들어 봄. 휴대폰 실기기 조작감(당구 세기 막대·눈싸움 두 막대)·FPS 미확인. 도미노 나침반 → 놓기 클릭 흐름은 캡처 대신 엔진 테스트로만 확인. 턴제 두 게임은 다른 턴제 게임처럼 "혼자 연습" 버튼이 없음(방 만들고 봇 채우기). 포스터·호버 영상 없음(이모지). next build 안 돌림.
 
 
-## 🧗 한 줄 등반대 + 🥁 박자 난장판 (새 게임 2개) — 2026-11-15 (패치 v1.175.0)
-
-요청: "3D 게임 추천(기존 메커니즘과 안 겹치는 것)" → 추천 5개 중 1번·2번을 "A-Z 구현 + 룰북 + 요약 + handoff". 둘 다 자체 설계. 규칙·설계 원전: [boardGameRule/한줄등반대/한줄등반대.md](./boardGameRule/한줄등반대/한줄등반대.md), [boardGameRule/박자난장판/박자난장판.md](./boardGameRule/박자난장판/박자난장판.md) (각 §1~§13).
-- **한 줄 등반대** `src/games/ropeClimb/` (id `rope-climbers`, 2~4인 실시간 협동): 자리 순서대로 4.4m 줄로 묶여 14칸 너비 암벽 등반, 모두 정상에 서면 완등(전원 1등)·실패하면 전원 꼴찌. 칸 5종(바위·매끈·턱·부서짐·오버행), 줄 제약(둘 다 잡으면 이동 제한 / 한 명 공중이면 매달림 / 당기면 초당 1.9m 끌어올림 / 채이면 받아냄), 체력, 🪨 낙석·💨 돌풍, 0.9초 무확보 = 팀 추락(⛑), ⛺ 캠프 체크포인트, 산 3곳, ⭐ 3단계. 파일: `data.ts`·`course.ts`(씨앗 벽 생성 + 거리장)·`sim.ts`(방장 60Hz, `MatchState`=순수 JSON, 벽은 씨앗으로 복원)·`bot.ts`·`net.ts`·`stats.ts`·`ropeClimbSound.ts`·`three/WallScene.tsx`(인스턴스 벽 + 표식, VRM 등반가, 처지는 줄)·`Wall2D.tsx`·`RopeClimbBoard.tsx`(팀 체력판·고도계·상황 안내 한 줄)·`RulebookModal.tsx`(7탭)·`RopeClimbGame.tsx`.
-- **박자 난장판** `src/games/beatMayhem/` (id `beat-mayhem`, 방 2~8인·연습 혼자 가능): 곡·채보를 씨앗으로 생성(`song.ts`, 35마디, 스타일 3·난이도 3), **판정은 각자 기기**(`BeatMayhemBoard.tsx`)·방장은 누적 기록 검사와 장난·봇·순위만(`sim.ts` 30Hz). 시계는 스냅샷 중 지연이 가장 적었던 것을 기준으로 내 기기 시계로 흐름(`net.ts` `songNow`). 장난 5종은 "몇 박~몇 박"으로 정해 4박 예고 뒤 8박. 게이지 퍼펙트 +3·그레이트 +1, 100에 발사, 80 이상이면 자동 방패. `three/StageScene.tsx`(하이웨이 + 춤추는 VRM)·`Highway2D.tsx`·`beatMayhemSound.ts`·`RulebookModal.tsx`(7탭)·`BeatMayhemGame.tsx`·`stats.ts`.
-- **공용 변경**: `src/lib/audio/proceduralSuite.ts`에 `clock(bus)`·`noteAt(bus, inst, note, when, dur, gain)` 추가 — 박자 난장판이 곡을 오디오 시계에 직접 예약한다. **드럼 악기(kick·snare·hat·woodblock·triangle…)는 음 이름이 아니라 배수 1을 넘겨야 한다**(절대 Hz라 `note: "C6"`를 주면 2만 Hz로 잘려 거의 안 들림 — 기존 게임 SFX 여러 곳이 그렇게 돼 있음, 이번엔 안 고침).
-- **등록**: registry / playableGames / gameDifficulty(둘 다 2) / posterTaglines / roomRulebookSummaries / achievements(각 7) / details / presentation(요약 + 랭킹) / patchNotes v1.175.0 / `[gameId]/page.tsx` max-w-6xl / `proceduralSuites.test.ts` 개수 +2. 두 방 컴포넌트는 살얼음 파티 방 코드를 복제해 바꿈(import 안 함). 등록 스크립트는 작업 트리와 HEAD 본문에 같은 삽입을 적용하는 방식(다른 세션의 미커밋 변경을 안 쓸어 담으려고).
-- **튜닝(셀프플레이)** — 등반대: 처음엔 체력이 6초 만에 바닥나 연쇄로 미끄러짐 → 오르기 초당 9→6, 속도 2.1→1.6, 가만히 2.5→1.2, 장애물 위 쉼터 턱. 봇 길이 갈려 줄에 막히는 교착 2종 수정. 뒷산 Lv.5 6/6·빙벽 Lv.10 6/6 완등, 화산은 Lv.10도 2~4/6(낙석 6초·제한 7분일 때; 그 뒤 8초·9분으로 완화했고 **완화 뒤 표는 다시 안 잼**). 박자: 정확도 Lv.1 60%→Lv.10 99.8%, Lv.6 vs Lv.5 19:1, 4인 한 판 장난 13~19번 중 절반이 방패에 막힘(처음 27번/18번 → 게이지·방패 조정), 장난 켜면 평균 점수 −3%.
-- **확인**: `RopeClimb.test.ts` 28 + balance 4, `BeatMayhem.test.ts` 25 + balance 4 = 61개 통과. constants/stats/audio/registry 포함 343/345(실패 2개는 손대지 않은 `characterVoice.test.ts`). tsc 0, eslint 0. rolldown 번들(실제 `*Game.tsx`, `next/dynamic`→React.lazy 심) + 사이트 Tailwind + public/ 서버 + swiftshader로 연습 모드를 띄워 **게임당 1280px 3D 1장·360px 1장** 캡처 — 페이지 오류 0, 가로 넘침 0. 등반대는 손을 놓아 줄에 매달리고 봇이 끌어올리는 장면까지, 박자는 노트·판정·점수판·터치 판까지 봄. 하네스는 삭제.
-- **남은 것**: 실제 다기기 온라인(지연·방장 승계) 미확인. **소리는 한 번도 사람이 안 들음**(특히 박자 난장판의 생성 곡이 듣기 좋은지, 판정 보정 체감). 휴대폰 실기기 조작감·FPS 미확인. 2D 보기·결과 화면·장난 5종의 실제 모습은 캡처 안 함. 등반대 3D에 가는 흰 가로선 조각이 한두 개 보임(원인 미확인, 플레이 지장 없음). 박자 난장판 부정 방지는 누적 기록 상한 검사뿐. 포스터·호버 영상 없음(이모지). next build 안 돌림.
-
 ## 🤫 숨죽인 밤 (새 게임) — 2026-11-14 (패치 v1.174.0)
 
 요청: 3D 공포게임 추천 중 세 번째(백 개의 괴담 → 이상한 복도 다음). 낮 세션이 엔진·봇·보드·3D·소리·테스트까지 만들고 멈춘 것을 저녁 세션이 "이전 작업 이어서"로 마무리(방 코드·룰북·등록·화면 확인). 자체 창작 동시 선택 눈치 게임. 규칙 원전: [boardGameRule/숨죽인밤/숨죽인밤.md](./boardGameRule/숨죽인밤/숨죽인밤.md) (§1~§12). 숨죽인 병동과는 "소리만 듣는 존재"라는 소재만 같고 장르가 다르다(이쪽은 칸 위에서 한 밤씩 진행하는 경쟁).
@@ -428,6 +430,17 @@
 - **등록**: registry(🕯️, luck/party)/playableGames/gameDifficulty(1)/posterTaglines/roomRulebookSummaries/achievements(7)/details/presentation/patchNotes v1.171.0, page max-w-3xl, proceduralSuites +1.
 - **확인**: 단위 15 + 셀프플레이 5 통과, 공용 stats/constants/audio 포함 222개 통과, tsc 0, eslint 0. rolldown+swiftshader 헤드리스(HTTP로 VRM까지)로 4인 진행 중 판 3D 1280px·360px 캡처 — 처음엔 방이 너무 밝아 env 0.06·bloom 0.9·촛불 HDR 불꽃으로 고침, 봇 이름 🤖 중복 제거, 360px 가로 넘침 0.
 - **남은 것**: 실제 다기기 온라인 미확인, 소리 귀로 미확인, 휴대폰 실기기 FPS 미확인, 포스터·호버 영상 없음(🕯️ 이모지). 덱 순서는 시드로 계산 가능(락스텝 공통 한계, 룰북 §12).
+
+## 🧗 한 줄 등반대 + 🥁 박자 난장판 (새 게임 2개) — 2026-11-15 (패치 v1.175.0)
+
+요청: "3D 게임 추천(기존 메커니즘과 안 겹치는 것)" → 추천 5개 중 1번·2번을 "A-Z 구현 + 룰북 + 요약 + handoff". 둘 다 자체 설계. 규칙·설계 원전: [boardGameRule/한줄등반대/한줄등반대.md](./boardGameRule/한줄등반대/한줄등반대.md), [boardGameRule/박자난장판/박자난장판.md](./boardGameRule/박자난장판/박자난장판.md) (각 §1~§13).
+- **한 줄 등반대** `src/games/ropeClimb/` (id `rope-climbers`, 2~4인 실시간 협동): 자리 순서대로 4.4m 줄로 묶여 14칸 너비 암벽 등반, 모두 정상에 서면 완등(전원 1등)·실패하면 전원 꼴찌. 칸 5종(바위·매끈·턱·부서짐·오버행), 줄 제약(둘 다 잡으면 이동 제한 / 한 명 공중이면 매달림 / 당기면 초당 1.9m 끌어올림 / 채이면 받아냄), 체력, 🪨 낙석·💨 돌풍, 0.9초 무확보 = 팀 추락(⛑), ⛺ 캠프 체크포인트, 산 3곳, ⭐ 3단계. 파일: `data.ts`·`course.ts`(씨앗 벽 생성 + 거리장)·`sim.ts`(방장 60Hz, `MatchState`=순수 JSON, 벽은 씨앗으로 복원)·`bot.ts`·`net.ts`·`stats.ts`·`ropeClimbSound.ts`·`three/WallScene.tsx`(인스턴스 벽 + 표식, VRM 등반가, 처지는 줄)·`Wall2D.tsx`·`RopeClimbBoard.tsx`(팀 체력판·고도계·상황 안내 한 줄)·`RulebookModal.tsx`(7탭)·`RopeClimbGame.tsx`.
+- **박자 난장판** `src/games/beatMayhem/` (id `beat-mayhem`, 방 2~8인·연습 혼자 가능): 곡·채보를 씨앗으로 생성(`song.ts`, 35마디, 스타일 3·난이도 3), **판정은 각자 기기**(`BeatMayhemBoard.tsx`)·방장은 누적 기록 검사와 장난·봇·순위만(`sim.ts` 30Hz). 시계는 스냅샷 중 지연이 가장 적었던 것을 기준으로 내 기기 시계로 흐름(`net.ts` `songNow`). 장난 5종은 "몇 박~몇 박"으로 정해 4박 예고 뒤 8박. 게이지 퍼펙트 +3·그레이트 +1, 100에 발사, 80 이상이면 자동 방패. `three/StageScene.tsx`(하이웨이 + 춤추는 VRM)·`Highway2D.tsx`·`beatMayhemSound.ts`·`RulebookModal.tsx`(7탭)·`BeatMayhemGame.tsx`·`stats.ts`.
+- **공용 변경**: `src/lib/audio/proceduralSuite.ts`에 `clock(bus)`·`noteAt(bus, inst, note, when, dur, gain)` 추가 — 박자 난장판이 곡을 오디오 시계에 직접 예약한다. **드럼 악기(kick·snare·hat·woodblock·triangle…)는 음 이름이 아니라 배수 1을 넘겨야 한다**(절대 Hz라 `note: "C6"`를 주면 2만 Hz로 잘려 거의 안 들림 — 기존 게임 SFX 여러 곳이 그렇게 돼 있음, 이번엔 안 고침).
+- **등록**: registry / playableGames / gameDifficulty(둘 다 2) / posterTaglines / roomRulebookSummaries / achievements(각 7) / details / presentation(요약 + 랭킹) / patchNotes v1.175.0 / `[gameId]/page.tsx` max-w-6xl / `proceduralSuites.test.ts` 개수 +2. 두 방 컴포넌트는 살얼음 파티 방 코드를 복제해 바꿈(import 안 함). 등록 스크립트는 작업 트리와 HEAD 본문에 같은 삽입을 적용하는 방식(다른 세션의 미커밋 변경을 안 쓸어 담으려고).
+- **튜닝(셀프플레이)** — 등반대: 처음엔 체력이 6초 만에 바닥나 연쇄로 미끄러짐 → 오르기 초당 9→6, 속도 2.1→1.6, 가만히 2.5→1.2, 장애물 위 쉼터 턱. 봇 길이 갈려 줄에 막히는 교착 2종 수정. 뒷산 Lv.5 6/6·빙벽 Lv.10 6/6 완등, 화산은 Lv.10도 2~4/6(낙석 6초·제한 7분일 때; 그 뒤 8초·9분으로 완화했고 **완화 뒤 표는 다시 안 잼**). 박자: 정확도 Lv.1 60%→Lv.10 99.8%, Lv.6 vs Lv.5 19:1, 4인 한 판 장난 13~19번 중 절반이 방패에 막힘(처음 27번/18번 → 게이지·방패 조정), 장난 켜면 평균 점수 −3%.
+- **확인**: `RopeClimb.test.ts` 28 + balance 4, `BeatMayhem.test.ts` 25 + balance 4 = 61개 통과. constants/stats/audio/registry 포함 343/345(실패 2개는 손대지 않은 `characterVoice.test.ts`). tsc 0, eslint 0. rolldown 번들(실제 `*Game.tsx`, `next/dynamic`→React.lazy 심) + 사이트 Tailwind + public/ 서버 + swiftshader로 연습 모드를 띄워 **게임당 1280px 3D 1장·360px 1장** 캡처 — 페이지 오류 0, 가로 넘침 0. 등반대는 손을 놓아 줄에 매달리고 봇이 끌어올리는 장면까지, 박자는 노트·판정·점수판·터치 판까지 봄. 하네스는 삭제.
+- **남은 것**: 실제 다기기 온라인(지연·방장 승계) 미확인. **소리는 한 번도 사람이 안 들음**(특히 박자 난장판의 생성 곡이 듣기 좋은지, 판정 보정 체감). 휴대폰 실기기 조작감·FPS 미확인. 2D 보기·결과 화면·장난 5종의 실제 모습은 캡처 안 함. 등반대 3D에 가는 흰 가로선 조각이 한두 개 보임(원인 미확인, 플레이 지장 없음). 박자 난장판 부정 방지는 누적 기록 상한 검사뿐. 포스터·호버 영상 없음(이모지). next build 안 돌림.
 
 ## 🧊 살얼음 파티 (새 게임) — 2026-11-14 (패치 v1.169.0)
 
@@ -479,6 +492,17 @@
 - **셀프플레이**(`balance.sim.test.ts`, `CARGO_SIM_LOG=1`로 수치 출력): Lv.10 vs Lv.1 2인 승률 100%, Lv.7 vs Lv.3 67%, Lv.6 거울전 1번 자리 승률 2인 45%·4인 29%, Lv.7 판당 쏠림 2인 4.1·4인 5.7·6인 7.3개, 전복 0, 6층까지 올라감. 약한 봇 Lv.1(쏠림+3×전복 19.5/판) ≫ Lv.10(4.7).
 - **확인**: `CargoStack.test.ts` 25개 + `balance.sim.test.ts` 6개 통과, 공용 constants/stats 테스트 통과, cargoStack eslint 0·tsc 0(다른 세션 미완성 fogManor/islandPioneers 오류만 남음). rolldown+swiftshader 헤드리스로 3인 진행 중 판을 3D(1280px)·2D(360px) 캡처 — 에러 0·가로 넘침 0. 이때 **기본 조준 칸이 꽉 찬 가운데라 시작부터 ✕가 뜨던 것**을 "가운데에서 가장 가까운 놓을 수 있는 칸"으로 고침. 하네스는 삭제.
 - **남은 것**: 실제 다기기 온라인 플레이 미확인, 소리는 귀로 미확인, 휴대폰 실기기 3D FPS 미확인, 포스터·호버 영상 없음(🚢 이모지). 덱 순서는 시드로 계산 가능(공개 정보 위주 게임이라 서버 판정 안 씀 — 룰북 §11).
+
+## 🥊 범퍼 아레나 (새 게임) — 2026-11-08 (패치 v1.160.0, **로컬만 — 커밋·배포 안 함**)
+
+요청: 3D 새 게임 추천 중 "범퍼 아레나"를 A-Z 상세 설계·개발 + handoff 기록, **커밋/배포는 하지 말 것**. 자체 창작. 규칙·설계 원전: [boardGameRule/범퍼아레나/범퍼아레나.md](./boardGameRule/범퍼아레나/범퍼아레나.md) (§1~§13).
+- **게임**: 구름 위 육각 타일 섬(2인 37칸·3~4인 61칸·5~6인 91칸)에서 VRM 캐릭터가 범퍼 튜브를 타고 밀어 떨어뜨리는 2~6인 실시간 난투. 💨대시·⤴점프(착지 충격파)·🛡버티기(힘 2초, 바닥나면 한 번 떼야 재사용), 🔥열기%(100%=넉백 2배), 10초 뒤 바깥 링부터 무너짐·75초 서든데스·100초 무승부, 4인+ 핀볼 범퍼 기둥, 아이템 🍄⚡🛡️💥, 👻유령 입김(KO 점수 없음), 꼴찌 방패(1등과 4점+ 차). 점수 KO+1·생존+3·마지막 추락+1·시간종료 생존+2. 3/5/7라운드.
+- **구조** `src/games/bumperArena/`: `data.ts`(수치) · `arena.ts`(육각 좌표) · `sim.ts`(방장 판정 60Hz 고정 스텝, `MatchState`=순수 JSON, 자체 mulberry32 `rng`) · `bot.ts`(Lv.1~10) · `net.ts`(스냅샷=상태 전체, `SnapBuffer` 남 110ms 보간·내 몸 150ms 앞서) · `BumperArenaGame.tsx`(방/연습/승계) · `BumperBoard.tsx`(HUD·키보드·터치 조이스틱·연출·소리·결과) · `three/ArenaScene.tsx`(인스턴스 타일·기둥·아이템·유령·카메라+DOM 이름표) · `three/Rider.tsx`(VRM 튜브 자세) · `three/Fx.tsx` · `Arena2D.tsx`(WebGL 없을 때/선택) · `bumperArenaSound.ts`(132BPM BGM+SFX) · `RulebookModal.tsx` · `stats.ts`.
+- **온라인**: 손님은 입력만 `in`, 방장이 `snap` 10/초. 사람 나가면 10초 뒤 AI 대신(`setAway`). **방장 나가면 3초 뒤 남은 사람 중 최저 자리가 마지막 스냅샷으로 이어받음**(`stateFromSnap`→`createHost`). 혼자 연습은 네트워크 없이 로컬 판정. 한계: 방장 탭이 백그라운드로 멈추고 presence가 남으면 승계 안 됨.
+- **등록**: registry(2~6인, 🥊)/playableGames/gameDifficulty(2)/posterTaglines/roomRulebookSummaries/achievements(7)/details/presentation(요약+랭킹)/patchNotes v1.160.0, `[gameId]/page.tsx` max-w-6xl, proceduralSuites 개수 44.
+- **튜닝(셀프플레이)**: 처음 수치로는 라운드 4~6초·열기 250% 고정 → 대시 13→10, 반발 0.6→0.3, 박힘 배수 1.45→1.2, 열기 2.6→1.2/속도, 시작 위치 반 링 안쪽, 무너짐 15→10초. 박은 쪽 반동 감소(×0.55) 규칙은 대시한 사람이 같이 떨어져서 삭제, 대시 중 가속 0. 결과: Lv.10 vs Lv.1 20:0, Lv.7 vs Lv.3 20:0, Lv.5 거울 8:12, 라운드 중앙값 2인 ~14초/4인 ~21초/6인 ~24초, 혼자 떨어짐 <5%.
+- **확인**: `BumperArena.test.ts` 34개 + `balance.sim.test.ts` 5개, 공용 constants/stats/audio/registry 포함 277개 통과, tsc 0, eslint 0. rolldown+swiftshader 헤드리스(1280px) 4인 연습판 캡처로 섬·기둥·캐릭터 4명·이름표·꼴찌 방패·카운트다운 확인(이때 **연습 봇 수가 무시되고 2명으로 시작하던 버그**와 카메라가 너무 멀던 것을 고침), 360px은 가로 넘침 0·터치 버튼 62~76px(스크린샷 없이 수치만). 하네스는 삭제.
+- **남은 것**: 커밋·푸시·배포 안 함(요청). 실제 다기기 온라인(지연·방장 승계) 미확인, 소리 귀로 미확인, 휴대폰 실기기 조작감·FPS 미확인, 포스터·호버 영상 없음(🥊 이모지), next build 미실행(tsc/eslint만).
 
 ## ⛳ 미니골프 파티 (새 게임) — 2026-11-08 (패치 v1.158.0)
 
@@ -708,215 +732,6 @@
 - 로컬 테스트(키 없이): `SECURE_MATCH_MEMORY=1 npx next dev`(메모리 저장소) + Playwright 컨텍스트 2개.
 - 다음 이전 예정: 마피아(직업) → 아발론/쿠/러브레터/뱅/페루도/코요테. 게임마다 `<game>/secure.ts` SecureGameDef를 만들어 games.ts에 등록하고, "어떤 문자열 값도 비밀과 같지 않다" 테스트를 붙인다.
 - 같은 날 `176d62e`: 봇 시뮬 테스트가 무작위로 타임아웃 나던 문제를 testTimeout 30s로 고침. 시뮬은 동기 실행이라 5s 제한이 멈춤을 끊지 못하고 병렬 부하에서만 무작위로 실패했다.
-
-## 🎨 내 스킨 — 카드 뒷면·테이블(방 테마)·3D 이름판·소품, 방 전체에 보임 — 2026-10-31 (커밋 `5c4b7f0`~`6763e11` 5개/푸시, 배포는 웹훅 자동)
-
-"사용자별 커스텀" 요청 = 배경·카드 스킨(하우스룰 아님). 사용자가 "나만 보기"가 아니라 "모두에게 보이기"를 골랐다.
-- 카탈로그 `src/lib/skins/catalog.ts`(뒷면·테이블·이름판·소품, 뒷면마다 무늬+문양이 다름), 저장 `mySkin.ts`(localStorage `bg_my_skin_v1` + 로그인 시 `user_metadata.skin`), 훅 `useSkins.ts`.
-- 공유: 기존 `room-chars` presence(`roomCharacters.ts`)에 `skin`·`host`를 실어 보낸다. 게임별 프로토콜 변경은 없다. 자리 이름 기준이라 같은 닉네임 충돌은 캐릭터와 같다.
-- 누구 것이 보이나: 테이블 = 방장 것, 카드 뒷면·이름판 = 그 자리 주인 것. **공용 더미는 게임 기본 뒷면 유지.** 반지의 제왕 대결·스플렌더 대결·달무티 2D 뒷면은 뒷면이 장·레벨·등급 정보를 담고 있어 일부러 뺐다.
-- 3D: TableScene `useSkinnedTheme`(방장 테이블) + `CardBackOwner` 컨텍스트 → `HeldFan`이 뒷면을 바꾼다. 이름판은 `labelTexture(..., { plate })`(자리 색은 안쪽 테두리로 남고, 자리 비움은 회색 그대로). 2D는 쿠·러브레터·하나미코지·블러프 룰렛의 숨긴 손패만 `owner`를 받는다.
-- 6763e11: 테이블 스킨이 "방 테마"가 됨(조명 색·의자 색·떠다니는 파티클 꽃잎/별/눈/거품/불씨/반짝이 — 저사양 모드에선 꺼짐). 소품 스킨 = 페루도 컵 몸통·고리 + 게임이 색을 안 넘기는 CoinStack. FLUX 그림 뒷면 4종(`public/images/skins/backs/*.webp`; nouveau는 schnell이 가짜 숫자를 그려 모서리를 잘라냄) + 오로라 테이블 + 전설 이름판은 `unlocks.ts`로 잠금. 무료 스킨 한 번에 끼기 세트(`SKIN_SETS`, 무료만 — 테스트로 강제). 모든 3D 테이블 카메라 오버레이에 🎨 버튼.
-- 해금 조건(`unlocks.ts`): 사람과 함께 5판/10승/30승(봇이 낀 판은 `noBot`에서 빠짐), 서로 다른 게임 8종, 업적 20/40개. /stats 동기화 수치를 쓰므로 계정을 따라간다.
-- 확인: 운영에서 Playwright 컨텍스트 2개로 방장 스킨이 손님 화면에 보이는 것을 확인했다.
-- **안 한 것/남은 점**
-  - 해금 판정은 이 기기 브라우저에서만 한다. localStorage를 고치면 잠긴 스킨을 낄 수 있다(꾸미기라 피해 없다고 보고 스킨 창에서만 막음). 받는 쪽도 검사하지 않으므로 고친 사람의 잠긴 스킨이 방 전체에 보인다.
-  - 3D 손패는 대부분 옆으로 서 있어 그림 뒷면이 잘 안 보인다. 제안만 한 것: "테이블 앞에 놓인 카드에도 적용".
-  - 그림 생성 무료 쿼터(하루 약 6장) 중 4장을 10-31에 썼다. 그만큼 쿠·아발론·달무티 초상화 일일 큐(`~/.claude/art-staging/portrait-queue.mjs`)가 밀렸다.
-  - 페루도 컵 스킨은 화면 캡처로 확인하지 않았다(코드·tsc만).
-  - 2D 페이지 배경 스킨, 블러프 룰렛 3D 카드 뒷면은 미적용.
-  - 새 카드 게임은 CardBack에 `owner`를 넘기거나 TableScene 자리 안에서 HeldFan을 써야 스킨을 받는다.
-
-## 🎥 3D 테이블 23종 — 1인칭 | 테이블 시점 + 내 캐릭터 — 2026-10-29 (커밋/푸시, 배포는 웹훅 자동)
-
-"다른 게임도 동일하게, 게임 특색에 맞게" → 5 오이(아래 섹션)에서 만든 걸 공용화. 보드 파일은 안 건드리고 각 `*Table3D`에 두 줄만.
-- `TableScene cameraKey="<game>-camera"`: 씬이 시점을 직접 관리(`managed` — 게임이 `firstPerson`/`selfBody`를 직접 넘기면 꺼짐, 5 오이가 그 경우). 캔버스 왼쪽 위 DOM 오버레이 `CameraOverlay`: "🎥 1인칭 | 🪑 테이블" 선택 + 1인칭일 때 "🙋 이름 (나) · sub · tag"(1인칭에선 내 이름판/태그가 안 그려지니까). 기본 1인칭, 게임별 localStorage.
-- `selfView={ held?, mood?, pitch? }`: 내 몸이 쥘 것. 기본은 내 자리 mood·빈손(무릎). 1인칭에서 held가 있으면 카드를 놓는 mood는 rest로. 내 몸은 `out`(탈락)도 반영.
-- 게임별: 장수만 아는 카드 게임(뱅·달무티·운명전쟁39·로스트 시티·텔레파시) = 내 장수만큼 뒷면 부채(앞면은 2D 손패 칸). 쿠·러브레터는 내 카드가 이미 내 앞에 세워져/펼쳐져 있어 빈손으로 내려다봄. 쥐쥐·칩/주머니·주사위·사회추리 게임은 빈손. 달무티 = 더미 맨 위 패를 낸 사람 이름표(더미가 한 곳에 쌓여 전부 달면 겹침). **아발론 임무 카드는 누가 냈는지가 비밀이라 이름표 없음.**
-- 코요테·라이어 게임은 TableScene이 아니라 자체 장면(`FirstPersonCamera` 직접 사용)이라 이번에 미적용.
-- 페루도: 1인칭에서 내 컵(front)이 시야 한가운데를 막아 `selfView.frontShift=[0.5,0.05]`(오른손 옆) + pitch 0.06 (606b586). `frontShift`는 1인칭에서만 내 `front`를 옆으로 옮기는 공용 옵션.
-- 확인: tsc/eslint 0, vitest src/games+constants 2753 통과(merge-defense 봇 시뮬 1건 플레이키, 재실행 64/64). 운영 1인칭 캡처 = 5 오이·달무티·페루도·쿠·마피아(나머지 19종은 공용 코드라 미캡처 — 게임 자체 DOM 오버레이와 왼쪽 위 버튼이 겹치는지 미확인). 테스트 가이드(캡처·링크·체크리스트): claude.ai/artifact/27FwsYRWH7PVoYM7NQhBfh.
-
-## 🎥 5 오이 1인칭(라이어스 바식) — 내 캐릭터가 손패를 쥠 — 2026-10-29 (커밋/푸시, 배포는 웹훅 자동)
-
-"라이어스 바처럼 1인칭" → 프리뷰 2회(카메라만 바꾼 렌더, 내 VRM 몸 + 큰 손패) 후 "5 오이만 이대로". 공용 키트엔 **켜는 옵션만** 추가, 다른 게임은 그대로.
-- `TableScene` `firstPerson={ held, pitch, mood }`: 내 자리에 이름판 대신 내 VRM(`VrmPerson firstPerson`)을 `seatR - FPV_SEAT_IN(0.2)`에 앉힘. 내 태그·말풍선은 안 그림(보드 HUD로).
-- `VrmPerson firstPerson`: three-vrm `vrm.firstPerson.setup()` (레이어 9=머리 없는 몸, 10=전체) + 주석 없는 머리 부품/이식된 머리카락은 이름(`HEAD_PART`)으로 10번 레이어로. 대기 동작(think/shrug, 카드를 내려놓음) 끔, 모자 portal 안 그림.
-- `FirstPersonCamera fpv={ pitch }`: 눈 높이 1.5m, 가로 드래그 ±1.5rad, 마우스만 세로 드래그(터치 세로는 페이지 스크롤 유지), 놓으면 정면 복귀. 레이어 9 켜고 10 끔, overview(게임 끝)에선 반대로(머리 보임).
-- 5 오이: 헤더 `CameraToggle`(localStorage `five-cucumbers-camera`, 기본 fpv). fpv면 캔버스가 프레임 전체, DOM 손패 대신 상단 띠(아래쪽은 손패와 휴대폰 사이트 플로팅 💬/🎲 버튼 자리라 위로 — 🥒 내 오이 · 장수 · 👇 손패 보기/👀 테이블 보기 — 이번 턴만 덮어씀, 기본은 내 차례=내려보기). `MyHand3D`: 왼쪽 위 큰 숫자 손패 그림(`cucumber-hand:` 캐시), 낼 수 있는 카드 금색 테두리+들림, 나머지 어둡게, 탭(드래그 8px 넘으면 무시) → `playCard`. 카드 크기는 화면비가 아니라 **손패 위치에서 보이는 폭**(fov·aspect, `FAN_DIST` 0.55, 여유 0.68)에 7장이 맞게 계산 + 숫자 순 정렬, 다음 카드가 폭의 40%(`UNCOVERED`)를 남겨 두 자리 숫자가 보임. (1차 배포 때 운영 PC 프레임이 588×654 세로형이라 '휴대폰용 큰 카드'가 걸려 숫자가 가려졌던 것을 이 방식으로 고침.)
-- 확인: tsc/eslint 0, vitest 5 오이+shared three 74 + constants 68. 헤드리스(SwiftShader) 실제 코드 렌더 900×560·390×520 + 운영 프레임 크기 588×654·334×514 — 머리 안 보임, 손가락이 카드 쥠, 7장 숫자 모두 읽힘, 빛나는 카드 클릭 → `PLAYED c13/c15`. 프리뷰: claude.ai/artifact/PFetWCcHqWFUApVkgwX8SU.
-- **후속(같은 날) — 두 시점 + 테이블 시점에도 내 몸 + 누가 낸 카드**: `CameraToggle`을 "🎥 1인칭 | 🪑 테이블" 두 칸 선택(aria-pressed)으로. `TableScene selfBody={held, mood}` = 테이블 시점에서도 내 VRM을 내 자리에(전신, 등받이가 카메라 아래를 막아 **스툴**), 5 오이는 `showMe`로 뒷면 부채를 쥠. 트릭 카드 아래 `ScreenSprite` 이름표(자리 색, 내 것 "나", 크기 fpv 0.5 / 테이블 0.85, 카드 간격보다 넓어지지 않게). 내 "🥒 내 오이" 3D 태그는 이름표와 겹쳐서 빼고 DOM(손패 칸 제목 / 1인칭 상단 띠)으로. 확인: 588×508·334×514 렌더.
-- **안 한 것/남은 점**: 운영 실제 방 캡처·실기기 터치·FPS, 6인전(좌우 상대가 화면 밖 — 휴대폰은 맞은편만 보임), 탈락 후 내 몸(빈 손), 다른 23개 TableScene 게임 적용.
-
-## 🗂 로그인 병합 후속 — 꽉 찬 저장칸 대기, 탭 두 개 경합 — 2026-10-29 (커밋/푸시, 배포는 웹훅 자동)
-
-테스터 질문 3개 후속.
-- **방 안에서 바뀌면?** 이미 즉시 반영됨: `useRoomCharacterSync`가 `character` 변경 시 presence `track` 재전송 → 같은 방 사람 화면도 재입장 없이 바뀜(코드 변경 없음).
-- **저장칸 8개 꽉 참**: 밀려난 계정 캐릭터를 버리지 않고 `parked`(localStorage `bg_my_character_parked_v1` + `user_metadata.parkedCharacter`)로 보관. 내가 만든 캐릭터 위 호박색 배너 — "바꿔 입기"(`swapParked`, 지금 입은 것과 맞바꿈이라 어느 쪽도 안 사라짐) / "버리기"(confirm). 저장 캐릭터 하나 지우면 그 칸에 자동으로 들어감(`removeSaved`).
-- **탭 두 개**: 실제 버그였음 — 게스트가 탭 B에서 저장하면 메모리상 옛 목록으로 탭 A 저장분을 localStorage째 덮어씀(로그인 무관), 로그인 병합도 각 탭 메모리 값으로 해서 나중 탭이 이김. 수정: `storage` 이벤트로 탭 메모리 동기화(캐릭터·저장목록·대기, 닉네임), 병합은 `navigator.locks`(`bg-my-character-sync`/`bg-game-nickname-sync`) 안에서 localStorage 기준으로 한 탭씩.
-- **시나리오 테스트** [myCharacter.signIn.test.ts](./src/lib/character/myCharacter.signIn.test.ts): 가짜 auth + 공유 localStorage + 탭별 새 모듈(`vi.resetModules`) + FIFO 락으로 ①게스트 꾸미기→로그인→새로고침 ②두 탭 게스트 저장→한쪽 로그인 = 둘 다 계정에 ③꽉 찬 목록 대기→하나 삭제 시 입주. storage 리스너를 끄면 ②가 실패하는 것 확인. 주의: 탭 동작은 `act()`로 그 탭의 window를 잡고 실행해야 함(전역 stub 공유).
-- 확인: vitest character/identity 29 통과, eslint/tsc 0. **실제 브라우저 + 실계정 로그인 시나리오는 안 함**(prod Supabase 테스트 계정 필요).
-
-## 🔀 게스트 때 꾸민 프로필 → 로그인 시 잃지 않게 — 2026-10-29 (커밋/푸시, 배포는 웹훅 자동)
-
-테스터 질문 "게스트로 꾸민 뒤 로그인하면 누가 이기나" → 기존엔 **계정이 이겨서 게스트 작업이 localStorage째 덮여 사라짐**(다음 새로고침 시점), 로그인(`router.push`) 직후엔 아무 동기화도 없었고, 계정이 비어 있으면 게스트 캐릭터가 계정에 안 올라감, 저장 목록은 계정에 키만 있어도 통째로 대체.
-- 로그아웃 상태에서 바꾸면 표시: `bg_my_character_guest_edits_v1`(`{look,saved}`), `bg_game_nickname_guest_edit_v1`. 로그인 시(`SIGNED_IN` 리스너 + 로드 시 init) 순수 함수 `mergeGuestEdits`/`mergeGuestNickname`으로 병합.
-- 규칙: 게스트가 바꾼 게 있으면 **게스트 쪽이 이김**, 밀려난 계정 캐릭터는 내가 만든 캐릭터에 "예전 계정 캐릭터"로 보관(같은 모습이 이미 있거나 8개 꽉 차면 생략). 저장 목록은 합집합(계정 먼저, id·모습 중복 제거, 8개 상한). 게스트가 닉네임을 지운 건 계정 닉네임을 지우지 않음. 표시가 없으면 예전처럼 계정 우선, 계정이 비면 기기 값을 업로드.
-- 계정 반영은 `updateUser` 한 번, 실패하면 표시를 남겨 다음에 재시도. 프로필 게스트 안내 문구에 이 동작 설명 추가.
-- 확인: vitest character/identity 26 통과(병합 테스트 4개 추가), eslint/tsc 0. 실제 로그인 흐름은 브라우저로 안 해 봄.
-
-## 🙂 게스트도 프로필 수정 — 2026-10-29 (커밋/푸시, 배포는 웹훅 자동)
-
-"프로필 수정 비로그인 게스트도 할 수 있게" → 헤더(SiteHeader) 프로필 버튼을 `configured && userId` 조건 없이 항상 표시. 게임 닉네임(`myNickname`)·3D 캐릭터/저장 캐릭터(`myCharacter`)는 원래 localStorage로 게스트를 지원했으므로 ProfileModal에서 그대로 동작.
-- 게스트일 때: 랭킹 닉네임 칸·"공개 랭킹에도 같은 이름으로" 체크박스 숨김(계정 전용 `setPublicName`), 대신 "이 기기에만 저장 · 로그인하면 계정 저장/다른 기기/랭킹 닉네임" 안내 + /login 링크.
-- /account 페이지는 그대로 로그인 전용.
-- 확인: eslint 0, tsc(기존 proceduralSuites 외) 0. 화면 캡처는 안 함.
-
-## 🥒 5 오이 3D — 테이블 트릭 카드 크게 — 2026-10-29 (커밋/푸시, 배포는 웹훅 자동)
-
-"오이다섯개 테이블에 카드가 크게 보이게" → `CucumberTable3D`의 `Trick`: 카드 0.34×0.48 → **0.66×0.92**, 바닥에 눕히지 않고 내 쪽 모서리를 축으로 **0.75rad 세움**(`TRICK_CARD_TILT` — 낮은 카메라에선 눕힌 카드가 납작하게 눌려 보였음). 줄은 중앙에서 0.3 안쪽(내 🥒 태그에 안 가리게), 간격 상한 `tableR*1.4/(n-1)`, ImpactRing 1.1, 트릭 팻말 y 0.85(`f83180a`, `a2a7885`, `557b259`).
-- 확인: tsc·5 오이 테스트 51개 통과. **운영 실제 방(봇 3) 캡처** 1280px·390px — 카드 숫자가 크게 읽힘.
-- **남은 점**: 트릭 팻말("라운드 1 · 트릭 1/7")이 자동으로 내려와 카드 윗단에 살짝 겹침, 세운 카드가 맞은편 사람 몸통을 일부 가림(필요하면 `TRICK_CARD_TILT`를 0.55~0.6으로). 6인전·트릭 6장 캡처는 안 함.
-
-## 👥 같은 닉네임 구분 · 랭킹 닉네임 맞추기 · 자동 입력 안내 — 2026-10-28 (커밋/푸시, 배포는 웹훅 자동)
-
-테스터 질문 3개 반영.
-- **같은 이름**: 새 [uniqueNames.ts](./src/games/shared/room/uniqueNames.ts) `withUniqueNames` — 48개 온라인 게임 전부의 presence sync(`setOccupants(Object.values(raw).flat())`)에 끼움. 낮은 좌석이 이름 유지, 나머지 "상어 2/3"(이미 있는 이름은 건너뜀), 모든 클라이언트가 같은 presence로 같은 라벨 → 전송 데이터는 그대로. 채팅이 있는 28개 게임은 `senderName`을 `occupantsRef`의 내 라벨로(없으면 myName). 테스트 3개.
-- **랭킹 닉네임**: 프로필 게임 닉네임 저장 시 "공개 랭킹에도 같은 이름으로" 체크(기본 켬) → `setPublicName` 호출(중복/규칙 위반이면 랭킹 닉네임 칸에 에러, 랭킹 이름은 그대로).
-- **자동 입력 안내**: RoomNicknameField가 시작 이름(프로필 게임 닉네임/지난 이름)과 같은 동안 칸을 호박색 테두리 + "🏷️ '상어'(으)로 들어가요 — 프로필의 게임 닉네임이에요…" 문구.
-- 확인: vitest room/identity 통과, eslint/tsc 0, 헤드리스 375px 입장칸 캡처 1장. 실제 두 기기 같은 이름 입장은 안 해 봄.
-
-## 🏷️ 게임 닉네임 — 프로필에서 정하고 방 입장 때 자동 입력 — 2026-10-28 (커밋/푸시, 배포는 웹훅 자동)
-
-"이름과 닉네임을 프로필에서 정하고, 게임 입장 시에도 동일하게" → 새 [myNickname.ts](./src/lib/identity/myNickname.ts) (`useMyNickname`): localStorage `bg_game_nickname_v1` + 로그인 시 `user_metadata.gameNickname`(계정 우선), 12자.
-
-- 프로필(ProfileModal): 랭킹 닉네임 위에 "게임 닉네임" 칸(저장, 랭킹 닉네임이 있고 게임 닉네임이 없으면 "랭킹 닉네임과 같게"). 랭킹 닉네임(public_name, 공개·중복 불가)과는 별개.
-- 방 입장(RoomNicknameField, 48개 게임 공용): 이름칸이 비어 있으면 게임 닉네임 → 없으면 마지막으로 쓴 방 이름으로 1회 채움. 방에서 다른 이름을 쓰면 "⭐ 기본 닉네임으로 저장" 링크(게스트도 이 기기에 저장). 꽃게 서바이벌(자체 입력칸, 10자)은 이름 없는 게만 게임 닉네임으로 시작.
-- 확인: 헤드리스로 RoomNicknameField 자동 입력·"기본 닉네임으로 저장" 동작 확인(캡처 없이 값 검사). vitest identity/crab 70 통과, eslint/tsc 0. 실제 게임 로비 화면 캡처는 안 함.
-
-## 💾 내가 만든 캐릭터 저장 — 2026-10-28 (커밋/푸시, 배포는 웹훅 자동)
-
-"한번 만들어둔 건 저장할 수 있게" → `useMyCharacter`에 `saved`/`saveLook`/`removeSaved`. localStorage `bg_my_character_saved_v1` + 로그인 시 `user_metadata.savedCharacters`(계정 쪽이 우선, 로그인 전 저장분은 계정에 없으면 올림). 최대 `MAX_SAVED`=8, 이름 12자, **같은 이름으로 저장 = 덮어쓰기**. 검증 `sanitizeSaved`/`withSaved`(테스트 2개).
-
-- UI: 꾸미기 패널 상단(미리보기 아래, sticky)에 이름 입력 + "💾 저장/덮어쓰기", 목록 맨 위 "💾 내가 만든 캐릭터 (n/8)" 카드(3D 썸네일, 누르면 입기, × 삭제는 confirm). 모바일 미리보기 h-40(sm:h-48)으로 낮춤.
-- 확인: 헤드리스 375px로 꾸미기→이름 입력→저장→목록 복귀 흐름 실행, localStorage 저장·카드·썸네일·선택 표시 확인(1장). vitest character 20 통과, eslint/tsc 0.
-
-## 🤲 3D 캐릭터 손 — 카드 실제로 쥐기 + 자연스러운 손가락 — 2026-10-28 (커밋/푸시, 배포는 웹훅 자동)
-
-"손모양 자연스럽게, 인게임에서 카드를 실제로 잡은 것처럼" → 원인: 카드(`held`)는 가슴 앞 [0,1.07,0.46]에 떠 있고 팔은 만화 리그용 관절각(HOLD_ARMS)이라 VRM 긴 팔이 양옆으로 벌어져 손이 카드에 안 닿았음. 손가락은 4개가 같은 각도, 엄지는 관절 하나만.
-
-- 새 [vrmHands.ts](./src/games/shared/three/vrmHands.ts): 차분한 무드에서 팔을 **2-bone IK**(월드 공간, VRM0/1 공통)로 배치 — 카드 들면 `cards` 그립(손바닥은 본인 쪽, 손가락은 카드 뒤, 손목은 부채 아래 모서리), 빈손이면 `lap` 그립(무릎 위 손바닥 아래). 손목은 손가락 방향+검지 방향 기저를 맞춰 회전. 제스처 무드(cheer/point/shock…)는 기존 채널 포즈, 둘 사이 ~0.3초 블렌드(`ikW`).
-- 손가락: `fingerAngles`(검지→새끼 캐스케이드, 마디별 비율, 너클 펼침) + `thumbAngles`(엄지 3마디). 50단계 캐시로 프레임 할당 없음.
-- 카드 위치 `HOLD_AT` [0,1.0,0.3]로 당김(어른 팔이 닿게). `LAP_MOODS` = rest/sad/slump/nervous/smug.
-- 확인: 헤드리스 클로즈업 3회(전/IK 1차/손바닥 방향 수정) — 옆에서 손가락이 카드 뒤를 감쌈, 무릎 휴식 OK. vitest shared/three+character 41 통과(손가락 테스트 추가), eslint/tsc 0. prod 실제 게임 화면 캡처는 안 함. 남은 것: 엄지가 카드 앞면을 누르는 디테일, 제스처 중 손 모양.
-
-## ✏️ 직접 꾸미기 — PC 우측 패널 / 모바일 전환 화면 — 2026-10-28 (커밋/푸시, 배포는 웹훅 자동)
-
-"꾸미기는 스크롤을 내려야 해서 불편, PC는 버튼 누르면 우측 영역에, 모바일도 가능하면" → 새 [CharacterStudio.tsx](./src/components/profile/CharacterStudio.tsx)가 프로필 모달(ProfileModal)과 방 입장 "내 3D 캐릭터"(CharacterButton) 둘 다 담당.
-
-- CharacterPicker를 목록(`CharacterPicker`) + 꾸미기(`CharacterCustomizer`, 상단에 미리보기 sticky)로 분리, 공통 상태는 `useCharacterEdit` 훅. 목록 위 "✏️ 직접 꾸미기" 버튼(예전 `<details>` 접기 대체).
-- ≥1024px: Overlay `wide="xl"`(lg:max-w-5xl) 2단 — 왼쪽 프로필+목록(미리보기는 숨김, 캔버스 1개 유지), 오른쪽 꾸미기 패널 sticky + 자체 스크롤. 그 미만: 꾸미기가 목록을 대체, "← 캐릭터 목록"으로 복귀. 새 훅 `useMediaQuery`.
-- 확인: 헤드리스로 1366px·375px 캡처 각 1장(우측 패널/전환 화면, 가로 넘침 0). eslint/tsc 0. 실제 prod 화면 캡처는 안 함.
-
-## 🏆 공개 랭킹에 내가 고른 캐릭터 얼굴 — 2026-10-27 (커밋/푸시, SQL은 10-28 사용자 실행 완료)
-
-- **10-28 갱신**: 사용자가 합친 SQL(player_stats → game_champions)을 prod에서 실행. 첫 시도는 game_champions 부분만 돌아 `p.public_portrait does not exist` → game_champions.sql도 컬럼을 직접 추가하게 고침(c7fcc44). 재실행 후 anon 프로브: `public_game_board` 응답 OK, `public_portrait` 컬럼 존재, `set_my_public_portrait`는 anon 거부(42501 = 설치됨). 패치노트 v1.108.0(랭킹 얼굴 + 이번 달 1위 칩) 추가.
-
-"공개 랭킹은 내가 프로필에서 고른 게 나오게" → /stats 공개 랭킹 3개 RPC(`public_leaderboard`·`public_metric_leaderboard`·`public_bot_level_board`)가 `public_avatar_url`(업로드 사진)만 내보내고 있었음. 이제 `coalesce(public_portrait, public_avatar_url)` — 캐릭터 초상화 우선, 없으면 예전 업로드 사진.
-
-- `public_portrait` 컬럼 + `set_my_public_portrait`를 game_champions.sql에서 **player_stats.sql로 옮김**(랭킹이 쓰니까). game_champions.sql은 player_stats.sql 뒤에 실행(기존 안내 그대로).
-- **prod 상태(10-27 anon 프로브)**: `public_portrait` 컬럼 없음, `set_my_public_portrait`/`public_game_board` PGRST202 → **사용자가 Supabase SQL Editor에서 `supabase/player_stats.sql` → `supabase/game_champions.sql` 순서로 실행해야** 보임. 실행 후 각자 브라우저(`PublicPortraitPublisher`)가 다음 접속 때 초상화를 올림(실패한 시도는 스탬프 안 남겨 재시도).
-- 확인: 로컬 embedded-postgres로 player_stats.sql 2회 + game_champions.sql 실행 → 랭킹·게임 보드에 초상화 data URL 나옴. 클라이언트 코드 변경 없음. 패치노트는 prod에 보일 때 추가.
-
-## 🖼 프로필 이미지 업로드 제거 — 2026-10-27 (커밋/푸시, 배포는 웹훅 자동)
-
-"이미지 업로드는 필요 없다, 기능 삭제" → 프로필 사진 = 3D 캐릭터 초상화만.
-
-- 삭제: ProfileModal의 파일 선택·업로드 버튼·"내 3D 캐릭터/업로드한 사진" 토글, `profileStore.uploadAvatar`(+용량/형식 검사), `myCharacter`의 `photoMode`/`setPhotoMode`(localStorage `bg_profile_photo_mode_v1`는 더 안 읽음). `useProfilePhoto`는 초상화만, `PublicPortraitPublisher`는 초상화 있으면 게시·없으면 지움.
-- 남긴 것: 예전에 올린 사진(`profiles.avatar_url` → `user_profiles.public_avatar_url`)이 공개 랭킹(/stats)·1위 칩(초상화 없을 때)에 계속 나오므로, 그런 계정에만 "예전에 올린 사진 삭제" 버튼. `/api/profile/avatar`는 이제 `avatarUrl: null`(삭제)만 받음. Supabase `avatars` 버킷·정책·컬럼은 그대로(DB 변경 없음).
-- 확인: eslint/tsc(기존 proceduralSuites 외) 0, vitest character/constants/store 86 통과. 화면 캡처는 안 함.
-
-## 💄 캐릭터 메이크업 — 같은 모델도 다른 사람처럼 — 2026-10-27 (커밋/푸시, 배포는 웹훅 자동)
-
-"프로필 캐릭터들이 눈코입은 똑같고 머리만 다르다, 메이크업처럼 다르게 꾸밀 수 있나 + 설명을 지금 모습에 맞게" → 21명 프리셋이 VRM 12개를 나눠 쓰고(남자 6명이 전부 seed-san), `eyes/face/mark/lip` 필드는 VRM에 반영 안 되던 상태였음.
-
-- **새 모듈 [vrmMakeup.ts](./src/games/shared/three/vrmMakeup.ts)**: VRoid 얼굴 텍스처는 모든 export(클래식·three-vrm-girl·pixiv-sample)가 같은 UV 배치 → 고정 UV에 캔버스로 아이섀도·블러셔·립 틴트(multiply)·점/주근깨를 칠함(텍스처+메이크업 조합별 공유, refcount로 해제). 렌즈 = EyeIris 회색화 후 색 곱하기, seed-san은 눈 아틀라스의 홍채 타원만 재채색(`SEED_IRIS`). 눈매 = Fcl_BRW/EYE 모프를 상시 오프셋(블링크·강한 표정 때 0으로 페이드, 매 프레임 expression update 전에 되돌림 `liftMorphs`/`holdMorphs`), seed-san은 자체 모프명. 눈 크기 = raw 눈 뼈 scale, 얼굴형 = raw head scale.x. 눈썹은 염색한 머리색을 따라감.
-- **데이터**: `PersonLook`/`AvatarProfile`에 `iris`·`blush`·`shadow`(hex, 없으면 메이크업 없음). 프리셋 21명 재구성 — 같은 모델 공유 시 눈매·렌즈·메이크업이 모두 다르게(테스트로 강제), 일부는 옷/머리 graft(서아=고스 코트, 현·이안=서로 머리 교환). `concept` 설명은 실제 보이는 헤어·눈매·렌즈·메이크업으로 다시 씀. `PORTRAIT_RIG` 3으로 올려 저장된 초상화 재촬영.
-- **프로필 UI**: 직접 꾸미기에 "💄 얼굴 · 메이크업" — 눈매·얼굴형·렌즈·아이섀도·립·블러셔·포인트. seed-san은 섀도/블러셔/립/점 안 보여서 숨기고 안내 문구.
-- **확인**: 헤드리스 얼굴 클로즈업 2회(조정 전/후)로 칠 위치·렌즈·섀도 확인. seed-san `cheek` 모프는 안 보여서 블러셔 대상에서 뺌. vitest character/constants/shared three 106+ 통과, eslint 0, tsc(기존 proceduralSuites 외) 0. 실제 프로필 화면·게임 테이블 캡처는 안 함.
-- **남은 것**: 코 모양은 못 바꿈(모프 없음). 더 다른 얼굴이 필요하면 클래식끼리 Face 메시를 graft하고 모프를 이름(Fcl_*)으로 동기화하는 방식이 가능(이번엔 안 함). 이미 프리셋을 골라 저장한 사용자는 저장된 옛 look 그대로(새 렌즈/섀도 없음, 눈매·립·점은 이제 보임) — 프리셋을 다시 누르면 새 모습.
-
-## 🃏 3D 한 프레임 통합 — 카드게임 6종 — 2026-10-28 (커밋/푸시, 배포는 웹훅 자동)
-
-텔레파시에 이어 "분리된 게임 리스트" 조사 → 전/후 프리뷰 캔버스(6보드) → "있는 내용 전부 변경후로". 노 땡스·포 세일·하나미코지·러브 윈즈 올·그리드 포커·달무티를 5 오이 방식으로: `Frame3D` 대신 전용 프레임, 캔버스는 아래를 비우고 그 자리에 내 손패+조작 DOM 오버레이, 3D와 중복되는 2D 칸은 `!is3D`로 숨기거나 "📋 … 펼치기" 토글. 2D 화면은 같은 조각(상수로 추출)으로 예전 그대로.
-
-- 노 땡스: 손패 칸 = 내 칩·카드 묶음 + 노 땡스/가져오기. 2D 경매 칸 숨김, 플레이어 줄 토글(`stripOpen`). 2D 코인/카드 비행 FX는 3D에선 큐에 안 넣음(3D `lastEvent`가 대신).
-- 포 세일: 프레임 h 576/636/676, 손패 칸 236/244 — 매입: 내 부동산(sm)+입찰 스테퍼/입찰/포기(`bidControls`), 판매: 제출 카드(`submitCards`), 정산 결과(`saleResult`)는 캔버스 위 카드. 매물 줄·내 부동산 칸 숨김, 입찰 현황 토글(`bidsOpen`). 비행 FX 3D 제외.
-- 하나미코지: 손패 칸 256/264 — 부채꼴(sm, `renderHandFan(compact)`)+행동 4개 소형 버튼+확정, 뽑기 버튼. 선물/경쟁 응답(`offerBlock`)은 캔버스 위. 상대 쪽 숨김, 게이샤 판 토글(`geishaOpen`).
-- 러브 윈즈 올: 하단 칸 300/320(스크롤 가능, `mt-auto`) — `myCards`+`actionControls`(베팅/선언). 상대 손패 줄 숨김. 위쪽 PlayerHeader 줄(콜아웃 배지)은 유지.
-- 그리드 포커(부분 통합): 프레임 680/760/800, 하단 390/440 — 이번 카드+내 5×5 판(`myBoardGrid`), 제출 단계엔 라인 목록(`lineButtons`). DealerReveal·2D 내 판·제출 칸 숨김, 상대 판 토글(`opponentsOpen`). 순위 띠는 유지.
-- 달무티: 프레임 596/676/716, 손패 칸 236/244 — "찌그러지는 줄"(각 칸 basis-16→최소 18px, 카드가 오른쪽 이웃 밑으로)+패스/내기·세금 반환(`handActions`). 계급표 토글(`scoreOpen`). 계급표 접힘 상태에선 `PassBubble` 대신 `BubbleTimer`(1초 뒤 clear — 3D `passing` 표시 유지용).
-- 확인: tsc·eslint 0, 6게임 테스트 339개 통과. **운영 실제 방(봇 채움) 390px 캡처 6개** — 모두 3D 프레임 한 장 안에 손패+조작, 가로 넘침 0. 캡처로 잡은 것 2건 수정(`3d9d57a`): 그리드 포커 `lineButtons`가 빈 칸 판에서도 계산돼 'reading kind of null' 크래시 → `renderLineButtons()`로 제출 단계에서만, 포 세일 입찰액·±버튼이 라이트 모드에서 어두운 띠 위에 안 보임 → 3D에선 light: 덮어쓰기 제외. 그리드 포커 5번째 줄 잘림 → 하단 432/484로(`d8e3387`).
-- **안 한 것**: 판매/선물·경쟁 응답/선언/세금 반환 단계 캡처, 6인전, 실기기 터치. 러브 윈즈 올은 레이즈 패널이 길어 하단 칸 안에서 스크롤해야 함. 그리드 포커·러브 윈즈 올의 일부 패널은 라이트 모드에서 흰 패널로 보임(기존 2D와 같은 스타일).
-
-## 📡 텔레파시 3D — 오이다섯개식 한 프레임 통합 — 2026-10-27 (커밋/푸시, 배포는 웹훅 자동)
-
-"텔레파시도 오이다섯개처럼 아래에 분리하지 않고 합치기" → 프리뷰(디자인 캔버스, 지금 vs 통합안 3보드) 확인 후 구현. 텔레파시는 3D를 얹고 2D 가운데 무대(같은 더미 중복)·버린 카드 칸·손패 패널(번뜩임/다시 맞추기 설명 상자 포함)을 전부 아래에 남긴 덧붙이기형이었음.
-
-- `TelepathyBoard`: 가운데 무대 내용을 `syncStage`/`flowStage`/`eventStage`(실수·번뜩임 공개·레벨 통과)/`voteOverlay`로, 손패 패널을 `safeBanner`/`handChips`/`holdButton(compact)`/`autoSwitch`/`holdHint`/`starPanel`/`resyncPanel` 상수로 쪼갬 — 2D는 예전 그대로 조립.
-- 3D(`is3D`): `Frame3D` 대신 전용 프레임(h 556/616/656). 캔버스는 아래 196/204px를 비우고 그 자리에 손패 오버레이(⚡/🖐 버튼 · 꾹 누르기 카드 compact · 다음 카드 칩, 머리줄에 🤖 자동 스위치·"나만 남음" 안내). 캔버스 위: 진행 알약(이번 레벨 n/m장 + ⏱), 아래쪽에 번뜩임/실수 버린 카드 칩 + "✋ 내려는 중!"/"⏩ 남은 사람" 배너. sync는 캔버스 영역 위 카드, 실수·번뜩임 공개·레벨 통과는 프레임 전체를 덮는 반투명 카드(스크롤 가능), 투표는 기존 inset-0 오버레이가 프레임을 덮음. 설명 상자는 "❔ 도움말 펼치기"(`helpOpen`) 아래로. `RewardTrack compact`(통과 보상 줄 숨김).
-- 확인: tsc·eslint 0, 텔레파시 19 + 패치노트 68 테스트. **운영 실제 방(봇 2) 캡처** 390px·1280px — sync 카드가 테이블 위에, 진행 알약·꾹 누르기 카드·⚡/🖐 버튼이 한 프레임 안, 가로 넘침 0, 도움말 펼치기 동작. 390px에서 "다시 맞추기 2"·도움말 문구 줄바꿈 → 칸 폭·문구 조정(`78da43b`).
-- **안 한 것**: 실수·레벨 통과·번뜩임 투표 오버레이 실캡처(코드상 프레임 전체를 덮는 카드), 6인전, 실기기 터치. 페이지 머리(사이트 헤더·제목·레벨 막대)가 위 460px를 차지해 모바일 첫 화면엔 프레임이 반쯤만 보이는 건 5 오이와 같음.
-
-## 🔉 3D 캐릭터 감정 음성 — 중요한 순간에만 — 2026-10-27 (커밋 c588352/푸시)
-
-- **요청**: "AI 봇 음성이 거의 1턴마다 나온다, 정말 중요한 순간에만". 원인: 각 게임 3D 테이블이 매 턴 mood를 `smug`(제출 후)·`nervous`(대기)·`shrug`(패스) 등으로 바꾸고, [characterVoice.ts](./src/lib/audio/characterVoice.ts)가 감정 mood 변화마다 말했음(간격 테이블 0.9초/좌석 2.5초).
-- **변경**: `VoiceGate`가 `SPOKEN`(cheer·shock·sad·slump)만 소리 내고, 나머지(smug·nervous·shrug·clap·raise·point·laugh)는 **말풍선 캡션만**. 간격 테이블 14초 / 좌석 30초 / shock·cheer는 6초 뒤부터 끼어들기 가능. 캡션 빈도는 그대로(TableScene 2.5초 제한).
-- **검증**: characterVoice 테스트 11개(새 게이트 규칙 포함)·패치노트 테스트 통과. 실제 소리는 사람 귀로 확인 안 함. 여전히 잦다고 하면 `VOICE_GAP` 숫자나 `SPOKEN` 집합만 조절하면 됨.
-
-## 🥒 5 오이 3D — 내 손패를 테이블 프레임 안에, 중복 트릭칸·점수판 정리 — 2026-10-27 (커밋/푸시, 배포는 웹훅 자동)
-
-"2D/3D 분리 전수조사 + 5 오이 내 테이블에 카드가 보이게" → 조사 결과 31개 `useBoardView` 게임 중 10개(5 오이·포 세일·최고의 투자·그리드 포커·하나미코지·러브 윈즈 올·노 땡스·쇼미더코인·소환사의 협곡·운명전쟁39)는 3D를 **위에 얹기만** 하고 2D를 전부 남긴 "덧붙이기형"(3D 분기 1개, 2D 숨김 0개). 코요테·페루도·스플렌더 등은 3D가 2D 보드를 대체. 5 오이를 먼저 대체형으로 바꿈(`ead82a6`, `1ed5931`).
-
-- `FiveCucumbersBoard`: `is3D`일 때 `Frame3D` 대신 전용 프레임(h 516/616/656) — 캔버스는 아래 112/136/148px를 비워 두고, 그 자리에 **내 손패를 DOM 오버레이**(`handFan`, 2D와 같은 CardFace·합법 카드 금색, 3D에선 `flex-nowrap`). 2D 트릭 칸 숨김, 점수판은 "📋 점수표 펼치기" 토글(`scoresOpen`). 2D DOM 연출(`FlyingPlayedCard`/`FlyingCucumber`)은 3D에선 큐에 안 넣고, 3D로 바뀌면 남은 이벤트를 비움(3D `FlyIn`이 대신). 홀드 진행바·스킵은 그대로.
-- 확인: tsc(기존 오류만)·eslint, 5 오이+패치노트 테스트 119개. **운영 실제 방(봇 3) 캡처** 390px·1280px — 손패 7장이 테이블 아래에 보이고 점수표 토글 존재. 390px에서 부채꼴 끝 카드가 프레임 밖으로 17px 잘려 pb-6로 수정(`1ed5931`).
-- **후속(`3a7a3e1`, `f9e5c44`) — "카드가 각자 자기 쪽으로 놓여 안 보인다"**: `CucumberTable3D`의 `Trick`이 이제 낸 카드를 모두 **내 자리 기준으로 똑바로**(`angleOf(viewerSeat)`) 낸 순서대로 왼→오 한 줄에 놓음(0.34×0.48, 간격은 `tableR*1.5/(n-1)`로 제한, 중앙에서 살짝 안쪽 −0.04 — 내 🥒 태그에 안 가리게). FlyIn 출발점은 각 낸 사람 자리 그대로. 운영 캡처(1280px, 트릭 4장) 확인. 남은 점: 내가 트릭을 이기면 내 말풍선("이 트릭은 내 거!")이 홀드 동안 줄 위에 겹침.
-- **안 한 것**: 나머지 덧붙이기형 9게임, 실기기 터치 손맛, 라운드 종료 장면 캡처, 6인전 배치(카드 6장 간격).
-
-## 🧍 옛 만화풍 캐릭터 완전 제거 — 2026-10-27 (커밋/푸시)
-
-"이전 캐릭터가 프로필·게임 접속 시 같이 보인다" → 원인: `VrmPerson`이 VRM을 받는 동안(실패 시엔 계속) 옛 만화풍 `SeatedPerson` 몸을 대신 그렸음. 이제 그 사이엔 **빈 의자 + 들고 있는 카드 + 이름표(children)만** 보이고(`PLACEHOLDER_SEAT_Y = 0.5`, 의자는 `Chair` 함수로 분리), 프로필 미리보기(`CharacterPreview3D`)는 "캐릭터 불러오는 중…" 문구.
-
-- **코드 삭제**: `SeatedPerson.tsx`의 만화 몸·머리카락·얼굴 그리기 코드(~650줄) 삭제 — 파일엔 공용 어휘(PersonMood·POSES/TABLE_POSES·FACES·blinking·Hat·holdPose·SeatedPersonProps·STRONG_MOODS)만 남음. 아무도 안 쓰던 `RealisticPerson.tsx`·`glamFace.ts`·`kpopEyes.ts` 삭제. `TableScene`은 항상 `VrmPerson`(`personStyle`은 카메라·좌석 배치 옵션으로만 남김, 현재 미사용).
-- **남은 것**: 블러프 룰렛(`src/games/bluffRoulette/Character.tsx`)은 리볼버 연출이 붙은 게임 전용 만화 캐릭터라 이번엔 그대로 둠. `avatar.ts`의 hairStyle/face/eyes/build/mark 필드도 저장 호환 때문에 유지(VRM엔 반영 안 됨).
-- 확인: tsc(기존 proceduralSuites 오류 외) 0, eslint 0, vitest shared/three + character 38/38. 화면 캡처는 안 함.
-
-## ⚠️ 비로그인 기록 "언제 사라질지 모름 / 다른 브라우저에서 로그인하면 사라짐" 명시 — 2026-10-27 (커밋/푸시)
-
-/stats `GuestWarning`, 게임 끝 `MatchRecordCard` 경고, 새 랭킹 모달(`GameChampionChip`, 비로그인일 때 금색 경고 + "이 브라우저에서 로그인하기")에 같은 내용을 명시. 사실 관계: 비로그인 기록(IndexedDB `statPending` userId null)은 **그 브라우저에서 로그인할 때만** 계정으로 합쳐지고, 다른 브라우저에서 로그인하면 넘어가지 않음. 랭킹 모달 경고는 game_champions.sql 실행 전엔 칩이 숨겨져 안 보임. eslint 0, 화면 확인 안 함.
-
-## 👑 게임별 "이번 달 1위" 칩 + 캐릭터 초상화 랭킹 — 2026-10-27 (커밋/푸시, **SQL 실행 필요**)
-
-"캐릭터 이미지와 함께 '이 게임은 내가 이번 달 1위' / 전체 랭킹" 요청. 공통 게임 페이지(`src/app/games/[gameId]/page.tsx`) 제목 아래에 `GameChampionChip` — 이번 달(KST) 그 게임 1위의 캐릭터 초상화 + 닉네임, 내가 1위면 금색 "👑 이 게임은 내가 이번 달 1위!". 누르면 `Overlay` 모달 **이번 달 / 전체** 탭(상위 10 + 내 줄, 초상화·승·판·승률). 1인 게임(`players.max === 1`)은 제외.
-
-- **SQL `supabase/game_champions.sql`(사용자 실행 필요, player_stats.sql 다음에)**: `user_profiles.public_portrait`(≤30k자 data URL, webp/png/jpeg만) + `set_my_public_portrait()`(authenticated만) + `public_game_board(game, 'month'|'all', limit)`(anon 가능). 이번 달은 `player_match_log.recorded_at`(서버 시각) 기준 KST 월, 전체는 `player_game_stats`. 정렬은 /stats 기본과 같음(승 수 → 승률, 봇 판 포함). 실행 전에는 RPC가 PGRST202 → 칩이 아예 안 보임.
-- **초상화 공개**: `PublicPortraitPublisher`(ProfilePhoto.tsx, SiteHeader에 마운트) — 로그인 상태에서 프로필 사진이 3D 캐릭터면 그 초상화를 72px webp로 줄여 올리고, 업로드 사진 모드/캐릭터 없음이면 지움(업로드 사진은 원래 `public_avatar_url`로 나감). 계정+초상화 키당 기기에서 한 번만 전송(localStorage `bg_public_portrait_sent_v1`).
-- 확인: eslint 0, tsc는 기존 `proceduralSuites.test.ts` 오류 2개 외 0, vitest `gameChampions.test.ts` 2/2. SQL은 로컬 embedded-postgres로 실행 — 이번 달/전체 순위 차이, 잘못된 이미지·anon 쓰기 거부, 재실행 확인. **브라우저 화면 확인은 안 함**(운영에 SQL이 없어 칩이 렌더되지 않음). 패치노트는 SQL 실행 후 실제로 보일 때 추가할 것.
-
-## 🏁 코요테 마지막 승부 5초+ 유지 + 📜 이전 판정 기록 — 2026-10-26 (커밋/푸시, 배포는 웹훅 자동)
-
-"마지막 승부의 결과가 5초 이상 보이게 + 이전 결과를 볼 수 있는 기능" 요청. 원래는 마지막 판정에서 엔진이 곧장 `gameOver`가 되어 보드가 즉시 순위 화면으로 바뀌었다(테이블·판정 패널을 아예 못 봄).
-
-- **마지막 승부**: `CoyoteBoard`가 `gameOver`여도 `rankingOpen`이 false면 일반 판정과 같은 테이블+판정 패널(머리에 "🏁 마지막 승부")을 그린다. `FINAL_SHOWDOWN_HOLD_MS = 5000` 뒤에야 "🏆 최종 순위 보기"가 눌림(버튼이 5초 동안 차오르는 `coyote-hold-fill`). 스킵은 연출만 건너뛰고 5초 제한은 그대로. 자동으로 넘어가지는 않음. 순위 화면에 "🏁 마지막 승부 다시 보기" 버튼.
-- **판정 기록**: 엔진 `CoyoteState.resolutionHistory?: RoundResult[]`(`roundNumber`·`resolution`·`heartsAfter`) — 판정마다 추가(락스텝이라 모든 기기가 같음, optional이라 옛 상태도 유효). 새 `CoyoteHistory.tsx` 모달(최신순, `FormulaBar` 재사용, 모든 좌석 카드, 내 카드 강조, 탈락 표시). 헤더 "📜 기록 N" + 순위 화면 "📜 판정 기록 N판". 헤더 버튼은 `whitespace-nowrap` + 줄바꿈 허용(390px에서 4개라 글자가 깨졌음).
-- 확인: tsc/eslint 0, vitest 코요테 77/77(기록 테스트 1개 추가). 헤드리스 Chromium 390px — 2.5초에 버튼 비활성·순위 안 보임, 5.7초에 활성 → 클릭 시 순위 → 기록 모달, 가로 넘침·페이지 오류 없음. 운영 화면 캡처는 안 함.
-- 주의: 로비 미리보기 녹화(`scripts/poster-videos/record.cjs`)가 "결과 확정하고 계속하기"를 누르는 흐름이면 코요테는 이제 "🏆 최종 순위 보기"를 먼저 눌러야 함(녹화 재실행 시 확인).
-
-## 🐺 코요테 판정 패널에 "내 숫자" 카드 — 2026-10-26 (커밋/푸시, 배포는 웹훅 자동)
-
-"코요테 외치면 '판정 승리' 아래에 내 숫자를 내려서 확인할 수 있게" → `CoyoteBoard.tsx`의 `ShowdownMatchup`에 `viewerRole`/`myCard` 추가. 판정이 찍히는 순간(`verdictShown`) 내가 외친 사람/선언자면 내 칸의 "✓ 판정 승리"·"💔 하트 −1" 바로 아래, 둘 다 아니면 대진표 아래 줄에 "👀 내 숫자" + `CardFace`가 위에서 떨어져 내려옴(`globals.css` `coyote-my-card-drop`). 내 카드가 "?"였으면 바뀐 카드를 보여줌. 탈락자(카드 없음)는 안 보임. 2D 패널 기준(3D 보기에서도 같은 하단 패널이라 똑같이 보임).
-
-- 확인: tsc/eslint 0, vitest 코요테 76/76. 실제 컴포넌트 rolldown 번들 + 헤드리스 Chromium 390px로 외친 사람/선언자/구경자 시점 스크린샷 — 가로 넘침 없음. 운영 화면 캡처는 안 함.
 
 ## 1. Executive Summary
 
